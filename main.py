@@ -285,6 +285,16 @@ def _startup_logger(runtime_profile) -> logging.Logger:
     return logger
 
 
+def _log_window_state(logger, event: str, *, window=None, splash_process=None) -> None:
+    details = {"splash_alive": bool(splash_process is not None and splash_process.poll() is None)}
+    if window is not None:
+        try:
+            details.update(state=window.state(), viewable=bool(window.winfo_viewable()), geometry=window.geometry(), alpha=window.attributes("-alpha"), toplevels=len(window.winfo_children()))
+        except Exception:
+            logger.exception("Falha ao coletar estado visual em %s", event)
+    logger.info("%s %s", event, " ".join(f"{key}={value}" for key, value in details.items()))
+
+
 def _run_startup_smoke_test() -> int | None:
     if "--startup-smoke-test" not in sys.argv:
         return None
@@ -363,6 +373,8 @@ def main() -> int:
 
     runtime_profile = configure_profile_environment("TESTE")
     startup_logger = _startup_logger(runtime_profile)
+    startup_logger.info("START_APP")
+    startup_logger.info("APP_START")
     mark_startup("runtime_profile_ready", profile=runtime_profile.profile)
     database_lock = None
     installer_app_mutex = None
@@ -385,6 +397,9 @@ def main() -> int:
     splash_completed = False
     legacy_module = None
     mark_startup("splash_started", running=splash_process is not None)
+    startup_logger.info("SPLASH_START")
+    _log_window_state(startup_logger, "SPLASH_CREATED", splash_process=splash_process)
+    _log_window_state(startup_logger, "SPLASH_VISIBLE", splash_process=splash_process)
     try:
         mark_startup("legacy_import_started")
         import nabicode_legacy as legacy
@@ -399,6 +414,7 @@ def main() -> int:
         mark_startup("database_lock_acquired")
 
         app = legacy.FicharioMoveisApp()
+        _log_window_state(startup_logger, "ROOT_CREATED", window=app, splash_process=splash_process)
         mark_startup("application_created")
         _write_splash_metadata(metadata_file)
         try:
@@ -411,41 +427,17 @@ def main() -> int:
         # o processo da splash encerrar, evitando sobreposição ou janela fantasma.
         try:
             app.withdraw()
+            _log_window_state(startup_logger, "ROOT_WITHDRAWN", window=app, splash_process=splash_process)
         except Exception:
             pass
 
         readiness_signaled_at = None
-        fade_started_at = None
-        main_alpha = 0.0
-
-        def fade_main_in() -> None:
-            nonlocal main_alpha, fade_started_at
-            if fade_started_at is None:
-                fade_started_at = time.monotonic()
-            progress = min(1.0, (time.monotonic() - fade_started_at) / 0.34)
-            main_alpha = progress * progress * (3.0 - 2.0 * progress)
-            try:
-                app.attributes("-alpha", main_alpha)
-            except Exception:
-                main_alpha = 1.0
-                progress = 1.0
-            if progress < 1.0:
-                app.after(16, fade_main_in)
-            else:
-                try:
-                    app.attributes("-alpha", 1.0)
-                    app._marcar_startup_revelado()
-                    app.lift()
-                    app.focus_force()
-                    mark_startup("first_screen_usable")
-                except Exception:
-                    pass
-
         def finish_splash_lifecycle() -> None:
             nonlocal splash_completed
             if splash_completed:
                 return
             splash_completed = True
+            startup_logger.info("SPLASH_END")
             splash_metrics = _read_splash_metrics(metadata_file)
             if splash_metrics is not None:
                 startup_logger.info(
@@ -480,10 +472,9 @@ def main() -> int:
             if not getattr(app, "_main_window_ready", False):
                 app.after(16, reveal_application)
                 return
-
             if readiness_signaled_at is None:
+                _log_window_state(startup_logger, "ROOT_LAYOUT_READY", window=app, splash_process=splash_process)
                 try:
-                    app.attributes("-alpha", 0.0)
                     app.update_idletasks()
                 except Exception:
                     pass
@@ -500,14 +491,22 @@ def main() -> int:
                 startup_logger.error("Helper da splash excedeu 15 s após MAIN_WINDOW_READY; encerrando-o.")
                 if not _ensure_process_stopped(splash_process, timeout=1.0):
                     startup_logger.critical("Helper da splash não confirmou encerramento após kill.")
+            _log_window_state(startup_logger, "SPLASH_DESTROY_START", window=app, splash_process=splash_process)
             finish_splash_lifecycle()
+            _log_window_state(startup_logger, "SPLASH_DESTROY_END", window=app, splash_process=splash_process)
             try:
-                app.attributes("-alpha", 0.0)
+                app.attributes("-alpha", 1.0)
                 app.deiconify()
+                _log_window_state(startup_logger, "ROOT_DEICONIFY", window=app, splash_process=splash_process)
                 app.update_idletasks()
+                app._marcar_startup_revelado()
+                app.lift()
+                app.focus_force()
+                startup_logger.info("MAIN_READY")
+                _log_window_state(startup_logger, "ROOT_VISIBLE", window=app, splash_process=splash_process)
+                mark_startup("first_screen_usable")
             except Exception:
-                pass
-            app.after(16, fade_main_in)
+                startup_logger.exception("Falha ao revelar a janela principal pronta")
 
         app.after_idle(reveal_application)
         mark_startup("mainloop_entered")

@@ -16,10 +16,11 @@ class V243SplashAndCutterTests(unittest.TestCase):
         self.assertIn("fade_out = 1.0 - smooth((elapsed - 11.0) / 1.2)", SPLASH)
         self.assertNotIn("tkinter", SPLASH)
 
-    def test_main_cross_fades_without_white_gap(self):
-        self.assertIn('app.attributes("-alpha", 0.0)', MAIN)
+    def test_main_reveals_ready_window_without_alpha_animation(self):
+        self.assertIn('app.attributes("-alpha", 1.0)', MAIN)
         self.assertIn("app.deiconify()", MAIN)
-        self.assertIn("fade_main_in", MAIN)
+        self.assertNotIn("fade_main_in", MAIN)
+        self.assertNotIn('app.attributes("-alpha", 0.0)', MAIN)
         self.assertIn("_stop_splash(stop_file)", MAIN)
 
     def test_raw_print_appends_escpos_cut(self):

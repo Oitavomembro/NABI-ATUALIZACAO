@@ -39,7 +39,13 @@ class LegacyBackendAdapterMixin:
         )
 
     def _servico_caixa(self):
-        return cached_instance(self, "_cash_service", lambda: CashService(self.backend_context.connect))
+        # Operações do Caixa partem da thread de interface. Um lock externo não
+        # pode congelar a janela por todo o timeout geral de 30 segundos.
+        return cached_instance(
+            self,
+            "_cash_service",
+            lambda: CashService(lambda: self.backend_context.connect(timeout=3)),
+        )
 
     def _resumo_caixa_dia(self, data_br=None):
         return self._servico_caixa().daily_summary(data_br)

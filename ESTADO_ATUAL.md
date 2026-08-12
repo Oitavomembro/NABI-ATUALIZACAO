@@ -110,4 +110,49 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 
 ## Checkpoint lógico
 
-**NabiCode 2.5.1 DEV — Checkpoint 41 — Módulo Caixa**
+**NabiCode 2.5.1 DEV — Checkpoint 41.1 — Caixa UI**
+
+## Checkpoint 41.1 — Caixa UI
+
+- Caixa consolidado como único ponto visual para sangria, suprimento e fechamento;
+- removidos do Dashboard os acessos legados `Movimentação de Caixa` e `Finalizar dia`;
+- layout reorganizado em cabeçalho, cards, ações, movimentações da sessão e histórico;
+- abertura visível somente com caixa fechado; ações operacionais visíveis somente com caixa aberto;
+- sangria, suprimento, fechamento e detalhes históricos migrados para modais NabiCode;
+- movimentos oficiais de vendas e recebimentos exibidos sem duplicação de persistência;
+- fluxos do Caixa deixaram de usar fade por `-alpha` e passaram à revelação estável após o layout;
+- regras contábeis, persistência, auditoria e Schema 14 preservados;
+- validação física Windows do novo layout e da ausência de glitch permanece pendente.
+
+## Candidato Checkpoint 41.2 — Runtime responsivo
+
+- removida a animação `-alpha` da transição splash → janela principal;
+- a abertura obrigatória do Caixa não adquire mais `grab`, eliminando bloqueio invisível da raiz;
+- fechar a pergunta obrigatória pelo X encerra normalmente a aplicação, sem permitir operação sem abertura;
+- modais operacionais liberam explicitamente qualquer `grab` antes de destruir a janela;
+- timeout das conexões do Caixa na thread de interface limitado a 3 segundos;
+- logging pontual de startup e Caixa registrado em `startup.log` e `nabicode.log`;
+- aprovação do Checkpoint 41.2 permanece condicionada à validação física de 10 ciclos no Windows.
+
+## Correções físicas posteriores — estado e reabertura
+
+- checagem automática do Caixa limitada a uma única execução no startup;
+- callbacks pendentes de abertura passam a ser identificados e não se multiplicam;
+- cancelar o formulário de saldo não agenda novamente a pergunta de abertura;
+- fechamento apenas recarrega o estado persistido e exibe as ações de caixa fechado;
+- modal de abertura e modal de fechamento possuem proteção de instância única;
+- nova sessão sempre é criada por ação explícita após o fechamento;
+- fechamento gera comprovante pelo pipeline oficial `Cupom 80 mm`, fora da thread da GUI;
+- ordem real de splash, raiz e diálogo do Caixa instrumentada nos logs de runtime;
+- validação física Windows da reabertura, impressão e ausência de piscada permanece pendente.
+
+## Infraestrutura de modais do Caixa — candidato seguinte
+
+- todos os fluxos do Caixa usam `_criar_modal_nabicode`, `_mostrar_modal_nabicode` e `_fechar_modal_caixa`;
+- nenhuma janela do Caixa usa `grab_set`, `wait_window`, `wait_variable`, `transient`, `topmost`, `withdraw/deiconify`, `focus_force` ou callback `after` para aparecer;
+- probe mínimo `TESTE MODAL` criado sobre o mesmo helper, sem banco, mas não exposto na UI de produção;
+- Sangria, Suprimento, Fechamento, escolha de abertura, saldo informado e detalhes compartilham a mesma infraestrutura;
+- criação de sessão centralizada com fontes permitidas `OPEN_WITH_VALUE` e `OPEN_WITHOUT_VALUE`;
+- origem desconhecida é recusada e registrada; startup e simples abertura da tela não criam sessão;
+- sessão aberta encontrada no startup é sempre a fonte persistida do terminal, inclusive uma sessão criada em execução anterior;
+- UI visual aprovada preservada sem expansão funcional.

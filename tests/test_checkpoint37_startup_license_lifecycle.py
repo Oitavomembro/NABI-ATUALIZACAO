@@ -179,7 +179,7 @@ class Checkpoint37StartupLicenseLifecycleTests(unittest.TestCase):
         self.assertIn("self._servico_licenca().evaluate()", monitor)
         self.assertNotIn("monitor_exact_expiration()", monitor)
 
-    def test_09_cash_opening_windows_are_built_hidden_then_faded(self):
+    def test_09_cash_opening_windows_use_shared_non_blocking_factory(self):
         question = LEGACY_SOURCE.split("def perguntar_abertura_caixa", 1)[1].split(
             "def abrir_formulario_abertura_caixa", 1
         )[0]
@@ -187,8 +187,12 @@ class Checkpoint37StartupLicenseLifecycleTests(unittest.TestCase):
             "def abrir_movimentacao_caixa", 1
         )[0]
         for block in (question, form):
-            self.assertLess(block.index("prepare_hidden_toplevel(win)"), block.index("CTkLabel"))
-            self.assertGreater(block.rindex("reveal_prepared_toplevel_smooth"), block.rindex("CTkButton"))
+            self.assertIn("_criar_modal_nabicode", block)
+            self.assertIn("_mostrar_modal_nabicode", block)
+            self.assertNotIn("reveal_prepared_toplevel_smooth", block)
+            self.assertNotIn("reveal_prepared_toplevel_when_idle", block)
+            self.assertNotIn("grab_set", block)
+            self.assertNotIn('attributes("-alpha"', block)
 
     def test_10_normal_and_exception_paths_cleanup_all_splash_signals(self):
         self.assertIn("_cleanup_splash_files(stop_file, pause_file, metadata_file, splash_error_file)", MAIN_SOURCE)

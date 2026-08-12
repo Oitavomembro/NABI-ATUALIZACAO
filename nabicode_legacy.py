@@ -857,7 +857,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self._redimensionamento_after = None
         self.bind("<Configure>", self._agendar_redesenho_interface, add="+")
         self.after(900, self._executar_backup_diario_automatico)
-        self.after(1800, self._agendar_pergunta_abertura_caixa)
+        self._cash_startup_after_id = self.after(1800, self._agendar_pergunta_abertura_caixa)
+        self._cash_startup_check_done = False
         self.after(5000, self._atualizacao_automatica_rede)
         self.after(1000, self._monitorar_licenca)
         self.bind_all("<Any-KeyPress>", lambda _event: self.security.touch(), add="+")
@@ -1529,6 +1530,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         elif nome == "financeiro":
             self.carregar_financeiro()
         elif nome == "caixa":
+            self._log_caixa_runtime("CASH_SCREEN_OPEN")
             self.atualizar_tela_caixa()
         elif nome == "compras":
             self.carregar_compras()
@@ -1947,8 +1949,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             frame_topo_tabela_dash.pack(fill="x", padx=15, pady=(10, 2))
             ctk.CTkLabel(frame_topo_tabela_dash, text="📊 Histórico de Movimentações do Dia", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffffff").pack(side="left")
             ctk.CTkButton(frame_topo_tabela_dash, text="✏️ Editar", fg_color="#1f6feb", hover_color="#1158c7", height=30, width=85, font=ctk.CTkFont(size=12, weight="bold"), command=self.disparar_edicao_dash).pack(side="right")
-            ctk.CTkButton(frame_topo_tabela_dash, text="✅ Finalizar dia", fg_color="#8957e5", hover_color="#6e40c9", height=30, width=120, command=self.abrir_fechamento_caixa).pack(side="right", padx=6)
-            ctk.CTkButton(frame_topo_tabela_dash, text="💰 Movimentação de Caixa", fg_color="#9e6a03", hover_color="#7d4e00", height=30, width=175, command=self.abrir_movimentacao_caixa).pack(side="right", padx=6)
 
             tabela_dash_frame = ctk.CTkFrame(conteudo_frame, fg_color="transparent")
             tabela_dash_frame.pack(fill="both", expand=True, padx=15, pady=5)
@@ -2099,9 +2099,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _agendar_pergunta_abertura_caixa(self):
         """Abre a pergunta de caixa somente depois que a janela raiz estiver visível."""
-        if not self._startup_reveal_complete:
-            self.after(250, self._agendar_pergunta_abertura_caixa)
+        self._cash_startup_after_id = None
+        if self._cash_startup_check_done:
             return
+        if not self._startup_reveal_complete:
+            self._cash_startup_after_id = self.after(250, self._agendar_pergunta_abertura_caixa)
+            return
+        self._cash_startup_check_done = True
+        self._log_caixa_runtime("CASH_STARTUP_CHECK")
         try:
             self._garantir_janela_principal_visivel()
             self.perguntar_abertura_caixa()
@@ -2117,40 +2122,152 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         sessao = getattr(getattr(self, "security", None), "session", None)
         return getattr(getattr(sessao, "user", None), "username", "") or "Sistema"
 
+    @staticmethod
+    def _log_caixa_runtime(evento, **detalhes):
+        payload = " ".join(f"{chave}={valor}" for chave, valor in detalhes.items())
+        logger.info("%s%s", evento, f" {payload}" if payload else "")
+
+    def _fechar_modal_caixa(self, win, evento="CASH_MODAL_CLOSE"):
+        modal_type = str(getattr(win, "_cash_modal_type", "CAIXA"))
+        try:
+            if win.grab_current() == win:
+                win.grab_release()
+        except tk.TclError:
+            pass
+        try:
+            win.unbind("<Escape>")
+        except tk.TclError:
+            pass
+        refs = getattr(self, "_cash_modal_refs", {})
+        if refs.get(modal_type) is win:
+            refs.pop(modal_type, None)
+        try:
+            if win.winfo_exists():
+                win.destroy()
+        except tk.TclError:
+            pass
+        self._log_caixa_runtime(evento)
+        try:
+            self.lift(); self.focus_set()
+        except tk.TclError:
+            pass
+
+    def _criar_modal_nabicode(self, modal_type, title, width, height):
+        refs = getattr(self, "_cash_modal_refs", None)
+        if refs is None:
+            refs = self._cash_modal_refs = {}
+        existing = refs.get(modal_type)
+        try:
+            if existing is not None and existing.winfo_exists():
+                existing.lift()
+                return existing, False
+        except tk.TclError:
+            refs.pop(modal_type, None)
+        self._log_caixa_runtime("CASH_MODAL_CREATE_START", tipo=modal_type)
+        try:
+            win = ctk.CTkToplevel(self)
+            win._cash_modal_type = modal_type
+            win.title(title)
+            win.configure(fg_color="#0d1117")
+            x = max(0, self.winfo_rootx() + (max(self.winfo_width(), width) - width) // 2)
+            y = max(0, self.winfo_rooty() + (max(self.winfo_height(), height) - height) // 2)
+            win.geometry(f"{width}x{height}+{x}+{y}")
+            win.resizable(False, False)
+            refs[modal_type] = win
+            self._log_caixa_runtime("CASH_MODAL_CREATED", tipo=modal_type, geometry=win.geometry())
+            return win, True
+        except Exception:
+            logger.exception("CASH_MODAL_EXCEPTION tipo=%s", modal_type)
+            raise
+
+    def _mostrar_modal_nabicode(self, win, focus_widget=None):
+        modal_type = str(getattr(win, "_cash_modal_type", "CAIXA"))
+        try:
+            self._log_caixa_runtime("CASH_MODAL_WIDGETS_READY", tipo=modal_type)
+            win.update_idletasks()
+            self._log_caixa_runtime("CASH_MODAL_GEOMETRY_READY", tipo=modal_type, geometry=win.geometry())
+            win.lift()
+            self._log_caixa_runtime("CASH_MODAL_VISIBLE", tipo=modal_type, viewable=bool(win.winfo_viewable()), state=win.state())
+            if focus_widget is not None:
+                focus_widget.focus_set()
+            self._log_caixa_runtime("CASH_MODAL_FOCUS", tipo=modal_type)
+        except Exception:
+            logger.exception("CASH_MODAL_EXCEPTION tipo=%s", modal_type)
+            self._fechar_modal_caixa(win)
+            raise
+
+    def _solicitar_criacao_sessao_caixa(self, *, source, opening_balance):
+        allowed = {
+            "OPEN_WITH_VALUE": "VALOR_INFORMADO",
+            "OPEN_WITHOUT_VALUE": "SEM_VALOR_INFORMADO",
+        }
+        self._log_caixa_runtime("CASH_SESSION_CREATE_REQUEST", source=source, user_action=True)
+        if source not in allowed:
+            logger.error("CASH_SESSION_CREATE_REJECTED source=%s", source)
+            raise ValueError("Origem de abertura do caixa não autorizada.")
+        return self._servico_caixa().open_session(
+            self._terminal_caixa(), self._usuario_caixa(), opening_balance, allowed[source]
+        )
+
+    def _abrir_teste_modal_caixa(self):
+        """Probe visual mínimo, sem banco/modalidade; mantido sem botão de produção."""
+        win, created = self._criar_modal_nabicode("TESTE_MODAL", "TESTE MODAL", 360, 180)
+        if not created: return
+        ctk.CTkLabel(win, text="TESTE MODAL", font=ctk.CTkFont(size=18, weight="bold")).pack(pady=(35, 18))
+        close = lambda: self._fechar_modal_caixa(win)
+        ctk.CTkButton(win, text="Fechar", command=close).pack()
+        win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win)
+
     def tela_caixa(self, parent):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
-        cab = ctk.CTkFrame(frame, fg_color="#161b22")
-        cab.pack(fill="x", padx=24, pady=(24, 10))
-        self.lbl_caixa_estado = ctk.CTkLabel(cab, text="CAIXA", font=ctk.CTkFont(size=25, weight="bold"), text_color=self.cor_acento)
-        self.lbl_caixa_estado.pack(anchor="w", padx=20, pady=(16, 4))
-        self.lbl_caixa_identificacao = ctk.CTkLabel(cab, text="", justify="left", anchor="w")
-        self.lbl_caixa_identificacao.pack(fill="x", padx=20, pady=(0, 16))
-        self.lbl_caixa_resumo = ctk.CTkLabel(frame, text="", justify="left", anchor="w", font=ctk.CTkFont(size=14))
-        self.lbl_caixa_resumo.pack(fill="x", padx=30, pady=12)
-        actions = ctk.CTkFrame(frame, fg_color="transparent")
-        actions.pack(fill="x", padx=24, pady=8)
-        self.btn_caixa_abrir = ctk.CTkButton(actions, text="Informar saldo inicial", command=self.abrir_formulario_abertura_caixa)
-        self.btn_caixa_abrir.pack(side="left", padx=4)
-        self.btn_caixa_sem_valor = ctk.CTkButton(actions, text="Abrir sem informar", command=self._abrir_caixa_sem_valor_pela_aba)
-        self.btn_caixa_sem_valor.pack(side="left", padx=4)
-        self.btn_caixa_sangria = ctk.CTkButton(actions, text="REGISTRAR SANGRIA", fg_color="#b62324", command=lambda: self._abrir_movimento_sessao("SANGRIA"))
-        self.btn_caixa_sangria.pack(side="left", padx=4)
-        self.btn_caixa_suprimento = ctk.CTkButton(actions, text="REGISTRAR SUPRIMENTO", fg_color="#2ea043", command=lambda: self._abrir_movimento_sessao("SUPRIMENTO"))
-        self.btn_caixa_suprimento.pack(side="left", padx=4)
-        self.btn_caixa_fechar = ctk.CTkButton(actions, text="FECHAR CAIXA", fg_color="#1f6feb", command=self._abrir_fechamento_sessao)
-        self.btn_caixa_fechar.pack(side="left", padx=4)
-        ctk.CTkLabel(frame, text="HISTÓRICO", font=ctk.CTkFont(size=17, weight="bold")).pack(anchor="w", padx=30, pady=(18, 6))
-        self.tabela_caixas = ttk.Treeview(frame, columns=("id","abertura","usuario","saldo","fechamento","fechado_por","esperado","contado","diferenca","status"), show="headings", height=8)
-        for col, title in zip(self.tabela_caixas["columns"], ("ID","Abertura","Aberto por","Saldo inicial","Fechamento","Fechado por","Esperado","Contado","Diferença","Status")):
-            self.tabela_caixas.heading(col, text=title); self.tabela_caixas.column(col, width=105, anchor="center")
-        self.tabela_caixas.pack(fill="both", expand=True, padx=24, pady=(0, 20))
+        scroll = ctk.CTkScrollableFrame(frame, fg_color="transparent", corner_radius=0)
+        scroll.pack(fill="both", expand=True)
+        cab = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=14, border_width=1, border_color="#30363d")
+        cab.pack(fill="x", padx=24, pady=(20, 12))
+        top = ctk.CTkFrame(cab, fg_color="transparent"); top.pack(fill="x", padx=20, pady=(16, 4))
+        self.lbl_caixa_estado = ctk.CTkLabel(top, text="CAIXA", font=ctk.CTkFont(size=25, weight="bold"), text_color=self.cor_acento)
+        self.lbl_caixa_estado.pack(side="left")
+        ctk.CTkButton(top, text="← Voltar ao Início", width=145, fg_color="#30363d", hover_color="#484f58", command=lambda: self.mostrar_tela("dashboard")).pack(side="right")
+        self.lbl_caixa_identificacao = ctk.CTkLabel(cab, text="", justify="left", anchor="w", text_color="#c9d1d9")
+        self.lbl_caixa_identificacao.pack(fill="x", padx=20, pady=(2, 16))
+        cards = ctk.CTkFrame(scroll, fg_color="transparent"); cards.pack(fill="x", padx=20, pady=2)
+        for col in range(4): cards.grid_columnconfigure(col, weight=1, uniform="cash_cards")
+        self.caixa_cards = {}
+        definitions = (("expected_cash","DINHEIRO NA GAVETA","#00FF88"),("movement_total","MOVIMENTO TOTAL","#388bfd"),("pix","PIX","#a371f7"),("cartao","CARTÃO","#f0b429"),("recebimentos","RECEBIMENTOS","#58a6ff"),("sangrias","SANGRIAS","#ff6b6b"),("suprimentos","SUPRIMENTOS","#3fb950"),("saldo_inicial","SALDO INICIAL","#c9d1d9"))
+        for index, (key, title, color) in enumerate(definitions):
+            card = ctk.CTkFrame(cards, fg_color="#161b22", corner_radius=12, border_width=1, border_color="#30363d"); card.grid(row=index // 4, column=index % 4, sticky="nsew", padx=5, pady=5)
+            ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=11, weight="bold"), text_color="#8b949e").pack(anchor="w", padx=14, pady=(12, 2))
+            label = ctk.CTkLabel(card, text="R$ 0,00", font=ctk.CTkFont(size=21, weight="bold"), text_color=color); label.pack(anchor="w", padx=14, pady=(0, 12)); self.caixa_cards[key] = label
+        self.frame_caixa_abertura = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12)
+        self.frame_caixa_acoes = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12)
+        for action_frame in (self.frame_caixa_abertura, self.frame_caixa_acoes): action_frame.pack(fill="x", padx=24, pady=10)
+        ctk.CTkLabel(self.frame_caixa_abertura, text="ABRIR CAIXA", font=ctk.CTkFont(size=15, weight="bold"), text_color=self.cor_acento).pack(side="left", padx=16, pady=14)
+        self.btn_caixa_abrir = ctk.CTkButton(self.frame_caixa_abertura, text="Informar saldo inicial", command=self.abrir_formulario_abertura_caixa); self.btn_caixa_abrir.pack(side="left", padx=6, pady=12)
+        self.btn_caixa_sem_valor = ctk.CTkButton(self.frame_caixa_abertura, text="Abrir sem informar", fg_color="#1f6feb", command=self._abrir_caixa_sem_valor_pela_aba); self.btn_caixa_sem_valor.pack(side="left", padx=6, pady=12)
+        ctk.CTkLabel(self.frame_caixa_acoes, text="AÇÕES", font=ctk.CTkFont(size=15, weight="bold"), text_color=self.cor_acento).pack(side="left", padx=16, pady=14)
+        self.btn_caixa_sangria = ctk.CTkButton(self.frame_caixa_acoes, text="Registrar Sangria", fg_color="#b62324", command=lambda: self._abrir_movimento_sessao("SANGRIA")); self.btn_caixa_sangria.pack(side="left", padx=6, pady=12)
+        self.btn_caixa_suprimento = ctk.CTkButton(self.frame_caixa_acoes, text="Registrar Suprimento", fg_color="#2ea043", command=lambda: self._abrir_movimento_sessao("SUPRIMENTO")); self.btn_caixa_suprimento.pack(side="left", padx=6, pady=12)
+        self.btn_caixa_fechar = ctk.CTkButton(self.frame_caixa_acoes, text="Fechar Caixa", fg_color="#1f6feb", command=self._abrir_fechamento_sessao); self.btn_caixa_fechar.pack(side="left", padx=6, pady=12)
+        current = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12); current.pack(fill="x", padx=24, pady=10)
+        ctk.CTkLabel(current, text="MOVIMENTAÇÕES DA SESSÃO ATUAL", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=16, pady=(14, 8))
+        self.tabela_movimentos_caixa = ttk.Treeview(current, columns=("hora","tipo","valor","usuario","motivo","origem"), show="headings", height=6)
+        for col, title, width, anchor in (("hora","Horário",135,"center"),("tipo","Tipo",160,"w"),("valor","Valor",110,"e"),("usuario","Usuário",110,"w"),("motivo","Motivo",260,"w"),("origem","Origem",130,"w")):
+            self.tabela_movimentos_caixa.heading(col, text=title); self.tabela_movimentos_caixa.column(col, width=width, minwidth=75, anchor=anchor, stretch=col == "motivo")
+        self.tabela_movimentos_caixa.pack(fill="x", padx=16, pady=(0, 14))
+        history = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12); history.pack(fill="x", padx=24, pady=(10, 24))
+        ctk.CTkLabel(history, text="HISTÓRICO DE SESSÕES", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=16, pady=(14, 8))
+        self.tabela_caixas = ttk.Treeview(history, columns=("id","abertura","usuario","saldo","fechamento","fechado_por","esperado","contado","diferenca","status"), show="headings", height=7)
+        for col, title, width, anchor in (("id","Sessão",65,"center"),("abertura","Abertura",145,"center"),("usuario","Aberto por",100,"w"),("saldo","Saldo inicial",105,"e"),("fechamento","Fechamento",145,"center"),("fechado_por","Fechado por",100,"w"),("esperado","Esperado",105,"e"),("contado","Contado",105,"e"),("diferenca","Diferença",105,"e"),("status","Status",85,"center")):
+            self.tabela_caixas.heading(col, text=title); self.tabela_caixas.column(col, width=width, minwidth=60, anchor=anchor)
+        self.tabela_caixas.pack(fill="x", padx=16, pady=(0, 14))
         self.tabela_caixas.bind("<Double-1>", self._detalhar_caixa_historico)
         return frame
 
     def _abrir_caixa_sem_valor_pela_aba(self):
         try:
-            self._servico_caixa().open_session(self._terminal_caixa(), self._usuario_caixa(), 0, "SEM_VALOR_INFORMADO")
+            self._solicitar_criacao_sessao_caixa(source="OPEN_WITHOUT_VALUE", opening_balance=0)
             self.atualizar_tela_caixa()
         except Exception as exc:
             messagebox.showerror("Caixa", str(exc), parent=self)
@@ -2162,131 +2279,265 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         session = service.get_open_session(terminal)
         aberto = session is not None
         self.lbl_caixa_estado.configure(text="CAIXA ABERTO" if aberto else "CAIXA FECHADO")
-        for widget in (self.btn_caixa_sangria, self.btn_caixa_suprimento, self.btn_caixa_fechar): widget.configure(state="normal" if aberto else "disabled")
-        for widget in (self.btn_caixa_abrir, self.btn_caixa_sem_valor): widget.configure(state="disabled" if aberto else "normal")
+        if aberto:
+            self.frame_caixa_abertura.pack_forget()
+            if not self.frame_caixa_acoes.winfo_manager(): self.frame_caixa_acoes.pack(fill="x", padx=24, pady=10, before=self.tabela_movimentos_caixa.master)
+        else:
+            self.frame_caixa_acoes.pack_forget()
+            if not self.frame_caixa_abertura.winfo_manager(): self.frame_caixa_abertura.pack(fill="x", padx=24, pady=10, before=self.tabela_movimentos_caixa.master)
+        values = {key: Decimal("0") for key in self.caixa_cards}
+        for item in self.tabela_movimentos_caixa.get_children(): self.tabela_movimentos_caixa.delete(item)
         if session:
             resumo = service.session_summary(session.id)
-            self.lbl_caixa_identificacao.configure(text=f"Sessão #{session.id} • Terminal {terminal}\nAberto por {session.opened_by} em {session.opened_at} • Saldo inicial R$ {session.opening_balance:.2f} • {session.opening_mode}")
-            self.lbl_caixa_resumo.configure(text=(f"RESUMO DO PERÍODO\nVendas em dinheiro: R$ {resumo['dinheiro']:.2f}    PIX: R$ {resumo['pix']:.2f}    Cartão: R$ {resumo['cartao']:.2f}    Outros: R$ {resumo['outros']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}    Eletrônicos: R$ {resumo['recebimentos_eletronicos']:.2f}\nSuprimentos: R$ {resumo['suprimentos']:.2f}    Sangrias: R$ {resumo['sangrias']:.2f}\n\nMOVIMENTO TOTAL DO PERÍODO: R$ {resumo['movement_total']:.2f}\nDINHEIRO FÍSICO ESPERADO NA GAVETA: R$ {resumo['expected_cash']:.2f}"))
+            self.lbl_caixa_identificacao.configure(text=f"Sessão #{session.id}  •  Terminal: {terminal}  •  Aberto por: {session.opened_by}\nAbertura: {session.opened_at}  •  Saldo inicial: R$ {session.opening_balance:.2f}  •  Modo: {session.opening_mode}")
+            values.update(expected_cash=resumo["expected_cash"], movement_total=resumo["movement_total"], pix=resumo["pix"], cartao=resumo["cartao"], recebimentos=resumo["recebimentos_dinheiro"] + resumo["recebimentos_eletronicos"], sangrias=resumo["sangrias"], suprimentos=resumo["suprimentos"], saldo_inicial=session.opening_balance)
+            for movement in resumo["movements"]:
+                signal = "-" if movement.get("sinal", 1) < 0 else "+"
+                self.tabela_movimentos_caixa.insert("", "end", values=(movement["data"], movement["tipo"], f"{signal}R$ {movement['valor']:.2f}", movement["usuario"], movement["observacao"], movement.get("origem", "")))
         else:
-            self.lbl_caixa_identificacao.configure(text=f"Terminal {terminal}")
-            self.lbl_caixa_resumo.configure(text="Abra uma nova sessão para iniciar as operações de caixa.")
+            self.lbl_caixa_identificacao.configure(text=f"Terminal {terminal}  •  Nenhuma sessão aberta\nEscolha uma opção abaixo para iniciar o caixa.")
+        for key, label in self.caixa_cards.items(): label.configure(text=f"R$ {values[key]:.2f}")
         for item in self.tabela_caixas.get_children(): self.tabela_caixas.delete(item)
         for item in service.history(terminal):
             money = lambda value: "" if value is None else f"R$ {value:.2f}"
             self.tabela_caixas.insert("", "end", iid=str(item.id), values=(item.id,item.opened_at,item.opened_by,money(item.opening_balance),item.closed_at,item.closed_by,money(item.expected_cash),money(item.counted_cash),money(item.difference),item.status))
 
     def _abrir_movimento_sessao(self, kind):
-        value = simpledialog.askstring(kind.title(), "Valor (R$):", parent=self)
-        if value is None: return
-        note = simpledialog.askstring(kind.title(), "Motivo/observação:", parent=self) or ""
-        try:
-            self._servico_caixa().register_session_movement(self._terminal_caixa(), kind, tratar_numero(value), self._usuario_caixa(), note)
-            self.atualizar_tela_caixa()
-        except Exception as exc: messagebox.showerror("Caixa", str(exc), parent=self)
+        self._log_caixa_runtime("CASH_MODAL_OPEN", tipo=kind)
+        win, created = self._criar_modal_nabicode(kind, f"Registrar {kind.title()}", 520, 445)
+        if not created: return
+        shell = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        color = "#b62324" if kind == "SANGRIA" else "#2ea043"
+        ctk.CTkLabel(shell, text=f"REGISTRAR {kind}", font=ctk.CTkFont(size=22, weight="bold"), text_color=color).pack(anchor="w", padx=30, pady=(28, 18))
+        ctk.CTkLabel(shell, text="Valor", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=30)
+        value = ctk.CTkEntry(shell, placeholder_text="R$ 0,00", height=44); value.pack(fill="x", padx=30, pady=(5, 14))
+        ctk.CTkLabel(shell, text="Motivo / observação", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=30)
+        note = ctk.CTkTextbox(shell, height=100); note.pack(fill="x", padx=30, pady=(5, 8))
+        error = ctk.CTkLabel(shell, text="", text_color="#ff6b6b"); error.pack(anchor="w", padx=30)
+        buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=25, pady=18)
+        def close(_event=None): self._fechar_modal_caixa(win)
+        def confirm(_event=None):
+            try:
+                self._servico_caixa().register_session_movement(self._terminal_caixa(), kind, tratar_numero(value.get()), self._usuario_caixa(), note.get("1.0", "end").strip())
+            except Exception as exc:
+                error.configure(text=str(exc)); value.focus_set(); return
+            close(); self.atualizar_tela_caixa()
+        ctk.CTkButton(buttons, text=f"Confirmar {kind.title()}", fg_color=color, command=confirm).pack(side="right", padx=5)
+        ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
+        win.bind("<Return>", confirm); win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win, value)
 
     def _abrir_fechamento_sessao(self):
+        self._log_caixa_runtime("CASH_CLOSE_CLICK")
+        self._log_caixa_runtime("CASH_CLOSE_BUILD_START")
         session = self._servico_caixa().get_open_session(self._terminal_caixa())
         if not session: return
         resumo = self._servico_caixa().session_summary(session.id)
-        contado = simpledialog.askstring("Fechar caixa", f"Valor esperado em dinheiro: R$ {resumo['expected_cash']:.2f}\n\nVALOR CONTADO NO CAIXA:", parent=self)
-        if contado is None: return
-        try: counted = tratar_numero(contado)
-        except ValueError: messagebox.showerror("Caixa", "Valor contado inválido.", parent=self); return
-        diff = Decimal(str(counted)) - resumo["expected_cash"]
-        note = simpledialog.askstring("Fechar caixa", f"Diferença: R$ {diff:.2f}\nObservação do fechamento:", parent=self) or ""
-        label = "CAIXA CONFERE" if diff == 0 else (f"SOBRA: R$ {diff:.2f}" if diff > 0 else f"FALTA: R$ {abs(diff):.2f}")
-        if not messagebox.askyesno("Confirmar fechamento", f"Esperado: R$ {resumo['expected_cash']:.2f}\nContado: R$ {counted:.2f}\n{label}\n\nCONFIRMAR FECHAMENTO?", parent=self): return
-        try:
-            self._servico_caixa().close_session(self._terminal_caixa(), counted, self._usuario_caixa(), note)
+        win, created = self._criar_modal_nabicode("FECHAMENTO", "Fechar Caixa", 680, 680)
+        if not created: return
+        self._log_caixa_runtime("CASH_CLOSE_MODAL_OPEN")
+        shell = ctk.CTkScrollableFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        ctk.CTkLabel(shell, text="FECHAMENTO DE CAIXA", font=ctk.CTkFont(size=22, weight="bold"), text_color="#388bfd").pack(anchor="w", padx=32, pady=(26, 12))
+        detail = f"Saldo inicial: R$ {session.opening_balance:.2f}\nVendas em dinheiro: R$ {resumo['dinheiro']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\nSuprimentos: R$ {resumo['suprimentos']:.2f}\nSangrias: -R$ {resumo['sangrias']:.2f}\n\nDINHEIRO ESPERADO: R$ {resumo['expected_cash']:.2f}\n\nPIX: R$ {resumo['pix']:.2f}   •   CARTÃO: R$ {resumo['cartao']:.2f}   •   OUTROS ELETRÔNICOS: R$ {resumo['outros'] + resumo['recebimentos_eletronicos']:.2f}"
+        ctk.CTkLabel(shell, text=detail, justify="left", anchor="w", font=ctk.CTkFont(size=14), fg_color="#161b22", corner_radius=12).pack(fill="x", padx=32, pady=8, ipady=14)
+        ctk.CTkLabel(shell, text="VALOR CONTADO", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32, pady=(12, 3))
+        counted = ctk.CTkEntry(shell, placeholder_text="R$ 0,00", height=44); counted.pack(fill="x", padx=32)
+        result = ctk.CTkLabel(shell, text="Informe o valor contado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#8b949e"); result.pack(anchor="w", padx=32, pady=12)
+        ctk.CTkLabel(shell, text="Observação do fechamento", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32)
+        note = ctk.CTkTextbox(shell, height=85); note.pack(fill="x", padx=32, pady=(4, 6))
+        error = ctk.CTkLabel(shell, text="", text_color="#ff6b6b"); error.pack(anchor="w", padx=32)
+        def calculate(_event=None):
+            try: diff = Decimal(str(tratar_numero(counted.get()))) - resumo["expected_cash"]
+            except ValueError: result.configure(text="Informe um valor contado válido", text_color="#f0b429"); return None
+            if diff == 0: result.configure(text="CAIXA CONFERE", text_color="#00FF88")
+            elif diff > 0: result.configure(text=f"SOBRA R$ {diff:.2f}", text_color="#f0b429")
+            else: result.configure(text=f"FALTA R$ {abs(diff):.2f}", text_color="#ff6b6b")
+            return diff
+        counted.bind("<KeyRelease>", calculate)
+        closing = {"done": False, "submitting": False}
+        def close(_event=None, *, confirmed=False):
+            if closing["done"]: return
+            closing["done"] = True
+            self._log_caixa_runtime("CASH_CLOSE_CONFIRM" if confirmed else "CASH_CLOSE_CANCEL")
+            try:
+                if win.grab_current() == win:
+                    win.grab_release(); self._log_caixa_runtime("CASH_CLOSE_GRAB_RELEASE")
+            except tk.TclError:
+                logger.exception("CASH_CLOSE_EXCEPTION ao liberar grab")
+            self._fechar_modal_caixa(win, "CASH_CLOSE_DESTROY")
+            self._log_caixa_runtime("CASH_CLOSE_MODAL_CLOSE")
+        def confirm():
+            if closing["done"] or closing["submitting"]:
+                return
+            if calculate() is None: return
+            closing["submitting"] = True
+            confirm_button.configure(state="disabled", text="Fechando...")
+            try:
+                closed_session = self._servico_caixa().close_session(self._terminal_caixa(), tratar_numero(counted.get()), self._usuario_caixa(), note.get("1.0", "end").strip())
+            except Exception as exc:
+                logger.exception("CASH_CLOSE_EXCEPTION ao confirmar fechamento")
+                closing["submitting"] = False
+                confirm_button.configure(state="normal", text="Confirmar Fechamento")
+                error.configure(text=str(exc)); return
+            close(confirmed=True)
             self.atualizar_tela_caixa()
-        except Exception as exc: messagebox.showerror("Caixa", str(exc), parent=self)
+            self._imprimir_comprovante_fechamento_caixa(closed_session, resumo)
+        buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=27, pady=18)
+        confirm_button = ctk.CTkButton(buttons, text="Confirmar Fechamento", fg_color="#1f6feb", command=confirm)
+        confirm_button.pack(side="right", padx=5)
+        ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
+        win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._log_caixa_runtime("CASH_CLOSE_BUILD_END")
+        try:
+            self._mostrar_modal_nabicode(win, counted)
+            self._log_caixa_runtime("CASH_CLOSE_DEICONIFY", estado="nao_utilizado")
+            self._log_caixa_runtime("CASH_CLOSE_LIFT")
+            self._log_caixa_runtime("CASH_CLOSE_FOCUS")
+            self._log_caixa_runtime("CASH_CLOSE_GRAB_SET", estado="ignorado_diagnostico")
+            self._log_caixa_runtime("CASH_CLOSE_READY", grab="desativado")
+        except Exception:
+            logger.exception("CASH_CLOSE_EXCEPTION ao revelar modal")
+            close()
+
+    @staticmethod
+    def _texto_comprovante_fechamento_caixa(session, resumo):
+        return "".join((
+            "NABICODE\n",
+            "FECHAMENTO DE CAIXA\n",
+            "=" * 32, "\n",
+            f"Sessão: {session.id}\nTerminal: {session.terminal}\n"
+            f"Aberto por: {session.opened_by}\nAbertura: {session.opened_at}\n"
+            f"Fechado por: {session.closed_by}\nFechamento: {session.closed_at}\n",
+            "-" * 32, "\n",
+            f"Saldo inicial: R$ {session.opening_balance:.2f}\n"
+            f"Vendas dinheiro: R$ {resumo['dinheiro']:.2f}\n"
+            f"Recebimentos dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\n"
+            f"Suprimentos: R$ {resumo['suprimentos']:.2f}\n"
+            f"Sangrias: R$ {resumo['sangrias']:.2f}\n"
+            f"Outras saídas: R$ 0.00\n"
+            f"Dinheiro esperado: R$ {session.expected_cash:.2f}\n",
+            "-" * 32, "\n",
+            f"PIX: R$ {resumo['pix']:.2f}\nCartão: R$ {resumo['cartao']:.2f}\n"
+            f"Outros eletrônicos: R$ {resumo['outros'] + resumo['recebimentos_eletronicos']:.2f}\n"
+            f"Valor contado: R$ {session.counted_cash:.2f}\nDiferença: R$ {session.difference:.2f}\n"
+            f"Observação: {session.closing_note or '-'}\n",
+        ))
+
+    def _imprimir_comprovante_fechamento_caixa(self, session, resumo):
+        texto = self._texto_comprovante_fechamento_caixa(session, resumo)
+        impressora = obter_config("impressora_recibo") or "Padrão do Sistema"
+        servico_impressao = self._servico_impressao()
+        lock = getattr(self, "_cash_print_dispatch_lock", None)
+        if lock is None:
+            lock = threading.Lock()
+            self._cash_print_dispatch_lock = lock
+        with lock:
+            dispatched = getattr(self, "_cash_printed_closings", None)
+            if dispatched is None:
+                dispatched = set()
+                self._cash_printed_closings = dispatched
+            dispatch_key = int(session.id)
+            if dispatch_key in dispatched:
+                logger.warning(
+                    "CASH_CLOSE_PRINT_DUPLICATE_BLOCKED session_id=%s", session.id
+                )
+                return False
+            dispatched.add(dispatch_key)
+        def worker():
+            try:
+                nome = servico_impressao.print_text(
+                    texto,
+                    output_format="Cupom 80 mm",
+                    printer=impressora,
+                    title=f"Fechamento de caixa #{session.id}",
+                )
+            except Exception as exc:
+                logger.exception("Falha ao imprimir comprovante do fechamento de caixa")
+                self.after(0, lambda erro=str(exc): self.mostrar_notificacao("Fechamento salvo", f"O caixa foi fechado, mas a impressão falhou: {erro}", nivel="warning"))
+                return
+            self.after(0, lambda: self.mostrar_notificacao("Fechamento impresso", f"Comprovante enviado para {nome}.", nivel="success"))
+        threading.Thread(target=worker, name=f"cash-closing-print-{session.id}", daemon=True).start()
+        return True
 
     def _detalhar_caixa_historico(self, _event=None):
         selected = self.tabela_caixas.selection()
         if not selected: return
         resumo = self._servico_caixa().session_summary(int(selected[0]))
         sessao = resumo["session"]
-        movimentos = "\n".join(f"{m['data']} • {m['tipo']} • R$ {m['valor']:.2f} • {m['usuario']} • {m['observacao']}" for m in resumo["movements"]) or "Nenhum movimento próprio."
-        messagebox.showinfo("Detalhe do caixa", f"Sessão #{sessao.id} — {sessao.status}\nDinheiro R$ {resumo['dinheiro']:.2f} | PIX R$ {resumo['pix']:.2f} | Cartão R$ {resumo['cartao']:.2f}\nRecebimentos em dinheiro R$ {resumo['recebimentos_dinheiro']:.2f}\nSangrias R$ {resumo['sangrias']:.2f} | Suprimentos R$ {resumo['suprimentos']:.2f}\nEsperado R$ {resumo['expected_cash']:.2f}\nObservação: {sessao.closing_note}\n\n{movimentos}", parent=self)
+        win, created = self._criar_modal_nabicode("HISTORICO", f"Detalhes da sessão #{sessao.id}", 800, 620)
+        if not created: return
+        self._log_caixa_runtime("CASH_MODAL_OPEN", tipo="HISTORICO")
+        shell = ctk.CTkScrollableFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        ctk.CTkLabel(shell, text=f"SESSÃO #{sessao.id} — {sessao.status}", font=ctk.CTkFont(size=21, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=28, pady=(24, 12))
+        counted_text = "—" if sessao.counted_cash is None else f"R$ {sessao.counted_cash:.2f}"
+        difference_text = "—" if sessao.difference is None else f"R$ {sessao.difference:.2f}"
+        text = f"Abertura: {sessao.opened_at} por {sessao.opened_by}\nFechamento: {sessao.closed_at or '—'} por {sessao.closed_by or '—'}\nSaldo inicial: R$ {sessao.opening_balance:.2f}\nDinheiro: R$ {resumo['dinheiro']:.2f}   PIX: R$ {resumo['pix']:.2f}   Cartão: R$ {resumo['cartao']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\nSangrias: R$ {resumo['sangrias']:.2f}   Suprimentos: R$ {resumo['suprimentos']:.2f}\nEsperado: R$ {resumo['expected_cash']:.2f}\nContado: {counted_text}   Diferença: {difference_text}\nObservação: {sessao.closing_note or '—'}"
+        ctk.CTkLabel(shell, text=text, justify="left", anchor="w", fg_color="#161b22", corner_radius=12).pack(fill="x", padx=28, pady=8, ipady=12)
+        ctk.CTkLabel(shell, text="MOVIMENTAÇÕES", font=ctk.CTkFont(size=15, weight="bold")).pack(anchor="w", padx=28, pady=(14, 6))
+        if resumo["movements"]:
+            for movement in resumo["movements"]:
+                sign = "-" if movement.get("sinal", 1) < 0 else "+"
+                ctk.CTkLabel(shell, text=f"{movement['data']}  •  {movement['tipo']}  •  {sign}R$ {movement['valor']:.2f}  •  {movement['usuario']}  •  {movement['observacao']}", anchor="w").pack(fill="x", padx=32, pady=2)
+        else:
+            ctk.CTkLabel(shell, text="Nenhuma movimentação nesta sessão.", text_color="#8b949e").pack(anchor="w", padx=32)
+        close = lambda _event=None: self._fechar_modal_caixa(win)
+        ctk.CTkButton(shell, text="Voltar", fg_color="#30363d", command=close).pack(anchor="e", padx=28, pady=24)
+        win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win)
 
     def perguntar_abertura_caixa(self):
         if not self._startup_reveal_complete:
-            self.after(250, self._agendar_pergunta_abertura_caixa)
             return
         self._garantir_janela_principal_visivel()
+        self._log_caixa_runtime("CASH_CHECK", terminal=self._terminal_caixa())
         if self._servico_caixa().get_open_session(self._terminal_caixa()):
             return
-        if self._janela_abertura_caixa is not None:
-            try:
-                if self._janela_abertura_caixa.winfo_exists():
-                    self._janela_abertura_caixa.lift()
-                    self._janela_abertura_caixa.focus_force()
-                    return
-            except tk.TclError:
-                pass
-
-        win = ctk.CTkToplevel(self)
-        prepare_hidden_toplevel(win)
+        win, created = self._criar_modal_nabicode("ABERTURA_ESCOLHA", "Abertura de caixa", 500, 250)
+        if not created: return
+        self._log_caixa_runtime("CASH_DIALOG_CREATE")
         self._janela_abertura_caixa = win
-        win.title("Abertura de caixa")
-        win.geometry("500x250")
-        win.resizable(False, False)
-        win.transient(self)
+        self._log_caixa_runtime("CASH_MODAL_OPEN", tipo="ABERTURA")
 
         def fechar_apos_abertura():
             self._janela_abertura_caixa = None
-            try:
-                win.grab_release()
-            except tk.TclError:
-                pass
-            win.destroy()
+            self._fechar_modal_caixa(win)
             self._garantir_janela_principal_visivel()
+
+        def encerrar_aplicacao():
+            self._janela_abertura_caixa = None
+            self._fechar_modal_caixa(win)
+            self.destroy()
 
         def informar_agora():
             fechar_apos_abertura()
-            self.after_idle(self.abrir_formulario_abertura_caixa)
+            self.abrir_formulario_abertura_caixa()
 
         def abrir_sem_informar():
             try:
-                self._servico_caixa().open_session(
-                    self._terminal_caixa(), self._usuario_caixa(), 0,
-                    "SEM_VALOR_INFORMADO",
-                )
+                self._solicitar_criacao_sessao_caixa(source="OPEN_WITHOUT_VALUE", opening_balance=0)
             except Exception as exc:
                 messagebox.showerror("Abertura de caixa", str(exc), parent=win)
                 return
             fechar_apos_abertura()
             self.atualizar_tela_caixa()
 
-        win.protocol("WM_DELETE_WINDOW", lambda: None)
+        win.protocol("WM_DELETE_WINDOW", encerrar_aplicacao)
         ctk.CTkLabel(win, text="💵 Abertura de caixa", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.cor_acento).pack(pady=(25,8))
         ctk.CTkLabel(win, text="Escolha como abrir o caixa deste terminal.", justify="center").pack(pady=8)
         frame=ctk.CTkFrame(win, fg_color="transparent"); frame.pack(fill="x", padx=30, pady=15)
         ctk.CTkButton(frame, text="INFORMAR SALDO INICIAL", fg_color="#2ea043", command=informar_agora).pack(side="left", expand=True, fill="x", padx=5)
         ctk.CTkButton(frame, text="ABRIR SEM INFORMAR", fg_color="#1f6feb", command=abrir_sem_informar).pack(side="left", expand=True, fill="x", padx=5)
-        reveal_prepared_toplevel_smooth(win, grab=True, duration_ms=300)
+        self._mostrar_modal_nabicode(win)
+        self._log_caixa_runtime("CASH_DIALOG_VISIBLE", viewable=bool(win.winfo_viewable()))
 
     def abrir_formulario_abertura_caixa(self):
         """Abre o formulário de caixa sem ocultar ou bloquear a janela principal."""
         self._garantir_janela_principal_visivel()
 
-        if self._janela_formulario_abertura_caixa is not None:
-            try:
-                if self._janela_formulario_abertura_caixa.winfo_exists():
-                    self._janela_formulario_abertura_caixa.lift()
-                    self._janela_formulario_abertura_caixa.focus_force()
-                    return
-            except tk.TclError:
-                pass
-
-        win = ctk.CTkToplevel(self)
-        prepare_hidden_toplevel(win)
+        win, created = self._criar_modal_nabicode("ABERTURA_VALOR", "Informar abertura de caixa", 480, 410)
+        if not created: return
         self._janela_formulario_abertura_caixa = win
-        win.title("Informar abertura de caixa")
-        win.geometry("480x410")
-        win.resizable(False, False)
-        win.transient(self)
+        self._log_caixa_runtime("CASH_MODAL_OPEN", tipo="SALDO_INICIAL")
 
         ctk.CTkLabel(
             win,
@@ -2301,49 +2552,37 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             height=40,
         )
         valor.pack(fill="x", padx=30, pady=7)
+        erro = ctk.CTkLabel(win, text="", text_color="#ff6b6b")
+        erro.pack(anchor="w", padx=30)
 
         def fechar_formulario():
             self._janela_formulario_abertura_caixa = None
-            try:
-                win.grab_release()
-            except tk.TclError:
-                pass
-            try:
-                win.destroy()
-            except tk.TclError:
-                pass
-            self.after_idle(self.perguntar_abertura_caixa)
+            self._fechar_modal_caixa(win)
+            self._garantir_janela_principal_visivel()
 
         def salvar():
+            if not valor.get().strip():
+                erro.configure(text="Informe o saldo inicial. R$ 0,00 é aceito.")
+                return
             try:
-                valor_inicial = tratar_numero(valor.get()) if valor.get().strip() else 0.0
+                valor_inicial = tratar_numero(valor.get())
             except ValueError:
-                messagebox.showerror("Erro", "Valor inicial inválido.", parent=win)
+                erro.configure(text="Valor inicial inválido.")
                 return
 
             try:
-                self._servico_caixa().open_session(
-                    self._terminal_caixa(), self._usuario_caixa(), valor_inicial,
-                    "VALOR_INFORMADO",
-                )
-                messagebox.showinfo(
-                    "Abertura",
-                    "Caixa aberto com sucesso.",
-                    parent=win,
-                )
+                self._solicitar_criacao_sessao_caixa(source="OPEN_WITH_VALUE", opening_balance=valor_inicial)
             except Exception as exc:
                 logger.exception("Falha ao registrar abertura de caixa.")
-                messagebox.showerror(
-                    "Abertura de caixa",
-                    f"Não foi possível registrar a abertura:\n{exc}",
-                    parent=win,
-                )
+                erro.configure(text=f"Não foi possível abrir o caixa: {exc}")
                 return
 
             fechar_formulario()
             self.atualizar_tela_caixa()
 
-        win.protocol("WM_DELETE_WINDOW", lambda: None)
+        win.protocol("WM_DELETE_WINDOW", fechar_formulario)
+        win.bind("<Escape>", lambda _event: fechar_formulario())
+        win.bind("<Return>", lambda _event: salvar())
         ctk.CTkButton(
             win,
             text="CONFIRMAR ABERTURA",
@@ -2351,12 +2590,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             height=42,
             command=salvar,
         ).pack(fill="x", padx=30, pady=(15, 6))
-        reveal_prepared_toplevel_smooth(
-            win,
-            grab=True,
-            focus_widget=valor,
-            duration_ms=300,
-        )
+        ctk.CTkButton(win, text="VOLTAR", fg_color="#30363d", command=fechar_formulario).pack(fill="x", padx=30, pady=5)
+        self._mostrar_modal_nabicode(win, valor)
 
     def abrir_movimentacao_caixa(self):
         win=ctk.CTkToplevel(self); win.title("Movimentação de Caixa"); win.geometry("500x500"); win.transient(self); win.grab_set()

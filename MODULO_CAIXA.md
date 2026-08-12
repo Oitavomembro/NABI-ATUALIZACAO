@@ -31,4 +31,12 @@ Os valores próprios do Caixa são persistidos em representação decimal canôn
 
 ## Interface
 
-A aba `Caixa` mostra estado, identificação da sessão, resumo por forma de pagamento, movimento total, dinheiro esperado e histórico. Oferece abertura, sangria, suprimento e fechamento com confirmação. O detalhe histórico preserva o snapshot do fechamento e os movimentos próprios da sessão.
+A aba `Caixa` é o ponto oficial de todas as operações. Ela mantém a navegação principal acessível e mostra estado, identificação, cards por forma de pagamento, movimento total, dinheiro esperado, ações, movimentações da sessão e histórico.
+
+Com caixa aberto aparecem somente sangria, suprimento e fechamento. Com caixa fechado aparecem somente as duas opções de abertura. Sangria, suprimento, fechamento e detalhes usam modais visuais NabiCode, construídos ocultos e revelados somente depois do layout, sem fade por transparência.
+
+Os antigos acessos `Movimentação de Caixa` e `Finalizar dia` não são mais exibidos no Dashboard. As funções internas legadas permanecem apenas para compatibilidade do código histórico, sem concorrer com o fluxo oficial.
+
+Após o fechamento, nenhuma abertura é disparada automaticamente. A tela consulta novamente o banco, mostra `CAIXA FECHADO` e aguarda uma escolha explícita. O comprovante do fechamento é enviado ao pipeline oficial de impressão térmica 80 mm em segundo plano; falhas de impressora não desfazem o fechamento nem bloqueiam a interface.
+
+Todos os Toplevels do Caixa compartilham uma infraestrutura não bloqueante. Nesta fase de estabilização não usam modalidade, espera, transient, topmost ou alternância de visibilidade. A criação de sessão também possui uma única fronteira: somente confirmação de saldo informado ou clique explícito em abrir sem informar são aceitos.
