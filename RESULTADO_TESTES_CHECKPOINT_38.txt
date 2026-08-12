@@ -1,0 +1,36 @@
+NabiCode 2.5.1 DEV — Checkpoint 38
+Data: 2026-08-08
+
+BASE:
+NabiCode_v2_5_1_DEV_CHECKPOINT_37_STARTUP_SPLASH_LICENSE_FIX.zip
+SHA-256: 0dbd062b69e26403b58e119594fd3f545590b98bcfb84f1dfe27b94dcb3df88a
+
+COMPILAÇÃO:
+python -m compileall -q .
+RESULTADO: APROVADO
+
+TESTES FOCADOS:
+66 passed, 3 subtests passed in 0.77s
+
+SUÍTE COMPLETA:
+959 passed, 18 subtests passed in 19.22s
+
+CONTAGEM:
+Checkpoint 37: 949 testes, 18 subtestes
+Checkpoint 38: 959 testes, 18 subtestes
+Testes removidos: 0
+Testes adicionados: 10
+
+BENCHMARK DO RENDERER 1280x720 / 732 FRAMES:
+média: 12.53 ms/frame
+p95: 21.93 ms/frame
+pior: 29.13 ms/frame
+capacidade teórica média do desenho: 79.8 FPS
+
+PERFIS:
+raiz: TESTE
+artefato: PRODUCAO
+versão: 2.5.1
+
+BUILD E TESTE FÍSICO WINDOWS:
+PENDENTES. Nenhuma aprovação física foi presumida.

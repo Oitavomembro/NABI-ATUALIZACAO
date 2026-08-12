@@ -1,0 +1,52 @@
+NABICODE 2.5.1 DEV — CHECKPOINT 40
+Data: 2026-08-09
+
+compileall:
+python -m compileall -q .
+APROVADO
+
+Suíte completa:
+990 passed, 22 subtests passed in 24.90s
+
+Suíte focada inicial (PDV, campo de busca, notificações, build, startup e licença):
+78 passed, 3 subtests passed in 0.45s
+
+Stress separado:
+1 passed in 5.45s
+1.000 vendas; 2.000 movimentos; 100 cancelamentos; 100 rollbacks injetados.
+
+Benchmark separado:
+1 passed in 0.34s
+
+Soak separado:
+1 passed in 3.10s
+5.000 ciclos; 1.000 commits; 4.000 rollbacks.
+
+Soak prolongado, quatro rodadas adicionais:
+1 passed in 2.61s
+1 passed in 2.52s
+1 passed in 2.46s
+1 passed in 2.42s
+Total adicional: 20.000 ciclos; 4.000 commits; 16.000 rollbacks.
+
+Smoke headless do helper canônico:
+schema=3
+engine=pygame-ce-canonical
+logical_size=1280x720
+rendered_frames=757
+measured_fps=61.851
+average_render_ms=10.508
+slowest_render_ms=23.942
+erros=nenhum
+
+Motor visual versus protótipo:
+SHA-256=7057bd3b41ba0cca3fc05486e07f2556debdb3942cb2304b46ce18a3814ac53f
+comparação byte a byte=IGUAL
+
+Auditoria do build:
+{"ok": true, "version": "2.5.1", "distribution": "NabiCode_v2_5_1"}
+perfil fonte=TESTE
+perfil artefato=PRODUCAO
+
+Build PyInstaller/Inno, setup recompilado e teste físico Windows:
+NÃO EXECUTADOS neste ambiente Linux; pendentes.

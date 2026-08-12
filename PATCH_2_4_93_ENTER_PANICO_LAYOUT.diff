@@ -1,0 +1,157 @@
+--- /mnt/data/nabi_2492_orig/NabiCode_v2_4_92_TESTE_SALDO_HISTORICO/controllers/pdv_enter_controller.py	2026-08-07 11:41:58.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/controllers/pdv_enter_controller.py	2026-08-07 13:27:08.731878188 +0000
+@@ -57,11 +57,21 @@
+ 
+     def handle_product(self, event: Any = None) -> str:
+         if self._popup_open(self.popup_getter()):
+-            self.confirm_suggestion(event)
++            # O evento veio do campo de pesquisa, não da Treeview. Repassar
++            # coordenadas desse evento para a tabela fazia o Enter identificar
++            # uma linha inexistente e ignorar a sugestão selecionada.
++            self.confirm_suggestion(None)
+             return "break"
+ 
+         term = str(self.product_entry.get() or "").strip()
+         if not term:
++            # Carrinho preenchido + pesquisa vazia: Enter desloca o foco para
++            # a etapa de finalização. O próximo Enter no carrinho finaliza.
++            try:
++                if self.cart.get_children():
++                    self._focus(self.cart)
++            except Exception:
++                pass
+             return "break"
+         if self.select_by_barcode(term):
+             self._focus(self.quantity_entry)
+--- /mnt/data/nabi_2492_orig/NabiCode_v2_4_92_TESTE_SALDO_HISTORICO/nabicode_legacy.py	2026-08-07 13:00:59.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/nabicode_legacy.py	2026-08-07 13:27:36.683956076 +0000
+@@ -44,7 +44,7 @@
+ 
+ SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+ RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
+-COMPILED_APP_VERSION = "2.4.92"
++COMPILED_APP_VERSION = "2.4.93"
+ 
+ def _ler_versao_aplicacao():
+     return load_app_version(
+@@ -502,8 +502,13 @@
+     PageUp/PageDown: 20%; Home/End: 0%/100%.
+     """
+ 
+-    def __init__(self, master, *, fg_color="#161b22", content_width=1000, content_height=1, **kwargs):
++    def __init__(
++        self, master, *, fg_color="#161b22", content_width=1000, content_height=1,
++        expand_to_viewport=False, **kwargs
++    ):
+         super().__init__(master, fg_color=fg_color, **kwargs)
++        self._minimum_content_width = int(content_width)
++        self._expand_to_viewport = bool(expand_to_viewport)
+         self.grid_rowconfigure(0, weight=1)
+         self.grid_columnconfigure(0, weight=1)
+         self._wheel_bound = False
+@@ -582,6 +587,13 @@
+ 
+     def _update_scrollregion(self, _event=None):
+         self.update_idletasks()
++        if self._expand_to_viewport:
++            viewport_width = max(1, self.canvas.winfo_width())
++            target_width = max(self._minimum_content_width, viewport_width)
++            try:
++                self.canvas.itemconfigure(self._window_id, width=target_width)
++            except tk.TclError:
++                pass
+         bbox = self.canvas.bbox("all")
+         if bbox:
+             self.canvas.configure(scrollregion=bbox)
+@@ -807,8 +819,9 @@
+                 "Seus cadastros e históricos foram preservados."
+             )
+ 
+-        self.contador_panico = 0
+-        self.bind("<Down>", self.ativar_modo_panico)
++        # Pânico não pode compartilhar teclas de navegação. O atalho exige
++        # combinação deliberada para nunca fechar o sistema ao navegar listas.
++        self.bind("<Control-Shift-P>", self.ativar_modo_panico)
+         
+         self.bind("<F1>", lambda event: self.mostrar_tela("configs" if primeira_vez else "dashboard"))
+         self.bind("<F2>", lambda event: self.abrir_pdv_independente())
+@@ -1299,10 +1312,9 @@
+         
+         return not liberado[0]
+ 
+-    def ativar_modo_panico(self, event):
+-        self.contador_panico += 1
+-        if self.contador_panico >= 4:
+-            self.destroy()
++    def ativar_modo_panico(self, event=None):
++        self.destroy()
++        return "break"
+ 
+     def alternar_menu_lateral(self):
+         if self.frame_menu.winfo_ismapped():
+@@ -1349,7 +1361,7 @@
+             "[F3] ➔ Clientes\n"
+             "[F4] ➔ Produtos\n"
+             "[F5] ➔ Configs\n"
+-            "[⬇️x4] ➔ Pânico"
++            "[Ctrl+Shift+P] ➔ Pânico"
+         )
+         lbl_atalhos_lista = ctk.CTkLabel(frame_atalhos, text=txt_atalhos, font=ctk.CTkFont(size=13, weight="bold"), text_color="#c9d1d9", justify="left")
+         lbl_atalhos_lista.pack(anchor="w", padx=10, pady=(0, 6))
+@@ -1373,6 +1385,17 @@
+         btn_suporte = ctk.CTkButton(self.frame_menu, text="📲 Suporte", fg_color="#2ea043", hover_color="#238636", height=32, font=ctk.CTkFont(size=12, weight="bold"), command=self.abrir_chamado_suporte)
+         btn_suporte.pack(pady=(0, 5), padx=12, fill="x")
+ 
++        btn_panico = ctk.CTkButton(
++            self.frame_menu,
++            text="⚠ Pânico  [Ctrl+Shift+P]",
++            fg_color="#b62324",
++            hover_color="#8f1d1e",
++            height=30,
++            font=ctk.CTkFont(size=11, weight="bold"),
++            command=self.ativar_modo_panico,
++        )
++        btn_panico.pack(pady=(0, 5), padx=12, fill="x")
++
+         lbl_rodape_dev = ctk.CTkLabel(self.frame_menu, text="Nabi 🦋 Code", font=ctk.CTkFont(size=10), text_color="#8b949e", cursor="hand2")
+         lbl_rodape_dev.pack(side="bottom", pady=15)
+ 
+@@ -4436,7 +4459,13 @@
+ 
+         rodape = ctk.CTkFrame(win, fg_color="#161b22", corner_radius=0)
+         rodape.grid(row=2, column=0, sticky="ew")
+-        ctk.CTkLabel(rodape, text="F2 Produto   F3 Cliente   F4 Quantidade   F5 Orçamento   F7 Reabrir   F8 Pré-venda   F9 Finalizar   Duplo clique remove item   Esc Fechar", font=ctk.CTkFont(size=12, weight="bold"), text_color="#c9d1d9").pack(pady=10)
++        ctk.CTkLabel(
++            rodape,
++            text=("Enter seleciona/avança • pesquisa vazia + Enter → carrinho • Enter no carrinho → finalizar   "
++                  "F2 Produto   F3 Cliente   F9 Finalizar   Esc Fechar"),
++            font=ctk.CTkFont(size=12, weight="bold"),
++            text_color="#c9d1d9",
++        ).pack(pady=10)
+ 
+         for item in self.carrinho_venda:
+             nome_item = f"AVULSO • {item['item']}" if item.get("item_avulso") else item["item"]
+@@ -5312,7 +5341,11 @@
+             return SearchEntryBehavior.consume_enter()
+ 
+         iid = ""
+-        if event is not None and getattr(event, "y", None) is not None:
++        if (
++            event is not None
++            and getattr(event, "widget", None) is tabela
++            and getattr(event, "y", None) is not None
++        ):
+             if tabela.identify_region(event.x, event.y) not in {"cell", "tree"}:
+                 return "break"
+             iid = tabela.identify_row(event.y)
+@@ -5995,7 +6028,9 @@
+         self.criar_cabecalho_e_botoes(frame)
+         self.adicionar_rodape_status(frame)
+         
+-        scroll_clientes = BidirectionalScrollableFrame(frame, fg_color="transparent", content_width=1180)
++        scroll_clientes = BidirectionalScrollableFrame(
++            frame, fg_color="transparent", content_width=1180, expand_to_viewport=True
++        )
+         self.scroll_clientes = scroll_clientes
+         scroll_clientes.pack(fill="both", expand=True, padx=20, pady=5)
+         conteudo_cli = scroll_clientes.content

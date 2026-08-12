@@ -1,0 +1,237 @@
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/RELATORIO_CORRECOES_2_4_94.md /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/RELATORIO_CORRECOES_2_4_94.md
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/RELATORIO_CORRECOES_2_4_94.md	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/RELATORIO_CORRECOES_2_4_94.md	2026-08-07 13:45:27.946378151 +0000
+@@ -0,0 +1,9 @@
++# NabiCode 2.4.94 — Setas, layout de Clientes e corte térmico
++
++## Correções
++- Tela Clientes deixa de impor largura mínima de 1180 px; usa mínimo seguro de 900 px e cresce até o viewport.
++- Setas navegam entre opções/botões globalmente sem roubar setas de Entry, ComboBox, Treeview, listas, sliders ou textos.
++- Removido default conflitante que podia persistir corte automático desligado.
++- Migração 2.4.94 habilita corte automático uma única vez em bases antigas; depois o usuário pode desligá-lo normalmente.
++- Pânico permanece em Ctrl+Shift+P e não usa setas.
++- Financeiro/recebimento não foi alterado.
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/VERSAO.txt /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/VERSAO.txt
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/VERSAO.txt	2026-08-07 13:27:36.681079690 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/VERSAO.txt	2026-08-07 13:45:27.945581549 +0000
+@@ -1 +1 @@
+-2.4.93
++2.4.94
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/database/schema_initializer.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/database/schema_initializer.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/database/schema_initializer.py	2026-08-05 21:08:54.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/database/schema_initializer.py	2026-08-07 13:45:27.945940522 +0000
+@@ -760,13 +760,26 @@
+         ("impressao_mostrar_email", "0"),
+         ("impressao_mostrar_assinatura", "1"),
+         ("impressao_qrcode", "1"),
+-        ("impressao_corte_automatico", "0"),
+         ("impressao_avanco_linhas", "3"),
+         ("impressao_acao_pos_pdf", "PERGUNTAR"),
+         ("impressao_salvar_pdf_automatico", "1")
+     ]
+     for chave, valor in configs_padrao:
+         cursor.execute("INSERT OR IGNORE INTO configuracoes (chave, valor) VALUES (?, ?)", (chave, valor))
++
++    # 2.4.94: bases migradas podiam carregar o corte térmico desligado por um
++    # default duplicado antigo. Habilita uma única vez; depois disso a escolha
++    # do usuário volta a ser soberana e pode ser desligada nas configurações.
++    corte_marker = cursor.execute(
++        "SELECT valor FROM configuracoes WHERE chave='migracao_corte_automatico_2494'"
++    ).fetchone()
++    if not corte_marker:
++        cursor.execute(
++            "UPDATE configuracoes SET valor='1' WHERE chave='impressao_corte_automatico'"
++        )
++        cursor.execute(
++            "INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES ('migracao_corte_automatico_2494', '1')"
++        )
+     # Migra apenas a senha padrão antiga; senhas personalizadas permanecem intactas.
+     senha_antiga = hashlib.sha256("NabiCode@123".encode("utf-8")).hexdigest()
+     senha_nova = "c6e9ec8af02a450b41405d7f905d7ce4061bd7559d576d5dd56efd3071b399ef"
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/nabicode_legacy.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/nabicode_legacy.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/nabicode_legacy.py	2026-08-07 13:27:36.683956076 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/nabicode_legacy.py	2026-08-07 13:45:27.945385118 +0000
+@@ -33,6 +33,7 @@
+ from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
+ from services.windows_file_opener import WindowsFileOpener, WindowsFileOpenError
+ from ui import NabiTheme, configure_ctk, configure_ttk, apply_responsive_geometry
++from ui.keyboard_navigation import install_global_arrow_navigation
+ from managers import SystemInfrastructureManager
+ from helpers import parse_flexible_number, parse_system_date
+ from controllers.pdv_enter_controller import PDVEnterController
+@@ -44,7 +45,7 @@
+ 
+ SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+ RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
+-COMPILED_APP_VERSION = "2.4.93"
++COMPILED_APP_VERSION = "2.4.94"
+ 
+ def _ler_versao_aplicacao():
+     return load_app_version(
+@@ -848,6 +849,7 @@
+ 
+         self._instalar_interacoes_texto_globais()
+         self._instalar_atalhos_globais()
++        install_global_arrow_navigation(self)
+         self.after(5000, self._executar_agendamentos_relatorios)
+         self.bind("<<NabiCommandPalette>>", lambda _event: self.abrir_pesquisa_global(), add="+")
+ 
+@@ -6029,7 +6031,7 @@
+         self.adicionar_rodape_status(frame)
+         
+         scroll_clientes = BidirectionalScrollableFrame(
+-            frame, fg_color="transparent", content_width=1180, expand_to_viewport=True
++            frame, fg_color="transparent", content_width=900, expand_to_viewport=True
+         )
+         self.scroll_clientes = scroll_clientes
+         scroll_clientes.pack(fill="both", expand=True, padx=20, pady=5)
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_exe_version_packaging.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_exe_version_packaging.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_exe_version_packaging.py	2026-08-07 13:27:36.684358273 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_exe_version_packaging.py	2026-08-07 13:45:27.946064736 +0000
+@@ -18,7 +18,7 @@
+ 
+     def test_legacy_uses_compiled_fallback(self):
+         source = (ROOT / "nabicode_legacy.py").read_text(encoding="utf-8")
+-        self.assertIn('COMPILED_APP_VERSION = "2.4.93"', source)
++        self.assertIn('COMPILED_APP_VERSION = "2.4.94"', source)
+         self.assertIn("return load_app_version(", source)
+         self.assertNotIn('raise RuntimeError("VERSAO.txt', source)
+ 
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_startup_smoke_test.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_startup_smoke_test.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_startup_smoke_test.py	2026-08-07 13:27:36.684240037 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_startup_smoke_test.py	2026-08-07 13:45:27.946022323 +0000
+@@ -26,7 +26,7 @@
+                 check=False,
+             )
+             self.assertEqual(completed.returncode, 0, completed.stderr)
+-            self.assertEqual(output.read_text(encoding="utf-8").strip(), "2.4.93")
++            self.assertEqual(output.read_text(encoding="utf-8").strip(), "2.4.94")
+ 
+     def test_all_build_scripts_execute_binary_smoke_test(self):
+         for filename in ("GERAR_EXE_FINAL.bat", "GERAR_EXE_TESTE.bat", "GERAR_EXE_DEBUG.bat"):
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_v243_splash_and_cutter.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_v243_splash_and_cutter.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_v243_splash_and_cutter.py	2026-08-05 22:49:56.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_v243_splash_and_cutter.py	2026-08-07 13:45:27.946128310 +0000
+@@ -32,6 +32,8 @@
+         self.assertIn("Corte automático da impressora térmica", UI)
+         self.assertIn("impressao_corte_automatico", UI)
+         self.assertIn('("impressao_corte_automatico", "1")', SCHEMA)
++        self.assertNotIn('("impressao_corte_automatico", "0")', SCHEMA)
++        self.assertIn('migracao_corte_automatico_2494', SCHEMA)
+ 
+ if __name__ == "__main__":
+     unittest.main()
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_v2494_keyboard_layout_cutter.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_v2494_keyboard_layout_cutter.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/tests/test_v2494_keyboard_layout_cutter.py	1970-01-01 00:00:00.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/tests/test_v2494_keyboard_layout_cutter.py	2026-08-07 13:45:27.946340275 +0000
+@@ -0,0 +1,31 @@
++from pathlib import Path
++import unittest
++
++ROOT = Path(__file__).resolve().parents[1]
++LEGACY = (ROOT / "nabicode_legacy.py").read_text(encoding="utf-8")
++KEYBOARD = (ROOT / "ui" / "keyboard_navigation.py").read_text(encoding="utf-8")
++SCHEMA = (ROOT / "database" / "schema_initializer.py").read_text(encoding="utf-8")
++
++
++class V2494KeyboardLayoutCutterTests(unittest.TestCase):
++    def test_clients_can_shrink_to_real_viewport(self):
++        self.assertIn('content_width=900, expand_to_viewport=True', LEGACY)
++        self.assertNotIn('content_width=1180, expand_to_viewport=True', LEGACY)
++
++    def test_global_arrow_navigation_is_installed(self):
++        self.assertIn('install_global_arrow_navigation(self)', LEGACY)
++        self.assertIn('("<Right>", "<Down>")', KEYBOARD)
++        self.assertIn('("<Left>", "<Up>")', KEYBOARD)
++
++    def test_arrow_navigation_preserves_native_inputs_and_tables(self):
++        for name in ('CTkEntry', 'CTkTextbox', 'CTkComboBox', 'Treeview', 'Listbox'):
++            self.assertIn(f'"{name}"', KEYBOARD)
++
++    def test_cutter_old_conflicting_default_is_removed(self):
++        self.assertIn('(\"impressao_corte_automatico\", \"1\")', SCHEMA)
++        self.assertNotIn('(\"impressao_corte_automatico\", \"0\")', SCHEMA)
++        self.assertIn('migracao_corte_automatico_2494', SCHEMA)
++
++
++if __name__ == '__main__':
++    unittest.main()
+diff -ruN '--exclude=__pycache__' '--exclude=.pytest_cache' /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/ui/keyboard_navigation.py /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/ui/keyboard_navigation.py
+--- /mnt/data/NabiCode_v2_4_93_TESTE_ENTER_PANICO_LAYOUT/ui/keyboard_navigation.py	2026-08-07 11:42:08.000000000 +0000
++++ /mnt/data/NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/ui/keyboard_navigation.py	2026-08-07 13:45:27.945756429 +0000
+@@ -60,3 +60,75 @@
+     )
+     for sequence in sequences:
+         bind_key_once(widget, sequence, callback, owner=owner, add=add)
++
++
++_ARROW_NAV_ATTR = "_nabicode_global_arrow_navigation"
++
++
++def _ancestor_type_names(widget: Any) -> set[str]:
++    names: set[str] = set()
++    current = widget
++    seen: set[int] = set()
++    while current is not None:
++        marker = id(current)
++        if marker in seen:
++            break
++        seen.add(marker)
++        names.add(type(current).__name__)
++        current = getattr(current, "master", None)
++    return names
++
++
++def _preserve_native_arrow_behavior(widget: Any) -> bool:
++    """Não rouba setas de campos/listas que já usam as teclas semanticamente."""
++    names = _ancestor_type_names(widget)
++    native_names = {
++        "Entry", "Text", "Listbox", "Treeview", "Combobox", "Spinbox", "Scale",
++        "CTkEntry", "CTkTextbox", "CTkComboBox", "CTkSlider", "CTkScrollableFrame",
++    }
++    if names & native_names:
++        return True
++    try:
++        widget_class = str(widget.winfo_class())
++    except Exception:
++        widget_class = ""
++    return widget_class in {"Entry", "Text", "TEntry", "Treeview", "TCombobox", "Listbox", "Spinbox", "Scale"}
++
++
++def _move_focus(widget: Any, *, forward: bool) -> str | None:
++    if widget is None or _preserve_native_arrow_behavior(widget):
++        return None
++    try:
++        target = widget.tk_focusNext() if forward else widget.tk_focusPrev()
++    except Exception:
++        return None
++    if target in (None, widget):
++        return None
++    try:
++        target.focus_set()
++    except Exception:
++        return None
++    return "break"
++
++
++def install_global_arrow_navigation(root: Any) -> None:
++    """Usa setas para navegar opções/botões sem interferir em edição e tabelas.
++
++    Direita/Baixo avançam; Esquerda/Cima retornam. Entradas, Treeviews,
++    Comboboxes, sliders e listas preservam o comportamento nativo das setas.
++    """
++    if getattr(root, _ARROW_NAV_ATTR, False):
++        return
++    setattr(root, _ARROW_NAV_ATTR, True)
++
++    def handler(event: Any, *, forward: bool) -> str | None:
++        state = int(getattr(event, "state", 0) or 0)
++        # Ctrl/Alt/Meta continuam disponíveis para atalhos do sistema/aplicação.
++        if state & 0x0004 or state & 0x0008 or state & 0x0080:
++            return None
++        return _move_focus(getattr(event, "widget", None), forward=forward)
++
++    for sequence in ("<Right>", "<Down>"):
++        root.bind_all(sequence, lambda event, f=True: handler(event, forward=f), add="+")
++    for sequence in ("<Left>", "<Up>"):
++        root.bind_all(sequence, lambda event, f=False: handler(event, forward=f), add="+")

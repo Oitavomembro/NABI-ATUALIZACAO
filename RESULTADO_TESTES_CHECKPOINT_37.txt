@@ -1,0 +1,43 @@
+NabiCode 2.5.1 DEV — Checkpoint 37
+Data: 2026-08-08
+
+BASE:
+NabiCode_v2_5_1_DEV_CHECKPOINT_36_SMOKE_PROFILE_HOTFIX.zip
+SHA-256: 36cd989fe883a8bf542ab5b473e986883a318cf9641f18031277586a00226a3d
+
+COMPILAÇÃO:
+python -m compileall -q .
+RESULTADO: APROVADO
+
+TESTES FOCADOS INICIAIS:
+74 passed, 10 subtests passed in 1.36s
+
+TESTES FOCADOS APÓS REFORÇO DE CLEANUP:
+56 passed, 10 subtests passed in 0.89s
+
+TESTES FOCADOS DE STARTUP/SPLASH/LICENÇA/LOCK/BUILD:
+64 passed, 10 subtests passed in 1.22s
+
+SUÍTE COMPLETA FINAL:
+949 passed, 18 subtests passed in 20.16s
+
+CONTAGEM:
+Checkpoint 36: 934 testes, 11 subtestes
+Checkpoint 37: 949 testes, 18 subtestes
+Testes removidos: 0
+Testes adicionados: 15
+
+PERFIS:
+PERFIL_NABICODE.txt (raiz): TESTE
+build_tools/resources/PERFIL_NABICODE.txt: PRODUCAO
+VERSAO.txt: 2.5.1
+
+CONTRATO SMOKE CHECKPOINT 36:
+PRESERVADO E APROVADO NOS TESTES LOCAIS.
+
+BUILD/INSTALADOR WINDOWS DO CHECKPOINT 37:
+NÃO EXECUTADO NESTE AMBIENTE LINUX.
+PENDENTE DE REBUILD E VALIDAÇÃO FÍSICA NO WINDOWS.
+
+TESTES FÍSICOS, IMPRESSÃO E CORTE:
+PENDENTES; nenhum resultado físico foi presumido.

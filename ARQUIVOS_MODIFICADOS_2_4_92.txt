@@ -1,0 +1,14 @@
+services/financeiro_calculator.py
+services/financeiro_service.py
+services/receipt_service.py
+nabicode_legacy.py (integração: apenas trecho de recebimento + versão)
+core/app_version.py
+VERSAO.txt
+tests/test_financeiro_reconciliacao_2490.py
+tests/test_financeiro_recebimento_cliente_service.py
+tests/test_financeiro_saldo_historico_migrado_2492.py
+tests/test_credit_installments_and_targeted_payment.py
+tests/test_startup_smoke_test.py
+tests/test_exe_version_packaging.py
+AUDITAR_SALDO_CLIENTE.py
+RELATORIO_CORRECAO_SALDO_HISTORICO_2_4_92.md

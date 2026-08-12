@@ -1,0 +1,493 @@
+diff --git a/nabicode_legacy.py b/nabicode_legacy.py
+index e4c1332..5e73ec4 100644
+--- a/nabicode_legacy.py
++++ b/nabicode_legacy.py
+@@ -35,6 +35,8 @@ from services.windows_file_opener import WindowsFileOpener, WindowsFileOpenError
+ from ui import NabiTheme, configure_ctk, configure_ttk, apply_responsive_geometry
+ from managers import SystemInfrastructureManager
+ from helpers import parse_flexible_number, parse_system_date
++from controllers.pdv_enter_controller import PDVEnterController
++from controllers.financeiro_callback_controller import FinanceiroCallbackController
+ 
+ # Configuração Inicial
+ UI_THEME = NabiTheme()
+@@ -42,7 +44,7 @@ configure_ctk(appearance="Dark")
+ 
+ SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+ RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
+-COMPILED_APP_VERSION = "2.4.90"
++COMPILED_APP_VERSION = "2.4.91"
+ 
+ def _ler_versao_aplicacao():
+     return load_app_version(
+@@ -4299,9 +4301,7 @@ class FicharioMoveisApp(ctk.CTk):
+             command=self.mostrar_lista_produtos_venda,
+         )
+         self.btn_lista_produtos_venda.grid(row=0, column=2, padx=(2, 6), pady=12)
+-        SearchEntryBehavior.attach(
+-            self.entry_item_venda, on_enter=self.confirmar_sugestao_produto
+-        )
++        SearchEntryBehavior.configure(self.entry_item_venda)
+         self.entry_item_venda.bind("<KeyRelease>", self.filtrar_produtos_venda)
+         self.entry_item_venda.bind("<Down>", self.navegar_sugestoes_produto)
+         self.entry_item_venda.bind("<Up>", self.navegar_sugestoes_produto)
+@@ -4327,13 +4327,6 @@ class FicharioMoveisApp(ctk.CTk):
+             except (TypeError, ValueError):
+                 return False
+ 
+-        win._enter_navigator = install_enter_navigation(
+-            [
+-                EnterField(self.entry_qtd_venda, validar_quantidade_pdv),
+-                EnterField(self.entry_valor_venda, validar_preco_pdv),
+-            ],
+-            on_finish=self.adicionar_item_carrinho,
+-        )
+         ctk.CTkButton(busca, text="Adicionar  [Enter]", height=42, width=150, fg_color="#1f6feb", hover_color="#1158c7", command=self.adicionar_item_carrinho).grid(row=0, column=5, padx=(6, 14), pady=12)
+ 
+         self.var_item_avulso_pdv = tk.BooleanVar(value=False)
+@@ -4474,7 +4467,19 @@ class FicharioMoveisApp(ctk.CTk):
+         win.bind("<F9>", lambda _event: self.finalizar_venda("COMPROVANTE"))
+         win.bind("<F10>", lambda _event: self.aplicar_desconto_item_pdv())
+         win.bind("<F11>", lambda _event: self._alternar_tela_cheia_pdv())
+-        win.bind("<Return>", self._enter_contexto_pdv, add="+")
++        self._pdv_enter_controller = PDVEnterController(
++            product_entry=self.entry_item_venda,
++            quantity_entry=self.entry_qtd_venda,
++            price_entry=self.entry_valor_venda,
++            cart=self.tabela_carrinho,
++            popup_getter=lambda: getattr(self, "popup_produtos_venda", None),
++            confirm_suggestion=self.confirmar_sugestao_produto,
++            select_by_barcode=self._selecionar_produto_por_codigo_barras,
++            add_item=self.adicionar_item_carrinho,
++            finalize_sale=lambda: self.finalizar_venda("COMPROVANTE"),
++            validate_quantity=validar_quantidade_pdv,
++            validate_price=validar_preco_pdv,
++        ).install()
+         # Esc e o botão X são tratados pelo controlador universal de janelas.
+         def revelar_pdv_pronto():
+             try:
+@@ -4494,23 +4499,11 @@ class FicharioMoveisApp(ctk.CTk):
+ 
+ 
+     def _enter_contexto_pdv(self, event=None):
+-        foco = getattr(event, "widget", None) if event is not None else None
+-        if foco is getattr(self, "tabela_carrinho", None):
+-            self.finalizar_venda("COMPROVANTE")
+-            return "break"
+-        if foco is getattr(self, "entry_item_venda", None):
+-            popup = getattr(self, "popup_produtos_venda", None)
+-            try:
+-                popup_aberto = popup is not None and popup.winfo_exists()
+-            except tk.TclError:
+-                popup_aberto = False
+-            if not popup_aberto:
+-                termo = self.entry_item_venda.get().strip()
+-                selecionado_por_codigo = self._selecionar_produto_por_codigo_barras(termo)
+-                if selecionado_por_codigo or (termo and self.entry_valor_venda.get().strip()):
+-                    self.adicionar_item_carrinho()
+-                    return "break"
+-        return None
++        controller = getattr(self, "_pdv_enter_controller", None)
++        if controller is None:
++            return None
++        return controller.dispatch_legacy_event(event)
++
+ 
+ 
+     def abrir_cliente_rapido_pdv(self):
+@@ -5380,30 +5373,6 @@ class FicharioMoveisApp(ctk.CTk):
+         self.lista_produtos_venda = None
+         self._produto_sugestao_por_indice = []
+ 
+-    def _selecionar_produto_por_codigo_barras(self, codigo=None):
+-        codigo = str(codigo if codigo is not None else self.entry_item_venda.get()).strip()
+-        if not codigo:
+-            return False
+-        candidatos = PRODUTO_SERVICE.listar(codigo, "TODOS")
+-        produto = next((
+-            item for item in candidatos
+-            if item.get("ativo") and codigo.casefold() in {
+-                str(item.get("codigo", "")).strip().casefold(),
+-                str(item.get("codigo_barras", "")).strip().casefold(),
+-            }
+-        ), None)
+-        if produto is None:
+-            return False
+-        self.produto_venda_selecionado_id = produto["id"]
+-        if hasattr(self, "var_item_avulso_pdv"):
+-            self.var_item_avulso_pdv.set(False)
+-        self.entry_item_venda.delete(0, "end")
+-        self.entry_item_venda.insert(0, produto["nome"])
+-        self.entry_valor_venda.delete(0, "end")
+-        preco = DecimalStorage.to_decimal(produto.get("preco_venda") or 0, field="preço do produto")
+-        self.entry_valor_venda.insert(0, f"{preco:.2f}".replace(".", ","))
+-        self.fechar_sugestoes_produto()
+-        return True
+ 
+     def alternar_item_avulso_pdv(self):
+         """Alterna entre produto cadastrado e item livre sem controle de estoque."""
+@@ -6749,7 +6718,12 @@ class FicharioMoveisApp(ctk.CTk):
+             self.atualizar_resumo_lateral()
+             self.carregar_historico_dia()
+             try:
+-                self.janela_recibo_pagamento_cliente(resultado["pagamento_mov_id"], resultado["alocacoes"])
++                self.janela_recibo_pagamento_cliente(
++                    resultado["pagamento_mov_id"],
++                    resultado["alocacoes"],
++                    saldo_anterior=resultado["saldo_anterior"],
++                    novo_saldo=resultado["novo_saldo"],
++                )
+             except Exception as exc:
+                 logger.exception("Pagamento salvo, mas a preparação do recibo falhou", exc_info=exc)
+                 messagebox.showerror(
+@@ -6931,8 +6905,13 @@ class FicharioMoveisApp(ctk.CTk):
+     def texto_comprovante_venda(self, cliente_id, itens, total, tipo, documento_id=None):
+         return self._servico_comprovantes().build_sale_text(cliente_id, itens, total, tipo, sale_id=documento_id)
+ 
+-    def texto_recibo_pagamento_cliente(self, mov_id, alocacoes):
+-        return self._servico_comprovantes().build_payment_text(mov_id, alocacoes)
++    def texto_recibo_pagamento_cliente(self, mov_id, alocacoes, saldo_anterior=None, novo_saldo=None):
++        return self._servico_comprovantes().build_payment_text(
++            mov_id,
++            alocacoes,
++            balance_before=saldo_anterior,
++            balance_after=novo_saldo,
++        )
+ 
+ 
+     def formato_impressao(self, categoria):
+@@ -7088,9 +7067,14 @@ class FicharioMoveisApp(ctk.CTk):
+         nome = self.imprimir_texto_a4_windows(texto, impressora, tipo)
+         return f"Documento A4 enviado para:\n{nome}"
+ 
+-    def janela_recibo_pagamento_cliente(self, mov_id, alocacoes):
++    def janela_recibo_pagamento_cliente(self, mov_id, alocacoes, saldo_anterior=None, novo_saldo=None):
+         """Mostra o recibo textual e imprime cupom; PDF só é gerado sob demanda."""
+-        texto = self.texto_recibo_pagamento_cliente(mov_id, alocacoes)
++        texto = self.texto_recibo_pagamento_cliente(
++            mov_id,
++            alocacoes,
++            saldo_anterior=saldo_anterior,
++            novo_saldo=novo_saldo,
++        )
+         perfil = self.formato_impressao("recibo")
+         impressora = obter_config("impressora_recibo") or "Padrão do Sistema"
+ 
+@@ -7174,7 +7158,11 @@ class FicharioMoveisApp(ctk.CTk):
+                 return
+             try:
+                 caminho = self.gerar_pdf_pagamento_cliente(
+-                    mov_id, alocacoes, destino=destino
++                    mov_id,
++                    alocacoes,
++                    destino=destino,
++                    saldo_anterior=saldo_anterior,
++                    novo_saldo=novo_saldo,
+                 )
+                 messagebox.showinfo(
+                     "PDF",
+@@ -7279,9 +7267,20 @@ class FicharioMoveisApp(ctk.CTk):
+     def gerar_pdf_movimentacao(self, mov_id, destino=None):
+         return self._servico_pdf_documentos().generate_movement(mov_id, destination=destino)
+ 
+-    def gerar_pdf_pagamento_cliente(self, mov_id, alocacoes, destino=None):
++    def gerar_pdf_pagamento_cliente(
++        self,
++        mov_id,
++        alocacoes,
++        destino=None,
++        saldo_anterior=None,
++        novo_saldo=None,
++    ):
+         return self._servico_pdf_documentos().generate_customer_payment(
+-            mov_id, allocations=alocacoes, destination=destino
++            mov_id,
++            allocations=alocacoes,
++            destination=destino,
++            balance_before=saldo_anterior,
++            balance_after=novo_saldo,
+         )
+ 
+     def gerar_pdf_fechamento(self, resumo, valor_contado=None, responsavel="", observacao="", destino=None):
+@@ -8191,262 +8190,48 @@ class FicharioMoveisApp(ctk.CTk):
+         self.tabela_financeiro.pack(fill="both", expand=True)
+         return frame
+ 
++    def _financeiro_callbacks(self):
++        controller = getattr(self, "_financeiro_callback_controller", None)
++        if controller is None:
++            controller = FinanceiroCallbackController(self, FINANCEIRO_SERVICE, FinanceiroViewData)
++            self._financeiro_callback_controller = controller
++        return controller
++
+     def carregar_financeiro(self):
+-        if not hasattr(self, "tabela_financeiro"):
+-            return
+-        inicio, fim = self.fin_inicio.get().strip(), self.fin_fim.get().strip()
+-        try:
+-            fluxo = FINANCEIRO_SERVICE.fluxo_caixa(inicio, fim)
+-            dre = FINANCEIRO_SERVICE.dre(inicio, fim)
+-            self.fin_lbl_fluxo.configure(text=FinanceiroViewData.resumo_fluxo(fluxo))
+-            self.fin_lbl_dre.configure(text=FinanceiroViewData.resumo_dre(dre))
+-        except ValueError as exc:
+-            messagebox.showerror("Financeiro", str(exc), parent=self)
+-            return
+-        tipo = None if self.fin_tipo.get() == "TODOS" else self.fin_tipo.get()
+-        status = None if self.fin_status.get() == "TODOS" else self.fin_status.get()
+-        titulos = FINANCEIRO_SERVICE.listar_titulos(tipo=tipo, status=status)
+-        for item in self.tabela_financeiro.get_children(): self.tabela_financeiro.delete(item)
+-        for t in titulos:
+-            self.tabela_financeiro.insert("", "end", iid=str(t["id"]), values=FinanceiroViewData.linha_titulo(t, FINANCEIRO_SERVICE.obter_centro_custo(t["id"])))
++        return self._financeiro_callbacks().carregar()
+ 
+     def _titulo_financeiro_selecionado(self):
+-        sel = self.tabela_financeiro.selection() if hasattr(self, "tabela_financeiro") else ()
+-        if not sel:
+-            messagebox.showwarning("Financeiro", "Selecione um título.", parent=self); return None
+-        return int(sel[0])
++        return self._financeiro_callbacks().titulo_selecionado()
+ 
+     def novo_titulo_financeiro(self):
+-        if not self._autorizar("financeiro", "create"):
+-            return
+-        tipo = simpledialog.askstring("Novo título", "Tipo: PAGAR ou RECEBER", parent=self)
+-        if tipo is None: return
+-        valor = simpledialog.askfloat("Novo título", "Valor:", minvalue=0.01, parent=self)
+-        if valor is None: return
+-        venc = simpledialog.askstring("Novo título", "Vencimento (AAAA-MM-DD):", parent=self)
+-        if venc is None: return
+-        desc = simpledialog.askstring("Novo título", "Descrição:", parent=self) or ""
+-        pessoa = simpledialog.askstring("Novo título", "Pessoa/fornecedor/cliente:", parent=self) or ""
+-        try:
+-            FINANCEIRO_SERVICE.criar_titulo(tipo=tipo, valor=valor, data_vencimento=venc, descricao=desc, pessoa_nome=pessoa, usuario=self._usuario_financeiro())
+-            self.carregar_financeiro()
+-        except ValueError as exc: messagebox.showerror("Financeiro", str(exc), parent=self)
++        return self._financeiro_callbacks().novo_titulo()
+ 
+     def baixar_titulo_financeiro(self):
+-        if not self._autorizar("financeiro", "pay"):
+-            return
+-        titulo_id = self._titulo_financeiro_selecionado()
+-        if titulo_id is None: return
+-        titulo = FINANCEIRO_SERVICE.repository.obter_titulo(titulo_id)
+-        saldo = float(titulo["saldo_aberto"])
+-        juros = simpledialog.askfloat("Baixa", "Juros mensal (%):", initialvalue=0.0, minvalue=0.0, parent=self)
+-        if juros is None: return
+-        multa = simpledialog.askfloat("Baixa", "Multa (%):", initialvalue=0.0, minvalue=0.0, parent=self)
+-        if multa is None: return
+-        calc = FINANCEIRO_SERVICE.calcular_juros_multa(titulo_id, juros_mensal_percentual=juros, multa_percentual=multa)
+-        encargos = calc["juros"] + calc["multa"]
+-        forma = simpledialog.askstring("Baixa", "Forma de pagamento:", parent=self) or ""
+-        try:
+-            if encargos > 0:
+-                confirmar = messagebox.askyesno(
+-                    "Baixa com encargos",
+-                    f"Saldo: R$ {saldo:.2f}\nJuros: R$ {calc['juros']:.2f}\nMulta: R$ {calc['multa']:.2f}\nTotal: R$ {calc['total']:.2f}\n\nAplicar encargos ao título e realizar a baixa total?",
+-                    parent=self,
+-                )
+-                if not confirmar:
+-                    return
+-                FINANCEIRO_SERVICE.baixar_com_encargos(
+-                    titulo_id, juros_mensal_percentual=juros, multa_percentual=multa,
+-                    forma_pagamento=forma, usuario=self._usuario_financeiro(),
+-                )
+-            else:
+-                valor = simpledialog.askfloat("Baixa", f"Saldo R$ {saldo:.2f}.\nValor a baixar no título:", initialvalue=saldo, minvalue=0.01, maxvalue=saldo, parent=self)
+-                if valor is None:
+-                    return
+-                FINANCEIRO_SERVICE.baixar(titulo_id, valor, forma_pagamento=forma, usuario=self._usuario_financeiro())
+-            self.carregar_financeiro()
+-        except ValueError as exc: messagebox.showerror("Financeiro", str(exc), parent=self)
++        return self._financeiro_callbacks().baixar_titulo()
+ 
+     def definir_centro_custo_financeiro(self):
+-        if not self._autorizar("financeiro", "create"):
+-            return
+-        titulo_id = self._titulo_financeiro_selecionado()
+-        if titulo_id is None: return
+-        atual = FINANCEIRO_SERVICE.obter_centro_custo(titulo_id)
+-        centro = simpledialog.askstring("Centro de custo", "Centro de custo:", initialvalue=atual, parent=self)
+-        if centro is None: return
+-        FINANCEIRO_SERVICE.definir_centro_custo(titulo_id, centro, usuario=self._usuario_financeiro())
+-        self.carregar_financeiro()
++        return self._financeiro_callbacks().definir_centro_custo()
+ 
+     def abrir_recorrencias_financeiro(self):
+-        if not self._autorizar("financeiro", "create"):
+-            return
+-        recorrencias = FINANCEIRO_SERVICE.listar_recorrencias()
+-        resumo = "\n".join(
+-            f"{r['identificador']} | {r['tipo']} | R$ {r['valor']:.2f} | dia {r['dia_vencimento']} | {'ATIVA' if r.get('ativo', True) else 'INATIVA'}"
+-            for r in recorrencias
+-        ) or "Nenhuma recorrência cadastrada."
+-        acao = simpledialog.askstring(
+-            "Recorrências",
+-            resumo + "\n\nAções: NOVA, EDITAR, ATIVAR, DESATIVAR, EXCLUIR ou GERAR",
+-            parent=self,
+-        )
+-        if acao is None:
+-            return
+-        acao = acao.strip().upper()
+-        try:
+-            if acao == "NOVA":
+-                ident = simpledialog.askstring("Recorrência", "Identificador único:", parent=self)
+-                if ident is None: return
+-                tipo = simpledialog.askstring("Recorrência", "Tipo: PAGAR ou RECEBER", parent=self)
+-                if tipo is None: return
+-                valor = simpledialog.askfloat("Recorrência", "Valor:", minvalue=0.01, parent=self)
+-                if valor is None: return
+-                dia = simpledialog.askinteger("Recorrência", "Dia do vencimento:", minvalue=1, maxvalue=31, parent=self)
+-                if dia is None: return
+-                desc = simpledialog.askstring("Recorrência", "Descrição:", parent=self) or ""
+-                FINANCEIRO_SERVICE.criar_recorrencia(identificador=ident, tipo=tipo, valor=valor, dia_vencimento=dia, descricao=desc, usuario=self._usuario_financeiro())
+-            elif acao == "EDITAR":
+-                ident = simpledialog.askstring("Recorrências", "Identificador:", parent=self)
+-                if ident is None: return
+-                atual = next((r for r in FINANCEIRO_SERVICE.listar_recorrencias() if r["identificador"] == ident), None)
+-                if not atual: raise ValueError("Recorrência não encontrada.")
+-                tipo = simpledialog.askstring("Recorrência", "Tipo: PAGAR ou RECEBER", initialvalue=atual["tipo"], parent=self)
+-                if tipo is None: return
+-                valor = simpledialog.askfloat("Recorrência", "Valor:", initialvalue=float(atual["valor"]), minvalue=0.01, parent=self)
+-                if valor is None: return
+-                dia = simpledialog.askinteger("Recorrência", "Dia do vencimento:", initialvalue=int(atual["dia_vencimento"]), minvalue=1, maxvalue=31, parent=self)
+-                if dia is None: return
+-                desc = simpledialog.askstring("Recorrência", "Descrição:", initialvalue=atual.get("descricao", ""), parent=self)
+-                if desc is None: return
+-                pessoa = simpledialog.askstring("Recorrência", "Pessoa:", initialvalue=atual.get("pessoa_nome", ""), parent=self)
+-                if pessoa is None: return
+-                FINANCEIRO_SERVICE.editar_recorrencia(ident, tipo=tipo, valor=valor, dia_vencimento=dia, descricao=desc, pessoa_nome=pessoa, usuario=self._usuario_financeiro())
+-            elif acao in {"ATIVAR", "DESATIVAR", "EXCLUIR"}:
+-                ident = simpledialog.askstring("Recorrências", "Identificador:", parent=self)
+-                if ident is None: return
+-                if acao == "EXCLUIR":
+-                    FINANCEIRO_SERVICE.excluir_recorrencia(ident, usuario=self._usuario_financeiro())
+-                else:
+-                    FINANCEIRO_SERVICE.ativar_recorrencia(ident, acao == "ATIVAR", usuario=self._usuario_financeiro())
+-            elif acao == "GERAR":
+-                competencia = simpledialog.askstring("Recorrências", "Competência AAAA-MM:", initialvalue=datetime.now().strftime("%Y-%m"), parent=self)
+-                if competencia is None: return
+-                ano, mes = map(int, competencia.split("-"))
+-                FINANCEIRO_SERVICE.gerar_recorrencias(ano, mes, usuario=self._usuario_financeiro())
+-                self.carregar_financeiro()
+-            else:
+-                raise ValueError("Ação de recorrência inválida.")
+-        except (ValueError, TypeError) as exc:
+-            messagebox.showerror("Recorrência", str(exc), parent=self)
++        return self._financeiro_callbacks().abrir_recorrencias()
+ 
+     def conciliar_pagamento_financeiro(self):
+-        if not self._autorizar("financeiro", "reconcile"):
+-            return
+-        titulo_id = self._titulo_financeiro_selecionado()
+-        if titulo_id is None: return
+-        pagamentos = FINANCEIRO_SERVICE.listar_pagamentos(titulo_id)
+-        if not pagamentos:
+-            messagebox.showwarning("Conciliação", "O título não possui pagamentos.", parent=self); return
+-        linhas = FinanceiroViewData.pagamentos_para_selecao(pagamentos)
+-        pagamento_id = simpledialog.askinteger("Conciliação", f"Informe o ID do pagamento:\n\n{linhas}", parent=self)
+-        if pagamento_id is None: return
+-        referencia = simpledialog.askstring("Conciliação", "Referência do extrato/comprovante:", parent=self)
+-        if referencia is None: return
+-        try:
+-            FINANCEIRO_SERVICE.conciliar_pagamento(pagamento_id, referencia, usuario=self._usuario_financeiro())
+-            messagebox.showinfo("Conciliação", "Pagamento conciliado.", parent=self)
+-        except ValueError as exc: messagebox.showerror("Conciliação", str(exc), parent=self)
++        return self._financeiro_callbacks().conciliar_pagamento()
+ 
+     def cancelar_titulo_financeiro(self):
+-        if not self._autorizar("financeiro", "create"):
+-            return
+-        titulo_id = self._titulo_financeiro_selecionado()
+-        if titulo_id is None:
+-            return
+-        if not messagebox.askyesno("Cancelar título", "Cancelar o título selecionado?", parent=self):
+-            return
+-        try:
+-            FINANCEIRO_SERVICE.cancelar(titulo_id, usuario=self._usuario_financeiro())
+-            self.carregar_financeiro()
+-        except ValueError as exc:
+-            messagebox.showerror("Financeiro", str(exc), parent=self)
++        return self._financeiro_callbacks().cancelar_titulo()
+ 
+     def abrir_conciliacoes_financeiro(self):
+-        if not self._autorizar("financeiro", "reconcile"):
+-            return
+-        registros = FINANCEIRO_SERVICE.listar_conciliacoes()
+-        linhas = FinanceiroViewData.conciliacoes_para_selecao(registros)
+-        acao = simpledialog.askstring(
+-            "Conciliações",
+-            linhas + "\n\nDigite CONCILIAR ou DESFAZER:",
+-            parent=self,
+-        )
+-        if acao is None:
+-            return
+-        try:
+-            acao = acao.strip().upper()
+-            pagamento_id = simpledialog.askinteger("Conciliações", "ID do pagamento:", parent=self)
+-            if pagamento_id is None:
+-                return
+-            if acao == "CONCILIAR":
+-                referencia = simpledialog.askstring("Conciliações", "Referência:", parent=self)
+-                if referencia is None:
+-                    return
+-                FINANCEIRO_SERVICE.conciliar_pagamento(pagamento_id, referencia, usuario=self._usuario_financeiro())
+-            elif acao == "DESFAZER":
+-                FINANCEIRO_SERVICE.desfazer_conciliacao(pagamento_id, usuario=self._usuario_financeiro())
+-            else:
+-                raise ValueError("Ação de conciliação inválida.")
+-        except ValueError as exc:
+-            messagebox.showerror("Conciliações", str(exc), parent=self)
++        return self._financeiro_callbacks().abrir_conciliacoes()
+ 
+     def abrir_relatorio_centros_custo(self):
+-        if not self._autorizar("financeiro", "view"):
+-            return
+-        try:
+-            dados = FINANCEIRO_SERVICE.relatorio_centros_custo(self.fin_inicio.get().strip(), self.fin_fim.get().strip())
+-            texto = FinanceiroViewData.relatorio_centros_custo(dados)
+-            messagebox.showinfo("Relatório por centro de custo", texto, parent=self)
+-        except ValueError as exc:
+-            messagebox.showerror("Financeiro", str(exc), parent=self)
++        return self._financeiro_callbacks().abrir_relatorio_centros_custo()
+ 
+     def abrir_detalhes_financeiros(self):
+-        if not self._autorizar("financeiro", "view"):
+-            return
+-        try:
+-            inicio, fim = self.fin_inicio.get().strip(), self.fin_fim.get().strip()
+-            fluxo = FINANCEIRO_SERVICE.fluxo_caixa(inicio, fim)
+-            dre = FINANCEIRO_SERVICE.dre(inicio, fim)
+-            messagebox.showinfo(
+-                "Detalhes financeiros",
+-                FinanceiroViewData.detalhes_financeiros(fluxo, dre),
+-                parent=self,
+-            )
+-        except ValueError as exc:
+-            messagebox.showerror("Financeiro", str(exc), parent=self)
++        return self._financeiro_callbacks().abrir_detalhes()
+ 
+     def estornar_pagamento_financeiro(self):
+-        if not self._autorizar("financeiro", "pay"):
+-            return
+-        titulo_id = self._titulo_financeiro_selecionado()
+-        if titulo_id is None:
+-            return
+-        pagamentos = FINANCEIRO_SERVICE.listar_pagamentos(titulo_id)
+-        if not pagamentos:
+-            messagebox.showwarning("Estorno", "O título não possui pagamentos.", parent=self)
+-            return
+-        linhas = FinanceiroViewData.pagamentos_para_selecao(pagamentos)
+-        pagamento_id = simpledialog.askinteger("Estorno", f"Informe o ID do pagamento a estornar:\n\n{linhas}", parent=self)
+-        if pagamento_id is None:
+-            return
+-        if not messagebox.askyesno("Estorno", "Confirmar estorno desta baixa?", parent=self):
+-            return
+-        try:
+-            FINANCEIRO_SERVICE.estornar_pagamento(pagamento_id, usuario=self._usuario_financeiro())
+-            self.carregar_financeiro()
+-        except ValueError as exc:
+-            messagebox.showerror("Estorno", str(exc), parent=self)
++        return self._financeiro_callbacks().estornar_pagamento()
+ 
+     def tela_configs(self, parent):
+         frame = ctk.CTkFrame(parent, fg_color="transparent")

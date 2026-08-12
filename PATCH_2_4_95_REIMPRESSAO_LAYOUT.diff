@@ -1,0 +1,163 @@
+--- NabiCode_v2_4_94_TESTE_SETAS_LAYOUT_CORTE/nabicode_legacy.py	2026-08-07 13:45:27.945385118 +0000
++++ NabiCode_v2_4_95_TESTE_REIMPRESSAO_LAYOUT/nabicode_legacy.py	2026-08-07 13:55:23.835842351 +0000
+@@ -45,7 +45,7 @@
+ 
+ SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+ RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
+-COMPILED_APP_VERSION = "2.4.94"
++COMPILED_APP_VERSION = "2.4.95"
+ 
+ def _ler_versao_aplicacao():
+     return load_app_version(
+@@ -2335,13 +2335,38 @@
+                     if m:
+                         qtd=tratar_numero(m.group(1)); subtotal=tratar_numero(m.group(3)); itens.append({"qtd":qtd,"item":m.group(2),"preco":subtotal/qtd if qtd else subtotal,"subtotal":subtotal})
+                 if not itens: itens=[{"qtd":1,"item":desc or "Venda","preco":float(valor or 0),"subtotal":float(valor or 0)}]
+-                caminho=self.gerar_pdf_venda(cid,itens,float(valor or 0),"ENTREGA" if categoria=="entrega" else "RECIBO",mov_id)
+-                self.janela_acoes_pdf(caminho,"entrega" if categoria=="entrega" else "recibo","Segunda via")
++                tipo_doc = "ENTREGA" if categoria=="entrega" else "RECIBO"
++                texto = self.texto_comprovante_venda(cid, itens, float(valor or 0), tipo_doc, mov_id)
++                self.janela_preview_documento(
++                    texto,
++                    categoria="entrega" if categoria=="entrega" else "recibo",
++                    titulo="Segunda via",
++                    subtitulo="Pré-visualização do cupom",
++                    pdf_callback=lambda destino: self.gerar_pdf_venda(
++                        cid, itens, float(valor or 0), tipo_doc, mov_id, destino=destino
++                    ),
++                )
+             elif tipo == "PAGAMENTO":
+                 self.janela_recibo_pagamento_cliente(int(mov_id), [])
+             else:
+-                caminho = self.gerar_pdf_movimentacao(mov_id)
+-                self.janela_acoes_pdf(caminho, "recibo", "Comprovante")
++                texto = (
++                    "NabiCode\nCOMPROVANTE DE MOVIMENTAÇÃO\n"
++                    + "=" * 42 + "\n"
++                    + f"Movimento: {mov_id}\n"
++                    + f"Data: {data or '-'}\n"
++                    + f"Cliente: {nome or 'CONSUMIDOR FINAL'}\n"
++                    + f"Tipo: {tipo or '-'}\n"
++                    + f"Forma: {forma or '-'}\n"
++                    + f"Valor: R$ {DecimalStorage.to_decimal(valor or 0, field='valor'):.2f}\n"
++                    + f"Descrição: {desc or '-'}\n"
++                )
++                self.janela_preview_documento(
++                    texto,
++                    categoria="recibo",
++                    titulo="Comprovante",
++                    subtitulo="Pré-visualização do cupom",
++                    pdf_callback=lambda destino: self.gerar_pdf_movimentacao(mov_id, destino=destino),
++                )
+         except Exception as exc: messagebox.showerror("Reimpressão",str(exc))
+ 
+     def disparar_edicao_dash(self):
+@@ -6125,7 +6150,14 @@
+             ("💰 Receber", "#2ea043", self.receber_pagamento_cliente_selecionado),
+             ("📜 Histórico", "#1f6feb", self.abrir_historico_cliente_selecionado),
+         ):
+-            ctk.CTkButton(acoes_clientes, text=texto, fg_color=cor, height=36, command=comando).pack(side="left", expand=True, fill="x", padx=4)
++            ctk.CTkButton(
++                acoes_clientes,
++                text=texto,
++                fg_color=cor,
++                height=36,
++                font=ctk.CTkFont(size=11, weight="bold"),
++                command=comando,
++            ).pack(side="left", expand=True, fill="x", padx=2)
+ 
+         # O ttk.Treeview aplica cor e fonte por linha. As faixas abaixo tornam
+         # dívidas visíveis imediatamente sem alterar os dados do cliente.
+@@ -7103,6 +7135,92 @@
+         nome = self.imprimir_texto_a4_windows(texto, impressora, tipo)
+         return f"Documento A4 enviado para:\n{nome}"
+ 
++    def janela_preview_documento(
++        self,
++        texto,
++        categoria="recibo",
++        titulo="Documento pronto",
++        subtitulo="Pré-visualização do cupom",
++        pdf_callback=None,
++    ):
++        """Janela única de impressão: prévia textual, cupom 80 mm e PDF sob demanda."""
++        perfil = self.formato_impressao(categoria)
++        chave_impressora = f"impressora_{categoria}"
++        impressora = obter_config(chave_impressora) or "Padrão do Sistema"
++
++        win = ctk.CTkToplevel(self)
++        win.title(titulo)
++        win.geometry("700x640")
++        win.minsize(620, 540)
++        win.transient(self)
++        win.grab_set()
++
++        ctk.CTkLabel(
++            win, text=titulo, font=ctk.CTkFont(size=21, weight="bold"), text_color="#00FF88"
++        ).pack(pady=(18, 4))
++        ctk.CTkLabel(
++            win,
++            text=f"Saída configurada: {perfil}  •  Impressora: {impressora}",
++            text_color="#c9d1d9",
++        ).pack(pady=(0, 10))
++
++        preview_frame = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=10)
++        preview_frame.pack(fill="both", expand=True, padx=22, pady=(4, 12))
++        ctk.CTkLabel(
++            preview_frame, text=subtitulo, font=ctk.CTkFont(size=14, weight="bold"), text_color="#58a6ff"
++        ).pack(anchor="w", padx=14, pady=(10, 5))
++        preview = ctk.CTkTextbox(
++            preview_frame, wrap="none", font=ctk.CTkFont(family="Consolas", size=12),
++            fg_color="#010409", text_color="#f0f6fc"
++        )
++        preview.pack(fill="both", expand=True, padx=12, pady=(0, 12))
++        preview.insert("1.0", texto)
++        preview.configure(state="disabled")
++
++        botoes = ctk.CTkFrame(win, fg_color="transparent")
++        botoes.pack(fill="x", padx=22, pady=(0, 18))
++
++        def imprimir():
++            try:
++                if perfil == "Cupom 80 mm":
++                    nome = self.imprimir_texto_windows(
++                        self.ajustar_texto_cupom(texto, 42), impressora, titulo
++                    )
++                else:
++                    nome = self.imprimir_texto_a4_windows(texto, impressora, titulo)
++                messagebox.showinfo("Impressão", f"Documento enviado para:\n{nome}", parent=win)
++            except Exception as exc:
++                logger.exception("Falha ao imprimir documento textual", exc_info=exc)
++                messagebox.showerror("Impressão", f"Não foi possível imprimir o documento:\n{exc}", parent=win)
++
++        def salvar_pdf():
++            if pdf_callback is None:
++                messagebox.showinfo("PDF", "PDF não disponível para este documento.", parent=win)
++                return
++            destino = filedialog.asksaveasfilename(
++                parent=win, title="Salvar documento em PDF", defaultextension=".pdf",
++                filetypes=[("Arquivo PDF", "*.pdf")], initialfile=f"{self._nome_pdf_seguro(titulo)}.pdf"
++            )
++            if not destino:
++                return
++            try:
++                caminho = pdf_callback(destino)
++                messagebox.showinfo("PDF", f"PDF salvo em:\n{caminho or destino}", parent=win)
++            except Exception as exc:
++                logger.exception("Falha ao salvar PDF sob demanda", exc_info=exc)
++                messagebox.showerror("PDF", f"Não foi possível salvar o PDF:\n{exc}", parent=win)
++
++        ctk.CTkButton(
++            botoes, text="Imprimir cupom 80 mm", fg_color="#2ea043", height=44, command=imprimir
++        ).pack(fill="x", pady=(0, 8))
++        ctk.CTkButton(
++            botoes, text="Salvar PDF (opcional)", fg_color="#8957e5", height=40, command=salvar_pdf
++        ).pack(fill="x", pady=(0, 8))
++        ctk.CTkButton(
++            botoes, text="Fechar", fg_color="#30363d", height=38, command=win.destroy
++        ).pack(fill="x")
++        return win
++
+     def janela_recibo_pagamento_cliente(self, mov_id, alocacoes, saldo_anterior=None, novo_saldo=None):
+         """Mostra o recibo textual e imprime cupom; PDF só é gerado sob demanda."""
+         texto = self.texto_recibo_pagamento_cliente(

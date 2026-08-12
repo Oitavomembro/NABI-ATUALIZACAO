@@ -1,0 +1,48 @@
+BASE: NabiCode_v2_4_88_BASE_OFICIAL_INTEGRADA
+DESTINO: NabiCode_v2_4_89_BASE_OFICIAL_INTEGRADA
+
+LEGACY / INFRA
+nabicode_legacy.py (patch aplicado; não substituído integralmente)
+helpers/__init__.py
+helpers/value_parsing.py
+managers/__init__.py
+managers/system_infrastructure_manager.py
+tests/test_system_infrastructure_manager.py
+tests/test_value_parsing_helpers.py
+LEGACY_RELATORIO_REGRESSOES_2_4_88.md
+LEGACY_TESTES_EXECUTADOS_2_4_88.md
+
+FINANCEIRO
+repositories/financeiro_repository.py
+services/financeiro_service.py
+services/financeiro_calculator.py
+services/financeiro_view_data.py
+tests/test_financeiro_modularizacao_2488.py
+FINANCEIRO_RELATORIO_REGRESSOES_2488.md
+INDICACAO_PATCHES_LEGADO_FINANCEIRO_2488.md
+
+CADASTROS
+repositories/customer_maintenance_repository.py
+services/produto_service.py
+tests/test_cadastro_transaction_integrity.py
+tests/test_cadastro_repository_extraction.py
+CADASTROS_REGRESSOES_2_4_88.md
+
+DOCUMENTAL
+services/printing_service.py
+services/pdf_document_service.py
+tests/test_document_pipeline.py
+DOCUMENTAL_SIMPLIFICACAO_80MM_REGRESSOES.md
+
+INTERFACE
+ui/theme.py
+tests/test_ui_theme.py
+RELATORIO_REGRESSOES_INTERFACE_2_4_88.md
+
+VERSIONAMENTO / INTEGRAÇÃO
+VERSAO.txt
+tests/test_exe_version_packaging.py
+tests/test_startup_smoke_test.py
+RELATORIO_FINAL_INTEGRACAO_2_4_89.md
+RELATORIO_REGRESSOES_2_4_89.md
+ARQUIVOS_INTEGRADOS_2_4_89.txt

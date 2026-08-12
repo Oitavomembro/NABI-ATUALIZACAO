@@ -1,0 +1,17 @@
+nabicode_legacy.py
+repositories/cliente_repository.py
+repositories/dashboard_repository.py
+services/estoque_service.py
+services/pdv_transaction_service.py
+services/windows_file_opener.py
+tests/test_cliente_repository.py
+tests/test_dashboard_repository.py
+tests/test_estoque_service.py
+tests/test_exe_version_packaging.py
+tests/test_startup_smoke_test.py
+tests/test_regressoes_windows_2490.py
+VERSAO.txt
+PATCH_NABICODE_LEGACY_2_4_90.diff
+RELATORIO_FINAL_INTEGRACAO_2_4_90.md
+RELATORIO_REGRESSOES_2_4_90.md
+ARQUIVOS_INTEGRADOS_2_4_90.txt

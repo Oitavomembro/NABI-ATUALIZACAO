@@ -1,0 +1,56 @@
+BASE: NabiCode_v2_4_95_TESTE_REIMPRESSAO_LAYOUT
+DESTINO: NabiCode_v2_4_96_TESTE_INTEGRADO
+
+LEGACY
+- nabicode_legacy.py (patches aplicados manualmente; arquivo não substituído)
+- helpers/__init__.py
+- helpers/legacy_reduction_helpers.py
+
+FINANCEIRO
+- services/financeiro_calculator.py
+- services/financeiro_service.py
+- tests/test_financeiro_modularizacao_2495.py
+
+CADASTROS
+- controllers/__init__.py
+- controllers/customer_registration_controller.py
+- controllers/product_registration_controller.py
+- validators/__init__.py
+- validators/auxiliary_registration_validator.py
+- validators/customer_validator.py
+- validators/product_validator.py
+- repositories/__init__.py
+- services/customer_registration_service.py
+- services/product_application_service.py
+- services/produto_service.py
+- tests/test_cadastro_modularization_2495.py
+
+DOCUMENTAL
+- services/printing_service.py
+- services/document_rendering.py
+- tests/test_printing_service.py
+- tests/test_v243_splash_and_cutter.py
+
+INTERFACE
+- ui/__init__.py
+- ui/background_manager.py
+- ui/layout_manager.py
+- services/ui_preferences.py
+- tests/test_background_manager.py
+- tests/test_layout_manager.py
+- tests/test_ui_preferences.py
+- PATCH_INTERFACE_LEGADO.md (instruções aplicadas ao legado)
+
+AJUSTES DE INTEGRAÇÃO
+- VERSAO.txt
+- tests/test_startup_smoke_test.py
+- tests/test_exe_version_packaging.py
+- tests/test_panic_and_clients_layout_2493.py
+- tests/test_regressoes_windows_2490.py
+- tests/test_scroll_global_integration.py
+- tests/test_v2494_keyboard_layout_cutter.py
+
+RELATÓRIOS ADICIONADOS
+- RELATORIO_FINAL_INTEGRACAO_2_4_96.md
+- RELATORIO_REGRESSOES_2_4_96.md
+- ARQUIVOS_INTEGRADOS_2_4_96.txt

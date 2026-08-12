@@ -1,0 +1,53 @@
+# Python
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Ambiente e credenciais
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+
+# Logs e temporários
+*.log
+logs/
+*.tmp
+*.bak
+
+# Bancos e dados operacionais reais
+*.db
+*.sqlite
+*.sqlite3
+backups/
+backup/
+backups_moveis/
+dumps/
+dados_reais/
+userdata/
+user_data/
+
+# Fixtures SQLite sintéticas só podem ser versionadas nesta pasta,
+# após revisão para confirmar que não contêm dados reais.
+!tests/fixtures/**/*.db
+!tests/fixtures/**/*.sqlite
+!tests/fixtures/**/*.sqlite3
+
+# Build e artefatos gerados
+build/
+dist/
+build_output/
+wheelhouse/
+*.exe
+*.msi
+
+# Dados de runtime do Windows nunca pertencem ao repositório.
+# A pasta real fica em %APPDATA%\NabiCode e deve permanecer fora da árvore.
+AppData/NabiCode/
+

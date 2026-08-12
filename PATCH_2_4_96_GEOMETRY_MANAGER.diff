@@ -1,0 +1,14 @@
+--- /mnt/data/orig2496/integracao_2496/nabicode_legacy.py	2026-08-07 15:59:15.000000000 +0000
++++ nabicode_legacy.py	2026-08-07 16:04:35.433010564 +0000
+@@ -6018,7 +6018,10 @@
+         self.criar_cabecalho_e_botoes(frame)
+ 
+         conteudo_cli = ctk.CTkFrame(frame, fg_color="#161b22", corner_radius=12)
+-        conteudo_cli.grid(row=1, column=0, sticky="nsew", padx=20, pady=5)
++        # O cabeçalho desta tela usa ``pack``. Tk não permite misturar ``pack``
++        # e ``grid`` entre filhos do mesmo parent, portanto o container principal
++        # também deve usar ``pack``. O grid permanece somente dentro dele.
++        conteudo_cli.pack(fill="both", expand=True, padx=20, pady=5)
+         LayoutManager.configure_vertical_shell(conteudo_cli, expandable_row=2)
+         self.background_manager.attach(conteudo_cli)
+         

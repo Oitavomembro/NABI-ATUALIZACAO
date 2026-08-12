@@ -1,0 +1,42 @@
+NABICODE 2.5.1 DEV — RESULTADO FINAL DA AUDITORIA NOTURNA
+Data: 2026-08-08
+
+compileall:
+python -m compileall -q .
+APROVADO
+
+Suíte completa:
+977 passed, 19 subtests passed in 20.73s
+
+Suíte focada startup/splash/licença/lock/build/update:
+98 passed, 11 subtests passed in 2.57s
+
+Regressões novas de falhas legadas + runtime + build:
+31 passed in 2.03s
+
+Stress final:
+1 passed in 4.36s
+sales=1000; stock_movements=2000; cancelled_sales=100; injected_rollbacks=100
+duration=4.149s; database=552960 bytes; memory current=39917 bytes; peak=48465 bytes
+
+Benchmark final:
+1 passed in 0.35s
+product_search_10000 mean=1.594ms p50=1.111ms max=5.380ms
+client_suggestions_10000 mean=2.237ms p50=2.205ms max=2.328ms
+client_history_50000 mean=0.202ms p50=0.196ms max=0.236ms
+dashboard_50000 mean=2.579ms p50=2.474ms max=2.937ms
+financial_20000 mean=1.388ms p50=1.367ms max=1.492ms
+
+Soak final:
+1 passed in 3.88s
+cycles=5000; commits=1000; rollbacks=4000; duration=3.858s
+memory samples=[5146,5242,5274,5306,5338]; current=6370; peak=7713 bytes
+
+Soak prolongado:
+4 execuções aprovadas; 20000 ciclos; 4000 commits; 16000 rollbacks no total.
+
+Auditoria local do build:
+{"ok": true, "version": "2.5.1", "distribution": "NabiCode_v2_5_1"}
+Perfil raiz=TESTE; perfil do artefato=PRODUCAO.
+
+PyInstaller/Inno/instalação/hardware Windows: NÃO EXECUTADOS neste ambiente; pendentes de validação física.

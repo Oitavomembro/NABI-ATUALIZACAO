@@ -1,0 +1,29 @@
+NabiCode 2.5.1 DEV — Checkpoint 35
+Data: 2026-08-08
+
+BASE:
+NabiCode_v2_5_1_DEV_CHECKPOINT_34_INSTALLER_PIPELINE.zip
+SHA-256: 100d072bd0e80a755cb7e0dad4189cece23a767618066ddd5cf53ece2edf5b57
+
+COMPILAÇÃO:
+python -m compileall -q .
+RESULTADO: APROVADO
+
+TESTES FOCADOS STARTUP/SPLASH:
+31 passed in 0.40s
+
+TESTES FOCADOS BUILD/PYINSTALLER/SMOKE:
+17 passed, 3 subtests passed in 0.40s
+
+SUÍTE COMPLETA FINAL:
+931 passed, 11 subtests passed in 17.25s
+
+SMOKE DO FRAMEBUFFER LIGHTSPEED:
+LIGHTSPEED_FRAME_SMOKE: OK RGBA (960, 540) 920 720
+
+PERFIS:
+PERFIL_NABICODE.txt (raiz): TESTE
+build_tools/resources/PERFIL_NABICODE.txt: PRODUCAO
+
+TESTES FÍSICOS WINDOWS:
+PENDENTES. Nenhum resultado físico foi inferido ou declarado.

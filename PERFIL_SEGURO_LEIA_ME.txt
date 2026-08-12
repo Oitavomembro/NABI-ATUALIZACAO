@@ -1,0 +1,8 @@
+NABICODE — TESTE SEGURO
+
+Este pacote usa por padrão:
+%APPDATA%\NabiCode\Teste\fichario_moveis.db
+
+Nunca aponta por padrão para o banco de PRODUÇÃO.
+O banco recebe um marcador de perfil e um lock enquanto o programa estiver aberto.
+Para testar uma base real, restaure/copiei um backup para este ambiente de TESTE.

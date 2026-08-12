@@ -1,0 +1,198 @@
+--- /mnt/data/_orig2490/NabiCode_v2_4_89_BASE_OFICIAL_INTEGRADA/nabicode_legacy.py	2026-08-07 10:15:25.829828502 +0000
++++ /mnt/data/NabiCode_v2_4_90_BASE_OFICIAL_INTEGRADA/nabicode_legacy.py	2026-08-07 10:13:28.297690079 +0000
+@@ -42,7 +42,7 @@
+ 
+ SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
+ RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
+-COMPILED_APP_VERSION = "2.4.89"
++COMPILED_APP_VERSION = "2.4.90"
+ 
+ def _ler_versao_aplicacao():
+     return load_app_version(
+@@ -1412,6 +1412,12 @@
+         if nome == "dashboard":
+             self.carregar_historico_dia()
+         elif nome == "clientes":
++            scroll_clientes = getattr(self, "scroll_clientes", None)
++            if scroll_clientes is not None:
++                try:
++                    scroll_clientes.canvas.xview_moveto(0)
++                except (AttributeError, tk.TclError):
++                    pass
+             self.carregar_clientes()
+         elif nome == "vendas":
+             self.atualizar_combo_clientes_venda()
+@@ -5344,6 +5350,7 @@
+             return "break"
+ 
+         self.produto_venda_selecionado_id = produto["id"]
++        self._produto_venda_override_estoque = False
+         if hasattr(self, "var_item_avulso_pdv"):
+             self.var_item_avulso_pdv.set(False)
+         self.entry_item_venda.delete(0, "end")
+@@ -5354,6 +5361,8 @@
+         )
+         self.entry_valor_venda.insert(0, f"{preco:.2f}".replace(".", ","))
+         self.fechar_sugestoes_produto()
++        if not self._confirmar_estoque_pdv_ao_selecionar(int(produto["id"])):
++            return "break"
+         self.entry_qtd_venda.focus_set()
+         self.entry_qtd_venda.select_range(0, "end")
+         return "break"
+@@ -5437,6 +5446,7 @@
+             if chave not in {codigo, barras}:
+                 continue
+             self.produto_venda_selecionado_id = int(produto["id"])
++            self._produto_venda_override_estoque = False
+             if hasattr(self, "var_item_avulso_pdv"):
+                 self.var_item_avulso_pdv.set(False)
+             self.entry_item_venda.delete(0, "end")
+@@ -5447,9 +5457,72 @@
+             self.entry_valor_venda.delete(0, "end")
+             self.entry_valor_venda.insert(0, f"{preco:.2f}".replace(".", ","))
+             self.fechar_sugestoes_produto()
++            if not self._confirmar_estoque_pdv_ao_selecionar(int(produto["id"])):
++                return False
+             return True
+         return False
+ 
++    def _confirmar_estoque_pdv_ao_selecionar(self, produto_id):
++        """Bloqueia produto zerado no momento da seleção, salvo autorização explícita."""
++        try:
++            produto = ESTOQUE_SERVICE.repository.buscar_produto(int(produto_id))
++        except Exception as exc:
++            logger.exception("Falha ao consultar estoque do produto %s", produto_id, exc_info=exc)
++            messagebox.showerror(
++                "Estoque",
++                "Não foi possível consultar o estoque deste produto.",
++                parent=getattr(self, "pdv_window", self),
++            )
++            return False
++        if not produto or not bool(produto.get("controla_estoque", 1)) or str(produto.get("tipo_produto", "")).upper() == "SERVICO":
++            return True
++        saldo = float(produto.get("estoque_atual", 0) or 0)
++        if bool(produto.get("permite_estoque_negativo", 0)) or saldo > 0:
++            return True
++        continuar = messagebox.askyesno(
++            "Produto sem estoque",
++            f"{produto.get('codigo', '')} - {produto.get('nome', '')} está sem estoque.\n\n"
++            "Deseja vender mesmo assim? O estoque ficará negativo para esta venda.",
++            parent=getattr(self, "pdv_window", self),
++        )
++        if continuar:
++            self._produto_venda_override_estoque = True
++            return True
++        self.produto_venda_selecionado_id = None
++        self._produto_venda_override_estoque = False
++        self.entry_item_venda.delete(0, "end")
++        self.entry_valor_venda.delete(0, "end")
++        self.entry_item_venda.focus_set()
++        return False
++
++    def _confirmar_estoque_pdv_para_quantidade(self, produto_id, quantidade):
++        """Confere a quantidade total no carrinho antes de permitir saldo negativo."""
++        produto = ESTOQUE_SERVICE.repository.buscar_produto(int(produto_id))
++        if not produto or not bool(produto.get("controla_estoque", 1)) or str(produto.get("tipo_produto", "")).upper() == "SERVICO":
++            return True
++        if bool(produto.get("permite_estoque_negativo", 0)):
++            return True
++        saldo = float(produto.get("estoque_atual", 0) or 0)
++        quantidade_no_carrinho = sum(
++            float(item.get("qtd", 0) or 0)
++            for item in self.carrinho_venda
++            if item.get("produto_id") == int(produto_id)
++        )
++        solicitado = quantidade_no_carrinho + float(quantidade)
++        if solicitado <= saldo + 1e-9:
++            return True
++        if bool(getattr(self, "_produto_venda_override_estoque", False)):
++            return True
++        continuar = messagebox.askyesno(
++            "Estoque insuficiente",
++            f"{produto.get('codigo', '')} - {produto.get('nome', '')}\n\n"
++            f"Disponível: {saldo:g}\nSolicitado no carrinho: {solicitado:g}\n\n"
++            "Deseja vender mesmo assim? O estoque ficará negativo para esta venda.",
++            parent=getattr(self, "pdv_window", self),
++        )
++        self._produto_venda_override_estoque = bool(continuar)
++        return bool(continuar)
++
+     def adicionar_item_carrinho(self):
+         item = self.entry_item_venda.get().strip()
+         qtd_str = self.entry_qtd_venda.get().strip()
+@@ -5499,6 +5572,9 @@
+             valor_str = self.entry_valor_venda.get().strip()
+             preco = tratar_numero(valor_str)
+ 
++        if not item_avulso and produto_id and not self._confirmar_estoque_pdv_para_quantidade(produto_id, qtd):
++            return
++
+         subtotal = qtd * preco
+         registro = {
+             "produto_id": None if item_avulso else produto_id,
+@@ -5508,6 +5584,7 @@
+             "subtotal": subtotal,
+             "item_avulso": item_avulso,
+             "controla_estoque": not item_avulso,
++            "estoque_override": bool(getattr(self, "_produto_venda_override_estoque", False)),
+         }
+         self.carrinho_venda.append(registro)
+ 
+@@ -5517,6 +5594,7 @@
+ 
+         self.entry_item_venda.delete(0, "end")
+         self.produto_venda_selecionado_id = None
++        self._produto_venda_override_estoque = False
+         self.fechar_sugestoes_produto()
+         self.entry_qtd_venda.delete(0, "end")
+         self.entry_qtd_venda.insert(0, "1")
+@@ -5949,6 +6027,7 @@
+         self.adicionar_rodape_status(frame)
+         
+         scroll_clientes = BidirectionalScrollableFrame(frame, fg_color="transparent", content_width=1180)
++        self.scroll_clientes = scroll_clientes
+         scroll_clientes.pack(fill="both", expand=True, padx=20, pady=5)
+         conteudo_cli = scroll_clientes.content
+         conteudo_cli.configure(fg_color="#161b22", corner_radius=12)
+@@ -6159,7 +6238,7 @@
+ 
+         cliente_id = selecionado[0]
+         try:
+-            novo_valor = self.cliente_repository.toggle_favorite(int(cliente_id))
++            novo_valor = CLIENTE_REPOSITORY.toggle_favorite(int(cliente_id))
+         except (TypeError, ValueError) as exc:
+             logger.warning("Não foi possível alternar favorito do cliente %s: %s", cliente_id, exc)
+             messagebox.showerror("Erro", str(exc))
+@@ -6665,7 +6744,8 @@
+                 + (f" Observação: {resultado['observacao']}" if resultado["observacao"] else ""),
+             )
+             win.destroy()
+-            self.filtrar_tabela_clientes()
++            termo_atual = self.entry_busca_cliente.get().strip() if hasattr(self, "entry_busca_cliente") else ""
++            self.carregar_clientes(termo_atual, manter_pagina=True)
+             self.atualizar_resumo_lateral()
+             self.carregar_historico_dia()
+             try:
+@@ -6712,8 +6792,20 @@
+         win.configure(fg_color="#0d1117")
+         win.grab_set()
+ 
+-        ctk.CTkLabel(win, text=f"📜 FICHA {ficha or '—'} — {nome}",
+-                     font=ctk.CTkFont(size=21, weight="bold"), text_color=self.cor_acento).pack(pady=(14,5))
++        cabecalho_historico = ctk.CTkFrame(win, fg_color="transparent")
++        cabecalho_historico.pack(fill="x", padx=20, pady=(14, 5))
++        ctk.CTkLabel(
++            cabecalho_historico,
++            text=f"📜 FICHA {ficha or '—'} — {nome}",
++            font=ctk.CTkFont(size=21, weight="bold"),
++            text_color=self.cor_acento,
++        ).pack(side="left", anchor="w")
++        ctk.CTkLabel(
++            cabecalho_historico,
++            text=f"SALDO DEVEDOR: R$ {float(saldo or 0):.2f}",
++            font=ctk.CTkFont(size=17, weight="bold"),
++            text_color="#ff7b72" if float(saldo or 0) > 0.005 else "#3fb950",
++        ).pack(side="right", anchor="e")
+ 
+         painel = ctk.CTkFrame(win, fg_color="#161b22", corner_radius=10)
+         painel.pack(fill="x", padx=20, pady=(4,8))

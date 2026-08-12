@@ -1,0 +1,7 @@
+Nenhuma regressão encontrada nos testes automatizados.
+
+Escopo preservado:
+- PDV não alterado.
+- Pesquisa não alterada.
+- Impressão não alterada.
+- Estrutura e comandos da interface não alterados.
