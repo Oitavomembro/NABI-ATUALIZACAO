@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal
 from typing import Any, Callable, Optional
+import re
 
 from repositories.decimal_storage import DecimalStorage
 
@@ -18,6 +19,23 @@ class CashClosingResult:
     replaced: bool
 
 
+@dataclass(frozen=True)
+class CashSession:
+    id: int
+    terminal: str
+    opened_by: str
+    opened_at: str
+    opening_balance: Decimal
+    opening_mode: str
+    status: str
+    closed_by: str = ""
+    closed_at: str = ""
+    expected_cash: Optional[Decimal] = None
+    counted_cash: Optional[Decimal] = None
+    difference: Optional[Decimal] = None
+    closing_note: str = ""
+
+
 class CashService:
     """Persistência e cálculos do caixa, sem dependência da interface gráfica."""
 
@@ -29,6 +47,213 @@ class CashService:
 
     def __init__(self, connection_factory: ConnectionFactory):
         self._connection_factory = connection_factory
+
+    @staticmethod
+    def _money(value: Any, field: str = "valor") -> Decimal:
+        return DecimalStorage.to_decimal(value, field=field).quantize(Decimal("0.01"))
+
+    @staticmethod
+    def _session(row) -> Optional[CashSession]:
+        if not row:
+            return None
+        decimal_or_none = lambda value: None if value in (None, "") else Decimal(str(value))
+        return CashSession(
+            id=int(row[0]), terminal=str(row[1]), opened_by=str(row[2]), opened_at=str(row[3]),
+            opening_balance=Decimal(str(row[4])), opening_mode=str(row[5]), status=str(row[6]),
+            closed_by=str(row[7] or ""), closed_at=str(row[8] or ""),
+            expected_cash=decimal_or_none(row[9]), counted_cash=decimal_or_none(row[10]),
+            difference=decimal_or_none(row[11]), closing_note=str(row[12] or ""),
+        )
+
+    def get_open_session(self, terminal: str) -> Optional[CashSession]:
+        conn = self._connection_factory()
+        try:
+            row = conn.execute(
+                """SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,
+                          closed_by,closed_at,expected_cash,counted_cash,difference,closing_note
+                     FROM cash_sessions WHERE terminal=? AND status='ABERTO' ORDER BY id DESC LIMIT 1""",
+                (str(terminal).strip(),),
+            ).fetchone()
+            return self._session(row)
+        finally:
+            conn.close()
+
+    def open_session(self, terminal: str, user: str, opening_balance: Any = 0,
+                     opening_mode: str = "VALOR_INFORMADO", opened_at: Optional[str] = None) -> CashSession:
+        terminal = str(terminal or "").strip()
+        user = str(user or "Sistema").strip() or "Sistema"
+        mode = str(opening_mode or "").strip().upper()
+        if not terminal:
+            raise ValueError("Terminal não identificado.")
+        if mode not in {"VALOR_INFORMADO", "SEM_VALOR_INFORMADO"}:
+            raise ValueError("Modo de abertura inválido.")
+        balance = self._money(opening_balance, "saldo inicial")
+        if balance < 0:
+            raise ValueError("O saldo inicial não pode ser negativo.")
+        if mode == "SEM_VALOR_INFORMADO":
+            balance = Decimal("0.00")
+        now = opened_at or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if conn.execute("SELECT 1 FROM cash_sessions WHERE terminal=? AND status='ABERTO'", (terminal,)).fetchone():
+                raise FileExistsError("Já existe um caixa aberto neste terminal.")
+            cursor = conn.execute(
+                "INSERT INTO cash_sessions(terminal,opened_by,opened_at,opening_balance,opening_mode,status) VALUES(?,?,?,?,?,'ABERTO')",
+                (terminal, user, now, DecimalStorage.canonical(balance, field="saldo inicial"), mode),
+            )
+            session_id = int(cursor.lastrowid)
+            self._audit(conn, user, "CAIXA_ABERTO", session_id, f"terminal={terminal}; saldo={balance:.2f}; modo={mode}", now)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return self.get_open_session(terminal)  # type: ignore[return-value]
+
+    @staticmethod
+    def _audit(conn, user: str, action: str, session_id: int, details: str, occurred_at: str) -> None:
+        tables = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "auditoria" in tables:
+            conn.execute(
+                "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) VALUES(?,?,'CAIXA',?,?,?,'SUCESSO')",
+                (occurred_at, user, action, str(session_id), details),
+            )
+
+    def register_session_movement(self, terminal: str, movement_type: str, amount: Any,
+                                  user: str, note: str = "", occurred_at: Optional[str] = None) -> int:
+        kind = str(movement_type or "").strip().upper()
+        if kind not in {"SANGRIA", "SUPRIMENTO"}:
+            raise ValueError("Tipo de movimento de caixa inválido.")
+        value = self._money(amount, "valor do movimento")
+        if value <= 0:
+            raise ValueError("O valor deve ser maior que zero.")
+        session = self.get_open_session(terminal)
+        if session is None:
+            raise RuntimeError("Não existe caixa aberto neste terminal.")
+        now = occurred_at or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        actor = str(user or "Sistema").strip() or "Sistema"
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            if not conn.execute("SELECT 1 FROM cash_sessions WHERE id=? AND status='ABERTO'", (session.id,)).fetchone():
+                raise RuntimeError("A sessão de caixa está fechada.")
+            cur = conn.execute(
+                "INSERT INTO cash_movements(cash_session_id,type,amount,user_id,note,created_at) VALUES(?,?,?,?,?,?)",
+                (session.id, kind, DecimalStorage.canonical(value, field="valor do movimento"), actor, str(note or "").strip(), now),
+            )
+            self._audit(conn, actor, kind, session.id, f"valor={value:.2f}; motivo={str(note or '').strip()}", now)
+            conn.commit()
+            return int(cur.lastrowid)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    @classmethod
+    def _payment_parts(cls, description: str, total: Decimal) -> dict[str, Decimal]:
+        text = str(description or "").upper()
+        parts = {"DINHEIRO": Decimal("0"), "PIX": Decimal("0"), "CARTAO": Decimal("0"), "OUTROS": Decimal("0")}
+        matches = re.findall(r"(DINHEIRO|PIX|CART(?:ÃO|AO)(?: DE CR[EÉ]DITO| DE D[EÉ]BITO)?|CREDIARIO|TRANSFER[EÊ]NCIA|OUTRO)\s+R\$\s*([0-9.,]+)", text)
+        if matches:
+            for label, raw in matches:
+                value = DecimalStorage.to_decimal(raw, field="forma de pagamento")
+                key = "DINHEIRO" if label == "DINHEIRO" else "PIX" if label == "PIX" else "CARTAO" if label.startswith("CART") else "OUTROS"
+                parts[key] += value
+            return parts
+        key = "DINHEIRO" if "DINHEIRO" in text else "PIX" if "PIX" in text else "CARTAO" if "CART" in text else "OUTROS"
+        parts[key] = total
+        return parts
+
+    def session_summary(self, session_id: int) -> dict[str, Any]:
+        conn = self._connection_factory()
+        try:
+            row = conn.execute("SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,closed_by,closed_at,expected_cash,counted_cash,difference,closing_note FROM cash_sessions WHERE id=?", (int(session_id),)).fetchone()
+            session = self._session(row)
+            if session is None:
+                raise LookupError("Sessão de caixa não encontrada.")
+            end = session.closed_at or "99/99/9999 99:99:99"
+            movement_columns = self._columns(conn, "movimentacoes")
+            canonical = "valor_decimal" if "valor_decimal" in movement_columns else "NULL"
+            status = "COALESCE(status_pagamento,'')" if "status_pagamento" in movement_columns else "''"
+            movements = conn.execute(f"SELECT tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status} FROM movimentacoes").fetchall()
+            own = conn.execute("SELECT type,amount,user_id,note,created_at FROM cash_movements WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
+        finally:
+            conn.close()
+        totals = {key: Decimal("0.00") for key in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "sangrias", "suprimentos")}
+        def parsed(value: str):
+            try: return datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
+            except (TypeError, ValueError): return None
+        start_dt, end_dt = parsed(session.opened_at), parsed(end)
+        for kind, method, legacy, canonical, date_text, status in movements:
+            when = parsed(date_text)
+            if str(status).upper() == "CANCELADO" or not when or (start_dt and when < start_dt) or (end_dt and when > end_dt):
+                continue
+            value = DecimalStorage.read(canonical, legacy, field="movimento")
+            parts = self._payment_parts(method, value)
+            if kind == "COMPRA":
+                for key in ("DINHEIRO", "PIX", "CARTAO", "OUTROS"):
+                    totals[key.casefold().replace("cartao", "cartao")] += parts[key]
+            elif kind == "PAGAMENTO":
+                totals["recebimentos_dinheiro"] += parts["DINHEIRO"]
+                totals["recebimentos_eletronicos"] += parts["PIX"] + parts["CARTAO"] + parts["OUTROS"]
+        history = []
+        for kind, amount, user, note, created in own:
+            value = Decimal(str(amount))
+            totals["sangrias" if kind == "SANGRIA" else "suprimentos"] += value
+            history.append({"tipo": kind, "valor": value, "usuario": user, "observacao": note, "data": created})
+        expected = session.opening_balance + totals["dinheiro"] + totals["recebimentos_dinheiro"] + totals["suprimentos"] - totals["sangrias"]
+        movement_total = sum((totals[k] for k in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "suprimentos")), Decimal("0")) - totals["sangrias"]
+        return {"session": session, **totals, "expected_cash": expected, "movement_total": movement_total, "movements": history}
+
+    def close_session(self, terminal: str, counted_cash: Any, user: str, note: str = "",
+                      closed_at: Optional[str] = None) -> CashSession:
+        session = self.get_open_session(terminal)
+        if session is None:
+            raise RuntimeError("Não existe caixa aberto neste terminal.")
+        counted = self._money(counted_cash, "valor contado")
+        if counted < 0:
+            raise ValueError("O valor contado não pode ser negativo.")
+        summary = self.session_summary(session.id)
+        expected = summary["expected_cash"]
+        difference = counted - expected
+        note = str(note or "").strip()
+        if difference != 0 and not note:
+            raise ValueError("Informe uma observação para sobra ou falta de caixa.")
+        actor = str(user or "Sistema").strip() or "Sistema"
+        now = closed_at or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            updated = conn.execute(
+                """UPDATE cash_sessions SET status='FECHADO',closed_by=?,closed_at=?,expected_cash=?,counted_cash=?,difference=?,closing_note=?
+                   WHERE id=? AND status='ABERTO'""",
+                (actor, now, str(expected), str(counted), str(difference), note, session.id),
+            )
+            if updated.rowcount != 1:
+                raise RuntimeError("A sessão de caixa já foi fechada.")
+            self._audit(conn, actor, "CAIXA_FECHADO", session.id, f"esperado={expected:.2f}; contado={counted:.2f}; diferenca={difference:.2f}; observacao={note}", now)
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+        return self.history(terminal, session.id)[0]
+
+    def history(self, terminal: str, session_id: Optional[int] = None) -> list[CashSession]:
+        conn = self._connection_factory()
+        try:
+            sql = "SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,closed_by,closed_at,expected_cash,counted_cash,difference,closing_note FROM cash_sessions WHERE terminal=?"
+            params: list[Any] = [str(terminal).strip()]
+            if session_id is not None:
+                sql += " AND id=?"; params.append(int(session_id))
+            sql += " ORDER BY id DESC"
+            return [self._session(row) for row in conn.execute(sql, params).fetchall()]  # type: ignore[misc]
+        finally:
+            conn.close()
 
     @staticmethod
     def _columns(connection, table: str) -> set[str]:

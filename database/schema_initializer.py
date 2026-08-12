@@ -678,6 +678,47 @@ def initialize_database(
             criado_em TEXT NOT NULL
         )
     """)
+    # Checkpoint 41: sessões de caixa pertencem ao terminal físico. As vendas e
+    # recebimentos continuam sendo agregados de ``movimentacoes``; somente
+    # operações próprias (sangria/suprimento) são gravadas separadamente.
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cash_sessions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            terminal TEXT NOT NULL,
+            opened_by TEXT NOT NULL,
+            opened_at TEXT NOT NULL,
+            opening_balance TEXT NOT NULL DEFAULT '0.00',
+            opening_mode TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'ABERTO'
+                CHECK(status IN ('ABERTO','FECHADO')),
+            closed_by TEXT DEFAULT '',
+            closed_at TEXT DEFAULT '',
+            expected_cash TEXT,
+            counted_cash TEXT,
+            difference TEXT,
+            closing_note TEXT DEFAULT ''
+        )
+    """)
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_session_terminal_open
+        ON cash_sessions(terminal) WHERE status='ABERTO'
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cash_movements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cash_session_id INTEGER NOT NULL,
+            type TEXT NOT NULL CHECK(type IN ('SANGRIA','SUPRIMENTO')),
+            amount TEXT NOT NULL,
+            payment_method TEXT NOT NULL DEFAULT 'DINHEIRO',
+            source TEXT NOT NULL DEFAULT 'CAIXA',
+            source_id TEXT NOT NULL DEFAULT '',
+            user_id TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(cash_session_id) REFERENCES cash_sessions(id)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_movements_session ON cash_movements(cash_session_id,created_at)")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS documentos_emitidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

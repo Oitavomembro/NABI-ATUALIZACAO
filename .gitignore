@@ -51,3 +51,4 @@ wheelhouse/
 # A pasta real fica em %APPDATA%\NabiCode e deve permanecer fora da árvore.
 AppData/NabiCode/
 
+work/

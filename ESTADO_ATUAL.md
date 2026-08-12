@@ -3,7 +3,7 @@
 ## Identificação
 
 - **Versão:** 2.5.1 DEV
-- **Base:** Checkpoint 40 Windows Validation Fixes
+- **Base:** Checkpoint 41 — Módulo Caixa
 - **Branch planejada:** `dev/nabicode-2.5.1`
 - **Status:** DESENVOLVIMENTO
 - **Instalador:** frente separada — não modificar
@@ -44,9 +44,18 @@
 - A falha ocorreu no smoke de startup pela ausência de `pygame` no ambiente.
 - Nenhum código funcional foi alterado para mascarar essas limitações. O resultado oficial conhecido do Checkpoint 40 permanece `990 passed, 22 subtests passed`.
 
-## Próxima missão — Módulo Caixa
+## Missão concluída — Módulo Caixa
 
-Esta missão está registrada para implementação futura. **Não foi implementada nesta preparação.**
+Implementada no NabiCode 2.5.1 DEV sobre a base oficial do Checkpoint 40.
+
+### Arquitetura
+
+- sessões persistidas por terminal em `cash_sessions`;
+- sangrias e suprimentos persistidos em `cash_movements`;
+- vendas e recebimentos agregados das fontes oficiais em `movimentacoes`, sem duplicação;
+- regras e cálculos isolados em `services/cash_service.py`;
+- patch de integração e interface mantido mínimo em `nabicode_legacy.py`;
+- auditoria de abertura, sangria, suprimento e fechamento na infraestrutura existente.
 
 ### Abertura
 
@@ -89,3 +98,16 @@ PIX e cartão entram no movimento do período, mas **não aumentam o dinheiro f�
 ### Múltiplos usuários
 
 Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação registra o usuário responsável. Não criar automaticamente um caixa independente para cada usuário.
+
+## Validação do Checkpoint 41
+
+- 11 testes automatizados do Caixa cobrindo os 20 cenários obrigatórios, aprovados;
+- suíte focada de Caixa, schema, PDV e financeiro: 32 aprovados;
+- suíte completa: 999 aprovados e 1 falha preexistente de fidelidade do splash (hash esperado `7057...`, hash atual da própria base e protótipo `6697...`);
+- `compileall`: aprovado após a correção de integração;
+- GUI física Windows: pendente de validação manual;
+- stress, benchmark e soak: não executados nesta missão.
+
+## Checkpoint lógico
+
+**NabiCode 2.5.1 DEV — Checkpoint 41 — Módulo Caixa**
