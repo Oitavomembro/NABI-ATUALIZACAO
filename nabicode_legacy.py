@@ -1852,7 +1852,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _aplicar_visibilidade_navegacao(self):
         """Mostra somente os módulos permitidos pelo modo e espaço de trabalho."""
         visiveis = set(self.perfil_interface.visible_modules)
-        ordem = ("dashboard", "vendas", "clientes", "produtos", "configs")
+        ordem = UIPreferencesService.MODULE_ORDER
         for grupo in self._grupos_botoes_topo:
             for botao in grupo.values():
                 botao.pack_forget()

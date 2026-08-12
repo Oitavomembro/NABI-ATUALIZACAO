@@ -20,7 +20,7 @@ class UIPreferencesServiceTests(unittest.TestCase):
 
     def test_simple_mode_hides_advanced_modules(self):
         profile = UIPreferencesService.build_profile({"mode": "Simples", "workspace": "Geral"})
-        self.assertEqual(profile.visible_modules, ("dashboard", "vendas", "clientes", "configs"))
+        self.assertEqual(profile.visible_modules, ("dashboard", "vendas", "clientes", "caixa", "configs"))
         self.assertNotIn("produtos", profile.visible_modules)
 
     def test_stock_workspace_restricts_navigation(self):
@@ -29,7 +29,7 @@ class UIPreferencesServiceTests(unittest.TestCase):
             "workspace": "Estoque",
             "adaptive_menu": True,
         })
-        self.assertEqual(profile.visible_modules, ("dashboard", "produtos", "configs"))
+        self.assertEqual(profile.visible_modules, ("dashboard", "produtos", "caixa", "configs"))
 
     def test_non_adaptive_menu_uses_mode_only(self):
         profile = UIPreferencesService.build_profile({
@@ -64,7 +64,7 @@ class UIPreferencesServiceTests(unittest.TestCase):
             "mode": "Simples",
             "workspace": "Financeiro",
         })
-        self.assertEqual(profile.visible_modules, ("vendas", "produtos"))
+        self.assertEqual(profile.visible_modules, ("vendas", "produtos", "caixa"))
 
     def test_custom_navigation_removes_unknown_and_duplicate_modules(self):
         data = UIPreferencesService.normalize({
@@ -78,7 +78,20 @@ class UIPreferencesServiceTests(unittest.TestCase):
             "custom_navigation": True,
             "navigation_modules": [],
         })
-        self.assertEqual(profile.visible_modules, ("dashboard",))
+        self.assertEqual(profile.visible_modules, ("dashboard", "caixa"))
+
+    def test_cash_module_is_visible_in_every_interface_profile(self):
+        for mode in UIPreferencesService.MODES:
+            for workspace in UIPreferencesService.WORKSPACES:
+                profile = UIPreferencesService.build_profile({"mode": mode, "workspace": workspace})
+                self.assertIn("caixa", profile.visible_modules, (mode, workspace))
+
+    def test_legacy_saved_navigation_cannot_hide_cash_module(self):
+        profile = UIPreferencesService.build_profile({
+            "custom_navigation": True,
+            "navigation_modules": ["dashboard", "vendas", "clientes", "produtos", "configs"],
+        })
+        self.assertIn("caixa", profile.visible_modules)
 
     def test_favorites_remove_unknown_and_duplicate_modules(self):
         data = UIPreferencesService.normalize({

@@ -49,6 +49,7 @@ class UIPreferencesService:
         "vendas": "Vendas",
         "clientes": "Clientes",
         "produtos": "Produtos",
+        "caixa": "Caixa",
         "financeiro": "Financeiro",
         "relatorios": "Relatórios",
         "configs": "Configurações",
@@ -72,18 +73,18 @@ class UIPreferencesService:
     }
 
     MODE_MODULES = {
-        "Simples": ("dashboard", "vendas", "clientes", "configs"),
-        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "configs"),
-        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "financeiro", "relatorios", "configs"),
+        "Simples": ("dashboard", "vendas", "clientes", "caixa", "configs"),
+        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
+        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "caixa", "financeiro", "relatorios", "configs"),
     }
 
     WORKSPACE_MODULES = {
-        "Geral": ("dashboard", "vendas", "clientes", "produtos", "configs"),
-        "Caixa": ("dashboard", "vendas", "clientes", "produtos", "configs"),
-        "Estoque": ("dashboard", "produtos", "configs"),
-        "Financeiro": ("dashboard", "clientes", "financeiro", "relatorios", "configs"),
-        "Atendimento": ("dashboard", "clientes", "vendas", "configs"),
-        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "relatorios", "configs"),
+        "Geral": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
+        "Caixa": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
+        "Estoque": ("dashboard", "produtos", "caixa", "configs"),
+        "Financeiro": ("dashboard", "clientes", "caixa", "financeiro", "relatorios", "configs"),
+        "Atendimento": ("dashboard", "clientes", "vendas", "caixa", "configs"),
+        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "caixa", "relatorios", "configs"),
     }
 
     ROW_HEIGHTS = {"Compacta": 22, "Normal": 27, "Confortável": 34}
@@ -164,6 +165,7 @@ class UIPreferencesService:
         mode_modules = cls.MODE_MODULES[data["mode"]]
         if data["custom_navigation"]:
             selected = set(data["navigation_modules"])
+            selected.add("caixa")
             visible = tuple(module_id for module_id in cls.MODULE_ORDER if module_id in selected)
         elif not data["adaptive_menu"]:
             visible = mode_modules
@@ -174,6 +176,9 @@ class UIPreferencesService:
                 visible += ("configs",)
             if "dashboard" not in visible:
                 visible = ("dashboard",) + visible
+        if "caixa" not in visible:
+            position = visible.index("configs") if "configs" in visible else len(visible)
+            visible = visible[:position] + ("caixa",) + visible[position:]
         return InterfaceProfile(
             mode=data["mode"],
             workspace=data["workspace"],
