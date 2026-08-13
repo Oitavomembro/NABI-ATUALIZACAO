@@ -180,7 +180,10 @@ class CashService:
             status = "COALESCE(status_pagamento,'')" if "status_pagamento" in movement_columns else "''"
             responsible = "COALESCE(responsavel,'')" if "responsavel" in movement_columns else "''"
             description = "COALESCE(descricao,'')" if "descricao" in movement_columns else "''"
-            movements = conn.execute(f"SELECT id,tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status},{responsible},{description} FROM movimentacoes").fetchall()
+            movements = conn.execute(
+                f"SELECT id,tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status},{responsible},{description} "
+                "FROM movimentacoes WHERE tipo IN ('COMPRA','PAGAMENTO')"
+            ).fetchall()
             own = conn.execute("SELECT type,amount,user_id,note,created_at FROM cash_movements WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
         finally:
             conn.close()

@@ -79,6 +79,17 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         self.assertEqual(summary["recebimentos_dinheiro"], 10500)
         self.assertEqual(summary["expected_cash"], 21200)
 
+    def test_summary_queries_only_sales_and_receipts(self):
+        session = self.open(value=0)
+        traced = []
+        connection = sqlite3.connect(self.db)
+        connection.set_trace_callback(traced.append)
+        cash = CashService(lambda: connection)
+        cash.session_summary(session.id)
+        movement_queries = [sql for sql in traced if "FROM movimentacoes" in sql]
+        self.assertEqual(len(movement_queries), 1)
+        self.assertIn("tipo IN ('COMPRA','PAGAMENTO')", movement_queries[0])
+
     def test_cancelled_sale_does_not_affect_cash(self):
         session = self.open(value=10)
         conn = sqlite3.connect(self.db)

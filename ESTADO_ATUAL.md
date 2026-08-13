@@ -208,3 +208,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão confirma abertura de diretório por processo simulado, sem lançar aplicativo externo;
 - 11 testes focados e compilação aprovados;
 - suíte completa: 1042 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.5 — resumo do Caixa mais leve
+
+- resumo da sessão deixa de materializar tipos de movimentação que nunca participam do Caixa;
+- consulta oficial limita a leitura a vendas (`COMPRA`) e recebimentos (`PAGAMENTO`);
+- cálculo, filtro temporal, cancelamentos e fontes persistidas permanecem inalterados;
+- nenhuma migração ou novo índice foi introduzido;
+- teste de regressão inspeciona a consulta efetivamente enviada ao SQLite;
+- 27 testes focados aprovados;
+- suíte completa: 1043 testes e 22 subtestes aprovados.
