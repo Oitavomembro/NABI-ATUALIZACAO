@@ -191,6 +191,17 @@ class ReportServiceTests(unittest.TestCase):
         self.assertTrue(path.exists())
         dispatch.assert_called_once_with(path)
 
+    def test_windows_pdf_dispatch_uses_isolated_printer(self) -> None:
+        path = Path(self.tmp.name) / "relatorio.pdf"
+        path.write_bytes(b"%PDF-1.4\n")
+        with patch("services.report_service.sys.platform", "win32"), patch(
+            "services.report_service.WindowsPDFPrinter"
+        ) as printer_class:
+            ReportService._dispatch_print(path)
+        printer_class.return_value.print.assert_called_once_with(
+            path, "Padrão do Sistema"
+        )
+
     def test_schedule_preserves_filters_and_can_be_disabled(self) -> None:
         saved = self.service.save_schedule({
             "name": "Vendas filtradas", "report_id": "vendas", "frequency": "DIARIO", "run_time": "08:00", "format": "CSV",

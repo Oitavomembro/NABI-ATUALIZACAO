@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import csv
 import json
-import os
 import shutil
 import sqlite3
 import subprocess
@@ -15,6 +14,7 @@ from typing import Any, Callable, Iterable, Mapping, Sequence
 
 from repositories.decimal_storage import DecimalStorage
 from database.sqlite_introspection import table_exists
+from services.windows_pdf_printer import WindowsPDFPrinter
 
 
 @dataclass(frozen=True)
@@ -343,9 +343,7 @@ class ReportService:
         if not path.exists():
             raise FileNotFoundError(path)
         if sys.platform.startswith("win"):
-            if not hasattr(os, "startfile"):
-                raise RuntimeError("Impressão não disponível neste Windows.")
-            os.startfile(str(path), "print")  # type: ignore[attr-defined]
+            WindowsPDFPrinter().print(path, "Padrão do Sistema")
             return
         command = shutil.which("lp") or shutil.which("lpr")
         if not command:

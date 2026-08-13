@@ -178,3 +178,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - dependências instaladas no ambiente de auditoria verificadas sem conflitos;
 - integridade do repositório Git aprovada;
 - nenhuma interface gráfica ou impressora física foi acionada durante a auditoria.
+
+## Checkpoint 42.2 — impressão segura de relatórios
+
+- relatórios PDF deixaram de usar `os.startfile(..., "print")`, mecanismo capaz de derrubar o runtime em algumas extensões de PDF no Windows;
+- envio passou a usar o processo isolado `WindowsPDFPrinter`, já adotado pelo restante do aplicativo;
+- impressora padrão do sistema preservada como destino do fluxo de relatórios;
+- teste de regressão simula o Windows e confirma o despacho isolado sem acionar impressora;
+- 31 testes focados aprovados;
+- suíte completa: 1035 testes e 22 subtestes aprovados.
