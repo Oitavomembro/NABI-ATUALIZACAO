@@ -246,6 +246,17 @@ class ReportServiceTests(unittest.TestCase):
         self.assertEqual(destination.read_text(encoding="utf-8"), "arquivo anterior")
         self.assertEqual(list(destination.parent.glob("vendas.*.csv")), [])
 
+    def test_empty_export_is_rejected_before_replacing_destination(self) -> None:
+        destination = Path(self.tmp.name) / "reports" / "vendas.csv"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("arquivo anterior", encoding="utf-8")
+        result = self.service.generate("vendas", actor="admin")
+        with patch.object(self.service, "_export_csv", return_value=None):
+            with self.assertRaisesRegex(RuntimeError, "arquivo válido"):
+                self.service.export(result, "CSV", destination, actor="admin")
+        self.assertEqual(destination.read_text(encoding="utf-8"), "arquivo anterior")
+        self.assertEqual(list(destination.parent.glob("vendas.*.csv")), [])
+
     def test_windows_pdf_dispatch_uses_isolated_printer(self) -> None:
         path = Path(self.tmp.name) / "relatorio.pdf"
         path.write_bytes(b"%PDF-1.4\n")

@@ -335,3 +335,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - limite configurado e ordem das notificações continuam preservados;
 - 14 testes focados de notificações e tarefas aprovados;
 - suíte completa: 1059 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.19 — validação de arquivos exportados
+
+- exportação verifica existência e tamanho positivo antes de publicar o destino final;
+- retorno silencioso de biblioteca sem conteúdo passa a ser tratado como falha;
+- temporário vazio é removido e arquivo anterior permanece intacto;
+- histórico e auditoria não registram exportação vazia como sucesso;
+- 22 testes focados de relatórios aprovados;
+- suíte completa: 1060 testes e 22 subtestes aprovados.

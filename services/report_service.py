@@ -323,6 +323,8 @@ class ReportService:
                 self._export_xlsx(result, temporary_path)
             else:
                 self._export_pdf(result, temporary_path)
+            if not temporary_path.is_file() or temporary_path.stat().st_size <= 0:
+                raise RuntimeError("A exportação não gerou um arquivo válido.")
             os.replace(temporary_path, path)
         except Exception:
             temporary_path.unlink(missing_ok=True)
