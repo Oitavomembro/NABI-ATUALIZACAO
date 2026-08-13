@@ -74,15 +74,19 @@ class TaskManager:
     def __init__(
         self,
         max_workers: int = 2,
+        max_records: int = 200,
         event_bus: EventBus | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         if max_workers < 1:
             raise ValueError("max_workers deve ser maior que zero.")
+        if max_records < 1:
+            raise ValueError("max_records deve ser maior que zero.")
         self._executor = ThreadPoolExecutor(max_workers=max_workers, thread_name_prefix="NabiCodeTask")
         self._event_bus = event_bus
         self._logger = logger or logging.getLogger("NabiCode.TaskManager")
         self._records: dict[str, TaskRecord] = {}
+        self._max_records = int(max_records)
         self._lock = threading.RLock()
         self._shutdown = False
 
@@ -92,6 +96,7 @@ class TaskManager:
         with self._lock:
             if self._shutdown:
                 raise RuntimeError("O gerenciador de tarefas já foi encerrado.")
+            self._prune_finished_locked()
             task_id = uuid.uuid4().hex
             record = TaskRecord(id=task_id, name=name.strip())
             self._records[task_id] = record
@@ -162,6 +167,18 @@ class TaskManager:
         if active_only:
             records = [item for item in records if item.status in {TaskStatus.PENDING, TaskStatus.RUNNING}]
         return sorted(records, key=lambda item: item.created_at, reverse=True)
+
+    def _prune_finished_locked(self) -> None:
+        overflow = len(self._records) - self._max_records + 1
+        if overflow <= 0:
+            return
+        terminal = {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}
+        finished = sorted(
+            (item for item in self._records.values() if item.status in terminal),
+            key=lambda item: item.finished_at or item.created_at,
+        )
+        for record in finished[:overflow]:
+            self._records.pop(record.id, None)
 
     def wait(self, task_id: str, timeout: float | None = None) -> TaskRecord:
         record = self.get(task_id)

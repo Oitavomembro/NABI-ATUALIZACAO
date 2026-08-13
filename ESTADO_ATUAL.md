@@ -245,3 +245,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - chaves válidas e compatibilidade das preferências existentes permanecem inalteradas;
 - 32 testes focados de núcleo, preferências e rede aprovados;
 - suíte completa: 1047 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.9 — histórico limitado de tarefas
+
+- gerenciador deixa de manter indefinidamente resultados e `Future` de tarefas antigas;
+- histórico padrão preserva os 200 registros mais recentes;
+- tarefas pendentes ou em execução nunca são removidas pelo limite;
+- somente registros concluídos, falhos ou cancelados mais antigos são descartados ao criar nova tarefa;
+- 17 testes focados de tarefas, núcleo e administração aprovados;
+- suíte completa: 1049 testes e 22 subtestes aprovados.

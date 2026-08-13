@@ -58,6 +58,24 @@ class TaskManagerTests(unittest.TestCase):
         self.assertEqual(final.status, TaskStatus.FAILED)
         self.assertIn("erro controlado", final.error)
 
+    def test_historico_remove_concluidas_antigas_sem_afetar_recentes(self):
+        manager = TaskManager(max_workers=1, max_records=3)
+        try:
+            completed = []
+            for index in range(4):
+                record = manager.submit(f"tarefa {index}", lambda _ctx, value=index: value)
+                completed.append(manager.wait(record.id, timeout=2))
+            records = manager.list()
+            self.assertEqual(len(records), 3)
+            self.assertIsNone(manager.get(completed[0].id))
+            self.assertEqual({item.result for item in records}, {1, 2, 3})
+        finally:
+            manager.shutdown(wait=True, cancel_pending=True)
+
+    def test_limite_invalido_e_rejeitado(self):
+        with self.assertRaises(ValueError):
+            TaskManager(max_records=0)
+
 
 if __name__ == "__main__":
     unittest.main()
