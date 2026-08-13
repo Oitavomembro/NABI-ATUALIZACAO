@@ -290,3 +290,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - limite de 200 registros e auditoria das operações permanecem inalterados;
 - 18 testes focados de relatórios aprovados;
 - suíte completa: 1053 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.14 — agendamentos resilientes
+
+- persistência de agendamentos com tipo incorreto deixa de quebrar a listagem;
+- registros antigos sem nome, relatório, frequência ou formato válidos são isolados;
+- agendamentos íntegros continuam listados e executados mesmo ao lado de entradas incompatíveis;
+- regras de frequência, formato, ativação e próxima execução permanecem inalteradas;
+- 19 testes focados de relatórios aprovados;
+- suíte completa: 1054 testes e 22 subtestes aprovados.

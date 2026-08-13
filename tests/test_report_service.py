@@ -227,6 +227,29 @@ class ReportServiceTests(unittest.TestCase):
         self.assertFalse(disabled["active"])
         self.assertEqual(self.service.run_due_schedules(now=datetime(2030, 1, 1, 9, 0)), [])
 
+    def test_malformed_schedules_do_not_block_valid_entries(self) -> None:
+        valid = self.service.save_schedule({
+            "name": "Vendas diárias", "report_id": "vendas",
+            "frequency": "DIARIO", "format": "CSV", "active": False,
+        })
+        connection = sqlite3.connect(self.db_path)
+        rows = [
+            valid,
+            "entrada antiga",
+            {"name": "Sem relatório", "frequency": "DIARIO", "format": "CSV"},
+            {"name": "Formato ruim", "report_id": "vendas", "frequency": "DIARIO", "format": "TXT"},
+        ]
+        import json
+        connection.execute(
+            "UPDATE configuracoes SET valor=? WHERE chave=?",
+            (json.dumps(rows), ReportService.SCHEDULES_KEY),
+        )
+        connection.commit()
+        connection.close()
+        schedules = self.service.list_schedules()
+        self.assertEqual([item["name"] for item in schedules], ["Vendas diárias"])
+        self.assertEqual(self.service.run_due_schedules(now=datetime(2030, 1, 1, 9, 0)), [])
+
     def test_authorizer_blocks_unauthorized_report(self) -> None:
         service = ReportService(
             self.service.connection_factory,

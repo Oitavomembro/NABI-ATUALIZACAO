@@ -371,7 +371,23 @@ class ReportService:
 
     def list_schedules(self) -> list[dict[str, Any]]:
         data = self._load_json_setting(self.SCHEDULES_KEY, [])
-        return sorted(data, key=lambda row: str(row.get("name", "")).casefold())
+        if not isinstance(data, list):
+            return []
+        valid: list[dict[str, Any]] = []
+        for item in data:
+            if not isinstance(item, dict):
+                continue
+            row = dict(item)
+            if not str(row.get("name", "")).strip():
+                continue
+            if str(row.get("report_id", "")).strip().lower() not in self.REPORTS:
+                continue
+            if str(row.get("frequency", "")).strip().upper() not in {"DIARIO", "SEMANAL", "MENSAL"}:
+                continue
+            if str(row.get("format", "CSV")).strip().upper() not in {"CSV", "XLSX", "PDF"}:
+                continue
+            valid.append(row)
+        return sorted(valid, key=lambda row: str(row.get("name", "")).casefold())
 
     def save_schedule(self, schedule: Mapping[str, Any], *, actor: str = "Sistema") -> dict[str, Any]:
         name = str(schedule.get("name", "")).strip()
