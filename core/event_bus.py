@@ -25,7 +25,8 @@ class EventBus:
         self._logger = logger or logging.getLogger("NabiCode.EventBus")
 
     def subscribe(self, event: str, handler: EventHandler) -> EventSubscription:
-        if not event or not callable(handler):
+        event = self._event_name(event)
+        if not callable(handler):
             raise ValueError("Evento e manipulador válidos são obrigatórios.")
         with self._lock:
             token = self._next_token
@@ -44,6 +45,7 @@ class EventBus:
             return True
 
     def publish(self, event: str, **payload: Any) -> list[Any]:
+        event = self._event_name(event)
         with self._lock:
             handlers = list(self._handlers.get(event, {}).values())
         results: list[Any] = []
@@ -59,4 +61,12 @@ class EventBus:
             if event is None:
                 self._handlers.clear()
             else:
+                event = self._event_name(event)
                 self._handlers.pop(event, None)
+
+    @staticmethod
+    def _event_name(event: str) -> str:
+        normalized = str(event or "").strip()
+        if not normalized:
+            raise ValueError("O nome do evento não pode ser vazio.")
+        return normalized

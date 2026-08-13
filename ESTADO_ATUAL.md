@@ -272,3 +272,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - recriação automática com valores padrão permanece inalterada;
 - 28 testes focados de núcleo e preferências aprovados;
 - suíte completa: 1051 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.12 — eventos internos consistentes
+
+- assinatura, publicação e limpeza passam a compartilhar a mesma validação de nome;
+- espaços externos são normalizados sem alterar os nomes válidos existentes;
+- eventos vazios deixam de desaparecer silenciosamente e geram erro explícito;
+- isolamento de falhas entre manipuladores permanece inalterado;
+- 21 testes focados de núcleo, tarefas e auditoria aprovados;
+- suíte completa: 1052 testes e 22 subtestes aprovados.

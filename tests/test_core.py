@@ -73,6 +73,19 @@ class ConfigManagerTests(unittest.TestCase):
 
 
 class EventBusTests(unittest.TestCase):
+    def test_event_names_are_trimmed_and_empty_names_are_rejected(self):
+        bus = EventBus()
+        received = []
+        subscription = bus.subscribe("  produto.salvo  ", lambda value: received.append(value))
+        self.assertEqual(subscription.event, "produto.salvo")
+        bus.publish(" produto.salvo ", value=1)
+        self.assertEqual(received, [1])
+        for invalid in ("", "   ", None):
+            with self.assertRaises(ValueError):
+                bus.publish(invalid)  # type: ignore[arg-type]
+        with self.assertRaises(ValueError):
+            bus.clear("   ")
+
     def test_publish_and_unsubscribe(self):
         bus = EventBus()
         received = []
