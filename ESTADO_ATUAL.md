@@ -187,3 +187,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão simula o Windows e confirma o despacho isolado sem acionar impressora;
 - 31 testes focados aprovados;
 - suíte completa: 1035 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.3 — sincronização entre frentes
+
+- incorporados os commits externos `843a5ff` e `b30ee70` da mesma branch, sem bifurcação ou conflito Git;
+- fechamento persistido sem impressão automática e com ação explícita para imprimir ou voltar;
+- bloqueio de reentrada impede trabalhos simultâneos e é liberado após sucesso ou falha para permitir nova tentativa;
+- movimento total do Caixa representa somente vendas, sem somar recebimentos, sangrias ou suprimentos;
+- diálogo obrigatório de abertura solicita primeiro plano momentâneo, sem modalidade ou `topmost` persistente;
+- preservado o roteamento exclusivo da categoria `fechamento`, sem reutilizar `impressora_recibo`;
+- 47 testes focados aprovados;
+- suíte completa: 1041 testes e 22 subtestes aprovados.

@@ -38,12 +38,12 @@ def test_opening_and_closing_dialogs_have_single_instance_guards():
     assert '_criar_modal_nabicode("FECHAMENTO"' in closing
 
 
-def test_closing_receipt_uses_official_80mm_pipeline_off_ui_thread():
+def test_closing_receipt_uses_configured_closing_pipeline_off_ui_thread():
     source = method_source("_imprimir_comprovante_fechamento_caixa")
     assert ".print_text(" in source
-    assert "OFFICIAL_THERMAL_FORMAT" in source
-    assert 'obter_config("impressora_recibo")' in source
-    assert 'obter_config("impressora_historico")' not in source
+    assert 'output_format("fechamento")' in source
+    assert 'obter_config("impressora_historico")' in source
+    assert 'obter_config("impressora_recibo")' not in source
     assert "threading.Thread" in source
     text = method_source("_texto_comprovante_fechamento_caixa")
     for field in ("FECHAMENTO DE CAIXA", "Saldo inicial", "Vendas dinheiro", "Recebimentos dinheiro", "Suprimentos", "Sangrias", "Dinheiro esperado", "PIX", "Cartão", "Valor contado", "Diferença"):
@@ -121,7 +121,9 @@ def test_two_concurrent_dispatch_attempts_for_same_closing_create_only_one_mock_
             pending.append(self.target)
 
     class Printer:
-        OFFICIAL_THERMAL_FORMAT = "Cupom 80 mm"
+        def output_format(self, category):
+            assert category == "fechamento"
+            return "A4"
 
         def print_text(self, text, **kwargs):
             calls.append((text, kwargs))
@@ -135,7 +137,7 @@ def test_two_concurrent_dispatch_attempts_for_same_closing_create_only_one_mock_
 
     namespace = {
         "threading": SimpleNamespace(Lock=threading.Lock, Thread=DeferredThread),
-        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_recibo" else "",
+        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_historico" else "",
         "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
     }
     exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
@@ -149,7 +151,7 @@ def test_two_concurrent_dispatch_attempts_for_same_closing_create_only_one_mock_
     assert calls[0][0].count("NABICODE") == 1
     assert calls[0][0].count("FECHAMENTO DE CAIXA") == 1
     assert calls[0][1]["printer"] == "IMPRESSORA FECHAMENTO"
-    assert calls[0][1]["output_format"] == "Cupom 80 mm"
+    assert calls[0][1]["output_format"] == "A4"
 
 
 def test_closing_is_persisted_without_automatic_print_and_offers_explicit_actions():
@@ -170,7 +172,9 @@ def test_failed_job_releases_guard_and_retry_creates_one_new_job():
         def start(self): self.target()
 
     class Printer:
-        OFFICIAL_THERMAL_FORMAT = "Cupom 80 mm"
+        def output_format(self, category):
+            assert category == "fechamento"
+            return "A4"
 
         def print_text(self, _text, **_kwargs):
             attempts.append(1)

@@ -2482,8 +2482,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _imprimir_comprovante_fechamento_caixa(self, session, resumo, on_complete=None):
         texto = self._texto_comprovante_fechamento_caixa(session, resumo)
         servico_impressao = self._servico_impressao()
-        impressora = obter_config("impressora_recibo") or "Padrão do Sistema"
-        formato = servico_impressao.OFFICIAL_THERMAL_FORMAT
+        impressora = obter_config("impressora_historico") or "Padrão do Sistema"
+        formato = servico_impressao.output_format("fechamento")
         lock = getattr(self, "_cash_print_dispatch_lock", None)
         if lock is None:
             lock = threading.Lock()
