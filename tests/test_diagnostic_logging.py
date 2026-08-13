@@ -51,6 +51,20 @@ class DiagnosticLoggingTests(unittest.TestCase):
         self.assertNotIn("OutraSenha", content)
         self.assertIn("<omitido>", content)
 
+    def test_oauth_credentials_are_redacted(self) -> None:
+        self.logger.error(
+            "Authorization: Bearer cabecalho-secreto "
+            "access_token=acesso-secreto&refresh_token=renovacao-secreta "
+            "client_secret=cliente-secreto"
+        )
+        content = self.log_file.read_text(encoding="utf-8")
+        for secret in (
+            "cabecalho-secreto", "acesso-secreto", "renovacao-secreta", "cliente-secreto"
+        ):
+            self.assertNotIn(secret, content)
+        self.assertIn("authorization=<omitido>", content.casefold())
+        self.assertIn("access_token=<omitido>", content.casefold())
+
     def test_logging_write_failure_does_not_escape(self) -> None:
         with patch.object(SafeRotatingFileHandler, "shouldRollover", side_effect=OSError("disco bloqueado")):
             self.logger.error("falha externa")

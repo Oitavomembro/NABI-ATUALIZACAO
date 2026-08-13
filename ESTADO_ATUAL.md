@@ -218,3 +218,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão inspeciona a consulta efetivamente enviada ao SQLite;
 - 27 testes focados aprovados;
 - suíte completa: 1043 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.6 — proteção ampliada dos diagnósticos
+
+- sanitização de logs passa a remover cabeçalhos `Authorization: Bearer`;
+- credenciais OAuth `access_token`, `refresh_token` e `client_secret` também são omitidas;
+- proteção anterior de senhas, tokens, chaves de API e chaves privadas permanece ativa;
+- teste de regressão usa somente segredos fictícios e verifica mensagem persistida;
+- 18 testes focados de logs, diagnóstico e segurança aprovados;
+- suíte completa: 1044 testes e 22 subtestes aprovados.

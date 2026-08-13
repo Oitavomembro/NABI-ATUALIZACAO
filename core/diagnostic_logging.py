@@ -7,7 +7,8 @@ from pathlib import Path
 
 
 _SENSITIVE_PATTERNS = (
-    re.compile(r"(?i)\b(senha|password|token|api[_-]?key|chave privada)\b\s*[:=]\s*([^\s,;]+)"),
+    re.compile(r"(?i)\b(authorization)\b\s*[:=]\s*bearer\s+([^\s,;]+)"),
+    re.compile(r"(?i)\b(senha|password|token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|chave privada)\b\s*[:=]\s*([^\s,;&]+)"),
     re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.DOTALL),
 )
 
