@@ -236,3 +236,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - gravação temporária, `fsync` e substituição atômica existentes foram preservados;
 - 31 testes focados de núcleo, preferências e rede aprovados;
 - suíte completa: 1046 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.8 — concorrência e chaves de configuração
+
+- leitura integral das configurações passa a usar o mesmo bloqueio das demais operações;
+- snapshots retornados continuam independentes por cópia profunda;
+- chaves pontuadas com segmentos vazios são recusadas antes de qualquer mutação;
+- chaves válidas e compatibilidade das preferências existentes permanecem inalteradas;
+- 32 testes focados de núcleo, preferências e rede aprovados;
+- suíte completa: 1047 testes e 22 subtestes aprovados.

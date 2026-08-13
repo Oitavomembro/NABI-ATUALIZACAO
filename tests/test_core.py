@@ -49,6 +49,16 @@ class ConfigManagerTests(unittest.TestCase):
             self.assertEqual(manager.get("backup"), {"enabled": True})
             self.assertEqual(path.read_text(encoding="utf-8"), original)
 
+    def test_set_rejects_empty_dotted_segments_without_mutation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sistema.json"
+            manager = ConfigManager(path, {"interface": {"tema": "escuro"}})
+            before = manager.get("")
+            for invalid in ("", ".interface", "interface.", "interface..tema", "   "):
+                with self.assertRaises(ValueError):
+                    manager.set(invalid, "claro")
+            self.assertEqual(manager.get(""), before)
+
 
 class EventBusTests(unittest.TestCase):
     def test_publish_and_unsubscribe(self):

@@ -41,9 +41,9 @@ class ConfigManager:
             return deepcopy(self._data)
 
     def get(self, key: str, default: Any = None) -> Any:
-        if not key:
-            return deepcopy(self._data)
         with self._lock:
+            if not key:
+                return deepcopy(self._data)
             current: Any = self._data
             for part in key.split("."):
                 if not isinstance(current, dict) or part not in current:
@@ -52,12 +52,12 @@ class ConfigManager:
             return deepcopy(current)
 
     def set(self, key: str, value: Any, *, persist: bool = True) -> None:
-        if not key:
-            raise ValueError("A chave de configuração não pode ser vazia.")
+        parts = key.split(".") if isinstance(key, str) else []
+        if not parts or any(not part.strip() for part in parts):
+            raise ValueError("A chave de configuração deve conter segmentos não vazios.")
         with self._lock:
             previous = deepcopy(self._data)
             current = self._data
-            parts = key.split(".")
             for part in parts[:-1]:
                 child = current.get(part)
                 if not isinstance(child, dict):
