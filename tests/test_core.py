@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from core import ConfigManager, EventBus
@@ -25,6 +26,28 @@ class ConfigManagerTests(unittest.TestCase):
             manager = ConfigManager(path, {"safe": True})
             self.assertTrue(manager.get("safe"))
             self.assertTrue(path.exists())
+
+    def test_failed_set_preserves_memory_and_disk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sistema.json"
+            manager = ConfigManager(path, {"interface": {"tema": "escuro"}})
+            original = path.read_text(encoding="utf-8")
+            with patch("core.config_manager.os.replace", side_effect=OSError("disco bloqueado")):
+                with self.assertRaises(OSError):
+                    manager.set("interface.tema", "claro")
+            self.assertEqual(manager.get("interface.tema"), "escuro")
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
+
+    def test_failed_update_preserves_memory_and_disk(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sistema.json"
+            manager = ConfigManager(path, {"backup": {"enabled": True}})
+            original = path.read_text(encoding="utf-8")
+            with patch("core.config_manager.os.replace", side_effect=OSError("disco bloqueado")):
+                with self.assertRaises(OSError):
+                    manager.update({"backup": {"enabled": False, "keep": 3}})
+            self.assertEqual(manager.get("backup"), {"enabled": True})
+            self.assertEqual(path.read_text(encoding="utf-8"), original)
 
 
 class EventBusTests(unittest.TestCase):

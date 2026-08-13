@@ -227,3 +227,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão usa somente segredos fictícios e verifica mensagem persistida;
 - 18 testes focados de logs, diagnóstico e segurança aprovados;
 - suíte completa: 1044 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.7 — configurações transacionais
+
+- alterações unitárias e atualizações agrupadas de configuração agora são atômicas também na memória;
+- falha ao substituir o arquivo restaura imediatamente o estado anterior em execução;
+- arquivo persistido e valores ativos não divergem em casos como disco cheio, antivírus ou pasta bloqueada;
+- gravação temporária, `fsync` e substituição atômica existentes foram preservados;
+- 31 testes focados de núcleo, preferências e rede aprovados;
+- suíte completa: 1046 testes e 22 subtestes aprovados.

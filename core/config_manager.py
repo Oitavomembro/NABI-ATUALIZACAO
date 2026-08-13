@@ -55,6 +55,7 @@ class ConfigManager:
         if not key:
             raise ValueError("A chave de configuração não pode ser vazia.")
         with self._lock:
+            previous = deepcopy(self._data)
             current = self._data
             parts = key.split(".")
             for part in parts[:-1]:
@@ -65,13 +66,22 @@ class ConfigManager:
                 current = child
             current[parts[-1]] = deepcopy(value)
             if persist:
-                self.save()
+                try:
+                    self.save()
+                except Exception:
+                    self._data = previous
+                    raise
 
     def update(self, values: Mapping[str, Any], *, persist: bool = True) -> None:
         with self._lock:
+            previous = deepcopy(self._data)
             self._data = self._merge(self._data, dict(values))
             if persist:
-                self.save()
+                try:
+                    self.save()
+                except Exception:
+                    self._data = previous
+                    raise
 
     def save(self) -> None:
         with self._lock:
