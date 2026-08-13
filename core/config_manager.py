@@ -4,6 +4,7 @@ import json
 import os
 import tempfile
 import threading
+import time
 from copy import deepcopy
 from pathlib import Path
 from typing import Any, Mapping
@@ -31,6 +32,10 @@ class ConfigManager:
                     loaded = candidate
                 except (OSError, json.JSONDecodeError, ValueError):
                     corrupt_path = self.path.with_suffix(self.path.suffix + ".corrompido")
+                    if corrupt_path.exists():
+                        corrupt_path = corrupt_path.with_name(
+                            f"{corrupt_path.name}.{time.time_ns()}"
+                        )
                     try:
                         self.path.replace(corrupt_path)
                     except OSError:

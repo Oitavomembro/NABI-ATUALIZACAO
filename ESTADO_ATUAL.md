@@ -263,3 +263,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - backups manuais e múltiplos destinos permanecem independentes;
 - 18 testes focados de backup, snapshot e manutenção aprovados;
 - suíte completa: 1050 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.11 — histórico de configurações corrompidas
+
+- recuperações sucessivas deixam de substituir a cópia corrompida anterior;
+- primeira ocorrência preserva o nome compatível `.corrompido`;
+- ocorrências adicionais recebem sufixo único e mantêm o conteúdo original;
+- recriação automática com valores padrão permanece inalterada;
+- 28 testes focados de núcleo e preferências aprovados;
+- suíte completa: 1051 testes e 22 subtestes aprovados.

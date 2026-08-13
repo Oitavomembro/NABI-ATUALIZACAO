@@ -27,6 +27,18 @@ class ConfigManagerTests(unittest.TestCase):
             self.assertTrue(manager.get("safe"))
             self.assertTrue(path.exists())
 
+    def test_repeated_corruption_preserves_each_recovery_copy(self):
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "sistema.json"
+            path.write_text("{primeiro", encoding="utf-8")
+            ConfigManager(path, {"safe": True})
+            path.write_text("{segundo", encoding="utf-8")
+            ConfigManager(path, {"safe": True})
+            recovered = sorted(path.parent.glob("sistema.json.corrompido*"))
+            self.assertEqual(len(recovered), 2)
+            contents = {item.read_text(encoding="utf-8") for item in recovered}
+            self.assertEqual(contents, {"{primeiro", "{segundo"})
+
     def test_failed_set_preserves_memory_and_disk(self):
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "sistema.json"
