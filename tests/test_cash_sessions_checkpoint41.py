@@ -81,6 +81,9 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
 
     def test_summary_queries_only_sales_and_receipts(self):
         session = self.open(value=0)
+        connection = sqlite3.connect(self.db)
+        connection.execute("UPDATE cash_sessions SET closed_at='12/08/2026 18:00:00' WHERE id=?", (session.id,))
+        connection.commit(); connection.close()
         traced = []
         connection = sqlite3.connect(self.db)
         connection.set_trace_callback(traced.append)
@@ -89,6 +92,26 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         movement_queries = [sql for sql in traced if "FROM movimentacoes" in sql]
         self.assertEqual(len(movement_queries), 1)
         self.assertIn("tipo IN ('COMPRA','PAGAMENTO')", movement_queries[0])
+        self.assertIn("data GLOB '12/08/2026 *'", movement_queries[0])
+
+    def test_summary_fetches_only_session_days_before_processing_rows(self):
+        session = self.open(value=0)
+        connection = sqlite3.connect(self.db)
+        connection.execute("UPDATE cash_sessions SET closed_at='13/08/2026 18:00:00' WHERE id=?", (session.id,))
+        connection.commit(); connection.close()
+        self.movement("COMPRA", "Dinheiro", 999, at="11/08/2026 18:00:00")
+        self.movement("COMPRA", "Dinheiro", 25, at="12/08/2026 09:00:00")
+        self.movement("PAGAMENTO", "PIX", 15, at="13/08/2026 01:00:00")
+        summary = self.cash.session_summary(session.id)
+        self.assertEqual(summary["dinheiro"], 25)
+        self.assertEqual(summary["recebimentos_eletronicos"], 15)
+
+    def test_invalid_or_excessively_old_session_dates_keep_legacy_fallback(self):
+        self.assertEqual(self.cash._session_date_prefixes("DATA ANTIGA"), [])
+        self.assertEqual(
+            self.cash._session_date_prefixes("01/01/2020 08:00:00", "02/01/2021 08:00:00"),
+            [],
+        )
 
     def test_cancelled_sale_does_not_affect_cash(self):
         session = self.open(value=10)
@@ -131,6 +154,15 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         self.assertEqual(history[0].expected_cash, Decimal("120.00")); self.assertEqual(closed.id, session.id)
         new = self.cash.open_session("PC-CAIXA", "Maria", 0, "SEM_VALOR_INFORMADO", "13/08/2026 08:00:00")
         self.assertNotEqual(new.id, session.id)
+
+    def test_history_can_be_filtered_by_opening_day(self):
+        first = self.open(value=100)
+        self.cash.close_session("PC-CAIXA", 100, "Ana", closed_at="12/08/2026 18:00:00")
+        second = self.cash.open_session("PC-CAIXA", "Maria", 0, "SEM_VALOR_INFORMADO", "13/08/2026 08:00:00")
+        self.assertEqual([item.id for item in self.cash.history("PC-CAIXA", opened_date="12/08/2026")], [first.id])
+        self.assertEqual([item.id for item in self.cash.history("PC-CAIXA", opened_date="13/08/2026")], [second.id])
+        with self.assertRaises(ValueError):
+            self.cash.history("PC-CAIXA", opened_date="2026-08-13")
 
 
 if __name__ == "__main__": unittest.main()

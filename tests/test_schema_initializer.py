@@ -72,6 +72,14 @@ class SchemaInitializerTests(unittest.TestCase):
             self.assertIn("produtos", tables)
             self.assertIn("movimentacoes", tables)
             self.assertIn("configuracoes", tables)
+            movement_indexes = {
+                row[1] for row in connection.execute("PRAGMA index_list(movimentacoes)")
+            }
+            self.assertIn("idx_mov_tipo_data", movement_indexes)
+            cash_indexes = {
+                row[1] for row in connection.execute("PRAGMA index_list(cash_sessions)")
+            }
+            self.assertIn("idx_cash_sessions_terminal_opened", cash_indexes)
             version = connection.execute(
                 "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
             ).fetchone()[0]

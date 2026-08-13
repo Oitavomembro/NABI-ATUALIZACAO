@@ -113,6 +113,7 @@ def initialize_database(
     if "origem_id" not in colunas_mov:
         cursor.execute("ALTER TABLE movimentacoes ADD COLUMN origem_id TEXT DEFAULT ''")
     cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_mov_origem ON movimentacoes(origem_sistema, origem_id) WHERE origem_sistema <> '' AND origem_id <> ''")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_tipo_data ON movimentacoes(tipo, data)")
     cursor.execute("""
         UPDATE movimentacoes
         SET valor_aberto = CASE
@@ -703,6 +704,7 @@ def initialize_database(
         CREATE UNIQUE INDEX IF NOT EXISTS idx_cash_session_terminal_open
         ON cash_sessions(terminal) WHERE status='ABERTO'
     """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_sessions_terminal_opened ON cash_sessions(terminal, opened_at)")
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cash_movements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

@@ -354,3 +354,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 33 testes focados da infraestrutura de modais aprovados;
 - suíte completa: 1060 testes e 22 subtestes aprovados;
 - estresse, desempenho e uso prolongado: 3 testes aprovados em ambiente isolado, sem impressora física.
+
+## Checkpoint 42.21 — Caixa diário, contextual e responsivo
+
+- resumo da sessão deixa de varrer todo o histórico e consulta apenas os dias abrangidos pelo Caixa;
+- novos índices cobrem movimentos por tipo/data e sessões por terminal/data de abertura;
+- cartões do Caixa exibem, sob demanda, somente os movimentos que compõem o valor selecionado;
+- resumo já carregado é reutilizado nos cartões, sem nova consulta ao banco a cada clique;
+- tabelas permanentes de movimentos e sessões foram substituídas por ações compactas;
+- histórico por dia é carregado somente quando solicitado e permite abrir os detalhes da sessão;
+- maximização e restauração redesenham a árvore visível e a marca-d'água da tela atual;
+- suíte completa: 1068 testes e 22 subtestes aprovados;
+- estresse, desempenho, uso prolongado, dependências e empacotamento: 21 testes aprovados;
+- nenhuma impressora física foi utilizada.

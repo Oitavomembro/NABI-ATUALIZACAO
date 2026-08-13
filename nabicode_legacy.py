@@ -857,6 +857,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         # Redesenho com debounce ao restaurar/maximizar evita piscadas e artefatos visuais.
         self._redimensionamento_after = None
         self.bind("<Configure>", self._agendar_redesenho_interface, add="+")
+        self.bind("<Map>", self._agendar_redesenho_interface, add="+")
         self.after(900, self._executar_backup_diario_automatico)
         self._cash_startup_after_id = self.after(1800, self._agendar_pergunta_abertura_caixa)
         self._cash_startup_check_done = False
@@ -1112,13 +1113,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self._redimensionamento_after = None
         try:
             self.update_idletasks()
-            # Força o Treeview ativo a recalcular a área somente depois do resize terminar.
-            for nome in ("tabela_cli", "tabela_dash", "tabela_carrinho"):
-                tabela = getattr(self, nome, None)
-                if tabela is not None and tabela.winfo_exists():
-                    tabela.event_generate("<Expose>")
-        except Exception:
-            pass
+            tela = getattr(self, "telas", {}).get(getattr(self, "tela_atual", ""))
+            manager = getattr(self, "background_manager", None)
+            if manager is not None and tela is not None:
+                manager.refresh(tela, immediate=True)
+            pending = [self]
+            while pending:
+                widget = pending.pop()
+                if widget.winfo_exists() and widget.winfo_viewable():
+                    widget.event_generate("<Expose>")
+                    pending.extend(widget.winfo_children())
+        except tk.TclError:
+            logger.exception("Falha ao redesenhar a janela principal após redimensionamento.")
 
     def _criar_borboleta_fundo(self, parent):
         """Compatibilidade temporária: delega a marca d'água ao gerenciador único."""
@@ -2240,8 +2246,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         definitions = (("expected_cash","DINHEIRO NA GAVETA","#00FF88"),("movement_total","MOVIMENTO TOTAL","#388bfd"),("pix","PIX","#a371f7"),("cartao","CARTÃO","#f0b429"),("recebimentos","RECEBIMENTOS","#58a6ff"),("sangrias","SANGRIAS","#ff6b6b"),("suprimentos","SUPRIMENTOS","#3fb950"),("saldo_inicial","SALDO INICIAL","#c9d1d9"))
         for index, (key, title, color) in enumerate(definitions):
             card = ctk.CTkFrame(cards, fg_color="#161b22", corner_radius=12, border_width=1, border_color="#30363d"); card.grid(row=index // 4, column=index % 4, sticky="nsew", padx=5, pady=5)
-            ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=11, weight="bold"), text_color="#8b949e").pack(anchor="w", padx=14, pady=(12, 2))
+            title_label = ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=11, weight="bold"), text_color="#8b949e"); title_label.pack(anchor="w", padx=14, pady=(12, 2))
             label = ctk.CTkLabel(card, text="R$ 0,00", font=ctk.CTkFont(size=21, weight="bold"), text_color=color); label.pack(anchor="w", padx=14, pady=(0, 12)); self.caixa_cards[key] = label
+            for clickable in (card, title_label, label):
+                clickable.bind("<Button-1>", lambda _event, item_key=key, item_title=title: self._abrir_detalhe_cartao_caixa(item_key, item_title))
         self.frame_caixa_abertura = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12)
         self.frame_caixa_acoes = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12)
         for action_frame in (self.frame_caixa_abertura, self.frame_caixa_acoes): action_frame.pack(fill="x", padx=24, pady=10)
@@ -2252,19 +2260,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.btn_caixa_sangria = ctk.CTkButton(self.frame_caixa_acoes, text="Registrar Sangria", fg_color="#b62324", command=lambda: self._abrir_movimento_sessao("SANGRIA")); self.btn_caixa_sangria.pack(side="left", padx=6, pady=12)
         self.btn_caixa_suprimento = ctk.CTkButton(self.frame_caixa_acoes, text="Registrar Suprimento", fg_color="#2ea043", command=lambda: self._abrir_movimento_sessao("SUPRIMENTO")); self.btn_caixa_suprimento.pack(side="left", padx=6, pady=12)
         self.btn_caixa_fechar = ctk.CTkButton(self.frame_caixa_acoes, text="Fechar Caixa", fg_color="#1f6feb", command=self._abrir_fechamento_sessao); self.btn_caixa_fechar.pack(side="left", padx=6, pady=12)
-        current = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12); current.pack(fill="x", padx=24, pady=10)
-        ctk.CTkLabel(current, text="MOVIMENTAÇÕES DA SESSÃO ATUAL", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=16, pady=(14, 8))
-        self.tabela_movimentos_caixa = ttk.Treeview(current, columns=("hora","tipo","valor","usuario","motivo","origem"), show="headings", height=6)
-        for col, title, width, anchor in (("hora","Horário",135,"center"),("tipo","Tipo",160,"w"),("valor","Valor",110,"e"),("usuario","Usuário",110,"w"),("motivo","Motivo",260,"w"),("origem","Origem",130,"w")):
-            self.tabela_movimentos_caixa.heading(col, text=title); self.tabela_movimentos_caixa.column(col, width=width, minwidth=75, anchor=anchor, stretch=col == "motivo")
-        self.tabela_movimentos_caixa.pack(fill="x", padx=16, pady=(0, 14))
-        history = ctk.CTkFrame(scroll, fg_color="#161b22", corner_radius=12); history.pack(fill="x", padx=24, pady=(10, 24))
-        ctk.CTkLabel(history, text="HISTÓRICO DE SESSÕES", font=ctk.CTkFont(size=16, weight="bold")).pack(anchor="w", padx=16, pady=(14, 8))
-        self.tabela_caixas = ttk.Treeview(history, columns=("id","abertura","usuario","saldo","fechamento","fechado_por","esperado","contado","diferenca","status"), show="headings", height=7)
-        for col, title, width, anchor in (("id","Sessão",65,"center"),("abertura","Abertura",145,"center"),("usuario","Aberto por",100,"w"),("saldo","Saldo inicial",105,"e"),("fechamento","Fechamento",145,"center"),("fechado_por","Fechado por",100,"w"),("esperado","Esperado",105,"e"),("contado","Contado",105,"e"),("diferenca","Diferença",105,"e"),("status","Status",85,"center")):
-            self.tabela_caixas.heading(col, text=title); self.tabela_caixas.column(col, width=width, minwidth=60, anchor=anchor)
-        self.tabela_caixas.pack(fill="x", padx=16, pady=(0, 14))
-        self.tabela_caixas.bind("<Double-1>", self._detalhar_caixa_historico)
+        self.caixa_consultas = ctk.CTkFrame(scroll, fg_color="transparent"); self.caixa_consultas.pack(fill="x", padx=24, pady=(8, 24))
+        ctk.CTkButton(self.caixa_consultas, text="Ver movimentações atuais", fg_color="#30363d", command=lambda: self._abrir_detalhe_cartao_caixa("todos", "MOVIMENTAÇÕES ATUAIS")).pack(side="left", padx=(0, 8))
+        ctk.CTkButton(self.caixa_consultas, text="Histórico por dia", fg_color="#1f6feb", command=self._abrir_historico_caixa_por_dia).pack(side="left")
+        self._cash_current_summary = None
         return frame
 
     def _abrir_caixa_sem_valor_pela_aba(self):
@@ -2283,26 +2282,86 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.lbl_caixa_estado.configure(text="CAIXA ABERTO" if aberto else "CAIXA FECHADO")
         if aberto:
             self.frame_caixa_abertura.pack_forget()
-            if not self.frame_caixa_acoes.winfo_manager(): self.frame_caixa_acoes.pack(fill="x", padx=24, pady=10, before=self.tabela_movimentos_caixa.master)
+            if not self.frame_caixa_acoes.winfo_manager(): self.frame_caixa_acoes.pack(fill="x", padx=24, pady=10, before=self.caixa_consultas)
         else:
             self.frame_caixa_acoes.pack_forget()
-            if not self.frame_caixa_abertura.winfo_manager(): self.frame_caixa_abertura.pack(fill="x", padx=24, pady=10, before=self.tabela_movimentos_caixa.master)
+            if not self.frame_caixa_abertura.winfo_manager(): self.frame_caixa_abertura.pack(fill="x", padx=24, pady=10, before=self.caixa_consultas)
         values = {key: Decimal("0") for key in self.caixa_cards}
-        for item in self.tabela_movimentos_caixa.get_children(): self.tabela_movimentos_caixa.delete(item)
+        self._cash_current_summary = None
         if session:
             resumo = service.session_summary(session.id)
+            self._cash_current_summary = resumo
             self.lbl_caixa_identificacao.configure(text=f"Sessão #{session.id}  •  Terminal: {terminal}  •  Aberto por: {session.opened_by}\nAbertura: {session.opened_at}  •  Saldo inicial: R$ {session.opening_balance:.2f}  •  Modo: {session.opening_mode}")
             values.update(expected_cash=resumo["expected_cash"], movement_total=resumo["movement_total"], pix=resumo["pix"], cartao=resumo["cartao"], recebimentos=resumo["recebimentos_dinheiro"] + resumo["recebimentos_eletronicos"], sangrias=resumo["sangrias"], suprimentos=resumo["suprimentos"], saldo_inicial=session.opening_balance)
-            for movement in resumo["movements"]:
-                signal = "-" if movement.get("sinal", 1) < 0 else "+"
-                self.tabela_movimentos_caixa.insert("", "end", values=(movement["data"], movement["tipo"], f"{signal}R$ {movement['valor']:.2f}", movement["usuario"], movement["observacao"], movement.get("origem", "")))
         else:
             self.lbl_caixa_identificacao.configure(text=f"Terminal {terminal}  •  Nenhuma sessão aberta\nEscolha uma opção abaixo para iniciar o caixa.")
         for key, label in self.caixa_cards.items(): label.configure(text=f"R$ {values[key]:.2f}")
-        for item in self.tabela_caixas.get_children(): self.tabela_caixas.delete(item)
-        for item in service.history(terminal):
+
+    def _abrir_detalhe_cartao_caixa(self, key, title):
+        resumo = getattr(self, "_cash_current_summary", None)
+        if resumo is None:
+            messagebox.showinfo("Caixa", "Não existe uma sessão aberta para consultar.", parent=self)
+            return
+        movements = list(resumo["movements"])
+        filters = {
+            "movement_total": lambda item: str(item["tipo"]).startswith("VENDA "),
+            "pix": lambda item: str(item["tipo"]).endswith(" PIX"),
+            "cartao": lambda item: str(item["tipo"]).endswith(" CARTAO"),
+            "recebimentos": lambda item: str(item["tipo"]).startswith("RECEBIMENTO "),
+            "sangrias": lambda item: item["tipo"] == "SANGRIA",
+            "suprimentos": lambda item: item["tipo"] == "SUPRIMENTO",
+            "expected_cash": lambda item: item["tipo"] in {"VENDA DINHEIRO", "RECEBIMENTO DINHEIRO", "SANGRIA", "SUPRIMENTO"},
+            "saldo_inicial": lambda _item: False,
+            "todos": lambda _item: True,
+        }
+        selected = [item for item in movements if filters.get(key, filters["todos"])(item)]
+        win, created = self._criar_modal_nabicode("DETALHE_CARTAO_CAIXA", title.title(), 760, 520)
+        if not created: return
+        shell = ctk.CTkScrollableFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        ctk.CTkLabel(shell, text=title, font=ctk.CTkFont(size=21, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=28, pady=(24, 12))
+        if key == "saldo_inicial":
+            ctk.CTkLabel(shell, text=f"Valor informado na abertura: R$ {resumo['session'].opening_balance:.2f}", anchor="w").pack(fill="x", padx=28, pady=8)
+        elif selected:
+            for movement in selected:
+                sign = "-" if movement.get("sinal", 1) < 0 else "+"
+                text = f"{movement['data']}  •  {movement['tipo']}  •  {sign}R$ {movement['valor']:.2f}\n{movement['usuario']}  •  {movement['observacao']}"
+                ctk.CTkLabel(shell, text=text, justify="left", anchor="w", fg_color="#161b22", corner_radius=9).pack(fill="x", padx=28, pady=4, ipady=7)
+        else:
+            ctk.CTkLabel(shell, text="Nenhuma movimentação compõe este valor.", text_color="#8b949e").pack(anchor="w", padx=28, pady=8)
+        close = lambda _event=None: self._fechar_modal_caixa(win)
+        ctk.CTkButton(shell, text="Voltar", fg_color="#30363d", command=close).pack(anchor="e", padx=28, pady=24)
+        win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win)
+
+    def _abrir_historico_caixa_por_dia(self):
+        win, created = self._criar_modal_nabicode("LISTA_HISTORICO_CAIXA", "Histórico do Caixa", 980, 560)
+        if not created: return
+        shell = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        header = ctk.CTkFrame(shell, fg_color="transparent"); header.pack(fill="x", padx=24, pady=(22, 12))
+        ctk.CTkLabel(header, text="HISTÓRICO POR DIA", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.cor_acento).pack(side="left")
+        date_entry = ctk.CTkEntry(header, width=135, placeholder_text="DD/MM/AAAA"); date_entry.pack(side="right", padx=(8, 0)); date_entry.insert(0, datetime.now().strftime("%d/%m/%Y"))
+        table = ttk.Treeview(shell, columns=("id","abertura","usuario","fechamento","esperado","contado","diferenca","status"), show="headings", height=13)
+        for col, label, width in (("id","Sessão",65),("abertura","Abertura",145),("usuario","Aberto por",105),("fechamento","Fechamento",145),("esperado","Esperado",105),("contado","Contado",105),("diferenca","Diferença",105),("status","Status",80)):
+            table.heading(col, text=label); table.column(col, width=width, minwidth=60, anchor="center")
+        table.pack(fill="both", expand=True, padx=24, pady=8)
+        status = ctk.CTkLabel(shell, text="", text_color="#8b949e"); status.pack(anchor="w", padx=24)
+        def load(_event=None):
+            try:
+                sessions = self._servico_caixa().history(self._terminal_caixa(), opened_date=date_entry.get())
+            except ValueError as exc:
+                status.configure(text=str(exc), text_color="#ff6b6b"); date_entry.focus_set(); return
+            for item in table.get_children(): table.delete(item)
             money = lambda value: "" if value is None else f"R$ {value:.2f}"
-            self.tabela_caixas.insert("", "end", iid=str(item.id), values=(item.id,item.opened_at,item.opened_by,money(item.opening_balance),item.closed_at,item.closed_by,money(item.expected_cash),money(item.counted_cash),money(item.difference),item.status))
+            for item in sessions:
+                table.insert("", "end", iid=str(item.id), values=(item.id,item.opened_at,item.opened_by,item.closed_at,money(item.expected_cash),money(item.counted_cash),money(item.difference),item.status))
+            status.configure(text=f"{len(sessions)} sessão(ões). Dê dois cliques para ver os detalhes.", text_color="#8b949e")
+        ctk.CTkButton(header, text="Buscar", width=80, fg_color="#1f6feb", command=load).pack(side="right")
+        close = lambda _event=None: self._fechar_modal_caixa(win)
+        ctk.CTkButton(shell, text="Voltar", fg_color="#30363d", command=close).pack(anchor="e", padx=24, pady=(8, 20))
+        table.bind("<Double-1>", self._detalhar_caixa_historico)
+        date_entry.bind("<Return>", load); win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win, date_entry)
+        load()
 
     def _abrir_movimento_sessao(self, kind):
         self._log_caixa_runtime("CASH_MODAL_OPEN", tipo=kind)
@@ -2516,7 +2575,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         return True
 
     def _detalhar_caixa_historico(self, _event=None):
-        selected = self.tabela_caixas.selection()
+        table = getattr(_event, "widget", None)
+        if table is None or not hasattr(table, "selection"):
+            return
+        selected = table.selection()
         if not selected: return
         resumo = self._servico_caixa().session_summary(int(selected[0]))
         sessao = resumo["session"]

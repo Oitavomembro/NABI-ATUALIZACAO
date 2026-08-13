@@ -49,10 +49,12 @@ def test_cash_actions_use_nabicode_modals_without_native_dialogs():
     assert "CASH_CLOSE_READY" in closing
 
 
-def test_cash_layout_contains_cards_actions_movements_and_history():
+def test_cash_layout_contains_contextual_cards_and_compact_history_actions():
     screen = method_source("tela_caixa")
-    for text in ("DINHEIRO NA GAVETA", "MOVIMENTO TOTAL", "PIX", "CARTÃO", "RECEBIMENTOS", "SANGRIAS", "SUPRIMENTOS", "MOVIMENTAÇÕES DA SESSÃO ATUAL", "HISTÓRICO DE SESSÕES"):
+    for text in ("DINHEIRO NA GAVETA", "MOVIMENTO TOTAL", "PIX", "CARTÃO", "RECEBIMENTOS", "SANGRIAS", "SUPRIMENTOS", "Ver movimentações atuais", "Histórico por dia"):
         assert text in screen
+    assert "ttk.Treeview" not in screen
+    assert 'clickable.bind("<Button-1>"' in screen
 
 
 def test_cash_opening_modals_do_not_use_alpha_fade():

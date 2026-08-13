@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import defaultdict
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Callable, Optional
 import re
@@ -180,10 +180,16 @@ class CashService:
             status = "COALESCE(status_pagamento,'')" if "status_pagamento" in movement_columns else "''"
             responsible = "COALESCE(responsavel,'')" if "responsavel" in movement_columns else "''"
             description = "COALESCE(descricao,'')" if "descricao" in movement_columns else "''"
-            movements = conn.execute(
+            movement_sql = (
                 f"SELECT id,tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status},{responsible},{description} "
                 "FROM movimentacoes WHERE tipo IN ('COMPRA','PAGAMENTO')"
-            ).fetchall()
+            )
+            movement_params: list[str] = []
+            date_prefixes = self._session_date_prefixes(session.opened_at, session.closed_at)
+            if date_prefixes:
+                movement_sql += " AND (" + " OR ".join("data GLOB ?" for _ in date_prefixes) + ")"
+                movement_params.extend(f"{prefix} *" for prefix in date_prefixes)
+            movements = conn.execute(movement_sql, movement_params).fetchall()
             own = conn.execute("SELECT type,amount,user_id,note,created_at FROM cash_movements WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
         finally:
             conn.close()
@@ -223,6 +229,22 @@ class CashService:
         )
         return {"session": session, **totals, "expected_cash": expected, "movement_total": movement_total, "movements": history}
 
+    @staticmethod
+    def _session_date_prefixes(opened_at: str, closed_at: str = "") -> list[str]:
+        """Dias da sessão para limitar a leitura do histórico sem perder compatibilidade."""
+
+        try:
+            start = datetime.strptime(opened_at, "%d/%m/%Y %H:%M:%S")
+            end = datetime.strptime(closed_at, "%d/%m/%Y %H:%M:%S") if closed_at else datetime.now()
+        except (TypeError, ValueError):
+            return []
+        if end < start:
+            return []
+        day_count = (end.date() - start.date()).days + 1
+        if day_count > 366:
+            return []
+        return [(start + timedelta(days=offset)).strftime("%d/%m/%Y") for offset in range(day_count)]
+
     def close_session(self, terminal: str, counted_cash: Any, user: str, note: str = "",
                       closed_at: Optional[str] = None) -> CashSession:
         session = self.get_open_session(terminal)
@@ -258,13 +280,24 @@ class CashService:
             conn.close()
         return self.history(terminal, session.id)[0]
 
-    def history(self, terminal: str, session_id: Optional[int] = None) -> list[CashSession]:
+    def history(
+        self,
+        terminal: str,
+        session_id: Optional[int] = None,
+        opened_date: Optional[str] = None,
+    ) -> list[CashSession]:
         conn = self._connection_factory()
         try:
             sql = "SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,closed_by,closed_at,expected_cash,counted_cash,difference,closing_note FROM cash_sessions WHERE terminal=?"
             params: list[Any] = [str(terminal).strip()]
             if session_id is not None:
                 sql += " AND id=?"; params.append(int(session_id))
+            if opened_date is not None:
+                try:
+                    normalized_date = datetime.strptime(str(opened_date).strip(), "%d/%m/%Y").strftime("%d/%m/%Y")
+                except (TypeError, ValueError) as exc:
+                    raise ValueError("Informe a data no formato DD/MM/AAAA.") from exc
+                sql += " AND opened_at GLOB ?"; params.append(f"{normalized_date} *")
             sql += " ORDER BY id DESC"
             return [self._session(row) for row in conn.execute(sql, params).fetchall()]  # type: ignore[misc]
         finally:
