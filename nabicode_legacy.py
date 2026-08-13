@@ -2330,30 +2330,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _abrir_fechamento_sessao(self):
         self._log_caixa_runtime("CASH_CLOSE_CLICK")
         self._log_caixa_runtime("CASH_CLOSE_BUILD_START")
-        session = self._servico_caixa().get_open_session(self._terminal_caixa())
-        if not session: return
-        resumo = self._servico_caixa().session_summary(session.id)
         win, created = self._criar_modal_nabicode("FECHAMENTO", "Fechar Caixa", 680, 680)
         if not created: return
         self._log_caixa_runtime("CASH_CLOSE_MODAL_OPEN")
         shell = ctk.CTkScrollableFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
-        ctk.CTkLabel(shell, text="FECHAMENTO DE CAIXA", font=ctk.CTkFont(size=22, weight="bold"), text_color="#388bfd").pack(anchor="w", padx=32, pady=(26, 12))
-        detail = f"Saldo inicial: R$ {session.opening_balance:.2f}\nVendas em dinheiro: R$ {resumo['dinheiro']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\nSuprimentos: R$ {resumo['suprimentos']:.2f}\nSangrias: -R$ {resumo['sangrias']:.2f}\n\nDINHEIRO ESPERADO: R$ {resumo['expected_cash']:.2f}\n\nPIX: R$ {resumo['pix']:.2f}   •   CARTÃO: R$ {resumo['cartao']:.2f}   •   OUTROS ELETRÔNICOS: R$ {resumo['outros'] + resumo['recebimentos_eletronicos']:.2f}"
-        ctk.CTkLabel(shell, text=detail, justify="left", anchor="w", font=ctk.CTkFont(size=14), fg_color="#161b22", corner_radius=12).pack(fill="x", padx=32, pady=8, ipady=14)
-        ctk.CTkLabel(shell, text="VALOR CONTADO", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32, pady=(12, 3))
-        counted = ctk.CTkEntry(shell, placeholder_text="R$ 0,00", height=44); counted.pack(fill="x", padx=32)
-        result = ctk.CTkLabel(shell, text="Informe o valor contado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#8b949e"); result.pack(anchor="w", padx=32, pady=12)
-        ctk.CTkLabel(shell, text="Observação do fechamento", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32)
-        note = ctk.CTkTextbox(shell, height=85); note.pack(fill="x", padx=32, pady=(4, 6))
-        error = ctk.CTkLabel(shell, text="", text_color="#ff6b6b"); error.pack(anchor="w", padx=32)
-        def calculate(_event=None):
-            try: diff = Decimal(str(tratar_numero(counted.get()))) - resumo["expected_cash"]
-            except ValueError: result.configure(text="Informe um valor contado válido", text_color="#f0b429"); return None
-            if diff == 0: result.configure(text="CAIXA CONFERE", text_color="#00FF88")
-            elif diff > 0: result.configure(text=f"SOBRA R$ {diff:.2f}", text_color="#f0b429")
-            else: result.configure(text=f"FALTA R$ {abs(diff):.2f}", text_color="#ff6b6b")
-            return diff
-        counted.bind("<KeyRelease>", calculate)
+        loading = ctk.CTkLabel(shell, text="Carregando fechamento...", font=ctk.CTkFont(size=18, weight="bold"), text_color="#8b949e")
+        loading.pack(expand=True, pady=80)
         closing = {"done": False, "submitting": False}
         def close(_event=None, *, confirmed=False):
             if closing["done"]: return
@@ -2366,38 +2348,67 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 logger.exception("CASH_CLOSE_EXCEPTION ao liberar grab")
             self._fechar_modal_caixa(win, "CASH_CLOSE_DESTROY")
             self._log_caixa_runtime("CASH_CLOSE_MODAL_CLOSE")
-        def confirm():
-            if closing["done"] or closing["submitting"]:
-                return
-            if calculate() is None: return
-            closing["submitting"] = True
-            confirm_button.configure(state="disabled", text="Fechando...")
-            try:
-                closed_session = self._servico_caixa().close_session(self._terminal_caixa(), tratar_numero(counted.get()), self._usuario_caixa(), note.get("1.0", "end").strip())
-            except Exception as exc:
-                logger.exception("CASH_CLOSE_EXCEPTION ao confirmar fechamento")
-                closing["submitting"] = False
-                confirm_button.configure(state="normal", text="Confirmar Fechamento")
-                error.configure(text=str(exc)); return
-            close(confirmed=True)
-            self.atualizar_tela_caixa()
-            self._imprimir_comprovante_fechamento_caixa(closed_session, resumo)
-        buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=27, pady=18)
-        confirm_button = ctk.CTkButton(buttons, text="Confirmar Fechamento", fg_color="#1f6feb", command=confirm)
-        confirm_button.pack(side="right", padx=5)
-        ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
         win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
-        self._log_caixa_runtime("CASH_CLOSE_BUILD_END")
-        try:
-            self._mostrar_modal_nabicode(win, counted)
-            self._log_caixa_runtime("CASH_CLOSE_DEICONIFY", estado="nao_utilizado")
-            self._log_caixa_runtime("CASH_CLOSE_LIFT")
-            self._log_caixa_runtime("CASH_CLOSE_FOCUS")
-            self._log_caixa_runtime("CASH_CLOSE_GRAB_SET", estado="ignorado_diagnostico")
-            self._log_caixa_runtime("CASH_CLOSE_READY", grab="desativado")
-        except Exception:
-            logger.exception("CASH_CLOSE_EXCEPTION ao revelar modal")
-            close()
+        self._mostrar_modal_nabicode(win)
+        self._log_caixa_runtime("CASH_CLOSE_READY", estado="carregando")
+
+        def carregar_fechamento():
+            try:
+                service = self._servico_caixa()
+                session = service.get_open_session(self._terminal_caixa())
+                if not session:
+                    close()
+                    self.atualizar_tela_caixa()
+                    return
+                resumo = service.session_summary(session.id)
+            except Exception as exc:
+                logger.exception("CASH_CLOSE_EXCEPTION ao carregar fechamento")
+                loading.configure(text=f"Não foi possível carregar o fechamento:\n{exc}", text_color="#ff6b6b")
+                return
+            if closing["done"]:
+                return
+            loading.destroy()
+            ctk.CTkLabel(shell, text="FECHAMENTO DE CAIXA", font=ctk.CTkFont(size=22, weight="bold"), text_color="#388bfd").pack(anchor="w", padx=32, pady=(26, 12))
+            detail = f"Saldo inicial: R$ {session.opening_balance:.2f}\nVendas em dinheiro: R$ {resumo['dinheiro']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\nSuprimentos: R$ {resumo['suprimentos']:.2f}\nSangrias: -R$ {resumo['sangrias']:.2f}\n\nDINHEIRO ESPERADO: R$ {resumo['expected_cash']:.2f}\n\nPIX: R$ {resumo['pix']:.2f}   •   CARTÃO: R$ {resumo['cartao']:.2f}   •   OUTROS ELETRÔNICOS: R$ {resumo['outros'] + resumo['recebimentos_eletronicos']:.2f}"
+            ctk.CTkLabel(shell, text=detail, justify="left", anchor="w", font=ctk.CTkFont(size=14), fg_color="#161b22", corner_radius=12).pack(fill="x", padx=32, pady=8, ipady=14)
+            ctk.CTkLabel(shell, text="VALOR CONTADO", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32, pady=(12, 3))
+            counted = ctk.CTkEntry(shell, placeholder_text="R$ 0,00", height=44); counted.pack(fill="x", padx=32)
+            result = ctk.CTkLabel(shell, text="Informe o valor contado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#8b949e"); result.pack(anchor="w", padx=32, pady=12)
+            ctk.CTkLabel(shell, text="Observação do fechamento", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32)
+            note = ctk.CTkTextbox(shell, height=85); note.pack(fill="x", padx=32, pady=(4, 6))
+            error = ctk.CTkLabel(shell, text="", text_color="#ff6b6b"); error.pack(anchor="w", padx=32)
+            def calculate(_event=None):
+                try: diff = Decimal(str(tratar_numero(counted.get()))) - resumo["expected_cash"]
+                except ValueError: result.configure(text="Informe um valor contado válido", text_color="#f0b429"); return None
+                if diff == 0: result.configure(text="CAIXA CONFERE", text_color="#00FF88")
+                elif diff > 0: result.configure(text=f"SOBRA R$ {diff:.2f}", text_color="#f0b429")
+                else: result.configure(text=f"FALTA R$ {abs(diff):.2f}", text_color="#ff6b6b")
+                return diff
+            counted.bind("<KeyRelease>", calculate)
+            def confirm():
+                if closing["done"] or closing["submitting"] or calculate() is None:
+                    return
+                closing["submitting"] = True
+                confirm_button.configure(state="disabled", text="Fechando...")
+                try:
+                    closed_session = service.close_session(self._terminal_caixa(), tratar_numero(counted.get()), self._usuario_caixa(), note.get("1.0", "end").strip())
+                except Exception as exc:
+                    logger.exception("CASH_CLOSE_EXCEPTION ao confirmar fechamento")
+                    closing["submitting"] = False
+                    confirm_button.configure(state="normal", text="Confirmar Fechamento")
+                    error.configure(text=str(exc)); return
+                close(confirmed=True)
+                self.atualizar_tela_caixa()
+                self._imprimir_comprovante_fechamento_caixa(closed_session, resumo)
+            buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=27, pady=18)
+            confirm_button = ctk.CTkButton(buttons, text="Confirmar Fechamento", fg_color="#1f6feb", command=confirm)
+            confirm_button.pack(side="right", padx=5)
+            ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
+            counted.focus_set()
+            self._log_caixa_runtime("CASH_CLOSE_BUILD_END")
+            self._log_caixa_runtime("CASH_CLOSE_READY", estado="pronto")
+
+        self.after(1, carregar_fechamento)
 
     @staticmethod
     def _texto_comprovante_fechamento_caixa(session, resumo):
@@ -2425,8 +2436,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _imprimir_comprovante_fechamento_caixa(self, session, resumo):
         texto = self._texto_comprovante_fechamento_caixa(session, resumo)
-        impressora = obter_config("impressora_recibo") or "Padrão do Sistema"
         servico_impressao = self._servico_impressao()
+        impressora = obter_config("impressora_historico") or "Padrão do Sistema"
+        formato = servico_impressao.output_format("fechamento")
         lock = getattr(self, "_cash_print_dispatch_lock", None)
         if lock is None:
             lock = threading.Lock()
@@ -2447,7 +2459,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 nome = servico_impressao.print_text(
                     texto,
-                    output_format="Cupom 80 mm",
+                    output_format=formato,
                     printer=impressora,
                     title=f"Fechamento de caixa #{session.id}",
                 )

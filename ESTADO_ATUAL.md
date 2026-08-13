@@ -156,3 +156,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - origem desconhecida é recusada e registrada; startup e simples abertura da tela não criam sessão;
 - sessão aberta encontrada no startup é sempre a fonte persistida do terminal, inclusive uma sessão criada em execução anterior;
 - UI visual aprovada preservada sem expansão funcional.
+
+## Checkpoint 41.5 — fechamento seguro do Caixa
+
+- comprovante de fechamento respeita a impressora e o formato próprios da categoria `fechamento`;
+- removido o acoplamento indevido com `impressora_recibo`, origem da seleção externa `LIVRARIA NABI`;
+- despacho continua limitado a um único trabalho por sessão, inclusive sob chamadas repetidas;
+- modal de fechamento é exibido imediatamente e carrega o resumo após a primeira renderização;
+- testes usam serviço de impressão simulado e não acionam hardware físico;
+- validação focada: 28 testes de interface/runtime aprovados e 19 testes adicionais de Caixa/impressão aprovados;
+- validação física Windows permanece pendente.

@@ -38,10 +38,12 @@ def test_opening_and_closing_dialogs_have_single_instance_guards():
     assert '_criar_modal_nabicode("FECHAMENTO"' in closing
 
 
-def test_closing_receipt_uses_official_80mm_pipeline_off_ui_thread():
+def test_closing_receipt_uses_configured_closing_pipeline_off_ui_thread():
     source = method_source("_imprimir_comprovante_fechamento_caixa")
     assert ".print_text(" in source
-    assert 'output_format="Cupom 80 mm"' in source
+    assert 'output_format("fechamento")' in source
+    assert 'obter_config("impressora_historico")' in source
+    assert 'obter_config("impressora_recibo")' not in source
     assert "threading.Thread" in source
     text = method_source("_texto_comprovante_fechamento_caixa")
     for field in ("FECHAMENTO DE CAIXA", "Saldo inicial", "Vendas dinheiro", "Recebimentos dinheiro", "Suprimentos", "Sangrias", "Dinheiro esperado", "PIX", "Cartão", "Valor contado", "Diferença"):
@@ -103,6 +105,10 @@ def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
             self.target()
 
     class Printer:
+        def output_format(self, category):
+            assert category == "fechamento"
+            return "A4"
+
         def print_text(self, text, **kwargs):
             calls.append((text, kwargs))
             return "IMPRESSORA MOCK"
@@ -115,7 +121,7 @@ def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
 
     namespace = {
         "threading": SimpleNamespace(Lock=threading.Lock, Thread=ImmediateThread),
-        "obter_config": lambda _key: "Padrão do Sistema",
+        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_historico" else "",
         "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
     }
     exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
@@ -126,6 +132,14 @@ def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
     assert len(calls) == 1
     assert calls[0][0].count("NABICODE") == 1
     assert calls[0][0].count("FECHAMENTO DE CAIXA") == 1
+    assert calls[0][1]["printer"] == "IMPRESSORA FECHAMENTO"
+    assert calls[0][1]["output_format"] == "A4"
+
+
+def test_closing_modal_is_revealed_before_database_summary_is_loaded():
+    source = method_source("_abrir_fechamento_sessao")
+    assert source.index("self._mostrar_modal_nabicode(win)") < source.index("def carregar_fechamento")
+    assert "self.after(1, carregar_fechamento)" in source
 
 
 def test_startup_window_order_is_instrumented_without_alpha_zero():
