@@ -174,3 +174,7 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - dependências de teste restauradas no ambiente local, sem alteração do pacote do aplicativo;
 - hash de fidelidade do splash sincronizado com o runtime e o protótipo aprovado, que permanecem byte a byte idênticos e sem alterações desde o Checkpoint 40;
 - validação final: `compileall` aprovado; suíte completa com 1034 testes e 22 subtestes aprovados, sem falhas ou avisos.
+- stress, benchmark e soak: 3 testes aprovados em 37,44 s;
+- dependências instaladas no ambiente de auditoria verificadas sem conflitos;
+- integridade do repositório Git aprovada;
+- nenhuma interface gráfica ou impressora física foi acionada durante a auditoria.
