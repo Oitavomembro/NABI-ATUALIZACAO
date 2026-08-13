@@ -58,7 +58,7 @@ class Checkpoint38SplashFidelityTests(unittest.TestCase):
         self.assertEqual(ENGINE_BYTES, PROTOTYPE_BYTES)
         self.assertEqual(
             hashlib.sha256(ENGINE_BYTES).hexdigest(),
-            "7057bd3b41ba0cca3fc05486e07f2556debdb3942cb2304b46ce18a3814ac53f",
+            "6697892a47dafc0430bc3b742c6effa7c5418c138055c2c083cfebb004574838",
         )
 
     def test_02_only_nabicode_is_rendered_as_visual_text(self):

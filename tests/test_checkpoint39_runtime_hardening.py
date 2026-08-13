@@ -135,6 +135,7 @@ class DatabaseLockHardeningTests(unittest.TestCase):
                 thread.join(3.0)
             self.assertEqual(results.count("acquired"), 1)
             self.assertEqual(results.count("blocked"), 7)
+            self.assertFalse(self.lock(folder).lock_path.exists())
 
     def test_encerramento_abrupto_de_processo_deixa_lock_recuperavel(self):
         with tempfile.TemporaryDirectory() as folder:

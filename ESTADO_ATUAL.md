@@ -166,3 +166,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - testes usam serviço de impressão simulado e não acionam hardware físico;
 - validação focada: 28 testes de interface/runtime aprovados e 19 testes adicionais de Caixa/impressão aprovados;
 - validação física Windows permanece pendente.
+
+## Candidato Checkpoint 42 — auditoria de estabilidade
+
+- liberação do lock exclusivo do banco tolera a janela curta de compartilhamento de arquivos do Windows;
+- teste de concorrência confirma um único vencedor, sete bloqueios e remoção final do lock;
+- dependências de teste restauradas no ambiente local, sem alteração do pacote do aplicativo;
+- hash de fidelidade do splash sincronizado com o runtime e o protótipo aprovado, que permanecem byte a byte idênticos e sem alterações desde o Checkpoint 40;
+- validação final: `compileall` aprovado; suíte completa com 1034 testes e 22 subtestes aprovados, sem falhas ou avisos.

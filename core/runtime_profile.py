@@ -5,6 +5,7 @@ import json
 import os
 import socket
 import sys
+import time
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -375,9 +376,15 @@ class DatabaseUsageLock:
         except Exception:
             current = {}
         if current.get("owner_token") == self._owner_token:
-            try:
-                self.lock_path.unlink()
-            except FileNotFoundError:
-                pass
+            for attempt in range(10):
+                try:
+                    self.lock_path.unlink()
+                    break
+                except FileNotFoundError:
+                    break
+                except PermissionError:
+                    if not _IS_WINDOWS or attempt == 9:
+                        raise
+                    time.sleep(0.01)
         self._owned = False
         atexit.unregister(self.release)
