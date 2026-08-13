@@ -33,6 +33,17 @@ def test_shared_factory_has_no_grab_transient_topmost_or_visibility_toggle():
         assert forbidden not in source
 
 
+def test_required_opening_dialog_requests_foreground_without_persistent_topmost():
+    opening = method_source("perguntar_abertura_caixa")
+    foreground = method_source("_trazer_modal_caixa_para_frente")
+    assert "_trazer_modal_caixa_para_frente(win)" in opening
+    assert 'attributes("-topmost", True)' in foreground
+    assert 'attributes("-topmost", False)' in foreground
+    assert foreground.index('attributes("-topmost", True)') < foreground.index('attributes("-topmost", False)')
+    for forbidden in ("grab_set", "wait_window", "wait_variable", "focus_force"):
+        assert forbidden not in foreground
+
+
 def test_minimal_modal_uses_same_factory_without_business_dependencies():
     source = method_source("_abrir_teste_modal_caixa")
     assert '"TESTE MODAL"' in source

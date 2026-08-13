@@ -2197,6 +2197,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self._fechar_modal_caixa(win)
             raise
 
+    def _trazer_modal_caixa_para_frente(self, win):
+        """Solicita primeiro plano no Windows sem manter topmost ou criar modalidade."""
+        try:
+            win.attributes("-topmost", True)
+            win.lift()
+            win.focus_set()
+        except tk.TclError:
+            logger.exception("CASH_MODAL_FOREGROUND_FAILED")
+        finally:
+            try:
+                win.attributes("-topmost", False)
+            except tk.TclError:
+                pass
+
     def _solicitar_criacao_sessao_caixa(self, *, source, opening_balance):
         allowed = {
             "OPEN_WITH_VALUE": "VALOR_INFORMADO",
@@ -2583,6 +2597,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(frame, text="INFORMAR SALDO INICIAL", fg_color="#2ea043", command=informar_agora).pack(side="left", expand=True, fill="x", padx=5)
         ctk.CTkButton(frame, text="ABRIR SEM INFORMAR", fg_color="#1f6feb", command=abrir_sem_informar).pack(side="left", expand=True, fill="x", padx=5)
         self._mostrar_modal_nabicode(win)
+        self._trazer_modal_caixa_para_frente(win)
         self._log_caixa_runtime("CASH_DIALOG_VISIBLE", viewable=bool(win.winfo_viewable()))
 
     def abrir_formulario_abertura_caixa(self):
