@@ -214,7 +214,10 @@ class CashService:
             history.append({"tipo": kind, "valor": value, "usuario": user, "observacao": note, "data": created, "origem": "CAIXA", "sinal": -1 if kind == "SANGRIA" else 1})
         history.sort(key=lambda item: parsed(item["data"]) or datetime.min)
         expected = session.opening_balance + totals["dinheiro"] + totals["recebimentos_dinheiro"] + totals["suprimentos"] - totals["sangrias"]
-        movement_total = sum((totals[k] for k in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "suprimentos")), Decimal("0")) - totals["sangrias"]
+        movement_total = sum(
+            (totals[key] for key in ("dinheiro", "pix", "cartao", "outros")),
+            Decimal("0"),
+        )
         return {"session": session, **totals, "expected_cash": expected, "movement_total": movement_total, "movements": history}
 
     def close_session(self, terminal: str, counted_cash: Any, user: str, note: str = "",

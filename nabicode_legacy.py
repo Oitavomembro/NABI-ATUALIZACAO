@@ -15,6 +15,7 @@ import tkinter as tk
 from tkinter import messagebox, ttk, filedialog, simpledialog
 import webbrowser
 import logging
+from time import perf_counter
 from decimal import Decimal
 
 from core import ConfigManager, EventBus, TaskManager, TaskStatus, GlobalShortcutManager, EnterField, install_enter_navigation, WindowActionController, UniversalTextInteractionManager, ContextHelpController, CommandDefinition, CommandPalette, GlobalSearchEngine, SearchResult, UniversalLayoutPolicy
@@ -2328,8 +2329,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self._mostrar_modal_nabicode(win, value)
 
     def _abrir_fechamento_sessao(self):
+        close_started = perf_counter()
         self._log_caixa_runtime("CASH_CLOSE_CLICK")
-        self._log_caixa_runtime("CASH_CLOSE_BUILD_START")
+        self._log_caixa_runtime("CASH_CLOSE_MODAL_CREATE")
         win, created = self._criar_modal_nabicode("FECHAMENTO", "Fechar Caixa", 680, 680)
         if not created: return
         self._log_caixa_runtime("CASH_CLOSE_MODAL_OPEN")
@@ -2350,9 +2352,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self._log_caixa_runtime("CASH_CLOSE_MODAL_CLOSE")
         win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
         self._mostrar_modal_nabicode(win)
+        self._log_caixa_runtime("CASH_CLOSE_MODAL_VISIBLE", elapsed_ms=round((perf_counter() - close_started) * 1000, 2))
         self._log_caixa_runtime("CASH_CLOSE_READY", estado="carregando")
 
         def carregar_fechamento():
+            data_started = perf_counter()
+            self._log_caixa_runtime("CASH_CLOSE_DATA_START")
             try:
                 service = self._servico_caixa()
                 session = service.get_open_session(self._terminal_caixa())
@@ -2365,6 +2370,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 logger.exception("CASH_CLOSE_EXCEPTION ao carregar fechamento")
                 loading.configure(text=f"Não foi possível carregar o fechamento:\n{exc}", text_color="#ff6b6b")
                 return
+            self._log_caixa_runtime("CASH_CLOSE_DATA_END", elapsed_ms=round((perf_counter() - data_started) * 1000, 2))
             if closing["done"]:
                 return
             loading.destroy()
@@ -2399,7 +2405,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     error.configure(text=str(exc)); return
                 close(confirmed=True)
                 self.atualizar_tela_caixa()
-                self._imprimir_comprovante_fechamento_caixa(closed_session, resumo)
+                self._abrir_acoes_fechamento_caixa(closed_session, resumo)
             buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=27, pady=18)
             confirm_button = ctk.CTkButton(buttons, text="Confirmar Fechamento", fg_color="#1f6feb", command=confirm)
             confirm_button.pack(side="right", padx=5)
@@ -2409,6 +2415,31 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self._log_caixa_runtime("CASH_CLOSE_READY", estado="pronto")
 
         self.after(1, carregar_fechamento)
+
+    def _abrir_acoes_fechamento_caixa(self, session, resumo):
+        win, created = self._criar_modal_nabicode("FECHAMENTO_CONCLUIDO", f"Caixa #{session.id} fechado", 560, 300)
+        if not created: return
+        shell = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=0); shell.pack(fill="both", expand=True)
+        ctk.CTkLabel(shell, text="CAIXA FECHADO", font=ctk.CTkFont(size=22, weight="bold"), text_color="#00FF88").pack(anchor="w", padx=30, pady=(28, 8))
+        ctk.CTkLabel(shell, text=f"Sessão #{session.id} concluída. A impressão é opcional e não altera o fechamento.", justify="left", anchor="w", wraplength=490).pack(fill="x", padx=30, pady=(0, 20))
+        status = ctk.CTkLabel(shell, text="", text_color="#f0b429"); status.pack(anchor="w", padx=30)
+        buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=25, pady=24)
+        def close(_event=None): self._fechar_modal_caixa(win)
+        def print_closing():
+            if getattr(print_button, "_cash_printing", False): return
+            print_button._cash_printing = True
+            print_button.configure(state="disabled", text="Imprimindo...")
+            status.configure(text="Enviando um trabalho para a impressora...")
+            def finished(ok, message):
+                print_button._cash_printing = False
+                print_button.configure(state="normal", text="Imprimir Fechamento")
+                status.configure(text=message, text_color="#00FF88" if ok else "#ff6b6b")
+            if not self._imprimir_comprovante_fechamento_caixa(session, resumo, on_complete=finished):
+                finished(False, "Já existe uma impressão deste fechamento em andamento.")
+        print_button = ctk.CTkButton(buttons, text="Imprimir Fechamento", fg_color="#1f6feb", command=print_closing); print_button.pack(side="right", padx=5)
+        ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
+        win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
+        self._mostrar_modal_nabicode(win, print_button)
 
     @staticmethod
     def _texto_comprovante_fechamento_caixa(session, resumo):
@@ -2434,28 +2465,30 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             f"Observação: {session.closing_note or '-'}\n",
         ))
 
-    def _imprimir_comprovante_fechamento_caixa(self, session, resumo):
+    def _imprimir_comprovante_fechamento_caixa(self, session, resumo, on_complete=None):
         texto = self._texto_comprovante_fechamento_caixa(session, resumo)
         servico_impressao = self._servico_impressao()
-        impressora = obter_config("impressora_historico") or "Padrão do Sistema"
-        formato = servico_impressao.output_format("fechamento")
+        impressora = obter_config("impressora_recibo") or "Padrão do Sistema"
+        formato = servico_impressao.OFFICIAL_THERMAL_FORMAT
         lock = getattr(self, "_cash_print_dispatch_lock", None)
         if lock is None:
             lock = threading.Lock()
             self._cash_print_dispatch_lock = lock
         with lock:
-            dispatched = getattr(self, "_cash_printed_closings", None)
+            dispatched = getattr(self, "_cash_prints_in_progress", None)
             if dispatched is None:
                 dispatched = set()
-                self._cash_printed_closings = dispatched
+                self._cash_prints_in_progress = dispatched
             dispatch_key = int(session.id)
             if dispatch_key in dispatched:
                 logger.warning(
-                    "CASH_CLOSE_PRINT_DUPLICATE_BLOCKED session_id=%s", session.id
+                    "CASH_CLOSE_PRINT_REENTRY_BLOCKED session_id=%s", session.id
                 )
                 return False
             dispatched.add(dispatch_key)
         def worker():
+            ok = False
+            message = ""
             try:
                 nome = servico_impressao.print_text(
                     texto,
@@ -2465,9 +2498,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             except Exception as exc:
                 logger.exception("Falha ao imprimir comprovante do fechamento de caixa")
-                self.after(0, lambda erro=str(exc): self.mostrar_notificacao("Fechamento salvo", f"O caixa foi fechado, mas a impressão falhou: {erro}", nivel="warning"))
-                return
-            self.after(0, lambda: self.mostrar_notificacao("Fechamento impresso", f"Comprovante enviado para {nome}.", nivel="success"))
+                message = f"A impressão falhou: {exc}"
+            else:
+                ok = True
+                message = f"Comprovante enviado para {nome}."
+            finally:
+                with lock:
+                    dispatched.discard(dispatch_key)
+                if on_complete is not None:
+                    self.after(0, lambda: on_complete(ok, message))
+                elif ok:
+                    self.after(0, lambda: self.mostrar_notificacao("Fechamento impresso", message, nivel="success"))
+                else:
+                    self.after(0, lambda: self.mostrar_notificacao("Fechamento salvo", message, nivel="warning"))
         threading.Thread(target=worker, name=f"cash-closing-print-{session.id}", daemon=True).start()
         return True
 

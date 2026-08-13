@@ -67,6 +67,17 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         summary = self.cash.session_summary(session.id)
         self.assertEqual(summary["recebimentos_dinheiro"], 40); self.assertEqual(summary["recebimentos_eletronicos"], 25)
         self.assertEqual(summary["expected_cash"], 40)
+        self.assertEqual(summary["movement_total"], 0)
+
+    def test_movement_total_contains_only_sales(self):
+        session = self.open(value=500)
+        self.movement("COMPRA", "Dinheiro", 10000)
+        self.movement("PAGAMENTO", "Dinheiro", 10500)
+        self.cash.register_session_movement("PC-CAIXA", "SUPRIMENTO", 200, "Ana", "troco", "12/08/2026 10:00:00")
+        summary = self.cash.session_summary(session.id)
+        self.assertEqual(summary["movement_total"], 10000)
+        self.assertEqual(summary["recebimentos_dinheiro"], 10500)
+        self.assertEqual(summary["expected_cash"], 21200)
 
     def test_cancelled_sale_does_not_affect_cash(self):
         session = self.open(value=10)

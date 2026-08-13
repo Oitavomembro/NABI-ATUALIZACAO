@@ -38,12 +38,12 @@ def test_opening_and_closing_dialogs_have_single_instance_guards():
     assert '_criar_modal_nabicode("FECHAMENTO"' in closing
 
 
-def test_closing_receipt_uses_configured_closing_pipeline_off_ui_thread():
+def test_closing_receipt_uses_official_80mm_pipeline_off_ui_thread():
     source = method_source("_imprimir_comprovante_fechamento_caixa")
     assert ".print_text(" in source
-    assert 'output_format("fechamento")' in source
-    assert 'obter_config("impressora_historico")' in source
-    assert 'obter_config("impressora_recibo")' not in source
+    assert "OFFICIAL_THERMAL_FORMAT" in source
+    assert 'obter_config("impressora_recibo")' in source
+    assert 'obter_config("impressora_historico")' not in source
     assert "threading.Thread" in source
     text = method_source("_texto_comprovante_fechamento_caixa")
     for field in ("FECHAMENTO DE CAIXA", "Saldo inicial", "Vendas dinheiro", "Recebimentos dinheiro", "Suprimentos", "Sangrias", "Dinheiro esperado", "PIX", "Cartão", "Valor contado", "Diferença"):
@@ -82,32 +82,46 @@ def test_closing_receipt_has_only_nabicode_identity_and_no_livraria_contaminatio
     assert "LIVRARIA" not in fechamento.upper()
     assert fechamento.count("NABICODE") == 1
     assert fechamento.count("FECHAMENTO DE CAIXA") == 1
+    assert fechamento.count("Sessão: 7") == 1
+    assert "MOVIMENTAÇÕES" not in fechamento
+    assert "historico" not in fechamento.casefold()
+
+
+def test_runtime_document_sources_have_no_livraria_nabi_variation():
+    audited = (
+        ROOT / "nabicode_legacy.py",
+        ROOT / "services" / "printing_service.py",
+        ROOT / "services" / "receipt_service.py",
+        ROOT / "services" / "pdf_document_service.py",
+        ROOT / "controllers" / "legacy_backend_adapter.py",
+    )
+    for path in audited:
+        assert "livraria nabi" not in path.read_text(encoding="utf-8").casefold(), path
 
 
 def test_closing_print_dispatch_has_duplicate_guard_and_single_job_contract():
     source = method_source("_imprimir_comprovante_fechamento_caixa")
     assert "_cash_print_dispatch_lock" in source
-    assert "_cash_printed_closings" in source
-    assert "CASH_CLOSE_PRINT_DUPLICATE_BLOCKED" in source
+    assert "_cash_prints_in_progress" in source
+    assert "CASH_CLOSE_PRINT_REENTRY_BLOCKED" in source
     closing = method_source("_abrir_fechamento_sessao")
     assert 'closing["submitting"]' in closing
     assert 'confirm_button.configure(state="disabled"' in closing
 
 
-def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
+def test_two_concurrent_dispatch_attempts_for_same_closing_create_only_one_mock_job():
     calls = []
+    pending = []
 
-    class ImmediateThread:
+    class DeferredThread:
         def __init__(self, *, target, **_kwargs):
             self.target = target
 
         def start(self):
-            self.target()
+            pending.append(self.target)
 
     class Printer:
-        def output_format(self, category):
-            assert category == "fechamento"
-            return "A4"
+        OFFICIAL_THERMAL_FORMAT = "Cupom 80 mm"
 
         def print_text(self, text, **kwargs):
             calls.append((text, kwargs))
@@ -120,8 +134,8 @@ def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
         mostrar_notificacao = lambda self, *_args, **_kwargs: None
 
     namespace = {
-        "threading": SimpleNamespace(Lock=threading.Lock, Thread=ImmediateThread),
-        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_historico" else "",
+        "threading": SimpleNamespace(Lock=threading.Lock, Thread=DeferredThread),
+        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_recibo" else "",
         "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
     }
     exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
@@ -129,11 +143,64 @@ def test_two_dispatch_attempts_for_same_closing_create_only_one_mock_job():
     session = SimpleNamespace(id=19)
     assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
     assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is False
+    assert len(pending) == 1
+    pending.pop()()
     assert len(calls) == 1
     assert calls[0][0].count("NABICODE") == 1
     assert calls[0][0].count("FECHAMENTO DE CAIXA") == 1
     assert calls[0][1]["printer"] == "IMPRESSORA FECHAMENTO"
-    assert calls[0][1]["output_format"] == "A4"
+    assert calls[0][1]["output_format"] == "Cupom 80 mm"
+
+
+def test_closing_is_persisted_without_automatic_print_and_offers_explicit_actions():
+    closing = method_source("_abrir_fechamento_sessao")
+    actions = method_source("_abrir_acoes_fechamento_caixa")
+    assert "_imprimir_comprovante_fechamento_caixa" not in closing
+    assert "_abrir_acoes_fechamento_caixa(closed_session, resumo)" in closing
+    assert 'text="Imprimir Fechamento"' in actions
+    assert 'text="Voltar"' in actions
+    assert "_cash_printing" in actions
+
+
+def test_failed_job_releases_guard_and_retry_creates_one_new_job():
+    attempts = []
+
+    class ImmediateThread:
+        def __init__(self, *, target, **_kwargs): self.target = target
+        def start(self): self.target()
+
+    class Printer:
+        OFFICIAL_THERMAL_FORMAT = "Cupom 80 mm"
+
+        def print_text(self, _text, **_kwargs):
+            attempts.append(1)
+            if len(attempts) == 1: raise RuntimeError("mock")
+            return "IMPRESSORA MOCK"
+
+    class App:
+        _texto_comprovante_fechamento_caixa = staticmethod(lambda *_: "NABICODE\nFECHAMENTO DE CAIXA\n")
+        _servico_impressao = lambda self: Printer()
+        after = lambda self, _delay, callback: callback()
+        mostrar_notificacao = lambda self, *_args, **_kwargs: None
+
+    namespace = {
+        "threading": SimpleNamespace(Lock=threading.Lock, Thread=ImmediateThread),
+        "obter_config": lambda _key: "Padrão do Sistema",
+        "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
+    }
+    exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
+    app, session = App(), SimpleNamespace(id=20)
+    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
+    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
+    assert len(attempts) == 2
+
+
+def test_close_modal_has_required_timing_markers_and_no_print_on_creation():
+    source = method_source("_abrir_fechamento_sessao")
+    for marker in ("CASH_CLOSE_CLICK", "CASH_CLOSE_DATA_START", "CASH_CLOSE_DATA_END", "CASH_CLOSE_MODAL_CREATE", "CASH_CLOSE_MODAL_VISIBLE"):
+        assert marker in source
+    before_confirm = source.split("def confirm():", 1)[0]
+    assert "_imprimir_comprovante_fechamento_caixa" not in before_confirm
 
 
 def test_closing_modal_is_revealed_before_database_summary_is_loaded():
