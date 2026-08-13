@@ -344,3 +344,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - histórico e auditoria não registram exportação vazia como sucesso;
 - 22 testes focados de relatórios aprovados;
 - suíte completa: 1060 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.20 — propriedade nativa dos modais do Caixa
+
+- causa raiz corrigida na fábrica compartilhada: as janelas do Caixa agora pertencem nativamente à janela principal;
+- todos os modais usam `transient(self)`, impedindo que sejam ocultados atrás da aplicação;
+- removido o contorno anterior baseado em `topmost`; não há temporizador, foco forçado nem bloqueio por `grab`;
+- validação manual no Windows aprovada pelo usuário;
+- 33 testes focados da infraestrutura de modais aprovados;
+- suíte completa: 1060 testes e 22 subtestes aprovados;
+- estresse, desempenho e uso prolongado: 3 testes aprovados em ambiente isolado, sem impressora física.

@@ -27,21 +27,20 @@ def test_all_cash_windows_use_one_factory_and_no_modal_blocking():
         assert "reveal_prepared_toplevel" not in source
 
 
-def test_shared_factory_has_no_grab_transient_topmost_or_visibility_toggle():
+def test_shared_factory_uses_native_owner_without_modal_blocking_or_topmost():
     source = method_source("_criar_modal_nabicode") + method_source("_mostrar_modal_nabicode")
-    for forbidden in ("grab_set", "transient(", "-topmost", "withdraw(", "deiconify(", "focus_force", "after(", "after_idle("):
+    assert "win.transient(self)" in source
+    for forbidden in ("grab_set", "-topmost", "withdraw(", "deiconify(", "focus_force", "after(", "after_idle("):
         assert forbidden not in source
 
 
-def test_required_opening_dialog_requests_foreground_without_persistent_topmost():
+def test_every_cash_modal_is_shown_by_owned_shared_factory():
     opening = method_source("perguntar_abertura_caixa")
-    foreground = method_source("_trazer_modal_caixa_para_frente")
-    assert "_trazer_modal_caixa_para_frente(win)" in opening
-    assert 'attributes("-topmost", True)' in foreground
-    assert 'attributes("-topmost", False)' in foreground
-    assert foreground.index('attributes("-topmost", True)') < foreground.index('attributes("-topmost", False)')
-    for forbidden in ("grab_set", "wait_window", "wait_variable", "focus_force"):
-        assert forbidden not in foreground
+    showing = method_source("_mostrar_modal_nabicode")
+    assert "_mostrar_modal_nabicode(win)" in opening
+    assert "win.lift()" in showing
+    assert "focus_set()" in showing
+    assert "_trazer_modal_caixa_para_frente" not in SOURCE
 
 
 def test_minimal_modal_uses_same_factory_without_business_dependencies():
