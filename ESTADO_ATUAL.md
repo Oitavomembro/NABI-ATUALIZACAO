@@ -326,3 +326,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - arquivos anteriores nunca são sobrescritos por colisão de relógio;
 - 14 testes focados de backup e snapshot aprovados;
 - suíte completa: 1058 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.18 — notificações seguras entre threads
+
+- publicação, leitura, limpeza e extensão do histórico compartilham bloqueio reentrante;
+- alteração da duração padrão também é sincronizada;
+- snapshots do histórico permanecem consistentes sob produtores concorrentes;
+- limite configurado e ordem das notificações continuam preservados;
+- 14 testes focados de notificações e tarefas aprovados;
+- suíte completa: 1059 testes e 22 subtestes aprovados.

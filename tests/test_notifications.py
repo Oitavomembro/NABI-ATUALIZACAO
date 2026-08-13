@@ -1,9 +1,30 @@
 import unittest
 
+import threading
+
 from core.notifications import NotificationCenter
 
 
 class NotificationCenterTests(unittest.TestCase):
+    def test_concurrent_publish_keeps_bounded_consistent_history(self):
+        center = NotificationCenter(max_history=50)
+        barrier = threading.Barrier(5)
+
+        def publish(worker):
+            barrier.wait()
+            for index in range(40):
+                center.publish(f"T{worker}", str(index))
+
+        threads = [threading.Thread(target=publish, args=(worker,)) for worker in range(5)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(5)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        history = center.history()
+        self.assertEqual(len(history), 50)
+        self.assertTrue(all(record.title.startswith("T") for record in history))
+
     def test_duration_is_clamped(self):
         self.assertEqual(NotificationCenter.normalize_duration(1), 1200)
         self.assertEqual(NotificationCenter.normalize_duration(999999), 15000)

@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections import deque
 from dataclasses import dataclass
 from datetime import datetime
+import threading
 from typing import Deque, Iterable, Literal
 
 NotificationLevel = Literal["success", "info", "warning", "error"]
@@ -30,6 +31,7 @@ class NotificationCenter:
         if max_history < 1:
             raise ValueError("max_history deve ser maior que zero.")
         self._history: Deque[NotificationRecord] = deque(maxlen=int(max_history))
+        self._lock = threading.RLock()
         self.default_duration_ms = self.normalize_duration(default_duration_ms)
 
     @classmethod
@@ -56,20 +58,25 @@ class NotificationCenter:
             created_at=datetime.now(),
             duration_ms=self.normalize_duration(self.default_duration_ms if duration_ms is None else duration_ms),
         )
-        self._history.appendleft(record)
+        with self._lock:
+            self._history.appendleft(record)
         return record
 
     def set_default_duration(self, duration_ms: int | float | str | None) -> int:
         """Atualiza a duração padrão e retorna o valor normalizado."""
-        self.default_duration_ms = self.normalize_duration(duration_ms)
-        return self.default_duration_ms
+        with self._lock:
+            self.default_duration_ms = self.normalize_duration(duration_ms)
+            return self.default_duration_ms
 
     def history(self) -> list[NotificationRecord]:
-        return list(self._history)
+        with self._lock:
+            return list(self._history)
 
     def clear(self) -> None:
-        self._history.clear()
+        with self._lock:
+            self._history.clear()
 
     def extend(self, records: Iterable[NotificationRecord]) -> None:
-        for record in records:
-            self._history.append(record)
+        with self._lock:
+            for record in records:
+                self._history.append(record)
