@@ -254,3 +254,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - somente registros concluídos, falhos ou cancelados mais antigos são descartados ao criar nova tarefa;
 - 17 testes focados de tarefas, núcleo e administração aprovados;
 - suíte completa: 1049 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.10 — backup diário sem duplicidade concorrente
+
+- execução automática diária passa a serializar verificação, criação e marcação do dia;
+- dois disparos simultâneos geram apenas um conjunto de backups;
+- o segundo disparo retorna como ignorado depois de observar o marcador atualizado;
+- backups manuais e múltiplos destinos permanecem independentes;
+- 18 testes focados de backup, snapshot e manutenção aprovados;
+- suíte completa: 1050 testes e 22 subtestes aprovados.

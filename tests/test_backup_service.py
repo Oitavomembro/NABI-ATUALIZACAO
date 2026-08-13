@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import sqlite3
 import tempfile
+import threading
 import unittest
 from datetime import datetime
 from pathlib import Path
@@ -55,6 +56,25 @@ class BackupServiceTests(unittest.TestCase):
         self.assertEqual(2, len(first.created))
         self.assertTrue(second.skipped)
         self.assertEqual("2026-08-02", self.config["ultimo_backup_diario"])
+
+    def test_run_daily_concorrente_cria_apenas_um_conjunto(self) -> None:
+        barrier = threading.Barrier(2)
+        results = []
+
+        def run():
+            barrier.wait()
+            results.append(self.service.run_daily())
+
+        threads = [threading.Thread(target=run) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(10)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(sum(len(result.created) for result in results), 2)
+        self.assertEqual(sum(result.skipped for result in results), 1)
+        self.assertEqual(len(list((self.root / "local").glob("*.db"))), 1)
+        self.assertEqual(len(list((self.root / "cloud").glob("*.db"))), 1)
 
     def test_diretorios_duplicados_sao_eliminados(self) -> None:
         self.config["pasta_backup_nuvem"] = self.config["pasta_backup_local"]

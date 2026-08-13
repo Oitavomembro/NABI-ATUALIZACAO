@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import threading
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
@@ -18,6 +19,8 @@ class BackupResult:
 
 class BackupService:
     """Centraliza backups manuais e diários com validação SQLite obrigatória."""
+
+    _daily_lock = threading.Lock()
 
     def __init__(
         self,
@@ -76,15 +79,16 @@ class BackupService:
         return BackupResult(tuple(created), tuple(errors))
 
     def run_daily(self) -> BackupResult:
-        if self.get_config("backup_diario_ativo") != "1":
-            return BackupResult((), (), skipped=True)
-        today = self.now().strftime("%Y-%m-%d")
-        if self.get_config("ultimo_backup_diario") == today:
-            return BackupResult((), (), skipped=True)
-        result = self.create_all("backup_diario")
-        if result.created:
-            self.set_config("ultimo_backup_diario", today)
-        return result
+        with self._daily_lock:
+            if self.get_config("backup_diario_ativo") != "1":
+                return BackupResult((), (), skipped=True)
+            today = self.now().strftime("%Y-%m-%d")
+            if self.get_config("ultimo_backup_diario") == today:
+                return BackupResult((), (), skipped=True)
+            result = self.create_all("backup_diario")
+            if result.created:
+                self.set_config("ultimo_backup_diario", today)
+            return result
 
     @staticmethod
     def _safe_prefix(prefix: str) -> str:
