@@ -122,6 +122,35 @@ class BackupServiceTests(unittest.TestCase):
         self.assertTrue(Path(first).is_file())
         self.assertTrue(Path(second).is_file())
 
+    def test_backups_com_instante_identico_nao_sobrescrevem_anterior(self) -> None:
+        fixed = datetime(2026, 8, 2, 20, 30, 0, 123456)
+        self.service.now = lambda: fixed
+        first = Path(self.service.create(self.root / "collision", "manual"))
+        first_bytes = first.read_bytes()
+        second = Path(self.service.create(self.root / "collision", "manual"))
+        self.assertNotEqual(first, second)
+        self.assertEqual(first.read_bytes(), first_bytes)
+        self.assertTrue(second.is_file())
+        self.assertEqual(len(list((self.root / "collision").glob("*.db"))), 2)
+
+    def test_backups_concorrentes_com_instante_identico_reservam_nomes_unicos(self) -> None:
+        self.service.now = lambda: datetime(2026, 8, 2, 20, 30, 0, 654321)
+        barrier = threading.Barrier(2)
+        created = []
+
+        def run():
+            barrier.wait()
+            created.append(self.service.create(self.root / "concurrent", "manual"))
+
+        threads = [threading.Thread(target=run) for _ in range(2)]
+        for thread in threads:
+            thread.start()
+        for thread in threads:
+            thread.join(10)
+        self.assertFalse(any(thread.is_alive() for thread in threads))
+        self.assertEqual(len(set(created)), 2)
+        self.assertTrue(all(Path(path).is_file() for path in created))
+
     def test_arquivo_vazio_e_rejeitado(self) -> None:
         empty = self.root / "empty.db"
         empty.touch()

@@ -59,7 +59,18 @@ class BackupService:
         target_dir = Path(directory).expanduser().resolve()
         target_dir.mkdir(parents=True, exist_ok=True)
         timestamp = self.now()
-        target = target_dir / f"{self._safe_prefix(prefix)}_{timestamp:%Y%m%d_%H%M%S_%f}.db"
+        stem = f"{self._safe_prefix(prefix)}_{timestamp:%Y%m%d_%H%M%S_%f}"
+        sequence = 0
+        while True:
+            suffix = "" if sequence == 0 else f"_{sequence}"
+            target = target_dir / f"{stem}{suffix}.db"
+            try:
+                descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                sequence += 1
+                continue
+            os.close(descriptor)
+            break
         try:
             backup_database(self.database_path, target)
             self._validate(target)

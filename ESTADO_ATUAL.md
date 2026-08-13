@@ -317,3 +317,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - histórico e auditoria continuam sendo registrados somente após sucesso;
 - 21 testes focados de relatórios aprovados;
 - suíte completa: 1056 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.17 — nomes exclusivos de backup
+
+- backup reserva atomicamente o arquivo de destino antes de iniciar a cópia SQLite;
+- operações com data e microssegundo idênticos recebem sufixos sequenciais;
+- dois backups concorrentes não escolhem o mesmo caminho;
+- arquivos anteriores nunca são sobrescritos por colisão de relógio;
+- 14 testes focados de backup e snapshot aprovados;
+- suíte completa: 1058 testes e 22 subtestes aprovados.
