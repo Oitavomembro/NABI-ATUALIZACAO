@@ -308,3 +308,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - cálculo de vencimento e atualização de execuções bem-sucedidas permanecem inalterados;
 - 20 testes focados de relatórios aprovados;
 - suíte completa: 1055 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.16 — exportação atômica de relatórios
+
+- CSV, XLSX e PDF são gerados primeiro em arquivo temporário na pasta de destino;
+- destino final só é substituído após a geração completa;
+- falha remove o arquivo parcial e preserva uma versão anterior existente;
+- histórico e auditoria continuam sendo registrados somente após sucesso;
+- 21 testes focados de relatórios aprovados;
+- suíte completa: 1056 testes e 22 subtestes aprovados.

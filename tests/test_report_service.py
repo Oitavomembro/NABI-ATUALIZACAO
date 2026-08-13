@@ -230,6 +230,22 @@ class ReportServiceTests(unittest.TestCase):
         self.assertEqual(len(history), 2)
         self.assertTrue(all(isinstance(item, dict) for item in history))
 
+    def test_failed_export_preserves_existing_destination_and_removes_partial(self) -> None:
+        destination = Path(self.tmp.name) / "reports" / "vendas.csv"
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text("arquivo anterior", encoding="utf-8")
+        result = self.service.generate("vendas", actor="admin")
+
+        def fail(_result, temporary_path):
+            temporary_path.write_text("parcial", encoding="utf-8")
+            raise OSError("falha simulada")
+
+        with patch.object(self.service, "_export_csv", side_effect=fail):
+            with self.assertRaisesRegex(OSError, "falha simulada"):
+                self.service.export(result, "CSV", destination, actor="admin")
+        self.assertEqual(destination.read_text(encoding="utf-8"), "arquivo anterior")
+        self.assertEqual(list(destination.parent.glob("vendas.*.csv")), [])
+
     def test_windows_pdf_dispatch_uses_isolated_printer(self) -> None:
         path = Path(self.tmp.name) / "relatorio.pdf"
         path.write_bytes(b"%PDF-1.4\n")

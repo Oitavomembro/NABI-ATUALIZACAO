@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -309,12 +311,22 @@ class ReportService:
         if path.suffix.lower() != extension:
             path = path.with_suffix(extension)
         path.parent.mkdir(parents=True, exist_ok=True)
-        if fmt == "CSV":
-            self._export_csv(result, path)
-        elif fmt == "XLSX":
-            self._export_xlsx(result, path)
-        else:
-            self._export_pdf(result, path)
+        descriptor, temporary_name = tempfile.mkstemp(
+            prefix=path.stem + ".", suffix=extension, dir=str(path.parent)
+        )
+        os.close(descriptor)
+        temporary_path = Path(temporary_name)
+        try:
+            if fmt == "CSV":
+                self._export_csv(result, temporary_path)
+            elif fmt == "XLSX":
+                self._export_xlsx(result, temporary_path)
+            else:
+                self._export_pdf(result, temporary_path)
+            os.replace(temporary_path, path)
+        except Exception:
+            temporary_path.unlink(missing_ok=True)
+            raise
         self._append_history({
             "report_id": result.report_id, "title": result.title,
             "generated_at": datetime.now().isoformat(timespec="seconds"),
