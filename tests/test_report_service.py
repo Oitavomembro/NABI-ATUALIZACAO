@@ -191,6 +191,21 @@ class ReportServiceTests(unittest.TestCase):
         self.assertTrue(path.exists())
         dispatch.assert_called_once_with(path)
 
+    def test_malformed_history_shape_is_recovered_on_next_export(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+            (ReportService.HISTORY_KEY, '{"formato":"antigo"}'),
+        )
+        connection.commit()
+        connection.close()
+        self.assertEqual(self.service.history(), [])
+        result = self.service.generate("vendas", actor="admin")
+        self.service.export(result, "CSV", actor="admin")
+        history = self.service.history()
+        self.assertEqual(len(history), 2)
+        self.assertTrue(all(isinstance(item, dict) for item in history))
+
     def test_windows_pdf_dispatch_uses_isolated_printer(self) -> None:
         path = Path(self.tmp.name) / "relatorio.pdf"
         path.write_bytes(b"%PDF-1.4\n")

@@ -359,7 +359,11 @@ class ReportService:
         return dict(rows[index])
 
     def history(self, *, limit: int = 100) -> list[dict[str, Any]]:
-        return list(reversed(self._load_json_setting(self.HISTORY_KEY, [])))[0:max(1, int(limit))]
+        rows = self._load_json_setting(self.HISTORY_KEY, [])
+        if not isinstance(rows, list):
+            return []
+        valid = [dict(item) for item in rows if isinstance(item, dict)]
+        return list(reversed(valid))[0:max(1, int(limit))]
 
     def clear_history(self, *, actor: str = "Sistema") -> None:
         self._save_json_setting(self.HISTORY_KEY, [])
@@ -583,6 +587,9 @@ class ReportService:
 
     def _append_history(self, entry: dict[str, Any]) -> None:
         history = self._load_json_setting(self.HISTORY_KEY, [])
+        if not isinstance(history, list):
+            history = []
+        history = [item for item in history if isinstance(item, dict)]
         history.append(entry)
         self._save_json_setting(self.HISTORY_KEY, history[-self.MAX_HISTORY:])
 

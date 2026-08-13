@@ -281,3 +281,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - isolamento de falhas entre manipuladores permanece inalterado;
 - 21 testes focados de núcleo, tarefas e auditoria aprovados;
 - suíte completa: 1052 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.13 — recuperação do histórico de relatórios
+
+- histórico persistido com JSON de formato antigo ou tipo incorreto deixa de bloquear relatórios;
+- leitura retorna apenas entradas estruturadas como registros;
+- próxima geração ou exportação reconstrói automaticamente a lista válida;
+- limite de 200 registros e auditoria das operações permanecem inalterados;
+- 18 testes focados de relatórios aprovados;
+- suíte completa: 1053 testes e 22 subtestes aprovados.
