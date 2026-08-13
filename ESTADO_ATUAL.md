@@ -299,3 +299,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - regras de frequência, formato, ativação e próxima execução permanecem inalteradas;
 - 19 testes focados de relatórios aprovados;
 - suíte completa: 1054 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.15 — falhas isoladas nos agendamentos
+
+- falha em um relatório vencido deixa de interromper os agendamentos seguintes;
+- cada erro é registrado na auditoria com o nome do agendamento e resultado `ERRO`;
+- retorno para a interface continua contendo somente arquivos gerados com sucesso;
+- cálculo de vencimento e atualização de execuções bem-sucedidas permanecem inalterados;
+- 20 testes focados de relatórios aprovados;
+- suíte completa: 1055 testes e 22 subtestes aprovados.

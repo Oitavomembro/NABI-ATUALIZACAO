@@ -162,6 +162,30 @@ class ReportServiceTests(unittest.TestCase):
         self.assertTrue(updated["last_run_at"])
         self.assertGreater(updated["next_run_at"], saved["next_run_at"])
 
+    def test_failed_due_schedule_does_not_block_the_next_one(self) -> None:
+        for name in ("A falha", "B funciona"):
+            self.service.save_schedule({
+                "name": name, "report_id": "vendas", "frequency": "DIARIO",
+                "run_time": "08:00", "format": "CSV", "active": True,
+                "next_run_at": "2026-08-01T08:00",
+            }, actor="admin")
+        generated_path = Path(self.tmp.name) / "segundo.csv"
+
+        def run(name, *, actor):
+            if name == "A falha":
+                raise RuntimeError("falha simulada")
+            return generated_path
+
+        with patch.object(self.service, "run_schedule", side_effect=run):
+            generated = self.service.run_due_schedules(
+                now=datetime(2026, 8, 2, 9, 0), actor="admin"
+            )
+        self.assertEqual(generated, [generated_path])
+        errors = [event for event in self.audit_events if event[1] == "EXECUTAR_AGENDAMENTO"]
+        self.assertEqual(len(errors), 1)
+        self.assertEqual(errors[0][2], "A falha")
+        self.assertEqual(errors[0][4], "ERRO")
+
     def test_schedule_rejects_invalid_time(self) -> None:
         with self.assertRaises(ValueError):
             self.service.save_schedule({"name": "x", "report_id": "vendas", "frequency": "DIARIO", "run_time": "25:90", "format": "CSV"})

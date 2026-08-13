@@ -466,7 +466,15 @@ class ReportService:
             except ValueError:
                 next_run = current
             if next_run <= current:
-                generated.append(self.run_schedule(str(schedule.get("name", "")), actor=actor))
+                name = str(schedule.get("name", ""))
+                try:
+                    generated.append(self.run_schedule(name, actor=actor))
+                except Exception as exc:
+                    if self.audit:
+                        self.audit(
+                            "relatorios", "EXECUTAR_AGENDAMENTO", name,
+                            str(exc), "ERRO", actor,
+                        )
         return generated
 
     @staticmethod
