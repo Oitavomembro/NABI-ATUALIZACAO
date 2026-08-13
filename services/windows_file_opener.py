@@ -52,3 +52,26 @@ class WindowsFileOpener(WindowsShellDispatcher):
                 "O Windows não conseguiu abrir o arquivo no aplicativo associado."
             ) from exc
         return str(path)
+
+    def open_directory(self, directory_path: str | os.PathLike[str]) -> str:
+        path = Path(directory_path).resolve()
+        if not self._is_windows:
+            raise WindowsFileOpenError(
+                "A abertura isolada de pastas está disponível apenas no Windows."
+            )
+        if not path.is_dir():
+            raise FileNotFoundError(f"A pasta não foi encontrada:\n{path}")
+        try:
+            self._runner(
+                self.command(path),
+                creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+                stdin=subprocess.DEVNULL,
+                close_fds=True,
+            )
+        except Exception as exc:
+            raise WindowsFileOpenError(
+                "O Windows não conseguiu abrir a pasta."
+            ) from exc
+        return str(path)

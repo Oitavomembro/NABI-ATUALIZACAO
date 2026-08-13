@@ -7,6 +7,14 @@ from services.windows_file_opener import WindowsFileOpenError, WindowsFileOpener
 
 
 class WindowsFileOpenerTests(unittest.TestCase):
+    def test_open_directory_uses_isolated_process(self):
+        runner = Mock()
+        opener = WindowsFileOpener(runner=runner, is_windows=True)
+        with TemporaryDirectory() as folder:
+            self.assertEqual(opener.open_directory(folder), str(Path(folder).resolve()))
+        runner.assert_called_once()
+        self.assertIn("Start-Process", runner.call_args.args[0][-1])
+
     def test_command_uses_external_powershell_start_process(self):
         opener = WindowsFileOpener(is_windows=True)
         command = opener.command(Path("comprovante.pdf"))

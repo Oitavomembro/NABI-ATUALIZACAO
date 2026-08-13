@@ -198,3 +198,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - preservado o roteamento exclusivo da categoria `fechamento`, sem reutilizar `impressora_recibo`;
 - 47 testes focados aprovados;
 - suíte completa: 1041 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.4 — abertura isolada de arquivos e pastas
+
+- removidas do processo principal todas as chamadas funcionais restantes a `os.startfile`;
+- arquivos fiscais e documentos de histórico usam o abridor externo já homologado;
+- pastas de backup, diagnóstico, PDFs e sistema usam abertura isolada por processo no Windows;
+- validação explícita diferencia arquivo ausente de pasta ausente;
+- teste de regressão confirma abertura de diretório por processo simulado, sem lançar aplicativo externo;
+- 11 testes focados e compilação aprovados;
+- suíte completa: 1042 testes e 22 subtestes aprovados.

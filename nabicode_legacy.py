@@ -3656,7 +3656,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showwarning("Devoluções", "Nenhum arquivo fiscal disponível para esta devolução.", parent=janela)
                 return
             try:
-                os.startfile(os.path.abspath(caminho))
+                self._abrir_arquivo_sistema(caminho)
             except Exception as exc:
                 messagebox.showerror("Devoluções", str(exc), parent=janela)
 
@@ -7946,6 +7946,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             webbrowser.open(Path(caminho).as_uri())
         return caminho
 
+    def _abrir_diretorio_sistema(self, caminho):
+        caminho = os.path.abspath(os.fspath(caminho))
+        os.makedirs(caminho, exist_ok=True)
+        if os.name == "nt":
+            opener = getattr(self, "_windows_file_opener", None)
+            if opener is None:
+                opener = WindowsFileOpener()
+                self._windows_file_opener = opener
+            try:
+                opener.open_directory(caminho)
+            except WindowsFileOpenError as exc:
+                raise RuntimeError("O Windows não conseguiu abrir a pasta.") from exc
+        else:
+            subprocess.Popen(["xdg-open", caminho])
+        return caminho
+
     def _nome_pdf_seguro(self, texto):
         return self._servico_pdf_documentos().safe_name(texto)
 
@@ -8709,10 +8725,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             caminho = str(historico[int(selecao[0])].get("path", "")).strip()
             if not caminho or not Path(caminho).exists():
                 messagebox.showerror("Histórico", "O arquivo deste registro não está disponível.", parent=janela); return
-            if hasattr(os, "startfile"):
-                os.startfile(caminho)
-            else:
-                subprocess.Popen(["xdg-open", caminho])
+            self._abrir_arquivo_sistema(caminho)
         botoes = ctk.CTkFrame(janela, fg_color="transparent"); botoes.pack(fill="x", padx=15, pady=(0,15))
         ctk.CTkButton(botoes, text="Abrir arquivo", command=abrir_arquivo_historico).pack(side="left", padx=4)
         ctk.CTkButton(botoes, text="Limpar histórico", fg_color="#da3633", command=lambda: (REPORT_SERVICE.clear_history(actor=self._usuario_relatorios()), janela.destroy())).pack(side="right", padx=4)
@@ -9272,8 +9285,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def abrir_pasta_backup_config(self):
         pasta = self.entry_backup_local.get().strip() or BACKUP_DIR
         try:
-            os.makedirs(pasta, exist_ok=True)
-            os.startfile(os.path.abspath(pasta))
+            self._abrir_diretorio_sistema(pasta)
         except Exception as exc:
             messagebox.showerror("Backup", f"Não foi possível abrir a pasta:\n{exc}")
 
@@ -9764,10 +9776,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 messagebox.showerror("Restauração", str(exc), parent=janela)
         def abrir_pasta_backup():
-            os.makedirs(BACKUP_DIR, exist_ok=True)
-            caminho=os.path.abspath(BACKUP_DIR)
-            try: os.startfile(caminho)
-            except AttributeError: subprocess.Popen(["xdg-open", caminho])
+            self._abrir_diretorio_sistema(BACKUP_DIR)
         def limpar_backups():
             mantidos = _ADMIN_OPERATIONS.cleanup_backups(10)
             messagebox.showinfo("Backup", f"Limpeza concluída. Mantidos {mantidos} backups recentes.", parent=janela)
@@ -9986,7 +9995,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             executar_tarefa_ui("Diagnóstico técnico", trabalho, concluir, falhar, progresso)
 
         botao_diagnostico = botao(aba, "🩺 Executar diagnóstico completo", executar_diagnostico_ui, "#1f6feb")
-        botao(aba, "📂 Abrir pasta de diagnósticos", lambda: (os.makedirs(DIAGNOSTIC_DIR, exist_ok=True), os.startfile(os.path.abspath(DIAGNOSTIC_DIR))) if hasattr(os, "startfile") else subprocess.Popen(["xdg-open", os.path.abspath(DIAGNOSTIC_DIR)]), "#8957e5")
+        botao(aba, "📂 Abrir pasta de diagnósticos", lambda: self._abrir_diretorio_sistema(DIAGNOSTIC_DIR), "#8957e5")
 
         # MIGRAÇÃO — FASE 1: análise e simulação sem gravação
         aba = abas.tab("Migração")
@@ -10134,12 +10143,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ferramentas_dev = DeveloperToolsService(SOURCE_DIR, os.path.abspath(DB_NAME))
 
         def abrir_diretorio_tecnico(caminho):
-            os.makedirs(caminho, exist_ok=True)
-            caminho = os.path.abspath(caminho)
-            if hasattr(os, "startfile"):
-                os.startfile(caminho)
-            else:
-                subprocess.Popen(["xdg-open", caminho])
+            self._abrir_diretorio_sistema(caminho)
 
         def executar_testes_tecnicos():
             def trabalho(ctx):
@@ -10211,7 +10215,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         aba = abas.tab("Sistema")
         info = f"Versão: {APP_VERSION} — {APP_VERSION_LABEL}\nPython: {platform.python_version()}\nSistema: {platform.platform()}\nPasta do programa: {SOURCE_DIR}\nBanco: {os.path.abspath(DB_NAME)}"
         caixa_info=ctk.CTkTextbox(aba); caixa_info.pack(fill="both", expand=True, padx=18, pady=18); caixa_info.insert("end", info); caixa_info.configure(state="disabled")
-        botao(aba, "📂 Abrir pasta do sistema", lambda: os.startfile(os.path.abspath(os.getcwd())) if hasattr(os, 'startfile') else subprocess.Popen(['xdg-open', os.path.abspath(os.getcwd())]))
+        botao(aba, "📂 Abrir pasta do sistema", lambda: self._abrir_diretorio_sistema(os.getcwd()))
 
         # SUPORTE
         aba = abas.tab("Suporte")
