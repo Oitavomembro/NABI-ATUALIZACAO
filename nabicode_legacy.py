@@ -1490,6 +1490,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.container_telas = ctk.CTkFrame(self, fg_color="transparent")
         self.container_telas.grid(row=0, column=1, sticky="nsew", padx=0, pady=0)
         LayoutManager.configure_root(self.container_telas)
+        self.container_telas.grid_rowconfigure(0, weight=0)
+        self.container_telas.grid_rowconfigure(1, weight=1)
+
+        self.frame_navegacao_persistente = ctk.CTkFrame(self.container_telas, fg_color="transparent")
+        self.frame_navegacao_persistente.grid(row=0, column=0, sticky="ew")
+        self.criar_cabecalho_e_botoes(self.frame_navegacao_persistente)
+
+        self.container_conteudo_telas = ctk.CTkFrame(self.container_telas, fg_color="transparent")
+        self.container_conteudo_telas.grid(row=1, column=0, sticky="nsew")
+        LayoutManager.configure_root(self.container_conteudo_telas)
 
         fundo = self.preferencias_interface
         self.background_manager = BackgroundManager(
@@ -1527,7 +1537,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if fabrica is None:
             raise KeyError(f"Tela desconhecida: {nome}")
         inicio = perf_counter()
-        tela = fabrica(self.container_telas)
+        tela = fabrica(self.container_conteudo_telas)
         self.telas[nome] = tela
         self.background_manager.attach(tela)
         mark_startup(
@@ -1698,54 +1708,47 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame_centralizador = ctk.CTkFrame(parent, fg_color="transparent")
         frame_centralizador.pack(fill="x", pady=10, padx=20)
 
-        estilo_btn = {"height": 45, "corner_radius": 12, "font": ctk.CTkFont(size=14, weight="bold")}
+        estilo_btn = {"height": 42, "corner_radius": 12, "font": ctk.CTkFont(size=13, weight="bold")}
         
         self.botoes_topo = {}
         
         btn_dash = ctk.CTkButton(frame_centralizador, text="📊 [F1] Início", fg_color="#1f6feb", hover_color="#1158c7", **estilo_btn)
         btn_dash.configure(command=lambda: self.mostrar_tela("dashboard"))
-        btn_dash.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["dashboard"] = btn_dash
         
         btn_vendas = ctk.CTkButton(frame_centralizador, text="🛒 [F2] Vendas", fg_color="#2ea043", hover_color="#238636", **estilo_btn)
         btn_vendas.configure(command=self.abrir_pdv_independente)
-        btn_vendas.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["vendas"] = btn_vendas
         
         btn_clientes = ctk.CTkButton(frame_centralizador, text="👥 [F3] Clientes", fg_color="#8957e5", hover_color="#6e40c9", **estilo_btn)
         btn_clientes.configure(command=lambda: self.mostrar_tela("clientes"))
-        btn_clientes.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["clientes"] = btn_clientes
         
         btn_produtos = ctk.CTkButton(frame_centralizador, text="📦 [F4] Produtos", fg_color="#bf8700", hover_color="#9e6a03", **estilo_btn)
         btn_produtos.configure(command=lambda: self.mostrar_tela("produtos"))
-        btn_produtos.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["produtos"] = btn_produtos
 
         btn_financeiro = ctk.CTkButton(frame_centralizador, text="💰 Financeiro", fg_color="#0f766e", hover_color="#115e59", **estilo_btn)
         btn_financeiro.configure(command=lambda: self.mostrar_tela("financeiro"))
-        btn_financeiro.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["financeiro"] = btn_financeiro
 
         btn_caixa = ctk.CTkButton(frame_centralizador, text="💵 Caixa", fg_color="#a16207", hover_color="#854d0e", **estilo_btn)
         btn_caixa.configure(command=lambda: self.mostrar_tela("caixa"))
-        btn_caixa.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["caixa"] = btn_caixa
 
         btn_compras = ctk.CTkButton(frame_centralizador, text="📥 Compras", fg_color="#7c3aed", hover_color="#6d28d9", **estilo_btn)
         btn_compras.configure(command=lambda: self.mostrar_tela("compras"))
-        btn_compras.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["compras"] = btn_compras
 
         btn_relatorios = ctk.CTkButton(frame_centralizador, text="📈 Relatórios", fg_color="#0369a1", hover_color="#075985", **estilo_btn)
         btn_relatorios.configure(command=lambda: self.mostrar_tela("relatorios"))
-        btn_relatorios.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["relatorios"] = btn_relatorios
 
         btn_configs = ctk.CTkButton(frame_centralizador, text="⚙️ [F5] Configs", fg_color="#da3633", hover_color="#b62324", **estilo_btn)
         btn_configs.configure(command=lambda: self.mostrar_tela("configs"))
-        btn_configs.pack(side="left", padx=4, expand=True, fill="x")
         self.botoes_topo["configs"] = btn_configs
+        for coluna in range(5):
+            frame_centralizador.grid_columnconfigure(coluna, weight=1, uniform="navegacao_topo")
         for module_id, botao in self.botoes_topo.items():
             botao.bind("<Button-3>", lambda event, mid=module_id: self._abrir_menu_favorito_modulo(event, mid), add="+")
         self._grupos_botoes_topo.append(self.botoes_topo)
@@ -1891,15 +1894,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _aplicar_visibilidade_navegacao(self):
         """Mostra somente os módulos permitidos pelo modo e espaço de trabalho."""
-        visiveis = set(self.perfil_interface.visible_modules)
-        ordem = UIPreferencesService.MODULE_ORDER
         for grupo in self._grupos_botoes_topo:
             for botao in grupo.values():
-                botao.pack_forget()
-            for nome in ordem:
+                botao.grid_forget()
+            for nome, linha, coluna in UIPreferencesService.navigation_positions(
+                self.perfil_interface.visible_modules,
+                columns=5,
+            ):
                 botao = grupo.get(nome)
-                if botao is not None and nome in visiveis:
-                    botao.pack(side="left", padx=4, expand=True, fill="x")
+                if botao is not None:
+                    botao.grid(
+                        row=linha,
+                        column=coluna,
+                        padx=4,
+                        pady=4,
+                        sticky="ew",
+                    )
 
     def _salvar_preferencias_interface(self):
         dados = UIPreferencesService.normalize({
@@ -1944,7 +1954,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
 
-        self.criar_cabecalho_e_botoes(frame)
         self.adicionar_rodape_status(frame)
 
         scroll_dashboard = BidirectionalScrollableFrame(frame, fg_color="#161b22", corner_radius=12, content_width=1180)
@@ -2950,7 +2959,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def tela_produtos(self, parent):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
-        self.criar_cabecalho_e_botoes(frame)
         self.adicionar_rodape_status(frame)
 
         conteudo = ctk.CTkFrame(frame, fg_color="transparent")
@@ -5402,7 +5410,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
         
-        self.criar_cabecalho_e_botoes(frame)
         self.adicionar_rodape_status(frame)
         
         scroll_vendas = BidirectionalScrollableFrame(frame, fg_color="transparent", content_width=1120)
@@ -6681,12 +6688,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame.grid(row=0, column=0, sticky="nsew")
         
         LayoutManager.configure_vertical_shell(frame, expandable_row=1)
-        self.criar_cabecalho_e_botoes(frame)
 
         conteudo_cli = ctk.CTkFrame(frame, fg_color="#161b22", corner_radius=12)
-        # O cabeçalho desta tela usa ``pack``. Tk não permite misturar ``pack``
-        # e ``grid`` entre filhos do mesmo parent, portanto o container principal
-        # também deve usar ``pack``. O grid permanece somente dentro dele.
+        # O conteúdo principal e o rodapé compartilham ``pack``; o grid fica
+        # restrito aos widgets internos deste container.
         conteudo_cli.pack(fill="both", expand=True, padx=20, pady=5)
         LayoutManager.configure_vertical_shell(conteudo_cli, expandable_row=2)
         self.background_manager.attach(conteudo_cli)
@@ -8836,7 +8841,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def tela_financeiro(self, parent):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
-        self.criar_cabecalho_e_botoes(frame)
         self.adicionar_rodape_status(frame)
 
         scroll_financeiro = BidirectionalScrollableFrame(frame, fg_color="transparent", content_width=1280)
@@ -8943,7 +8947,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame = ctk.CTkFrame(parent, fg_color="transparent")
         frame.grid(row=0, column=0, sticky="nsew")
 
-        self.criar_cabecalho_e_botoes(frame)
         self.adicionar_rodape_status(frame)
 
         scroll_configs = BidirectionalScrollableFrame(frame, fg_color="transparent", content_width=980)

@@ -26,11 +26,12 @@ class UniversalLayoutIntegrationTests(unittest.TestCase):
         self.assertIn("scroll_x = ttk.Scrollbar", block)
         self.assertIn("rodape = ctk.CTkFrame(win", block)
 
-    def test_finance_screen_has_standard_header_scroll_and_footer(self):
+    def test_finance_screen_uses_persistent_header_scroll_and_footer(self):
         start = SOURCE.index("    def tela_financeiro")
         end = SOURCE.index("    def carregar_financeiro", start)
         block = SOURCE[start:end]
-        self.assertIn("self.criar_cabecalho_e_botoes(frame)", block)
+        self.assertNotIn("self.criar_cabecalho_e_botoes(frame)", block)
+        self.assertEqual(SOURCE.count("self.criar_cabecalho_e_botoes("), 1)
         self.assertIn("self.adicionar_rodape_status(frame)", block)
         self.assertIn("BidirectionalScrollableFrame", block)
         self.assertIn('orient="horizontal"', block)

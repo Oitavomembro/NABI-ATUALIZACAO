@@ -49,8 +49,9 @@ class UIPreferencesService:
         "vendas": "Vendas",
         "clientes": "Clientes",
         "produtos": "Produtos",
-        "caixa": "Caixa",
         "financeiro": "Financeiro",
+        "caixa": "Caixa",
+        "compras": "Compras",
         "relatorios": "Relatórios",
         "configs": "Configurações",
     }
@@ -74,17 +75,17 @@ class UIPreferencesService:
 
     MODE_MODULES = {
         "Simples": ("dashboard", "vendas", "clientes", "caixa", "configs"),
-        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
-        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "caixa", "financeiro", "relatorios", "configs"),
+        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "configs"),
+        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "caixa", "financeiro", "compras", "relatorios", "configs"),
     }
 
     WORKSPACE_MODULES = {
-        "Geral": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
+        "Geral": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "configs"),
         "Caixa": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
-        "Estoque": ("dashboard", "produtos", "caixa", "configs"),
+        "Estoque": ("dashboard", "produtos", "caixa", "compras", "configs"),
         "Financeiro": ("dashboard", "clientes", "caixa", "financeiro", "relatorios", "configs"),
         "Atendimento": ("dashboard", "clientes", "vendas", "caixa", "configs"),
-        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "caixa", "relatorios", "configs"),
+        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "relatorios", "configs"),
     }
 
     ROW_HEIGHTS = {"Compacta": 22, "Normal": 27, "Confortável": 34}
@@ -189,6 +190,20 @@ class UIPreferencesService:
     @classmethod
     def row_height(cls, density: str) -> int:
         return cls.ROW_HEIGHTS.get(density, cls.ROW_HEIGHTS[cls.DEFAULTS["density"]])
+
+    @classmethod
+    def navigation_positions(
+        cls, visible_modules: tuple[str, ...], *, columns: int = 5
+    ) -> tuple[tuple[str, int, int], ...]:
+        """Posições estáveis da barra, sem ocultar itens por largura."""
+
+        safe_columns = max(1, int(columns))
+        visible = set(visible_modules)
+        ordered = [module_id for module_id in cls.MODULE_ORDER if module_id in visible]
+        return tuple(
+            (module_id, index // safe_columns, index % safe_columns)
+            for index, module_id in enumerate(ordered)
+        )
 
     @classmethod
     def dashboard_widgets(cls, values: Mapping[str, Any] | None) -> tuple[str, ...]:

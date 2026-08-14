@@ -24,7 +24,7 @@ def test_main_navigation_registers_button_and_screen():
     assert "tela_caixa" in methods
     assert 'self.botoes_topo["caixa"] = btn_caixa' in source
     assert '"caixa": self.tela_caixa' in source
-    assert "ordem = UIPreferencesService.MODULE_ORDER" in source
+    assert "UIPreferencesService.navigation_positions(" in source
 
 
 def test_every_profile_keeps_cash_visible_even_with_legacy_preferences():

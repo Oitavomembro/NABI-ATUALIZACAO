@@ -404,3 +404,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - SHA-256: `473ff004a2b4fb816195bd8937b124d9a1de0aad353d12be43e59bf632697fd7`;
 - suíte completa no ambiente de build: 1074 testes e 22 subtestes aprovados;
 - instalador não foi executado e nenhuma impressora física foi utilizada.
+
+## Checkpoint 42.25 / R6 TESTE — navegação superior determinística
+
+- causa raiz removida: cada tela carregada sob demanda criava uma nova barra inicialmente completa, enquanto somente as barras anteriores tinham o perfil de visibilidade aplicado;
+- as cópias por tela foram substituídas por uma única barra persistente compartilhada;
+- a troca de tela não cria, oculta nem reordena botões;
+- `Compras` foi integrado oficialmente a `MODULE_ORDER` e aos perfis compatíveis;
+- a barra usa grade determinística de cinco colunas e segunda linha, evitando corte horizontal em 1280×768;
+- Financeiro permanece visível ou oculto exclusivamente conforme o perfil salvo (modo, espaço, menu adaptativo ou navegação personalizada);
+- preferências por usuário, permissões, atalhos e favoritos foram preservados;
+- 69 testes focados e 3 subtestes aprovados, incluindo Caixa e Migração;
+- suíte completa definitiva: 1088 testes e 22 subtestes aprovados;
+- `compileall`, smoke não visual de `main.py` no perfil TESTE e `git diff --check` aprovados;
+- conversor de Migração não foi alterado por esta frente; nenhuma produção foi gerada.

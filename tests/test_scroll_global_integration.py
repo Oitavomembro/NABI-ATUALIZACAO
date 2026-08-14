@@ -47,17 +47,16 @@ class ScrollGlobalIntegrationTests(unittest.TestCase):
     def test_headers_and_footers_remain_outside_expandable_content(self):
         for name in ("tela_vendas", "tela_financeiro", "tela_configs"):
             body = self.functions[name]
-            header = body.index("criar_cabecalho_e_botoes")
             scroll = body.index("BidirectionalScrollableFrame")
-            self.assertLess(header, scroll)
+            self.assertNotIn("criar_cabecalho_e_botoes", body)
             self.assertIn("adicionar_rodape_status", body[:scroll])
 
         clientes = self.functions["tela_clientes"]
-        header = clientes.index("criar_cabecalho_e_botoes")
         content = clientes.index("conteudo_cli = ctk.CTkFrame")
         footer = clientes.rindex("adicionar_rodape_status")
-        self.assertLess(header, content)
+        self.assertNotIn("criar_cabecalho_e_botoes", clientes)
         self.assertGreater(footer, content)
+        self.assertEqual(self.source.count("self.criar_cabecalho_e_botoes("), 1)
 
 
 if __name__ == "__main__":
