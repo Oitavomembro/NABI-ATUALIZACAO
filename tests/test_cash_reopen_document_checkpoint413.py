@@ -31,6 +31,15 @@ def test_opening_form_close_never_schedules_another_opening_dialog():
     assert "_solicitar_criacao_sessao_caixa" in form
 
 
+def test_closing_startup_question_keeps_main_application_running():
+    question = method_source("perguntar_abertura_caixa")
+    close_block = question.split("def fechar_pergunta", 1)[1].split("def informar_agora", 1)[0]
+    assert "_fechar_modal_caixa(win)" in close_block
+    assert "_garantir_janela_principal_visivel()" in close_block
+    assert "self.destroy()" not in close_block
+    assert 'win.protocol("WM_DELETE_WINDOW", fechar_pergunta)' in question
+
+
 def test_opening_and_closing_dialogs_have_single_instance_guards():
     opening = method_source("abrir_formulario_abertura_caixa")
     closing = method_source("_abrir_fechamento_sessao")
@@ -38,13 +47,12 @@ def test_opening_and_closing_dialogs_have_single_instance_guards():
     assert '_criar_modal_nabicode("FECHAMENTO"' in closing
 
 
-def test_closing_receipt_uses_configured_closing_pipeline_off_ui_thread():
-    source = method_source("_imprimir_comprovante_fechamento_caixa")
-    assert ".print_text(" in source
-    assert 'output_format("fechamento")' in source
-    assert 'obter_config("impressora_historico")' in source
-    assert 'obter_config("impressora_recibo")' not in source
-    assert "threading.Thread" in source
+def test_closing_receipt_uses_standard_preview_before_any_physical_print():
+    source = method_source("_abrir_preview_fechamento_caixa")
+    assert "janela_preview_documento(" in source
+    assert 'categoria="fechamento"' in source
+    assert ".print_text(" not in source
+    assert "threading.Thread" not in source
     text = method_source("_texto_comprovante_fechamento_caixa")
     for field in ("FECHAMENTO DE CAIXA", "Saldo inicial", "Vendas dinheiro", "Recebimentos dinheiro", "Suprimentos", "Sangrias", "Dinheiro esperado", "PIX", "Cartão", "Valor contado", "Diferença"):
         assert field in text
@@ -99,104 +107,44 @@ def test_runtime_document_sources_have_no_livraria_nabi_variation():
         assert "livraria nabi" not in path.read_text(encoding="utf-8").casefold(), path
 
 
-def test_closing_print_dispatch_has_duplicate_guard_and_single_job_contract():
-    source = method_source("_imprimir_comprovante_fechamento_caixa")
-    assert "_cash_print_dispatch_lock" in source
-    assert "_cash_prints_in_progress" in source
-    assert "CASH_CLOSE_PRINT_REENTRY_BLOCKED" in source
+def test_closing_confirmation_has_single_submit_and_preview_is_separate():
+    source = method_source("_abrir_preview_fechamento_caixa")
+    assert "janela_preview_documento(" in source
+    assert "print_text(" not in source
     closing = method_source("_abrir_fechamento_sessao")
     assert 'closing["submitting"]' in closing
     assert 'confirm_button.configure(state="disabled"' in closing
 
 
-def test_two_concurrent_dispatch_attempts_for_same_closing_create_only_one_mock_job():
-    calls = []
-    pending = []
-
-    class DeferredThread:
-        def __init__(self, *, target, **_kwargs):
-            self.target = target
-
-        def start(self):
-            pending.append(self.target)
-
-    class Printer:
-        def output_format(self, category):
-            assert category == "fechamento"
-            return "A4"
-
-        def print_text(self, text, **kwargs):
-            calls.append((text, kwargs))
-            return "IMPRESSORA MOCK"
-
+def test_opening_closing_preview_does_not_dispatch_mock_printer():
+    previews = []
     class App:
         _texto_comprovante_fechamento_caixa = staticmethod(lambda _session, _resumo: "NABICODE\nFECHAMENTO DE CAIXA\n")
-        _servico_impressao = lambda self: Printer()
-        after = lambda self, _delay, callback: callback()
-        mostrar_notificacao = lambda self, *_args, **_kwargs: None
+        janela_preview_documento = lambda self, text, **kwargs: previews.append((text, kwargs)) or "PREVIEW"
 
-    namespace = {
-        "threading": SimpleNamespace(Lock=threading.Lock, Thread=DeferredThread),
-        "obter_config": lambda key: "IMPRESSORA FECHAMENTO" if key == "impressora_historico" else "",
-        "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
-    }
-    exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
-    app = App()
-    session = SimpleNamespace(id=19)
-    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
-    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is False
-    assert len(pending) == 1
-    pending.pop()()
-    assert len(calls) == 1
-    assert calls[0][0].count("NABICODE") == 1
-    assert calls[0][0].count("FECHAMENTO DE CAIXA") == 1
-    assert calls[0][1]["printer"] == "IMPRESSORA FECHAMENTO"
-    assert calls[0][1]["output_format"] == "A4"
+    namespace = {}
+    exec(textwrap.dedent(method_source("_abrir_preview_fechamento_caixa")), namespace)
+    app, session = App(), SimpleNamespace(id=19)
+    assert namespace["_abrir_preview_fechamento_caixa"](app, session, {}) == "PREVIEW"
+    assert len(previews) == 1
+    assert previews[0][1]["categoria"] == "fechamento"
+    assert previews[0][0].count("FECHAMENTO DE CAIXA") == 1
 
 
 def test_closing_is_persisted_without_automatic_print_and_offers_explicit_actions():
     closing = method_source("_abrir_fechamento_sessao")
     actions = method_source("_abrir_acoes_fechamento_caixa")
-    assert "_imprimir_comprovante_fechamento_caixa" not in closing
+    assert "_abrir_preview_fechamento_caixa" not in closing
     assert "_abrir_acoes_fechamento_caixa(closed_session, resumo)" in closing
-    assert 'text="Imprimir Fechamento"' in actions
+    assert 'text="Visualizar / Imprimir"' in actions
     assert 'text="Voltar"' in actions
-    assert "_cash_printing" in actions
+    assert "_abrir_preview_fechamento_caixa(session, resumo)" in actions
 
 
-def test_failed_job_releases_guard_and_retry_creates_one_new_job():
-    attempts = []
-
-    class ImmediateThread:
-        def __init__(self, *, target, **_kwargs): self.target = target
-        def start(self): self.target()
-
-    class Printer:
-        def output_format(self, category):
-            assert category == "fechamento"
-            return "A4"
-
-        def print_text(self, _text, **_kwargs):
-            attempts.append(1)
-            if len(attempts) == 1: raise RuntimeError("mock")
-            return "IMPRESSORA MOCK"
-
-    class App:
-        _texto_comprovante_fechamento_caixa = staticmethod(lambda *_: "NABICODE\nFECHAMENTO DE CAIXA\n")
-        _servico_impressao = lambda self: Printer()
-        after = lambda self, _delay, callback: callback()
-        mostrar_notificacao = lambda self, *_args, **_kwargs: None
-
-    namespace = {
-        "threading": SimpleNamespace(Lock=threading.Lock, Thread=ImmediateThread),
-        "obter_config": lambda _key: "Padrão do Sistema",
-        "logger": SimpleNamespace(exception=lambda *_a, **_k: None, warning=lambda *_a, **_k: None),
-    }
-    exec(textwrap.dedent(method_source("_imprimir_comprovante_fechamento_caixa")), namespace)
-    app, session = App(), SimpleNamespace(id=20)
-    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
-    assert namespace["_imprimir_comprovante_fechamento_caixa"](app, session, {}) is True
-    assert len(attempts) == 2
+def test_standard_preview_uses_closing_printer_configuration_without_dispatch():
+    preview = method_source("janela_preview_documento")
+    assert '"impressora_historico" if categoria == "fechamento"' in preview
+    assert "print_text(" not in method_source("_abrir_preview_fechamento_caixa")
 
 
 def test_close_modal_has_required_timing_markers_and_no_print_on_creation():

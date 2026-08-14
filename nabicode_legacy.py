@@ -689,7 +689,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         report_service=REPORT_SERVICE,
     )
     def __init__(self):
-        super().__init__()
+        super().__init__(fg_color="#0d1117")
         self._main_window_ready = False
         self._startup_reveal_complete = False
         self._license_dialog_active = False
@@ -856,6 +856,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         # Redesenho com debounce ao restaurar/maximizar evita piscadas e artefatos visuais.
         self._redimensionamento_after = None
+        self._redimensionamento_tamanho = None
         self.bind("<Configure>", self._agendar_redesenho_interface, add="+")
         self.bind("<Map>", self._agendar_redesenho_interface, add="+")
         self.after(900, self._executar_backup_diario_automatico)
@@ -1102,6 +1103,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _agendar_redesenho_interface(self, event=None):
         if event is not None and event.widget is not self:
             return
+        size = (max(1, self.winfo_width()), max(1, self.winfo_height()))
+        if not self._startup_reveal_complete:
+            self._redimensionamento_tamanho = size
+            return
+        if size == self._redimensionamento_tamanho:
+            return
+        self._redimensionamento_tamanho = size
         if self._redimensionamento_after is not None:
             try:
                 self.after_cancel(self._redimensionamento_after)
@@ -2435,8 +2443,34 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             loading.destroy()
             ctk.CTkLabel(shell, text="FECHAMENTO DE CAIXA", font=ctk.CTkFont(size=22, weight="bold"), text_color="#388bfd").pack(anchor="w", padx=32, pady=(26, 12))
-            detail = f"Saldo inicial: R$ {session.opening_balance:.2f}\nVendas em dinheiro: R$ {resumo['dinheiro']:.2f}\nRecebimentos em dinheiro: R$ {resumo['recebimentos_dinheiro']:.2f}\nSuprimentos: R$ {resumo['suprimentos']:.2f}\nSangrias: -R$ {resumo['sangrias']:.2f}\n\nDINHEIRO ESPERADO: R$ {resumo['expected_cash']:.2f}\n\nPIX: R$ {resumo['pix']:.2f}   •   CARTÃO: R$ {resumo['cartao']:.2f}   •   OUTROS ELETRÔNICOS: R$ {resumo['outros'] + resumo['recebimentos_eletronicos']:.2f}"
-            ctk.CTkLabel(shell, text=detail, justify="left", anchor="w", font=ctk.CTkFont(size=14), fg_color="#161b22", corner_radius=12).pack(fill="x", padx=32, pady=8, ipady=14)
+            def metric_card(parent, row, column, title, amount, color="#f0f6fc"):
+                card = ctk.CTkFrame(parent, fg_color="#161b22", corner_radius=11, border_width=1, border_color="#30363d")
+                card.grid(row=row, column=column, sticky="nsew", padx=4, pady=4)
+                ctk.CTkLabel(card, text=title, font=ctk.CTkFont(size=11, weight="bold"), text_color="#8b949e").pack(anchor="w", padx=12, pady=(10, 1))
+                ctk.CTkLabel(card, text=f"R$ {amount:.2f}", font=ctk.CTkFont(size=18, weight="bold"), text_color=color).pack(anchor="w", padx=12, pady=(0, 10))
+            ctk.CTkLabel(shell, text="DINHEIRO FÍSICO", font=ctk.CTkFont(size=12, weight="bold"), text_color="#8b949e").pack(anchor="w", padx=32, pady=(2, 3))
+            cash_cards = ctk.CTkFrame(shell, fg_color="transparent"); cash_cards.pack(fill="x", padx=28)
+            for column in range(3): cash_cards.grid_columnconfigure(column, weight=1, uniform="closing_cash")
+            cash_metrics = (
+                ("SALDO INICIAL", session.opening_balance, "#c9d1d9"),
+                ("VENDAS", resumo["dinheiro"], "#58a6ff"),
+                ("RECEBIMENTOS", resumo["recebimentos_dinheiro"], "#58a6ff"),
+                ("SUPRIMENTOS", resumo["suprimentos"], "#3fb950"),
+                ("SANGRIAS", -resumo["sangrias"], "#ff6b6b"),
+                ("DINHEIRO ESPERADO", resumo["expected_cash"], "#00FF88"),
+            )
+            for index, (title, amount, color) in enumerate(cash_metrics):
+                metric_card(cash_cards, index // 3, index % 3, title, amount, color)
+            ctk.CTkLabel(shell, text="ELETRÔNICOS", font=ctk.CTkFont(size=12, weight="bold"), text_color="#8b949e").pack(anchor="w", padx=32, pady=(10, 3))
+            electronic_cards = ctk.CTkFrame(shell, fg_color="transparent"); electronic_cards.pack(fill="x", padx=28)
+            for column in range(3): electronic_cards.grid_columnconfigure(column, weight=1, uniform="closing_electronic")
+            electronic_metrics = (
+                ("PIX", resumo["pix"], "#a371f7"),
+                ("CARTÃO", resumo["cartao"], "#f0b429"),
+                ("OUTROS", resumo["outros"] + resumo["recebimentos_eletronicos"], "#79c0ff"),
+            )
+            for column, (title, amount, color) in enumerate(electronic_metrics):
+                metric_card(electronic_cards, 0, column, title, amount, color)
             ctk.CTkLabel(shell, text="VALOR CONTADO", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=32, pady=(12, 3))
             counted = ctk.CTkEntry(shell, placeholder_text="R$ 0,00", height=44); counted.pack(fill="x", padx=32)
             result = ctk.CTkLabel(shell, text="Informe o valor contado", font=ctk.CTkFont(size=18, weight="bold"), text_color="#8b949e"); result.pack(anchor="w", padx=32, pady=12)
@@ -2486,17 +2520,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         buttons = ctk.CTkFrame(shell, fg_color="transparent"); buttons.pack(fill="x", padx=25, pady=24)
         def close(_event=None): self._fechar_modal_caixa(win)
         def print_closing():
-            if getattr(print_button, "_cash_printing", False): return
-            print_button._cash_printing = True
-            print_button.configure(state="disabled", text="Imprimindo...")
-            status.configure(text="Enviando um trabalho para a impressora...")
-            def finished(ok, message):
-                print_button._cash_printing = False
-                print_button.configure(state="normal", text="Imprimir Fechamento")
-                status.configure(text=message, text_color="#00FF88" if ok else "#ff6b6b")
-            if not self._imprimir_comprovante_fechamento_caixa(session, resumo, on_complete=finished):
-                finished(False, "Já existe uma impressão deste fechamento em andamento.")
-        print_button = ctk.CTkButton(buttons, text="Imprimir Fechamento", fg_color="#1f6feb", command=print_closing); print_button.pack(side="right", padx=5)
+            self._abrir_preview_fechamento_caixa(session, resumo)
+            status.configure(text="Pré-visualização aberta. Nada foi impresso automaticamente.", text_color="#58a6ff")
+        print_button = ctk.CTkButton(buttons, text="Visualizar / Imprimir", fg_color="#1f6feb", command=print_closing); print_button.pack(side="right", padx=5)
         ctk.CTkButton(buttons, text="Voltar", fg_color="#30363d", command=close).pack(side="right", padx=5)
         win.bind("<Escape>", close); win.protocol("WM_DELETE_WINDOW", close)
         self._mostrar_modal_nabicode(win, print_button)
@@ -2525,54 +2551,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             f"Observação: {session.closing_note or '-'}\n",
         ))
 
-    def _imprimir_comprovante_fechamento_caixa(self, session, resumo, on_complete=None):
+    def _abrir_preview_fechamento_caixa(self, session, resumo):
         texto = self._texto_comprovante_fechamento_caixa(session, resumo)
-        servico_impressao = self._servico_impressao()
-        impressora = obter_config("impressora_historico") or "Padrão do Sistema"
-        formato = servico_impressao.output_format("fechamento")
-        lock = getattr(self, "_cash_print_dispatch_lock", None)
-        if lock is None:
-            lock = threading.Lock()
-            self._cash_print_dispatch_lock = lock
-        with lock:
-            dispatched = getattr(self, "_cash_prints_in_progress", None)
-            if dispatched is None:
-                dispatched = set()
-                self._cash_prints_in_progress = dispatched
-            dispatch_key = int(session.id)
-            if dispatch_key in dispatched:
-                logger.warning(
-                    "CASH_CLOSE_PRINT_REENTRY_BLOCKED session_id=%s", session.id
-                )
-                return False
-            dispatched.add(dispatch_key)
-        def worker():
-            ok = False
-            message = ""
-            try:
-                nome = servico_impressao.print_text(
-                    texto,
-                    output_format=formato,
-                    printer=impressora,
-                    title=f"Fechamento de caixa #{session.id}",
-                )
-            except Exception as exc:
-                logger.exception("Falha ao imprimir comprovante do fechamento de caixa")
-                message = f"A impressão falhou: {exc}"
-            else:
-                ok = True
-                message = f"Comprovante enviado para {nome}."
-            finally:
-                with lock:
-                    dispatched.discard(dispatch_key)
-                if on_complete is not None:
-                    self.after(0, lambda: on_complete(ok, message))
-                elif ok:
-                    self.after(0, lambda: self.mostrar_notificacao("Fechamento impresso", message, nivel="success"))
-                else:
-                    self.after(0, lambda: self.mostrar_notificacao("Fechamento salvo", message, nivel="warning"))
-        threading.Thread(target=worker, name=f"cash-closing-print-{session.id}", daemon=True).start()
-        return True
+        return self.janela_preview_documento(
+            texto,
+            categoria="fechamento",
+            titulo=f"Fechamento de caixa #{session.id}",
+            subtitulo="Pré-visualização do fechamento",
+        )
 
     def _detalhar_caixa_historico(self, _event=None):
         table = getattr(_event, "widget", None)
@@ -2621,10 +2607,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self._fechar_modal_caixa(win)
             self._garantir_janela_principal_visivel()
 
-        def encerrar_aplicacao():
+        def fechar_pergunta():
             self._janela_abertura_caixa = None
             self._fechar_modal_caixa(win)
-            self.destroy()
+            self._garantir_janela_principal_visivel()
 
         def informar_agora():
             fechar_apos_abertura()
@@ -2639,7 +2625,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             fechar_apos_abertura()
             self.atualizar_tela_caixa()
 
-        win.protocol("WM_DELETE_WINDOW", encerrar_aplicacao)
+        win.protocol("WM_DELETE_WINDOW", fechar_pergunta)
         ctk.CTkLabel(win, text="💵 Abertura de caixa", font=ctk.CTkFont(size=20, weight="bold"), text_color=self.cor_acento).pack(pady=(25,8))
         ctk.CTkLabel(win, text="Escolha como abrir o caixa deste terminal.", justify="center").pack(pady=8)
         frame=ctk.CTkFrame(win, fg_color="transparent"); frame.pack(fill="x", padx=30, pady=15)
@@ -7751,7 +7737,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     ):
         """Janela única de impressão: prévia textual, cupom 80 mm e PDF sob demanda."""
         perfil = self.formato_impressao(categoria)
-        chave_impressora = f"impressora_{categoria}"
+        chave_impressora = "impressora_historico" if categoria == "fechamento" else f"impressora_{categoria}"
         impressora = obter_config(chave_impressora) or "Padrão do Sistema"
 
         win = ctk.CTkToplevel(self)
@@ -7816,8 +7802,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 logger.exception("Falha ao salvar PDF sob demanda", exc_info=exc)
                 messagebox.showerror("PDF", f"Não foi possível salvar o PDF:\n{exc}", parent=win)
 
+        print_label = "Imprimir cupom 80 mm" if perfil == "Cupom 80 mm" else "Imprimir documento A4"
         ctk.CTkButton(
-            botoes, text="Imprimir cupom 80 mm", fg_color="#2ea043", height=44, command=imprimir
+            botoes, text=print_label, fg_color="#2ea043", height=44, command=imprimir
         ).pack(fill="x", pady=(0, 8))
         ctk.CTkButton(
             botoes, text="Salvar PDF (opcional)", fg_color="#8957e5", height=40, command=salvar_pdf

@@ -367,3 +367,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1068 testes e 22 subtestes aprovados;
 - estresse, desempenho, uso prolongado, dependências e empacotamento: 21 testes aprovados;
 - nenhuma impressora física foi utilizada.
+
+## Checkpoint 42.22 — fechamento legível e impressão confirmada
+
+- resumo do fechamento foi dividido em cartões de dinheiro físico e meios eletrônicos;
+- saldo, vendas, recebimentos, suprimentos, sangrias e valor esperado ganharam leitura individual;
+- ação de impressão do fechamento não envia mais trabalho diretamente ao Windows;
+- primeiro clique abre a pré-visualização padrão e exige nova ação explícita antes de imprimir;
+- configuração própria do fechamento continua usando a impressora de histórico, sem origem externa;
+- fechar pelo X a pergunta de abertura mantém a aplicação aberta e o Caixa fechado;
+- raiz nasce com superfície escura e o redesenho central ignora mudanças apenas de posição;
+- tentativas de pré-renderização que causaram sobreposição foram removidas integralmente;
+- glitch visual da transição splash para a interface permanece pendente de diagnóstico futuro;
+- suíte completa: 1071 testes e 22 subtestes aprovados;
+- nenhuma janela ou impressora física foi acionada na validação final automática.
