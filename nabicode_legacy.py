@@ -1502,18 +1502,40 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ),
         )
 
+        # Construir todos os módulos aqui bloqueava a inicialização por vários
+        # segundos e obrigava o Tk a renderizar telas que talvez nem fossem usadas.
+        # O roteador mantém uma única instância de cada tela e a cria no primeiro
+        # acesso. O dashboard continua imediato por ser o destino inicial habitual.
         self.telas = {}
-        self.telas["dashboard"] = self.tela_dashboard(self.container_telas)
-        self.telas["vendas"] = self.tela_vendas(self.container_telas)
-        self.telas["clientes"] = self.tela_clientes(self.container_telas)
-        self.telas["produtos"] = self.tela_produtos(self.container_telas)
-        self.telas["financeiro"] = self.tela_financeiro(self.container_telas)
-        self.telas["caixa"] = self.tela_caixa(self.container_telas)
-        self.telas["compras"] = self.tela_compras(self.container_telas)
-        self.telas["relatorios"] = self.tela_relatorios(self.container_telas)
-        self.telas["configs"] = self.tela_configs(self.container_telas)
-        for tela in self.telas.values():
-            self.background_manager.attach(tela)
+        self._fabricas_telas = {
+            "dashboard": self.tela_dashboard,
+            "clientes": self.tela_clientes,
+            "produtos": self.tela_produtos,
+            "financeiro": self.tela_financeiro,
+            "caixa": self.tela_caixa,
+            "compras": self.tela_compras,
+            "relatorios": self.tela_relatorios,
+            "configs": self.tela_configs,
+        }
+        self._garantir_tela_criada("dashboard")
+
+    def _garantir_tela_criada(self, nome):
+        tela = self.telas.get(nome)
+        if tela is not None:
+            return tela
+        fabrica = self._fabricas_telas.get(nome)
+        if fabrica is None:
+            raise KeyError(f"Tela desconhecida: {nome}")
+        inicio = perf_counter()
+        tela = fabrica(self.container_telas)
+        self.telas[nome] = tela
+        self.background_manager.attach(tela)
+        mark_startup(
+            "ui_screen_created",
+            screen=nome,
+            duration_ms=round((perf_counter() - inicio) * 1000, 2),
+        )
+        return tela
 
     def mostrar_tela(self, nome):
         if not self._autorizar("financeiro" if nome == "caixa" else nome, "view"):
@@ -1521,6 +1543,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if nome == "vendas":
             self.abrir_pdv_independente()
             return
+        self._garantir_tela_criada(nome)
         self._preparar_tela_para_exibicao(nome)
         for btn_nome, btn in self.botoes_topo.items():
             if btn_nome == nome:

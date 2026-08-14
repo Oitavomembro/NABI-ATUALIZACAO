@@ -381,3 +381,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - glitch visual da transição splash para a interface permanece pendente de diagnóstico futuro;
 - suíte completa: 1071 testes e 22 subtestes aprovados;
 - nenhuma janela ou impressora física foi acionada na validação final automática.
+
+## Checkpoint 42.23 — carregamento de telas sob demanda
+
+- medição do perfil TESTE confirmou cerca de 10 segundos bloqueados antes da criação da janela principal;
+- causa raiz removida do roteador central: clientes, produtos, financeiro, Caixa, compras, relatórios e configurações deixam de ser construídos antecipadamente;
+- somente o dashboard inicial é criado no startup; cada outro módulo é criado uma única vez, no primeiro acesso, e depois reutilizado;
+- cada criação passa a registrar tela e duração no diagnóstico de startup, permitindo localizar futuros gargalos sem suposições;
+- o carregamento ocorre antes da atualização e elevação da tela, preservando o contrato visual de navegação;
+- 15 testes focados aprovados;
+- suíte completa: 1072 testes e 22 subtestes aprovados;
+- perfil TESTE utilizado; nenhuma janela adicional ou impressora física foi acionada.

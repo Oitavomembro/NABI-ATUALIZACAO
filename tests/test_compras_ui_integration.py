@@ -20,7 +20,7 @@ class ComprasUIIntegrationTests(unittest.TestCase):
     def test_tela_compras_esta_integrada_ao_roteamento(self) -> None:
         self.assertIn("tela_compras", self.methods)
         self.assertIn("carregar_compras", self.methods)
-        self.assertIn('self.telas["compras"] = self.tela_compras', self.source)
+        self.assertIn('"compras": self.tela_compras', self.source)
         self.assertIn('elif nome == "compras":', self.source)
 
     def test_tela_compras_tem_layout_universal_e_acoes_reais(self) -> None:

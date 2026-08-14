@@ -11,7 +11,7 @@ class FinanceiroUIIntegrationTests(unittest.TestCase):
         cls.methods = {node.name for node in ast.walk(cls.tree) if isinstance(node, ast.FunctionDef)}
 
     def test_tela_financeiro_esta_registrada(self):
-        self.assertIn('self.telas["financeiro"] = self.tela_financeiro', self.source)
+        self.assertIn('"financeiro": self.tela_financeiro', self.source)
         self.assertIn('self.botoes_topo["financeiro"]', self.source)
 
     def test_operacoes_financeiras_expostas(self):

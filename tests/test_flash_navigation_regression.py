@@ -91,9 +91,20 @@ def test_pdv_does_not_maximize_or_map_during_construction():
 
 def test_regular_navigation_prepares_before_raise_without_removal():
     source = _method_source("mostrar_tela")
+    assert source.index("self._garantir_tela_criada(nome)") < source.index("self._preparar_tela_para_exibicao(nome)")
     assert source.index("self._preparar_tela_para_exibicao(nome)") < source.index("self.telas[nome].tkraise()")
     for forbidden in ("destroy(", "pack_forget(", "grid_forget(", "grid_remove(", "place_forget("):
         assert forbidden not in source
+
+
+def test_main_screens_are_created_once_and_only_when_requested():
+    creation = _method_source("criar_telas")
+    ensure = _method_source("_garantir_tela_criada")
+    assert 'self._garantir_tela_criada("dashboard")' in creation
+    assert "self.tela_clientes(self.container_telas)" not in creation
+    assert "self.tela_produtos(self.container_telas)" not in creation
+    assert "tela = self.telas.get(nome)" in ensure
+    assert "self.telas[nome] = tela" in ensure
 
 
 def test_histories_follow_hidden_build_contract():

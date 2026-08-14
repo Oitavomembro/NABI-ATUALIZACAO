@@ -52,3 +52,4 @@ wheelhouse/
 AppData/NabiCode/
 
 work/
+.codex-test-temp/

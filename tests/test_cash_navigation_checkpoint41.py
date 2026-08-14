@@ -23,7 +23,7 @@ def test_main_navigation_registers_button_and_screen():
     }
     assert "tela_caixa" in methods
     assert 'self.botoes_topo["caixa"] = btn_caixa' in source
-    assert 'self.telas["caixa"] = self.tela_caixa(self.container_telas)' in source
+    assert '"caixa": self.tela_caixa' in source
     assert "ordem = UIPreferencesService.MODULE_ORDER" in source
 
 
