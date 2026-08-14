@@ -645,6 +645,18 @@ def initialize_database(
             detalhes TEXT
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS migracao_nabimig_ids (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_system TEXT NOT NULL,
+            entity TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            target_table TEXT NOT NULL,
+            target_id INTEGER NOT NULL,
+            UNIQUE(source_system, entity, source_id),
+            UNIQUE(target_table, target_id)
+        )
+    """)
     # Controle financeiro opcional e documentos emitidos
     cursor.execute("PRAGMA table_info(movimentacoes)")
     colunas_mov = [c[1] for c in cursor.fetchall()]

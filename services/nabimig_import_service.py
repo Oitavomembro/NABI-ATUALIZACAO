@@ -5,8 +5,9 @@ import json
 import zipfile
 from collections import Counter
 from dataclasses import dataclass
+from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 
 SUPPORTED_PROTOCOL = 1
@@ -46,6 +47,14 @@ class NabiMigImportPreview:
         return not self.errors
 
 
+@dataclass(frozen=True)
+class NabiMigImportResult:
+    backup: str
+    inserted: dict[str, int]
+    updated: dict[str, int]
+    package_sha256: str
+
+
 class NabiMigImportService:
     """Porta de entrada offline para pacotes .nabimig; não executa SQL arbitrário."""
 
@@ -71,6 +80,172 @@ class NabiMigImportService:
             warnings=tuple(warnings),
             errors=tuple(errors),
         )
+
+    def execute_catalog(
+        self,
+        package: str | Path,
+        *,
+        database_path: str | Path,
+        backup_dir: str | Path,
+        connect: Callable[[], Any],
+        backup_database: Callable[..., Any],
+        categories: tuple[str, ...] = ("customers", "suppliers", "products", "stock"),
+    ) -> NabiMigImportResult:
+        """Importa somente o catálogo seguro; financeiro exige status de origem."""
+        allowed = {"customers", "suppliers", "products", "stock"}
+        selected = tuple(dict.fromkeys(categories))
+        unknown = set(selected) - allowed
+        if unknown:
+            raise ValueError("Categorias ainda nao liberadas para escrita: " + ", ".join(sorted(unknown)))
+        preview = self.preview(package)
+        if not preview.ready:
+            raise ValueError("Pacote reprovado: " + "; ".join(preview.errors))
+        missing = set(selected) - set(preview.counts)
+        if missing:
+            raise ValueError("Categorias ausentes do pacote: " + ", ".join(sorted(missing)))
+
+        path = Path(package).expanduser().resolve()
+        with zipfile.ZipFile(path) as archive:
+            records, manifest = self._read_validated(archive)
+        source_system = str(manifest.get("source", {}).get("system") or "NABIMIG")
+        backup_path = Path(backup_dir).expanduser().resolve() / f"antes_nabimig_{datetime.now():%Y%m%d_%H%M%S_%f}.db"
+        backup_path.parent.mkdir(parents=True, exist_ok=True)
+        backup_database(database_path, backup_path)
+        if not backup_path.is_file() or backup_path.stat().st_size == 0:
+            raise RuntimeError("O backup obrigatorio nao foi criado; importacao cancelada.")
+
+        connection = connect()
+        inserted = Counter()
+        updated = Counter()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self._require_target_schema(connection)
+            target_ids: dict[str, dict[str, int]] = {}
+            if "customers" in selected:
+                target_ids["customers"] = self._import_customers(connection, records["customers"], source_system, inserted, updated)
+            if "suppliers" in selected:
+                target_ids["suppliers"] = self._import_suppliers(connection, records["suppliers"], source_system, inserted, updated)
+            if "products" in selected:
+                target_ids["products"] = self._import_products(connection, records["products"], source_system, inserted, updated)
+            if "stock" in selected:
+                product_ids = target_ids.get("products") or self._load_target_ids(connection, source_system, "products")
+                self._import_stock(connection, records["stock"], product_ids, source_system, inserted, updated)
+            violations = connection.execute("PRAGMA foreign_key_check").fetchall()
+            if violations:
+                raise RuntimeError(f"Integridade relacional invalida apos importacao: {violations[0]}")
+            connection.execute(
+                """INSERT INTO migracoes_execucoes
+                   (data,arquivo,hash_arquivo,clientes_importados,movimentacoes_importadas,saldo_total,status,detalhes)
+                   VALUES(?,?,?,?,?,?,?,?)""",
+                (datetime.now().strftime("%d/%m/%Y %H:%M:%S"), str(path), preview.package_sha256,
+                 inserted["customers"] + updated["customers"], 0, 0, "SUCESSO",
+                 "NABIMIG catalogo: " + ",".join(selected)),
+            )
+            connection.commit()
+            return NabiMigImportResult(str(backup_path), dict(inserted), dict(updated), preview.package_sha256)
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    @staticmethod
+    def _require_target_schema(connection: Any) -> None:
+        required = {"clientes", "fornecedores", "produtos", "estoque_movimentacoes", "migracoes_execucoes", "migracao_nabimig_ids"}
+        available = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
+        missing = required - available
+        if missing:
+            raise RuntimeError("Banco NabiCode incompativel: " + ", ".join(sorted(missing)))
+
+    @staticmethod
+    def _mapping(connection: Any, source_system: str, entity: str, source_id: str) -> int | None:
+        row = connection.execute(
+            "SELECT target_id FROM migracao_nabimig_ids WHERE source_system=? AND entity=? AND source_id=?",
+            (source_system, entity, source_id),
+        ).fetchone()
+        return int(row[0]) if row else None
+
+    @staticmethod
+    def _save_mapping(connection: Any, source_system: str, entity: str, source_id: str, table: str, target_id: int) -> None:
+        connection.execute(
+            """INSERT INTO migracao_nabimig_ids(source_system,entity,source_id,target_table,target_id)
+               VALUES(?,?,?,?,?)""", (source_system, entity, source_id, table, target_id),
+        )
+
+    def _load_target_ids(self, connection: Any, source_system: str, entity: str) -> dict[str, int]:
+        return {str(row[0]): int(row[1]) for row in connection.execute(
+            "SELECT source_id,target_id FROM migracao_nabimig_ids WHERE source_system=? AND entity=?",
+            (source_system, entity),
+        )}
+
+    def _import_customers(self, connection: Any, rows: list[dict[str, Any]], source_system: str, inserted: Counter, updated: Counter) -> dict[str, int]:
+        result = {}
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            target = self._mapping(connection, source_system, "customers", sid)
+            values = (str(data.get("name") or "").strip(), str(data.get("document") or ""), str(data.get("phone") or ""), source_system)
+            if target is None:
+                code = f"HOST:{sid}"
+                connection.execute("INSERT INTO clientes(codigo,nome,cpf,telefone,origem_migracao,ficticio) VALUES(?,?,?,?,?,0)", (code,) + values)
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "customers", sid, "clientes", target)
+                inserted["customers"] += 1
+            else:
+                connection.execute("UPDATE clientes SET nome=?,cpf=?,telefone=?,origem_migracao=?,ficticio=0 WHERE id=?", values + (target,))
+                updated["customers"] += 1
+            result[sid] = target
+        return result
+
+    def _import_suppliers(self, connection: Any, rows: list[dict[str, Any]], source_system: str, inserted: Counter, updated: Counter) -> dict[str, int]:
+        result = {}; now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            target = self._mapping(connection, source_system, "suppliers", sid)
+            name = str(data.get("name") or "").strip() or f"Fornecedor migrado HOST-{sid}"
+            if target is None:
+                candidate = name
+                if connection.execute("SELECT 1 FROM fornecedores WHERE nome_fantasia=? COLLATE NOCASE", (candidate,)).fetchone():
+                    candidate = f"{name} (HOST-{sid})"
+                connection.execute("""INSERT INTO fornecedores(razao_social,nome_fantasia,cnpj,telefone,email,ativo,criado_em,atualizado_em)
+                    VALUES(?,?,?,?,?,1,?,?)""", (name, candidate, str(data.get("document") or ""), str(data.get("phone") or ""), str(data.get("email") or ""), now, now))
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "suppliers", sid, "fornecedores", target); inserted["suppliers"] += 1
+            else:
+                connection.execute("UPDATE fornecedores SET razao_social=?,cnpj=?,telefone=?,email=?,atualizado_em=? WHERE id=?", (name, str(data.get("document") or ""), str(data.get("phone") or ""), str(data.get("email") or ""), now, target)); updated["suppliers"] += 1
+            result[sid] = target
+        return result
+
+    def _import_products(self, connection: Any, rows: list[dict[str, Any]], source_system: str, inserted: Counter, updated: Counter) -> dict[str, int]:
+        result = {}; now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            target = self._mapping(connection, source_system, "products", sid)
+            values = (str(data.get("name") or "").strip(), float(data.get("sale_price") or 0), float(data.get("cost_price") or 0), now)
+            if target is None:
+                connection.execute("""INSERT INTO produtos(codigo,nome,preco_venda,preco_custo,tipo_produto,controla_estoque,participa_xml,ativo,criado_em,atualizado_em)
+                    VALUES(?,?,?,?, 'MERCADORIA',1,1,1,?,?)""", (f"HOST:{sid}", values[0], values[1], values[2], now, now))
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "products", sid, "produtos", target); inserted["products"] += 1
+            else:
+                connection.execute("UPDATE produtos SET nome=?,preco_venda=?,preco_custo=?,atualizado_em=? WHERE id=?", values + (target,)); updated["products"] += 1
+            result[sid] = target
+        return result
+
+    @staticmethod
+    def _import_stock(connection: Any, rows: list[dict[str, Any]], product_ids: dict[str, int], source_system: str, inserted: Counter, updated: Counter) -> None:
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            product_id = product_ids[str(data["product_id"])]
+            quantity = float(data.get("quantity") or 0)
+            previous = float(connection.execute("SELECT COALESCE(estoque_atual,0) FROM produtos WHERE id=?", (product_id,)).fetchone()[0])
+            connection.execute("UPDATE produtos SET estoque_atual=? WHERE id=?", (quantity, product_id))
+            existing = connection.execute("SELECT id FROM estoque_movimentacoes WHERE origem=? AND origem_id=? AND produto_id=?", (source_system, sid, product_id)).fetchone()
+            if existing:
+                connection.execute("UPDATE estoque_movimentacoes SET quantidade=?,saldo_anterior=?,saldo_atual=?,data=? WHERE id=?", (quantity - previous, previous, quantity, now, existing[0])); updated["stock"] += 1
+            else:
+                connection.execute("""INSERT INTO estoque_movimentacoes(produto_id,tipo,quantidade,saldo_anterior,saldo_atual,origem,origem_id,motivo,usuario,data)
+                    VALUES(?,'AJUSTE',?,?,?,?,?,'Estoque inicial migrado','Migracao',?)""", (product_id, quantity - previous, previous, quantity, source_system, sid, now)); inserted["stock"] += 1
 
     def _read_validated(self, archive: zipfile.ZipFile) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
         listed = archive.namelist()
