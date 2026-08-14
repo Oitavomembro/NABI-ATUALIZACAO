@@ -429,3 +429,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - atualizador existente preserva validação de hashes, snapshot, backup, reinício, diagnóstico e rollback;
 - gerador de pacote encontra `build_output/dist` e cria ZIP em `build_output/updates`, sem executar Inno Setup;
 - conversor e migração `.nabimig` não foram alterados por esta frente.
+
+## Checkpoint 42.27 — importador `.nabimig` integrado à Migração existente
+
+- a Migração Fase 2 foi preservada integralmente e passou a compartilhar uma área rolável com a nova seção `.nabimig`;
+- seleção, validação, contagens, origem, SHA-256, avisos e categorias ficam visíveis antes de qualquer escrita;
+- seleção parcial inclui automaticamente Clientes/Produtos/Vendas exigidos pelas dependências;
+- backup obrigatório, cancelamento antes da transação, `BEGIN IMMEDIATE`, rollback e `foreign_key_check` permanecem centralizados no serviço oficial;
+- clientes demonstrativos são identificados somente por `ficticio=1`; demos sem vínculo podem ser removidos e os vinculados são preservados e relatados;
+- relatório técnico final não inclui documentos, telefones ou dados pessoais;
+- pacote real R6 validado duas vezes em banco temporário: 87 clientes, 198 produtos, 12 fornecedores, 277 vendas, 317 itens e 32 contas abertas;
+- saldo aberto validado em R$ 10.171,00, sem duplicação, com dois backups e zero violações de chave estrangeira;
+- 21 testes focados aprovados e 1 teste opcional ignorado sem a variável do pacote real;
+- suíte completa: 1.099 testes, 22 subtestes e 1 teste opcional ignorado;
+- `compileall`, smoke de `main.py` e `git diff --check` aprovados; nenhum banco real, conversor ou impressora foi acessado.

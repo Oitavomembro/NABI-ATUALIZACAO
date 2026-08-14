@@ -53,9 +53,36 @@ class NabiMigImportResult:
     inserted: dict[str, int]
     updated: dict[str, int]
     package_sha256: str
+    selected_categories: tuple[str, ...] = ()
+    automatic_dependencies: tuple[str, ...] = ()
+    demo_customers_removed: int = 0
+    demo_customers_preserved: int = 0
+    open_balance: float = 0.0
+    foreign_key_check: str = "OK"
 
 
 class NabiMigImportService:
+    CATEGORY_DEPENDENCIES = {
+        "stock": ("products",),
+        "sales": ("customers",),
+        "sale_items": ("sales", "products"),
+        "credit_accounts": ("customers",),
+        "receipts": ("customers",),
+    }
+
+    @classmethod
+    def resolve_categories(cls, categories: tuple[str, ...]) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        requested = list(dict.fromkeys(categories))
+        selected = list(requested)
+        cursor = 0
+        while cursor < len(selected):
+            for dependency in cls.CATEGORY_DEPENDENCIES.get(selected[cursor], ()):
+                if dependency not in selected:
+                    selected.append(dependency)
+            cursor += 1
+        automatic = tuple(category for category in selected if category not in requested)
+        return tuple(selected), automatic
+
     """Porta de entrada offline para pacotes .nabimig; não executa SQL arbitrário."""
 
     @staticmethod
@@ -98,10 +125,12 @@ class NabiMigImportService:
         connect: Callable[[], Any],
         backup_database: Callable[..., Any],
         categories: tuple[str, ...] = ("customers", "suppliers", "products", "stock"),
+        remove_demo_customers: bool = False,
+        cancel_check: Callable[[], bool] | None = None,
     ) -> NabiMigImportResult:
         """Importa as categorias escolhidas numa única transação auditável."""
         allowed = {"customers", "suppliers", "products", "stock", "sales", "sale_items", "credit_accounts", "receipts"}
-        selected = tuple(dict.fromkeys(categories))
+        selected, automatic_dependencies = self.resolve_categories(categories)
         unknown = set(selected) - allowed
         if unknown:
             raise ValueError("Categorias ainda nao liberadas para escrita: " + ", ".join(sorted(unknown)))
@@ -121,13 +150,19 @@ class NabiMigImportService:
         backup_database(database_path, backup_path)
         if not backup_path.is_file() or backup_path.stat().st_size == 0:
             raise RuntimeError("O backup obrigatorio nao foi criado; importacao cancelada.")
+        if cancel_check is not None and cancel_check():
+            raise InterruptedError("Importacao cancelada antes da transacao.")
 
         connection = connect()
         inserted = Counter()
         updated = Counter()
+        demos_removed = 0
+        demos_preserved = 0
         try:
             connection.execute("BEGIN IMMEDIATE")
             self._require_target_schema(connection)
+            if remove_demo_customers:
+                demos_removed, demos_preserved = self._remove_unlinked_demo_customers(connection)
             target_ids: dict[str, dict[str, int]] = {}
             if "customers" in selected:
                 target_ids["customers"] = self._import_customers(connection, records["customers"], source_system, inserted, updated)
@@ -163,8 +198,13 @@ class NabiMigImportService:
                  self._imported_open_balance(connection, source_system), "SUCESSO",
                  "NABIMIG: " + ",".join(selected)),
             )
+            open_balance = self._imported_open_balance(connection, source_system)
             connection.commit()
-            return NabiMigImportResult(str(backup_path), dict(inserted), dict(updated), preview.package_sha256)
+            return NabiMigImportResult(
+                str(backup_path), dict(inserted), dict(updated), preview.package_sha256,
+                selected, automatic_dependencies, demos_removed, demos_preserved,
+                open_balance, "OK",
+            )
         except Exception:
             connection.rollback()
             raise
@@ -178,6 +218,38 @@ class NabiMigImportService:
         missing = required - available
         if missing:
             raise RuntimeError("Banco NabiCode incompativel: " + ", ".join(sorted(missing)))
+
+    @staticmethod
+    def _remove_unlinked_demo_customers(connection: Any) -> tuple[int, int]:
+        """Remove apenas demos comprovadamente sem vínculos; nunca usa nome/posição."""
+        demo_ids = [int(row[0]) for row in connection.execute("SELECT id FROM clientes WHERE ficticio=1")]
+        if not demo_ids:
+            return 0, 0
+        references: list[tuple[str, str]] = []
+        for (table_name,) in connection.execute("SELECT name FROM sqlite_master WHERE type='table'"):
+            if table_name.startswith("sqlite_") or table_name == "clientes":
+                continue
+            for foreign_key in connection.execute(f'PRAGMA foreign_key_list("{table_name}")'):
+                if str(foreign_key[2]).lower() == "clientes" and str(foreign_key[4]).lower() == "id":
+                    references.append((str(table_name), str(foreign_key[3])))
+        removed = preserved = 0
+        connection.execute("SAVEPOINT remover_clientes_demo")
+        try:
+            for customer_id in demo_ids:
+                linked = any(connection.execute(
+                    f'SELECT 1 FROM "{table}" WHERE "{column}"=? LIMIT 1', (customer_id,),
+                ).fetchone() for table, column in references)
+                if linked:
+                    preserved += 1
+                else:
+                    connection.execute("DELETE FROM clientes WHERE id=? AND ficticio=1", (customer_id,))
+                    removed += 1
+            connection.execute("RELEASE SAVEPOINT remover_clientes_demo")
+        except Exception:
+            connection.execute("ROLLBACK TO SAVEPOINT remover_clientes_demo")
+            connection.execute("RELEASE SAVEPOINT remover_clientes_demo")
+            raise
+        return removed, preserved
 
     @staticmethod
     def _mapping(connection: Any, source_system: str, entity: str, source_id: str) -> int | None:

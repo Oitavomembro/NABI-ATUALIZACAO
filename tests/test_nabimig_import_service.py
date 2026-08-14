@@ -169,6 +169,39 @@ class NabiMigImportServiceTests(unittest.TestCase):
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM migracao_nabimig_itens_venda").fetchone()[0], 1)
         connection.close()
 
+    def test_partial_selection_adds_required_dependencies(self):
+        selected, automatic = NabiMigImportService.resolve_categories(("sale_items",))
+        self.assertEqual(selected, ("sale_items", "sales", "products", "customers"))
+        self.assertEqual(automatic, ("sales", "products", "customers"))
+
+    def test_remove_demo_customers_only_removes_unlinked_fictitious_records(self):
+        target = self.create_target()
+        connection = sqlite3.connect(target)
+        connection.execute("INSERT INTO clientes(id,codigo,nome,ficticio) VALUES(90,'D1','Demo livre',1)")
+        connection.execute("INSERT INTO clientes(id,codigo,nome,ficticio) VALUES(91,'D2','Demo vinculado',1)")
+        connection.execute("INSERT INTO clientes(id,codigo,nome,ficticio) VALUES(92,'R1','Cliente real',0)")
+        connection.execute("INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor) VALUES(91,'TESTE','Vínculo',0)")
+        connection.commit()
+        removed, preserved = NabiMigImportService._remove_unlinked_demo_customers(connection)
+        connection.commit()
+        self.assertEqual((removed, preserved), (1, 1))
+        self.assertEqual(connection.execute("SELECT id FROM clientes ORDER BY id").fetchall(), [(91,), (92,)])
+        connection.close()
+
+    def test_cancel_after_backup_aborts_before_transaction(self):
+        build_package(self.path, self.catalog_records())
+        target = self.create_target()
+        with self.assertRaises(InterruptedError):
+            NabiMigImportService().execute_catalog(
+                self.path, database_path=target, backup_dir=Path(self.temp.name) / "backups",
+                connect=lambda: self.fail("a transação não deve começar"),
+                backup_database=lambda source, destination: shutil.copy2(source, destination),
+                cancel_check=lambda: True,
+            )
+        connection = sqlite3.connect(target)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM clientes").fetchone()[0], 0)
+        connection.close()
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -23,7 +23,7 @@ from core.scroll_utils import PercentScrollController
 from core.notifications import NotificationCenter
 from core.app_version import load_app_version
 from core.diagnostic_logging import configure_diagnostic_logging
-from database.sqlite_connection import backup_database
+from database.sqlite_connection import backup_database, open_connection
 from database.runtime_adapter import SQLiteRuntimeAdapter
 from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
@@ -34,6 +34,8 @@ from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
 from services.windows_file_opener import WindowsFileOpener, WindowsFileOpenError
+from services.nabimig_import_service import NabiMigImportService
+from services.nabimig_ui_service import CATEGORY_LABELS, final_report_text, preview_text
 from ui import (
     NabiTheme,
     BackgroundManager,
@@ -10093,9 +10095,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         # MIGRAÇÃO — FASE 1: análise e simulação sem gravação
         aba = abas.tab("Migração")
-        ctk.CTkLabel(aba, text="📦 Assistente de Migração — Fase 2", font=ctk.CTkFont(size=17, weight="bold"), text_color="#00FF88").pack(pady=(14, 4))
-        ctk.CTkLabel(aba, text="Analisa e importa clientes, saldo atual e somente as 12 últimas transações de cada cliente.", text_color="#c9d1d9").pack(pady=(0, 10))
-        frame_arq = ctk.CTkFrame(aba, fg_color="transparent"); frame_arq.pack(fill="x", padx=18, pady=4)
+        conteudo_mig = ctk.CTkScrollableFrame(aba, fg_color="transparent")
+        conteudo_mig.pack(fill="both", expand=True)
+        ctk.CTkLabel(conteudo_mig, text="📦 Assistente de Migração — Fase 2", font=ctk.CTkFont(size=17, weight="bold"), text_color="#00FF88").pack(pady=(14, 4))
+        ctk.CTkLabel(conteudo_mig, text="Analisa e importa clientes, saldo atual e somente as 12 últimas transações de cada cliente.", text_color="#c9d1d9").pack(pady=(0, 10))
+        frame_arq = ctk.CTkFrame(conteudo_mig, fg_color="transparent"); frame_arq.pack(fill="x", padx=18, pady=4)
         entrada_sql = ctk.CTkEntry(frame_arq, placeholder_text="Selecione o arquivo .sql do sistema antigo", height=38)
         entrada_sql.pack(side="left", fill="x", expand=True, padx=(0, 6))
         def escolher_sql():
@@ -10103,9 +10107,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if arq:
                 entrada_sql.delete(0, "end"); entrada_sql.insert(0, arq)
         ctk.CTkButton(frame_arq, text="Procurar...", width=110, command=escolher_sql).pack(side="right")
-        progresso_mig = ctk.CTkProgressBar(aba); progresso_mig.pack(fill="x", padx=18, pady=(8, 4)); progresso_mig.set(0)
-        status_mig = ctk.CTkLabel(aba, text="Aguardando arquivo.", text_color="#8b949e"); status_mig.pack(anchor="w", padx=18)
-        resultado_mig = ctk.CTkTextbox(aba, height=270, font=("Consolas", 11)); resultado_mig.pack(fill="both", expand=True, padx=18, pady=8)
+        progresso_mig = ctk.CTkProgressBar(conteudo_mig); progresso_mig.pack(fill="x", padx=18, pady=(8, 4)); progresso_mig.set(0)
+        status_mig = ctk.CTkLabel(conteudo_mig, text="Aguardando arquivo.", text_color="#8b949e"); status_mig.pack(anchor="w", padx=18)
+        resultado_mig = ctk.CTkTextbox(conteudo_mig, height=210, font=("Consolas", 11)); resultado_mig.pack(fill="x", padx=18, pady=8)
         resultado_mig.insert("end", "Nenhuma análise executada.\n")
         self.ultimo_relatorio_migracao = None
         self.dados_migracao_fase2 = None
@@ -10189,11 +10193,216 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 registrar_log_mig(dados["arquivo"], "IMPORTAÇÃO FASE 2", "ERRO", str(exc))
                 messagebox.showerror("Migração", f"A importação falhou e nenhum dado parcial foi mantido:\n{exc}", parent=janela)
 
-        frame_botoes_mig = ctk.CTkFrame(aba, fg_color="transparent"); frame_botoes_mig.pack(fill="x", padx=14, pady=(0, 10))
+        frame_botoes_mig = ctk.CTkFrame(conteudo_mig, fg_color="transparent"); frame_botoes_mig.pack(fill="x", padx=14, pady=(0, 10))
         ctk.CTkButton(frame_botoes_mig, text="🔎 Analisar", command=analisar_sql_ui, fg_color="#2ea043", height=40).pack(side="left", expand=True, fill="x", padx=4)
         ctk.CTkButton(frame_botoes_mig, text="🧮 Preparar Fase 2", command=preparar_fase2_ui, fg_color="#1f6feb", height=40).pack(side="left", expand=True, fill="x", padx=4)
         ctk.CTkButton(frame_botoes_mig, text="⬇ Importar Fase 2", command=importar_fase2_ui, fg_color="#8957e5", height=40).pack(side="left", expand=True, fill="x", padx=4)
         ctk.CTkButton(frame_botoes_mig, text="💾 Relatório", command=salvar_relatorio_mig, fg_color="#30363d", height=40).pack(side="left", expand=True, fill="x", padx=4)
+
+        # Pacotes do conversor usam o mesmo destino, sem substituir a Migração Fase 2.
+        separador_nabimig = ctk.CTkFrame(conteudo_mig, fg_color="#21262d")
+        separador_nabimig.pack(fill="x", padx=18, pady=(18, 8))
+        ctk.CTkLabel(
+            separador_nabimig,
+            text="IMPORTAR PACOTE DO CONVERSOR NABICODE (.nabimig)",
+            font=ctk.CTkFont(size=16, weight="bold"), text_color="#58a6ff",
+        ).pack(anchor="w", padx=14, pady=(12, 3))
+        ctk.CTkLabel(
+            separador_nabimig,
+            text="Validação completa, backup obrigatório e gravação em uma única transação.",
+            text_color="#c9d1d9",
+        ).pack(anchor="w", padx=14, pady=(0, 10))
+
+        servico_nabimig = NabiMigImportService()
+        estado_nabimig = {"preview": None, "cancelar": False, "relatorio": ""}
+        caminho_nabimig = tk.StringVar(value="")
+        modo_nabimig = tk.StringVar(value="tudo")
+        remover_demos_nabimig = tk.BooleanVar(value=True)
+        categorias_nabimig = {category: tk.BooleanVar(value=True) for category in CATEGORY_LABELS}
+
+        frame_pacote = ctk.CTkFrame(conteudo_mig, fg_color="transparent")
+        frame_pacote.pack(fill="x", padx=18, pady=4)
+        entrada_nabimig = ctk.CTkEntry(frame_pacote, textvariable=caminho_nabimig, state="readonly", height=38)
+        entrada_nabimig.pack(side="left", fill="x", expand=True, padx=(0, 6))
+
+        def escolher_nabimig():
+            arquivo = filedialog.askopenfilename(
+                parent=janela, title="Selecionar pacote do conversor NabiCode",
+                filetypes=[("Pacote NabiCode", "*.nabimig")],
+            )
+            if arquivo:
+                caminho_nabimig.set(arquivo)
+                estado_nabimig.update(preview=None, relatorio="")
+                status_nabimig.configure(text="Pacote selecionado. Clique em Validar pacote.", text_color="#ffd700")
+                resultado_nabimig.delete("1.0", "end")
+                resultado_nabimig.insert("end", "Aguardando validação completa do pacote.\n")
+
+        ctk.CTkButton(frame_pacote, text="Selecionar pacote .nabimig", width=205, command=escolher_nabimig).pack(side="right")
+
+        controles_nabimig = ctk.CTkFrame(conteudo_mig, fg_color="transparent")
+        controles_nabimig.pack(fill="x", padx=18, pady=5)
+        ctk.CTkRadioButton(controles_nabimig, text="Importar tudo", variable=modo_nabimig, value="tudo").pack(side="left", padx=(0, 18))
+        ctk.CTkRadioButton(controles_nabimig, text="Somente categorias escolhidas", variable=modo_nabimig, value="parcial").pack(side="left")
+
+        frame_categorias = ctk.CTkFrame(conteudo_mig, fg_color="#161b22")
+        frame_categorias.pack(fill="x", padx=18, pady=5)
+        checks_nabimig = {}
+
+        def atualizar_dependencias_nabimig():
+            if modo_nabimig.get() == "tudo":
+                preview = estado_nabimig.get("preview")
+                disponiveis = set(preview.counts) if preview else set(CATEGORY_LABELS)
+                for category, variable in categorias_nabimig.items():
+                    variable.set(category in disponiveis)
+                dependencias_nabimig.configure(text="Todas as categorias disponíveis serão importadas.")
+                return
+            escolhidas = tuple(category for category, variable in categorias_nabimig.items() if variable.get())
+            completas, automaticas = servico_nabimig.resolve_categories(escolhidas)
+            for category in automaticas:
+                categorias_nabimig[category].set(True)
+            if automaticas:
+                nomes = ", ".join(CATEGORY_LABELS[item] for item in automaticas)
+                dependencias_nabimig.configure(text=f"Dependências incluídas automaticamente: {nomes}")
+            else:
+                dependencias_nabimig.configure(text="Nenhuma dependência adicional necessária.")
+
+        for indice, (category, label) in enumerate(CATEGORY_LABELS.items()):
+            check = ctk.CTkCheckBox(
+                frame_categorias, text=label, variable=categorias_nabimig[category],
+                command=lambda cat=category: (modo_nabimig.set("parcial"), atualizar_dependencias_nabimig()),
+            )
+            check.grid(row=indice // 2, column=indice % 2, sticky="w", padx=14, pady=6)
+            checks_nabimig[category] = check
+        frame_categorias.grid_columnconfigure((0, 1), weight=1)
+        dependencias_nabimig = ctk.CTkLabel(conteudo_mig, text="Todas as categorias disponíveis serão importadas.", text_color="#f0b429")
+        dependencias_nabimig.pack(anchor="w", padx=22, pady=(2, 7))
+
+        ctk.CTkRadioButton(
+            conteudo_mig, text="Remover clientes demonstrativos antes da importação (recomendado)",
+            variable=remover_demos_nabimig, value=True,
+        ).pack(anchor="w", padx=22, pady=3)
+        ctk.CTkRadioButton(
+            conteudo_mig, text="Preservar clientes demonstrativos",
+            variable=remover_demos_nabimig, value=False,
+        ).pack(anchor="w", padx=22, pady=3)
+
+        progresso_nabimig = ctk.CTkProgressBar(conteudo_mig)
+        progresso_nabimig.pack(fill="x", padx=18, pady=(10, 4)); progresso_nabimig.set(0)
+        status_nabimig = ctk.CTkLabel(conteudo_mig, text="Aguardando pacote .nabimig.", text_color="#8b949e")
+        status_nabimig.pack(anchor="w", padx=18)
+        resultado_nabimig = ctk.CTkTextbox(conteudo_mig, height=230, font=("Consolas", 11))
+        resultado_nabimig.pack(fill="x", padx=18, pady=8)
+        resultado_nabimig.insert("end", "Nenhum pacote validado.\n")
+
+        def validar_nabimig_ui():
+            caminho = caminho_nabimig.get().strip()
+            if not caminho:
+                messagebox.showwarning("Migração .nabimig", "Selecione um pacote .nabimig.", parent=janela); return
+            progresso_nabimig.set(0.1)
+            status_nabimig.configure(text="Validando estrutura, hashes, contagens e vínculos...", text_color="#ffd700")
+            botao_validar_nabimig.configure(state="disabled")
+
+            def concluir(preview):
+                estado_nabimig["preview"] = preview
+                botao_validar_nabimig.configure(state="normal")
+                progresso_nabimig.set(1)
+                resultado_nabimig.delete("1.0", "end"); resultado_nabimig.insert("end", preview_text(preview))
+                for category, check in checks_nabimig.items():
+                    check.configure(state="normal" if category in preview.counts else "disabled")
+                    categorias_nabimig[category].set(category in preview.counts)
+                atualizar_dependencias_nabimig()
+                status_nabimig.configure(
+                    text="Pacote aprovado e pronto para importar." if preview.ready else "Pacote reprovado. Corrija os erros antes de importar.",
+                    text_color="#00FF88" if preview.ready else "#ff6b6b",
+                )
+
+            def falhar(erro):
+                estado_nabimig["preview"] = None
+                botao_validar_nabimig.configure(state="normal")
+                progresso_nabimig.set(0)
+                status_nabimig.configure(text="Pacote reprovado.", text_color="#ff6b6b")
+                messagebox.showerror("Migração .nabimig", f"O pacote não passou na validação:\n{erro}", parent=janela)
+
+            executar_tarefa_ui("Validar pacote .nabimig", lambda ctx: servico_nabimig.preview(caminho), concluir, falhar)
+
+        def importar_nabimig_ui():
+            preview = estado_nabimig.get("preview")
+            if preview is None or not preview.ready:
+                messagebox.showwarning("Migração .nabimig", "Valide e aprove o pacote antes de importar.", parent=janela); return
+            if not Path(DB_NAME).is_file():
+                messagebox.showerror("Migração .nabimig", "O banco ativo não foi localizado. Nada foi alterado.", parent=janela); return
+            if modo_nabimig.get() == "tudo":
+                escolhidas = tuple(category for category in CATEGORY_LABELS if category in preview.counts)
+            else:
+                escolhidas = tuple(category for category, variable in categorias_nabimig.items() if variable.get())
+            completas, automaticas = servico_nabimig.resolve_categories(escolhidas)
+            if not escolhidas or set(completas) - set(preview.counts):
+                messagebox.showerror("Migração .nabimig", "A seleção não forma um conjunto consistente para este pacote.", parent=janela); return
+            resumo = ", ".join(CATEGORY_LABELS[item] for item in completas)
+            if not messagebox.askyesno(
+                "Confirmar importação .nabimig",
+                f"Categorias: {resumo}\n\nUm backup obrigatório será criado antes da gravação.\n"
+                f"Clientes demonstrativos: {'remover quando não houver vínculos' if remover_demos_nabimig.get() else 'preservar'}.\n\nContinuar?",
+                parent=janela,
+            ):
+                return
+            estado_nabimig["cancelar"] = False
+            remover_demos = bool(remover_demos_nabimig.get())
+            progresso_nabimig.set(0.2)
+            status_nabimig.configure(text="Criando backup consistente...", text_color="#ffd700")
+            botao_importar_nabimig.configure(state="disabled")
+            botao_cancelar_nabimig.configure(state="normal")
+
+            def trabalho(ctx):
+                return servico_nabimig.execute(
+                    preview.package, database_path=DB_NAME, backup_dir=Path(APP_DIR) / "backups",
+                    connect=lambda: open_connection(DB_NAME, network_mode=MODO_REDE, logger=logger),
+                    backup_database=lambda origem, destino: backup_database(
+                        origem, destino, timeout=60, network_mode=MODO_REDE, logger=logger,
+                    ),
+                    categories=escolhidas, remove_demo_customers=remover_demos,
+                    cancel_check=lambda: bool(estado_nabimig["cancelar"]),
+                )
+
+            def concluir(result):
+                botao_importar_nabimig.configure(state="normal"); botao_cancelar_nabimig.configure(state="disabled")
+                progresso_nabimig.set(1)
+                relatorio = final_report_text(
+                    preview, result, DB_NAME, demos_requested_for_removal=remover_demos,
+                )
+                estado_nabimig["relatorio"] = relatorio
+                resultado_nabimig.delete("1.0", "end"); resultado_nabimig.insert("end", relatorio)
+                status_nabimig.configure(text="Importação concluída e verificada.", text_color="#00FF88")
+                registrar_log_mig(preview.package, "IMPORTAÇÃO NABIMIG", "SUCESSO", relatorio)
+                self.carregar_clientes(); self.atualizar_resumo_lateral()
+                messagebox.showinfo("Migração .nabimig", f"Importação concluída.\nBackup: {result.backup}", parent=janela)
+
+            def falhar(erro):
+                botao_importar_nabimig.configure(state="normal"); botao_cancelar_nabimig.configure(state="disabled")
+                cancelado = "cancelada antes da transacao" in erro.lower()
+                status = "CANCELADO" if cancelado else "FALHA COM ROLLBACK"
+                progresso_nabimig.set(0)
+                status_nabimig.configure(text=status, text_color="#f0b429" if cancelado else "#ff6b6b")
+                resultado_nabimig.delete("1.0", "end"); resultado_nabimig.insert("end", f"Status: {status}\n{erro}\n")
+                registrar_log_mig(preview.package, "IMPORTAÇÃO NABIMIG", status, erro)
+                if not cancelado:
+                    messagebox.showerror("Migração .nabimig", f"A importação falhou e foi desfeita:\n{erro}", parent=janela)
+
+            executar_tarefa_ui("Importar pacote .nabimig", trabalho, concluir, falhar)
+
+        def cancelar_nabimig_ui():
+            estado_nabimig["cancelar"] = True
+            status_nabimig.configure(text="Cancelamento solicitado; será aplicado antes da transação.", text_color="#f0b429")
+            botao_cancelar_nabimig.configure(state="disabled")
+
+        frame_acoes_nabimig = ctk.CTkFrame(conteudo_mig, fg_color="transparent")
+        frame_acoes_nabimig.pack(fill="x", padx=14, pady=(0, 18))
+        botao_validar_nabimig = ctk.CTkButton(frame_acoes_nabimig, text="Validar pacote", command=validar_nabimig_ui, fg_color="#2ea043", height=40)
+        botao_validar_nabimig.pack(side="left", expand=True, fill="x", padx=4)
+        botao_importar_nabimig = ctk.CTkButton(frame_acoes_nabimig, text="Criar backup e importar", command=importar_nabimig_ui, fg_color="#8957e5", height=40)
+        botao_importar_nabimig.pack(side="left", expand=True, fill="x", padx=4)
+        botao_cancelar_nabimig = ctk.CTkButton(frame_acoes_nabimig, text="Cancelar", command=cancelar_nabimig_ui, fg_color="#da3633", state="disabled", height=40)
+        botao_cancelar_nabimig.pack(side="left", expand=True, fill="x", padx=4)
 
         # DEMONSTRAÇÃO
         aba = abas.tab("Demonstração")
