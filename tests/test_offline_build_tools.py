@@ -5,6 +5,7 @@ import os
 import runpy
 import sys
 import tempfile
+import zipfile
 from pathlib import Path
 
 from build_tools import build_windows
@@ -282,7 +283,9 @@ def test_installer_validation_uses_validated_onedir_as_input() -> None:
 
 def test_windows_build_path_guard_recommends_short_root() -> None:
     with tempfile.TemporaryDirectory() as temporary:
-        short = Path(temporary) / "NB" / "NabiCode"
+        # Não derive o caso curto do TEMP: em algumas instalações Windows o
+        # próprio caminho temporário já ultrapassa o limite conservador.
+        short = Path(r"C:\NB\NabiCode")
         long = Path(temporary) / ("projeto_muito_longo_" * 8)
         assert build_windows.validate_windows_build_path(short) == []
         errors = build_windows.validate_windows_build_path(long)
@@ -317,6 +320,33 @@ def test_cleanup_preserves_wheelhouse_and_build_venv() -> None:
         assert not (build_root / "installer").exists()
         assert (wheelhouse / "SHA256SUMS.txt").read_text(encoding="ascii") == "preserve"
         assert (build_venv / "marker.txt").read_text(encoding="ascii") == "preserve"
+
+
+def test_python_314_zipfs_tcl_tk_is_materialized_for_pyinstaller() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        python_root = root / "python"
+        tcl_root = python_root / "tcl"
+        tcl_root.mkdir(parents=True)
+        with zipfile.ZipFile(tcl_root / "libtcl9.0.zip", "w") as bundle:
+            bundle.writestr("tcl_library/init.tcl", "package provide Tcl 9.0")
+        with zipfile.ZipFile(tcl_root / "libtk9.0.zip", "w") as bundle:
+            bundle.writestr("tk_library/tk.tcl", "package provide Tk 9.0")
+
+        environment = build_windows.prepare_tcl_tk_build_environment(
+            python_root=python_root,
+            build_root=root / "build_output",
+        )
+
+        assert Path(environment["TCL_LIBRARY"], "init.tcl").is_file()
+        assert Path(environment["TK_LIBRARY"], "tk.tcl").is_file()
+
+
+def test_tcl_environment_restore_does_not_shadow_distribution_name() -> None:
+    source = Path(build_windows.__file__).read_text(encoding="utf-8")
+    build_source = source.split("def build_windows()", 1)[1].split("def find_iscc", 1)[0]
+    assert "distribution = dist_root / distribution_name_value" in build_source
+    assert "for environment_name, previous in previous_environment.items()" in build_source
 
 
 def test_inno_installer_is_offline_and_preserves_appdata() -> None:

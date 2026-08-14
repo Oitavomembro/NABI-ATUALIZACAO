@@ -2,7 +2,7 @@
 
 Checkpoints 25 e 26  
 Data: 08/08/2026  
-Status: **INFRAESTRUTURA APROVADA; ARTEFATO WINDOWS PENDENTE**
+Status: **ARTEFATO WINDOWS GERADO E VALIDADO**
 
 ## Estratégia escolhida
 
@@ -124,6 +124,18 @@ A tentativa de build neste Linux foi corretamente recusada com código 2 e mensa
 7. validar impressão RAW, corte, A4 e PDF;
 8. inspecionar dependência do VC Runtime;
 9. gerar e validar instalador Inno Setup.
+
+## Build Windows validado em 14/08/2026
+
+- Python 3.14.7 x64;
+- PyInstaller 6.21.0;
+- Inno Setup 6.7.3;
+- Tcl/Tk 9 materializado a partir dos arquivos zip oficiais do Python 3.14;
+- smoke empacotado aprovado em 1,33 segundo, sem abrir a interface;
+- suíte completa: 1074 testes e 22 subtestes aprovados;
+- instalador: `build_output/installer/NabiCode_2.5.1_Setup_Offline.exe`;
+- tamanho: 47.109.465 bytes;
+- SHA-256: `473ff004a2b4fb816195bd8937b124d9a1de0aad353d12be43e59bf632697fd7`.
 
 ## Arquivos alterados
 

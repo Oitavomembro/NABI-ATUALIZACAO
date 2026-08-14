@@ -392,3 +392,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 15 testes focados aprovados;
 - suíte completa: 1072 testes e 22 subtestes aprovados;
 - perfil TESTE utilizado; nenhuma janela adicional ou impressora física foi acionada.
+
+## Checkpoint 42.24 — base atual integrada ao instalador Windows
+
+- pipeline oficial executado no Windows com Python 3.14.7 e Inno Setup 6.7.3;
+- corrigida na fonte a coleta de Tcl/Tk 9 do Python 3.14, distribuído em arquivos zip e antes ausente do onedir;
+- ambiente Tcl/Tk é materializado somente durante o build e coletado pelo hook oficial do PyInstaller;
+- corrigido conflito de variável que fazia a validação procurar a distribuição em `TK_LIBRARY`;
+- smoke do executável aprovado em 1,33 segundo, com perfil PRODUCAO, versão 2.5.1 e splash canônica;
+- instalador offline gerado em `build_output/installer/NabiCode_2.5.1_Setup_Offline.exe`;
+- SHA-256: `473ff004a2b4fb816195bd8937b124d9a1de0aad353d12be43e59bf632697fd7`;
+- suíte completa no ambiente de build: 1074 testes e 22 subtestes aprovados;
+- instalador não foi executado e nenhuma impressora física foi utilizada.

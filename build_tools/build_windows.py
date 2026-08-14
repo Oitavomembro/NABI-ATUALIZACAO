@@ -10,6 +10,7 @@ import platform
 import shutil
 import subprocess
 import sys
+import zipfile
 from datetime import datetime, timezone
 from importlib import metadata
 from pathlib import Path
@@ -141,12 +142,60 @@ def clean_output(root: Path = BUILD_ROOT) -> None:
     if resolved.name != "build_output" or resolved.parent != PROJECT_ROOT.resolve():
         raise RuntimeError(f"Recusa de limpeza fora de build_output: {resolved}")
     resolved.mkdir(parents=True, exist_ok=True)
-    for name in ("dist", "work", "installer", "manifest.json", "SHA256SUMS.txt", "smoke_version.txt", "startup_packaged.json"):
+    for name in ("dist", "work", "installer", "tcl_tk_runtime", "manifest.json", "SHA256SUMS.txt", "smoke_version.txt", "startup_packaged.json"):
         target = resolved / name
         if target.is_dir():
             shutil.rmtree(target)
         elif target.exists():
             target.unlink()
+
+
+def prepare_tcl_tk_build_environment(
+    *, python_root: Path | None = None, build_root: Path = BUILD_ROOT
+) -> dict[str, str]:
+    """Materializa os scripts Tcl/Tk distribuídos em zip pelo Python 3.14.
+
+    O hook atual do PyInstaller espera diretórios físicos. Sem este passo o
+    executável onedir nasce sem ``_tcl_data``/``_tk_data`` e encerra antes de
+    executar ``main.py``.
+    """
+
+    root = (python_root or Path(sys.base_prefix)) / "tcl"
+    archives = {
+        "TCL_LIBRARY": (next(iter(sorted(root.glob("libtcl*.zip"))), None), "tcl_library"),
+        "TK_LIBRARY": (next(iter(sorted(root.glob("libtk*.zip"))), None), "tk_library"),
+    }
+    if not any(archive is not None for archive, _ in archives.values()):
+        return {}
+    if not all(archive is not None for archive, _ in archives.values()):
+        raise RuntimeError("Distribuição Python possui apenas parte dos arquivos Tcl/Tk.")
+
+    destination = build_root / "tcl_tk_runtime"
+    if destination.exists():
+        shutil.rmtree(destination)
+    destination.mkdir(parents=True)
+    environment: dict[str, str] = {}
+    for variable, (archive, member_root) in archives.items():
+        assert archive is not None
+        target = destination / member_root
+        with zipfile.ZipFile(archive) as bundle:
+            prefix = member_root + "/"
+            members = [item for item in bundle.infolist() if item.filename.startswith(prefix)]
+            if not members:
+                raise RuntimeError(f"Conteúdo {member_root} ausente em {archive.name}.")
+            for item in members:
+                relative = Path(item.filename).relative_to(member_root)
+                output = (target / relative).resolve()
+                if target.resolve() not in output.parents and output != target.resolve():
+                    raise RuntimeError(f"Caminho inseguro no arquivo {archive.name}: {item.filename}")
+                if item.is_dir():
+                    output.mkdir(parents=True, exist_ok=True)
+                else:
+                    output.parent.mkdir(parents=True, exist_ok=True)
+                    with bundle.open(item) as source, output.open("wb") as sink:
+                        shutil.copyfileobj(source, sink)
+        environment[variable] = str(target)
+    return environment
 
 
 def forbidden_distribution_files(root: Path) -> list[str]:
@@ -335,23 +384,33 @@ def build_windows() -> Path:
     if errors:
         raise RuntimeError("\n".join(errors))
     clean_output()
+    tcl_tk_environment = prepare_tcl_tk_build_environment()
     version = read_version()
-    name = distribution_name()
+    distribution_name_value = distribution_name()
     dist_root = BUILD_ROOT / "dist"
     work_root = BUILD_ROOT / "work"
-    run((
-        sys.executable,
-        "-m",
-        "PyInstaller",
-        "--noconfirm",
-        "--clean",
-        "--distpath",
-        str(dist_root),
-        "--workpath",
-        str(work_root),
-        str(SPEC_FILE),
-    ))
-    distribution = dist_root / name
+    previous_environment = {name: os.environ.get(name) for name in tcl_tk_environment}
+    os.environ.update(tcl_tk_environment)
+    try:
+        run((
+            sys.executable,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--clean",
+            "--distpath",
+            str(dist_root),
+            "--workpath",
+            str(work_root),
+            str(SPEC_FILE),
+        ))
+    finally:
+        for environment_name, previous in previous_environment.items():
+            if previous is None:
+                os.environ.pop(environment_name, None)
+            else:
+                os.environ[environment_name] = previous
+    distribution = dist_root / distribution_name_value
     dist_errors = validate_distribution(distribution, version=version)
     if dist_errors:
         raise RuntimeError("\n".join(dist_errors))
@@ -359,7 +418,7 @@ def build_windows() -> Path:
     startup_trace = BUILD_ROOT / "startup_packaged.json"
     environment = dict(os.environ, NABICODE_STARTUP_TRACE=str(startup_trace))
     completed = subprocess.run(
-        (str(distribution / f"{name}.exe"), "--startup-smoke-test", "--smoke-output", str(smoke_output)),
+        (str(distribution / f"{distribution_name_value}.exe"), "--startup-smoke-test", "--smoke-output", str(smoke_output)),
         cwd=distribution,
         env=environment,
         timeout=60,
