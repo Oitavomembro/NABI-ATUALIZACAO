@@ -28,6 +28,17 @@ class ReleasePackagingServiceTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "certificado.pfx"):
                 ReleasePackagingService.validate_tree(root)
 
+    def test_certifi_public_trust_store_is_accepted_but_other_pem_is_rejected(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            certifi = root / "_internal" / "certifi"
+            certifi.mkdir(parents=True)
+            (certifi / "cacert.pem").write_text("PUBLIC CA BUNDLE", encoding="ascii")
+            ReleasePackagingService.validate_tree(root)
+            (certifi / "private.pem").write_text("PRIVATE KEY", encoding="ascii")
+            with self.assertRaisesRegex(ValueError, "private.pem"):
+                ReleasePackagingService.validate_tree(root)
+
 
 if __name__ == "__main__":
     unittest.main()

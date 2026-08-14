@@ -443,3 +443,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 21 testes focados aprovados e 1 teste opcional ignorado sem a variável do pacote real;
 - suíte completa: 1.099 testes, 22 subtestes e 1 teste opcional ignorado;
 - `compileall`, smoke de `main.py` e `git diff --check` aprovados; nenhum banco real, conversor ou impressora foi acessado.
+
+## Checkpoint 42.28 / R7 TESTE — atualização incremental e instalador
+
+- revisão interna avançada de R6 para R7;
+- corrigida a execução direta do comando `build_windows.py update`, que não encontrava os controladores do projeto;
+- auditoria de segredos passou a permitir somente o arquivo público `_internal/certifi/cacert.pem`, mantendo chaves, certificados privados e bancos bloqueados;
+- 32 testes do atualizador e 23 testes do empacotamento aprovados nas validações focadas;
+- pacote incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R7.zip`;
+- SHA-256 do pacote incremental: `6CEDA9DCC2F7820E2C92706039BEF2E91E3B631BA12962FD94006398F66914B1`;
+- instalador alternativo: `build_output/installer/NabiCode_2.5.1_TESTE_R7_Setup.exe`;
+- SHA-256 do instalador: `00B9A0003D58760781AC3D7DFD3BA0DF90A12826D8C2444FA70DDFD535E757C1`;
+- smoke empacotado e validações do pipeline aprovados; instalador não foi executado.

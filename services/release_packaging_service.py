@@ -24,6 +24,11 @@ class ReleasePackagingService:
         "certificados", "certificates", "secrets",
     }
 
+    @staticmethod
+    def _is_public_dependency_trust_store(relative: Path) -> bool:
+        parts = tuple(part.casefold() for part in relative.parts)
+        return relative.name.casefold() == "cacert.pem" and "certifi" in parts[:-1]
+
     @classmethod
     def inspect_paths(cls, paths: Iterable[Path], *, root: Path) -> tuple[SensitivePackageFinding, ...]:
         findings: list[SensitivePackageFinding] = []
@@ -35,7 +40,9 @@ class ReleasePackagingService:
             name = relative.name.casefold()
             suffix = relative.suffix.casefold()
             reason = ""
-            if name in cls.BLOCKED_NAMES or suffix in cls.BLOCKED_SUFFIXES:
+            if cls._is_public_dependency_trust_store(relative):
+                reason = ""
+            elif name in cls.BLOCKED_NAMES or suffix in cls.BLOCKED_SUFFIXES:
                 reason = "extensão ou nome sensível"
             elif parts & cls.BLOCKED_DIRS:
                 reason = "diretório de dados ou backup"
