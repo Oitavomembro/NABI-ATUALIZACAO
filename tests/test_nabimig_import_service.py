@@ -80,12 +80,15 @@ class NabiMigImportServiceTests(unittest.TestCase):
         connection = sqlite3.connect(target)
         connection.executescript("""
             PRAGMA foreign_keys=ON;
-            CREATE TABLE clientes(id INTEGER PRIMARY KEY, codigo TEXT UNIQUE, nome TEXT, cpf TEXT, telefone TEXT, origem_migracao TEXT, ficticio INTEGER DEFAULT 0);
+            CREATE TABLE clientes(id INTEGER PRIMARY KEY, codigo TEXT UNIQUE, nome TEXT, cpf TEXT, telefone TEXT, origem_migracao TEXT, ficticio INTEGER DEFAULT 0, saldo_devedor REAL DEFAULT 0);
             CREATE TABLE fornecedores(id INTEGER PRIMARY KEY, razao_social TEXT, nome_fantasia TEXT UNIQUE COLLATE NOCASE, cnpj TEXT, telefone TEXT, email TEXT, ativo INTEGER, criado_em TEXT, atualizado_em TEXT);
             CREATE TABLE produtos(id INTEGER PRIMARY KEY, codigo TEXT UNIQUE COLLATE NOCASE, nome TEXT, preco_venda REAL, preco_custo REAL, tipo_produto TEXT, controla_estoque INTEGER, participa_xml INTEGER, ativo INTEGER, criado_em TEXT, atualizado_em TEXT, estoque_atual REAL DEFAULT 0);
             CREATE TABLE estoque_movimentacoes(id INTEGER PRIMARY KEY, produto_id INTEGER REFERENCES produtos(id), tipo TEXT, quantidade REAL, saldo_anterior REAL, saldo_atual REAL, origem TEXT, origem_id TEXT, motivo TEXT, usuario TEXT, data TEXT, UNIQUE(origem,origem_id,produto_id));
             CREATE TABLE migracoes_execucoes(id INTEGER PRIMARY KEY, data TEXT, arquivo TEXT, hash_arquivo TEXT, clientes_importados INTEGER, movimentacoes_importadas INTEGER, saldo_total REAL, status TEXT, detalhes TEXT);
             CREATE TABLE migracao_nabimig_ids(id INTEGER PRIMARY KEY, source_system TEXT, entity TEXT, source_id TEXT, target_table TEXT, target_id INTEGER, UNIQUE(source_system,entity,source_id), UNIQUE(target_table,target_id));
+            CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY, cliente_id INTEGER REFERENCES clientes(id), tipo TEXT, descricao TEXT, valor REAL, data TEXT, vencimento TEXT, status_pagamento TEXT, valor_aberto REAL, origem_sistema TEXT, origem_id TEXT, UNIQUE(origem_sistema,origem_id));
+            CREATE TABLE parcelas(id INTEGER PRIMARY KEY, movimentacao_id INTEGER REFERENCES movimentacoes(id), numero_parcela INTEGER, valor_parcela REAL, vencimento TEXT, status TEXT, valor_pago REAL, data_pagamento TEXT, dados_confiaveis INTEGER);
+            CREATE TABLE migracao_nabimig_itens_venda(id INTEGER PRIMARY KEY, source_system TEXT, source_id TEXT, sale_source_id TEXT, product_id INTEGER REFERENCES produtos(id), quantidade REAL, valor_unitario REAL, valor_total REAL, UNIQUE(source_system,source_id));
         """)
         connection.commit(); connection.close()
         return target
@@ -131,13 +134,40 @@ class NabiMigImportServiceTests(unittest.TestCase):
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM clientes").fetchone()[0], 0)
         connection.close()
 
-    def test_catalog_import_blocks_financial_category(self):
+    def test_import_blocks_unsupported_category(self):
         build_package(self.path, self.catalog_records())
         with self.assertRaisesRegex(ValueError, "ainda nao liberadas"):
             NabiMigImportService().execute_catalog(
                 self.path, database_path=self.create_target(), backup_dir=Path(self.temp.name) / "backups",
-                connect=lambda: None, backup_database=lambda *_: None, categories=("credit_accounts",),
+                connect=lambda: None, backup_database=lambda *_: None, categories=("settings",),
             )
+
+    def test_full_import_preserves_sales_and_creates_only_open_debt(self):
+        records = self.catalog_records()
+        records.update({
+            "sales": [row("sales", "s1", {"customer_id": "c1", "date": {"$type": "date", "value": "2026-01-01"}, "total": {"$type": "decimal", "value": "100.00"}})],
+            "sale_items": [row("sale_items", "i1", {"sale_id": "s1", "product_id": "p1", "quantity": 2, "sale_price": 50, "total": 100})],
+            "credit_accounts": [row("credit_accounts", "a1", {"customer_id": "c1", "date": "2026-01-01", "due_date": {"$type": "date", "value": "2026-02-01"}, "total": {"$type": "decimal", "value": "40.00"}, "partial_paid": {"$type": "decimal", "value": "10.00"}, "paid_total": 0, "paid_date": "", "status": "ABERTO"})],
+            "receipts": [],
+        })
+        build_package(self.path, records)
+        target = self.create_target(); backups = Path(self.temp.name) / "backups"
+        categories = tuple(records)
+        result = NabiMigImportService().execute(
+            self.path, database_path=target, backup_dir=backups,
+            connect=lambda: sqlite3.connect(target), backup_database=lambda source, destination: shutil.copy2(source, destination),
+            categories=categories,
+        )
+        self.assertEqual(result.inserted["sales"], 1)
+        connection = sqlite3.connect(target)
+        sale = connection.execute("SELECT tipo,valor_aberto FROM movimentacoes WHERE origem_id='VENDA:s1'").fetchone()
+        debt = connection.execute("SELECT tipo,valor_aberto FROM movimentacoes WHERE origem_id='CONTA:a1'").fetchone()
+        self.assertEqual(sale, ("VENDA_HISTORICA", 0.0))
+        self.assertEqual(debt, ("COMPRA", 30.0))
+        self.assertEqual(connection.execute("SELECT saldo_devedor FROM clientes").fetchone()[0], 30.0)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM parcelas").fetchone()[0], 1)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM migracao_nabimig_itens_venda").fetchone()[0], 1)
+        connection.close()
 
 
 if __name__ == "__main__":

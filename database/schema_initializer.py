@@ -657,6 +657,20 @@ def initialize_database(
             UNIQUE(target_table, target_id)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS migracao_nabimig_itens_venda (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source_system TEXT NOT NULL,
+            source_id TEXT NOT NULL,
+            sale_source_id TEXT NOT NULL,
+            product_id INTEGER NOT NULL,
+            quantidade REAL NOT NULL,
+            valor_unitario REAL NOT NULL,
+            valor_total REAL NOT NULL,
+            UNIQUE(source_system, source_id),
+            FOREIGN KEY(product_id) REFERENCES produtos(id)
+        )
+    """)
     # Controle financeiro opcional e documentos emitidos
     cursor.execute("PRAGMA table_info(movimentacoes)")
     colunas_mov = [c[1] for c in cursor.fetchall()]

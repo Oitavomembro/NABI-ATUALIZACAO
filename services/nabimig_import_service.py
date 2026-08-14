@@ -20,8 +20,8 @@ REQUIRED_FIELDS: dict[str, tuple[str, ...]] = {
     "stock": ("product_id", "quantity"),
     "sales": ("date", "total"),
     "sale_items": ("sale_id", "product_id", "quantity", "sale_price", "total"),
-    "credit_accounts": ("customer_id", "date", "total"),
-    "receipts": ("customer_id", "date", "total"),
+    "credit_accounts": ("customer_id", "date", "due_date", "total", "status"),
+    "receipts": ("customer_id", "date", "value"),
 }
 REFERENCES: dict[str, tuple[tuple[str, str], ...]] = {
     "stock": (("product_id", "products"),),
@@ -84,6 +84,14 @@ class NabiMigImportService:
     def execute_catalog(
         self,
         package: str | Path,
+        **kwargs: Any,
+    ) -> NabiMigImportResult:
+        kwargs["categories"] = kwargs.get("categories", ("customers", "suppliers", "products", "stock"))
+        return self.execute(package, **kwargs)
+
+    def execute(
+        self,
+        package: str | Path,
         *,
         database_path: str | Path,
         backup_dir: str | Path,
@@ -91,8 +99,8 @@ class NabiMigImportService:
         backup_database: Callable[..., Any],
         categories: tuple[str, ...] = ("customers", "suppliers", "products", "stock"),
     ) -> NabiMigImportResult:
-        """Importa somente o catálogo seguro; financeiro exige status de origem."""
-        allowed = {"customers", "suppliers", "products", "stock"}
+        """Importa as categorias escolhidas numa única transação auditável."""
+        allowed = {"customers", "suppliers", "products", "stock", "sales", "sale_items", "credit_accounts", "receipts"}
         selected = tuple(dict.fromkeys(categories))
         unknown = set(selected) - allowed
         if unknown:
@@ -130,6 +138,18 @@ class NabiMigImportService:
             if "stock" in selected:
                 product_ids = target_ids.get("products") or self._load_target_ids(connection, source_system, "products")
                 self._import_stock(connection, records["stock"], product_ids, source_system, inserted, updated)
+            customer_ids = target_ids.get("customers") or self._load_target_ids(connection, source_system, "customers")
+            product_ids = target_ids.get("products") or self._load_target_ids(connection, source_system, "products")
+            if "sales" in selected:
+                target_ids["sales"] = self._import_sales(connection, records["sales"], customer_ids, source_system, inserted, updated)
+            if "sale_items" in selected:
+                sale_ids = target_ids.get("sales") or self._load_target_ids(connection, source_system, "sales")
+                self._import_sale_items(connection, records["sale_items"], sale_ids, product_ids, source_system, inserted, updated)
+            if "credit_accounts" in selected:
+                self._import_credit_accounts(connection, records["credit_accounts"], customer_ids, source_system, inserted, updated)
+                self._refresh_customer_balances(connection, customer_ids, source_system)
+            if "receipts" in selected:
+                self._import_receipts(connection, records["receipts"], customer_ids, source_system, inserted, updated)
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 raise RuntimeError(f"Integridade relacional invalida apos importacao: {violations[0]}")
@@ -138,8 +158,10 @@ class NabiMigImportService:
                    (data,arquivo,hash_arquivo,clientes_importados,movimentacoes_importadas,saldo_total,status,detalhes)
                    VALUES(?,?,?,?,?,?,?,?)""",
                 (datetime.now().strftime("%d/%m/%Y %H:%M:%S"), str(path), preview.package_sha256,
-                 inserted["customers"] + updated["customers"], 0, 0, "SUCESSO",
-                 "NABIMIG catalogo: " + ",".join(selected)),
+                 inserted["customers"] + updated["customers"],
+                 inserted["sales"] + updated["sales"] + inserted["credit_accounts"] + updated["credit_accounts"],
+                 self._imported_open_balance(connection, source_system), "SUCESSO",
+                 "NABIMIG: " + ",".join(selected)),
             )
             connection.commit()
             return NabiMigImportResult(str(backup_path), dict(inserted), dict(updated), preview.package_sha256)
@@ -151,7 +173,7 @@ class NabiMigImportService:
 
     @staticmethod
     def _require_target_schema(connection: Any) -> None:
-        required = {"clientes", "fornecedores", "produtos", "estoque_movimentacoes", "migracoes_execucoes", "migracao_nabimig_ids"}
+        required = {"clientes", "fornecedores", "produtos", "estoque_movimentacoes", "movimentacoes", "parcelas", "migracoes_execucoes", "migracao_nabimig_ids", "migracao_nabimig_itens_venda"}
         available = {row[0] for row in connection.execute("SELECT name FROM sqlite_master WHERE type='table'")}
         missing = required - available
         if missing:
@@ -247,6 +269,86 @@ class NabiMigImportService:
                 connection.execute("""INSERT INTO estoque_movimentacoes(produto_id,tipo,quantidade,saldo_anterior,saldo_atual,origem,origem_id,motivo,usuario,data)
                     VALUES(?,'AJUSTE',?,?,?,?,?,'Estoque inicial migrado','Migracao',?)""", (product_id, quantity - previous, previous, quantity, source_system, sid, now)); inserted["stock"] += 1
 
+    def _import_sales(self, connection, rows, customer_ids, source_system, inserted, updated):
+        result = {}
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            target = self._mapping(connection, source_system, "sales", sid)
+            customer_ref = data.get("customer_id")
+            customer_id = None if customer_ref in (None, "", 0, "0") else customer_ids[str(customer_ref)]
+            values = (customer_id, "VENDA_HISTORICA", f"Venda Host #{sid}", float(data.get("total") or 0), str(data.get("date") or ""), "PAGO", 0.0, source_system, f"VENDA:{sid}")
+            if target is None:
+                connection.execute("INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor,data,status_pagamento,valor_aberto,origem_sistema,origem_id) VALUES(?,?,?,?,?,?,?,?,?)", values)
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "sales", sid, "movimentacoes", target); inserted["sales"] += 1
+            else:
+                connection.execute("UPDATE movimentacoes SET cliente_id=?,tipo=?,descricao=?,valor=?,data=?,status_pagamento=?,valor_aberto=?,origem_sistema=?,origem_id=? WHERE id=?", values + (target,)); updated["sales"] += 1
+            result[sid] = target
+        return result
+
+    @staticmethod
+    def _import_sale_items(connection, rows, sale_ids, product_ids, source_system, inserted, updated):
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            sale_ref, product_ref = str(data["sale_id"]), str(data["product_id"])
+            if sale_ref not in sale_ids or product_ref not in product_ids:
+                raise RuntimeError(f"Item {sid} perdeu vinculo durante a importacao.")
+            values = (sale_ref, product_ids[product_ref], float(data.get("quantity") or 0), float(data.get("sale_price") or 0), float(data.get("total") or 0))
+            existing = connection.execute("SELECT id FROM migracao_nabimig_itens_venda WHERE source_system=? AND source_id=?", (source_system, sid)).fetchone()
+            if existing:
+                connection.execute("UPDATE migracao_nabimig_itens_venda SET sale_source_id=?,product_id=?,quantidade=?,valor_unitario=?,valor_total=? WHERE id=?", values + (existing[0],)); updated["sale_items"] += 1
+            else:
+                connection.execute("INSERT INTO migracao_nabimig_itens_venda(source_system,source_id,sale_source_id,product_id,quantidade,valor_unitario,valor_total) VALUES(?,?,?,?,?,?,?)", (source_system, sid) + values); inserted["sale_items"] += 1
+
+    def _import_credit_accounts(self, connection, rows, customer_ids, source_system, inserted, updated):
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            customer_id = customer_ids[str(data["customer_id"])]
+            total = float(data.get("total") or 0)
+            paid = float(data.get("partial_paid") or 0) + float(data.get("paid_total") or 0)
+            source_status = str(data.get("status") or "").strip().upper()
+            cancelled = "CANCEL" in source_status
+            settled = source_status in {"PAGO", "PAGA", "QUITADO", "QUITADA", "BAIXADO", "BAIXADA"}
+            open_value = 0.0 if cancelled or settled else max(0.0, round(total - paid, 2))
+            status = "CANCELADO" if cancelled else ("PAGO" if open_value <= 0.005 else ("PARCIAL" if paid > 0 else "PENDENTE"))
+            target = self._mapping(connection, source_system, "credit_accounts", sid)
+            values = (customer_id, "COMPRA", f"Conta a receber Host #{sid}", total, str(data.get("date") or ""), str(data.get("due_date") or ""), status, open_value, source_system, f"CONTA:{sid}")
+            if target is None:
+                connection.execute("INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor,data,vencimento,status_pagamento,valor_aberto,origem_sistema,origem_id) VALUES(?,?,?,?,?,?,?,?,?,?)", values)
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "credit_accounts", sid, "movimentacoes", target); inserted["credit_accounts"] += 1
+            else:
+                connection.execute("UPDATE movimentacoes SET cliente_id=?,tipo=?,descricao=?,valor=?,data=?,vencimento=?,status_pagamento=?,valor_aberto=?,origem_sistema=?,origem_id=? WHERE id=?", values + (target,)); updated["credit_accounts"] += 1
+            parcel_values = (total, str(data.get("due_date") or ""), status, max(0.0, total - open_value), str(data.get("paid_date") or ""))
+            parcel = connection.execute("SELECT id FROM parcelas WHERE movimentacao_id=? AND numero_parcela=1", (target,)).fetchone()
+            if parcel:
+                connection.execute("UPDATE parcelas SET valor_parcela=?,vencimento=?,status=?,valor_pago=?,data_pagamento=?,dados_confiaveis=1 WHERE id=?", parcel_values + (parcel[0],))
+            else:
+                connection.execute("INSERT INTO parcelas(movimentacao_id,numero_parcela,valor_parcela,vencimento,status,valor_pago,data_pagamento,dados_confiaveis) VALUES(?,1,?,?,?,?,?,1)", (target,) + parcel_values)
+
+    def _import_receipts(self, connection, rows, customer_ids, source_system, inserted, updated):
+        for row in rows:
+            sid, data = str(row["source_id"]), row["data"]
+            target = self._mapping(connection, source_system, "receipts", sid)
+            values = (customer_ids[str(data["customer_id"])], "PAGAMENTO", f"Recebimento Host #{sid}", float(data.get("value") or 0), str(data.get("date") or ""), "PAGO", 0.0, source_system, f"RECEBIMENTO:{sid}")
+            if target is None:
+                connection.execute("INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor,data,status_pagamento,valor_aberto,origem_sistema,origem_id) VALUES(?,?,?,?,?,?,?,?,?)", values)
+                target = int(connection.execute("SELECT last_insert_rowid()").fetchone()[0])
+                self._save_mapping(connection, source_system, "receipts", sid, "movimentacoes", target); inserted["receipts"] += 1
+            else:
+                connection.execute("UPDATE movimentacoes SET cliente_id=?,tipo=?,descricao=?,valor=?,data=?,status_pagamento=?,valor_aberto=?,origem_sistema=?,origem_id=? WHERE id=?", values + (target,)); updated["receipts"] += 1
+
+    @staticmethod
+    def _refresh_customer_balances(connection, customer_ids, source_system):
+        for customer_id in customer_ids.values():
+            balance = connection.execute("SELECT COALESCE(SUM(valor_aberto),0) FROM movimentacoes WHERE cliente_id=? AND origem_sistema=? AND origem_id LIKE 'CONTA:%' AND status_pagamento<>'CANCELADO'", (customer_id, source_system)).fetchone()[0]
+            connection.execute("UPDATE clientes SET saldo_devedor=? WHERE id=?", (float(balance or 0), customer_id))
+
+    @staticmethod
+    def _imported_open_balance(connection, source_system):
+        row = connection.execute("SELECT COALESCE(SUM(valor_aberto),0) FROM movimentacoes WHERE origem_sistema=? AND origem_id LIKE 'CONTA:%' AND status_pagamento<>'CANCELADO'", (source_system,)).fetchone()
+        return float(row[0] or 0)
+
     def _read_validated(self, archive: zipfile.ZipFile) -> tuple[dict[str, list[dict[str, Any]]], dict[str, Any]]:
         listed = archive.namelist()
         names = set(listed)
@@ -284,7 +386,7 @@ class NabiMigImportService:
 
         records: dict[str, list[dict[str, Any]]] = {}
         for category in categories:
-            rows = [json.loads(line) for line in archive.read(f"data/{category}.jsonl").splitlines() if line.strip()]
+            rows = [self._decode(json.loads(line)) for line in archive.read(f"data/{category}.jsonl").splitlines() if line.strip()]
             if len(rows) != counts[category]:
                 raise ValueError(f"Contagem divergente em {category}.")
             if any(row.get("entity") != category or not str(row.get("source_id") or "").strip() for row in rows):
@@ -297,6 +399,16 @@ class NabiMigImportService:
         if set(selection.get("categories") or ()) != set(categories):
             raise ValueError("Selecao divergente do manifesto.")
         return records, manifest
+
+    @classmethod
+    def _decode(cls, value: Any) -> Any:
+        if isinstance(value, list):
+            return [cls._decode(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        if value.get("$type") in {"decimal", "date", "datetime", "time"}:
+            return value.get("value")
+        return {str(key): cls._decode(item) for key, item in value.items()}
 
     def _validate_records(self, records: dict[str, list[dict[str, Any]]]) -> tuple[list[str], list[str]]:
         errors: list[str] = []
