@@ -455,3 +455,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - instalador alternativo: `build_output/installer/NabiCode_2.5.1_TESTE_R7_Setup.exe`;
 - SHA-256 do instalador: `00B9A0003D58760781AC3D7DFD3BA0DF90A12826D8C2444FA70DDFD535E757C1`;
 - smoke empacotado e validações do pipeline aprovados; instalador não foi executado.
+
+## Checkpoint 42.29 / R8 TESTE — fluxo único de migração
+
+- a aba Migração usa um único seletor para `.sql` e `.nabimig` e reconhece automaticamente o formato;
+- o mesmo fluxo apresenta `1. Analisar`, `2. Preparar` e `3. Migrar` para os dois formatos;
+- opções específicas do `.nabimig` aparecem somente depois da preparação, eliminando a seção duplicada permanente;
+- Migração Fase 2 antiga permanece disponível quando o arquivo selecionado é `.sql`;
+- relatório usa automaticamente a origem correspondente ao formato selecionado;
+- pacote financeiro R6 recuperado e restaurado na Área de Trabalho após o original ter sido apagado com a pasta do Conversor;
+- pacote restaurado validado duas vezes em banco temporário, com saldo de R$ 10.171,00 e sem duplicação;
+- revisão interna avançada para R8.

@@ -14,6 +14,12 @@ def test_existing_phase2_and_nabimig_share_the_migration_tab():
     assert "Importar Fase 2" in LEGACY
     assert "IMPORTAR PACOTE DO CONVERSOR NABICODE (.nabimig)" in LEGACY
     assert "NabiMigImportService()" in LEGACY
+    assert 'placeholder_text="Selecione um arquivo .sql ou .nabimig"' in LEGACY
+    assert 'text="1. Analisar"' in LEGACY
+    assert 'text="2. Preparar"' in LEGACY
+    assert 'text="3. Migrar"' in LEGACY
+    assert "validar_nabimig_ui(False) if arquivo_nabimig_selecionado()" in LEGACY
+    assert "validar_nabimig_ui(True) if arquivo_nabimig_selecionado()" in LEGACY
 
 
 def test_report_is_technical_and_contains_required_audit_fields():

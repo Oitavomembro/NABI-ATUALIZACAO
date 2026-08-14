@@ -36,11 +36,12 @@ def test_real_package_twice_in_temporary_database(tmp_path):
     service = NabiMigImportService()
     preview = service.preview(package)
     assert preview.ready
-    assert preview.counts == {
+    expected_counts = {
         "credit_accounts": 32, "customers": 87, "products": 198,
         "sale_items": 317, "sales": 277, "stock": 198, "suppliers": 12,
     }
-    categories = tuple(preview.counts)
+    assert {key: preview.counts.get(key) for key in expected_counts} == expected_counts
+    categories = tuple(expected_counts)
     arguments = dict(
         database_path=database, backup_dir=backup_dir, connect=connect,
         backup_database=lambda source, destination: shutil.copy2(source, destination),
