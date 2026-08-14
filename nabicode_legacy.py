@@ -36,6 +36,7 @@ from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
 from services.windows_file_opener import WindowsFileOpener, WindowsFileOpenError
 from services.nabimig_import_service import NabiMigImportService
 from services.nabimig_ui_service import CATEGORY_LABELS, final_report_text, preview_text
+from services.receipt_template_service import ReceiptTemplateService
 from ui import (
     NabiTheme,
     BackgroundManager,
@@ -8148,20 +8149,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ctk.CTkLabel(linha,text=rotulo,width=260,anchor="w").pack(side="left")
             w=ctk.CTkComboBox(linha,values=valores,state="readonly") if valores else ctk.CTkEntry(linha)
             w.pack(side="left",fill="x",expand=True); w.set(obter_config(chave)) if valores else w.insert(0,obter_config(chave)); campos[chave]=w
+        entrada(geral,"Modelo visual do cupom:","modelo_cupom_visual",ReceiptTemplateService.names())
         entrada(geral,"Fonte:","impressao_fonte",["Helvetica","Times-Roman","Courier"])
         entrada(geral,"Tamanho da fonte:","impressao_fonte_tamanho")
-        entrada(geral,"Tamanho do título:","impressao_titulo_tamanho")
-        entrada(geral,"Espaçamento entre linhas:","impressao_espacamento")
-        entrada(geral,"Margem (mm):","impressao_margem_mm")
-        entrada(geral,"Quantidade de vias:","impressao_vias")
-        entrada(geral,"Avanço final (linhas):","impressao_avanco_linhas")
         bools={}
-        for texto,chave,pad in [("Mostrar logotipo","impressao_mostrar_logo",False),("Mostrar endereço","impressao_mostrar_endereco",True),("Mostrar telefone","impressao_mostrar_telefone",True),("Mostrar CNPJ","impressao_mostrar_cnpj",True),("Mostrar e-mail","impressao_mostrar_email",False),("Mostrar campo de assinatura","impressao_mostrar_assinatura",True),("Incluir QR Code","impressao_qrcode",True),("Solicitar corte automático (térmica)","impressao_corte_automatico",False)]:
-            v=tk.BooleanVar(value=self._cfg_bool(chave,pad)); bools[chave]=v; ctk.CTkCheckBox(geral,text=texto,variable=v).pack(anchor="w",padx=18,pady=4)
-        linha_logo=ctk.CTkFrame(geral,fg_color="transparent"); linha_logo.pack(fill="x",padx=14,pady=5)
-        ctk.CTkLabel(linha_logo,text="Arquivo do logotipo:",width=260,anchor="w").pack(side="left")
-        logo=ctk.CTkEntry(linha_logo); logo.pack(side="left",fill="x",expand=True,padx=(0,5)); logo.insert(0,obter_config("impressao_logo_path")); campos["impressao_logo_path"]=logo
-        ctk.CTkButton(linha_logo,text="Escolher",width=90,command=lambda:self._escolher_logo(logo,win)).pack(side="left")
+        ctk.CTkLabel(geral,text="Escolha um dos 20 modelos prontos. Só fonte e tamanho precisam de ajuste.",text_color="#8b949e",wraplength=700).pack(padx=18,pady=18)
         modelos=["A4","Térmica 80 mm"]
         for rotulo,cat in [("Recibo / venda","recibo"),("Entrega","entrega"),("Ficha do cliente","ficha"),("Histórico","historico"),("Fechamento de caixa","fechamento")]: entrada(docs,f"Modelo para {rotulo}:",f"modelo_{cat}",modelos)
         entrada(docs,"Após gerar PDF:","impressao_acao_pos_pdf",["PERGUNTAR","ABRIR","IMPRIMIR","NADA"])
@@ -8172,7 +8164,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             for chave,v in bools.items(): salvar_config(chave,"1" if v.get() else "0")
             messagebox.showinfo("Impressão","Modelos de impressão salvos.",parent=win)
         def previsualizar():
-            salvar_tudo(); dados=self._dados_loja_impressao(); preview.delete("1.0","end"); preview.insert("end",f"{dados['nome']}\n{dados['endereco']}\nTel.: {dados['telefone']}  CNPJ: {dados['cnpj']}\n\nCOMPROVANTE DE VENDA\nData: {datetime.now():%d/%m/%Y %H:%M}\nCliente: CLIENTE DE TESTE\n\n1x Produto de demonstração\nR$ 100,00\n\nTOTAL: R$ 100,00\n\n{obter_config('rodape_cupom')}")
+            salvar_tudo(); dados=self._dados_loja_impressao(); texto=f"{dados['nome']}\nCOMPROVANTE DE VENDA\n{'='*42}\nData: {datetime.now():%d/%m/%Y %H:%M}\nCliente: CLIENTE DE TESTE\n{'-'*42}\n1x Produto de demonstração\nR$ 100,00\n{'-'*42}\nTOTAL: R$ 100,00\n{'='*42}\n{obter_config('rodape_cupom')}"; preview.delete("1.0","end"); preview.insert("end",ReceiptTemplateService.render(texto,campos['modelo_cupom_visual'].get()))
         def pdf_teste():
             salvar_tudo(); caminho=self.gerar_pdf_venda(None,[{"qtd":1,"item":"Produto de demonstração","preco":100.0,"subtotal":100.0}],100.0,"COMPROVANTE"); self.janela_acoes_pdf(caminho,"recibo","Teste")
         barra=ctk.CTkFrame(teste,fg_color="transparent"); barra.pack(fill="x",padx=12,pady=(0,12))

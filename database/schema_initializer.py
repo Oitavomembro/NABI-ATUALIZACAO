@@ -814,6 +814,7 @@ def initialize_database(
         ("modelo_historico", "A4"),
         ("modelo_fechamento", "A4"),
         ("impressao_fonte", "Helvetica"),
+        ("modelo_cupom_visual", "Clássico"),
         ("impressao_fonte_tamanho", "10"),
         ("impressao_titulo_tamanho", "15"),
         ("impressao_espacamento", "1.25"),

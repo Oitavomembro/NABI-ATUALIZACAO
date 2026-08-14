@@ -466,3 +466,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - pacote financeiro R6 recuperado e restaurado na Área de Trabalho após o original ter sido apagado com a pasta do Conversor;
 - pacote restaurado validado duas vezes em banco temporário, com saldo de R$ 10.171,00 e sem duplicação;
 - revisão interna avançada para R8.
+
+## Checkpoint 42.30 / R9 TESTE — galeria de cupons térmicos
+
+- criada galeria offline com 20 modelos visuais originais para cupom térmico 80 mm;
+- estilos incluem molduras, ticket, blocos, faixas, cantos, linhas, retrô, premium e `Nabi exclusivo`;
+- nenhum modelo externo ou arquivo com licença incerta foi incorporado;
+- o conteúdo financeiro permanece intocado; somente separadores, títulos, bordas e alinhamento mudam;
+- configuração foi simplificada para modelo visual, fonte e tamanho da fonte;
+- prévia aplica o modelo escolhido antes de qualquer impressão;
+- renderização respeita 42 caracteres e codificação CP850 do pipeline oficial;
+- corte automático continua único e nenhuma impressora física foi usada;
+- 40 testes focados aprovados;
+- revisão interna avançada para R9.

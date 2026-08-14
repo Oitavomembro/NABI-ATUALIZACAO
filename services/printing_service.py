@@ -6,6 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 from services.document_rendering import config_bool, normalize_newlines, wrap_lines
+from services.receipt_template_service import ReceiptTemplateService
 
 
 class PrintingService:
@@ -112,7 +113,10 @@ class PrintingService:
 
     def _raw_payload(self, text: str) -> bytes:
         """Monta o trabalho RAW uma vez: texto CP850, avanço e corte opcional."""
-        body = normalize_newlines(text).replace("\n", "\r\n").encode(
+        styled = ReceiptTemplateService.render(
+            text, self._get_config("modelo_cupom_visual") or ReceiptTemplateService.DEFAULT,
+        )
+        body = normalize_newlines(styled).replace("\n", "\r\n").encode(
             "cp850", errors="replace"
         )
         return body + self._cut_payload()

@@ -40,7 +40,8 @@ class PrintingServiceTests(unittest.TestCase):
 
         payload = service._raw_payload("Olá\nMundo")
 
-        assert payload.startswith("Olá\r\nMundo".encode("cp850"))
+        assert "Olá".encode("cp850") in payload
+        assert "Mundo".encode("cp850") in payload
         assert payload.endswith((b"\r\n" * 2) + service._ESC_POS_CUT_PARTIAL)
         assert payload.count(service._ESC_POS_CUT_PARTIAL) == 1
 
@@ -54,7 +55,8 @@ class PrintingServiceTests(unittest.TestCase):
 
         payload = service._raw_payload("Cupom")
 
-        assert payload == b"Cupom" + (b"\r\n" * 12) + service._ESC_POS_CUT_TOTAL
+        assert b"Cupom" in payload
+        assert payload.endswith((b"\r\n" * 12) + service._ESC_POS_CUT_TOTAL)
 
     def test_raw_payload_does_not_append_cut_when_disabled(self):
         values = {"impressao_corte_automatico": "0"}
@@ -62,7 +64,8 @@ class PrintingServiceTests(unittest.TestCase):
 
         payload = service._raw_payload("Cupom\n")
 
-        assert payload == b"Cupom\r\n"
+        assert b"Cupom" in payload
+        assert payload.endswith(b"\r\n\r\n\r\n")
         assert service._ESC_POS_CUT_PARTIAL not in payload
         assert service._ESC_POS_CUT_TOTAL not in payload
 
