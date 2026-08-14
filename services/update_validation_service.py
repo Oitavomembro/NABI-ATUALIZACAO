@@ -22,6 +22,12 @@ class UpdateValidationService:
                 raise RuntimeError(
                     f"Versão carregada {self.app_version} difere do pacote {state.get('target_version')}."
                 )
+            target_revision = int(state.get("target_revision") or 0)
+            loaded_revision = int(getattr(self.package_service, "current_revision", 0) or 0)
+            if target_revision != loaded_revision:
+                raise RuntimeError(
+                    f"Revisão carregada R{loaded_revision} difere do pacote R{target_revision}."
+                )
             file_errors = self.package_service.validate_installed_files(state)
             if file_errors:
                 raise RuntimeError("; ".join(file_errors))
@@ -35,6 +41,7 @@ class UpdateValidationService:
                 raise RuntimeError("Diagnóstico reprovado: " + "; ".join(failures))
             report = {
                 "versao": self.app_version,
+                "revisao": loaded_revision,
                 "arquivos": len(state.get("manifest", {}).get("files", [])),
                 "diagnostico": diagnostic.get("arquivo"),
                 "banco_preservado": True,

@@ -23,7 +23,7 @@ class UpdatePackageServiceTests(unittest.TestCase):
     def tearDown(self):
         self.temp.cleanup()
 
-    def make_package(self, *, version="2.4.38", source="2.4.37", files=None, remove=None):
+    def make_package(self, *, version="2.4.38", source="2.4.37", revision=0, files=None, remove=None):
         files = files or {"VERSAO.txt": version.encode(), "update_smoke_test.json": b'{"ok": true}'}
         manifest_files = [
             {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
@@ -32,6 +32,7 @@ class UpdatePackageServiceTests(unittest.TestCase):
         manifest = {
             "product": "NabiCode",
             "version": version,
+            "revision": revision,
             "minimum_source_version": source,
             "accepted_source_versions": [source],
             "files": manifest_files,
@@ -54,6 +55,30 @@ class UpdatePackageServiceTests(unittest.TestCase):
         package = self.make_package(source="2.4.36")
         with self.assertRaisesRegex(ValueError, "incompatível"):
             self.service.validate(package)
+
+    def test_accepts_newer_revision_without_changing_semantic_version(self):
+        (self.install / "REVISAO.txt").write_text("5\n", encoding="utf-8")
+        service = UpdatePackageService(
+            app_dir=self.app,
+            install_dir=self.install,
+            current_version="2.4.37",
+        )
+        package = self.make_package(version="2.4.37", revision=6)
+        manifest = service.validate(package)
+        self.assertEqual(manifest["revision"], 6)
+
+    def test_rejects_same_or_older_revision(self):
+        internal = self.install / "_internal"
+        internal.mkdir()
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
+        service = UpdatePackageService(
+            app_dir=self.app,
+            install_dir=self.install,
+            current_version="2.4.37",
+        )
+        package = self.make_package(version="2.4.37", revision=6)
+        with self.assertRaisesRegex(ValueError, "não é mais novo"):
+            service.validate(package)
 
     def test_prepare_backs_up_files_and_writes_state(self):
         (self.install / "VERSAO.txt").write_text("2.4.37", encoding="utf-8")

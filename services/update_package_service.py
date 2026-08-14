@@ -24,7 +24,18 @@ class UpdatePackageService:
         self.update_dir = self.app_dir / "atualizacoes"
         self.state_file = self.app_dir / "estado_atualizacao.json"
         self.history_file = self.app_dir / "historico_atualizacoes.jsonl"
-        self.validation_service = UpdatePackageValidationService(self.current_version)
+        self.current_revision = self._read_current_revision()
+        self.validation_service = UpdatePackageValidationService(
+            self.current_version, self.current_revision
+        )
+
+    def _read_current_revision(self) -> int:
+        for path in (self.install_dir / "REVISAO.txt", self.install_dir / "_internal" / "REVISAO.txt"):
+            try:
+                return max(0, int(path.read_text(encoding="utf-8-sig").strip()))
+            except (OSError, UnicodeError, TypeError, ValueError):
+                continue
+        return 0
 
     version_tuple = staticmethod(UpdatePackageValidationService.version_tuple)
     sha256_bytes = staticmethod(UpdatePackageValidationService.sha256_bytes)
@@ -49,7 +60,8 @@ class UpdatePackageService:
 
     def prepare(self, package_path: str | os.PathLike[str], manifest: dict[str, Any], snapshot_id: str) -> dict[str, Any]:
         target_version = str(manifest["version"])
-        tag = target_version.replace(".", "_")
+        target_revision = int(manifest.get("revision") or 0)
+        tag = target_version.replace(".", "_") + f"_r{target_revision}"
         staging = self.update_dir / f"staging_{tag}"
         backup = self.update_dir / f"backup_arquivos_{tag}_{datetime.now():%Y%m%d_%H%M%S}"
         if staging.exists():
@@ -83,6 +95,7 @@ class UpdatePackageService:
             "created_at": datetime.now().isoformat(timespec="seconds"),
             "source_version": self.current_version,
             "target_version": target_version,
+            "target_revision": target_revision,
             "manifest": manifest,
             "staging": str(staging),
             "file_backup": str(backup),

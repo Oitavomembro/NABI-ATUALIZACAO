@@ -23,12 +23,16 @@ class ReleasePackageController:
         self.clock = clock
 
     def locate_release(self) -> Path:
-        dist = self.project_dir / "dist"
-        candidates = [dist / f"NabiCode_v{self.version.replace('.', '_')}", dist / "NabiCode"]
+        dist_roots = (self.project_dir / "build_output" / "dist", self.project_dir / "dist")
+        candidates = [
+            dist / name
+            for dist in dist_roots
+            for name in (f"NabiCode_v{self.version.replace('.', '_')}", "NabiCode")
+        ]
         for candidate in candidates:
             if candidate.is_dir():
                 return candidate
-        folders = [item for item in dist.glob("*") if item.is_dir()] if dist.is_dir() else []
+        folders = [item for dist in dist_roots if dist.is_dir() for item in dist.glob("*") if item.is_dir()]
         if len(folders) == 1:
             return folders[0]
         raise FileNotFoundError("Pasta compilada não encontrada em dist. Gere o EXE final primeiro.")
@@ -37,11 +41,15 @@ class ReleasePackageController:
         self,
         *,
         minimum_source: str,
+        revision: int = 0,
         accepted_sources: Iterable[str] = (),
         remove: Iterable[str] = (),
     ) -> Path:
         release = self.locate_release()
-        output = self.project_dir / f"NabiCode_ATUALIZACAO_{self.version.replace('.', '_')}.zip"
+        revision = max(0, int(revision))
+        output_dir = self.project_dir / "build_output" / "updates"
+        output_dir.mkdir(parents=True, exist_ok=True)
+        output = output_dir / f"NabiCode_ATUALIZACAO_{self.version.replace('.', '_')}_R{revision}.zip"
         files = [path for path in release.rglob("*") if path.is_file()]
         ReleasePackagingService.validate_tree(release)
         if not files:
@@ -59,6 +67,7 @@ class ReleasePackageController:
             "product": "NabiCode",
             "package_type": "release",
             "version": self.version,
+            "revision": revision,
             "minimum_source_version": minimum_source,
             "accepted_source_versions": normalized_sources or [minimum_source],
             "created_at": self.clock().isoformat(timespec="seconds"),

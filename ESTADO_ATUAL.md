@@ -418,3 +418,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa definitiva: 1088 testes e 22 subtestes aprovados;
 - `compileall`, smoke não visual de `main.py` no perfil TESTE e `git diff --check` aprovados;
 - conversor de Migração não foi alterado por esta frente; nenhuma produção foi gerada.
+
+## Checkpoint 42.26 — Fornecedores em Compras e atualizações por revisão
+
+- Compras ganhou acesso direto `Fornecedores`, reutilizando exclusivamente `abrir_cadastros_auxiliares()` no tipo oficial `fornecedor`;
+- Produtos preserva o seletor original de marcas, fornecedores e unidades;
+- pedido sem fornecedor oferece abrir o cadastro e retoma o pedido com nova consulta ao repositório após fechar;
+- acesso direto respeita a permissão de criação em Compras e não cria tabela, formulário ou regra paralela;
+- `REVISAO.txt` permite aplicar R7, R8 etc. sobre a mesma versão 2.5.1;
+- atualizador existente preserva validação de hashes, snapshot, backup, reinício, diagnóstico e rollback;
+- gerador de pacote encontra `build_output/dist` e cria ZIP em `build_output/updates`, sem executar Inno Setup;
+- conversor e migração `.nabimig` não foram alterados por esta frente.

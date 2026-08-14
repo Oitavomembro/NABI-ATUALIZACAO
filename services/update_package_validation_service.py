@@ -9,8 +9,9 @@ import zipfile
 
 
 class UpdatePackageValidationService:
-    def __init__(self, current_version: str) -> None:
+    def __init__(self, current_version: str, current_revision: int = 0) -> None:
         self.current_version = str(current_version).strip()
+        self.current_revision = max(0, int(current_revision))
 
     @staticmethod
     def version_tuple(value: str) -> tuple[int, ...]:
@@ -38,6 +39,7 @@ class UpdatePackageValidationService:
             if manifest.get("product") != "NabiCode":
                 raise ValueError("O pacote não pertence ao NabiCode.")
             target_version = str(manifest.get("version") or "").strip()
+            target_revision = max(0, int(manifest.get("revision") or 0))
             minimum_version = str(manifest.get("minimum_source_version") or "").strip()
             accepted_sources = [
                 str(item).strip()
@@ -46,9 +48,14 @@ class UpdatePackageValidationService:
             ]
             if not target_version:
                 raise ValueError("O manifesto não informa a versão de destino.")
-            if self.version_tuple(target_version) <= self.version_tuple(self.current_version):
+            target_key = self.version_tuple(target_version)
+            current_key = self.version_tuple(self.current_version)
+            if target_key < current_key or (
+                target_key == current_key and target_revision <= self.current_revision
+            ):
                 raise ValueError(
-                    f"O pacote {target_version} não é mais novo que a versão instalada {self.current_version}."
+                    f"O pacote {target_version} R{target_revision} não é mais novo que "
+                    f"a instalação {self.current_version} R{self.current_revision}."
                 )
             if minimum_version and self.version_tuple(self.current_version) < self.version_tuple(minimum_version):
                 raise ValueError(f"O pacote exige no mínimo a versão {minimum_version}.")
@@ -79,4 +86,5 @@ class UpdatePackageValidationService:
                 removed.append(normalized_path)
             manifest["files"] = normalized
             manifest["remove"] = removed
+            manifest["revision"] = target_revision
             return manifest

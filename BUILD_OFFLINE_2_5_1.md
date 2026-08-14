@@ -137,6 +137,22 @@ A tentativa de build neste Linux foi corretamente recusada com código 2 e mensa
 - tamanho: 47.109.465 bytes;
 - SHA-256: `473ff004a2b4fb816195bd8937b124d9a1de0aad353d12be43e59bf632697fd7`.
 
+## Atualizações sem novo instalador
+
+Correções da mesma versão usam `REVISAO.txt` e pacote ZIP incremental. O
+instalador completo fica reservado para instalação inicial ou mudança estrutural.
+
+Exemplo para gerar a revisão seguinte sem compilar Inno Setup:
+
+```powershell
+python build_tools\build_windows.py update --minimum-source 2.5.1 --revision 7
+```
+
+O arquivo é criado em `build_output/updates/`. No NabiCode instalado, acessar
+Configurações administrativas → Atualizações, selecionar o ZIP e aplicar. O fluxo
+existente valida hashes, exige autorização, cria snapshot e backup dos arquivos,
+reinicia, valida a revisão carregada e executa rollback em caso de falha.
+
 ## Arquivos alterados
 
 - `build_tools/__init__.py`;

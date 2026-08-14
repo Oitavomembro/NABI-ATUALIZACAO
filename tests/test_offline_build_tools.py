@@ -26,6 +26,7 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.1"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "6"
     assert build_windows.distribution_name(ROOT) == "NabiCode_v2_5_1"
     assert (ROOT / "PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "TESTE"
     assert (ROOT / "build_tools/resources/PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "PRODUCAO"
@@ -39,6 +40,7 @@ def test_distribution_validation_rejects_database_and_cache() -> None:
         internal.mkdir()
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
         (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
         (root / "dados.db").write_bytes(b"SQLite format 3")
         (root / "__pycache__").mkdir()
         (root / "__pycache__" / "x.pyc").write_bytes(b"x")
@@ -57,6 +59,7 @@ def test_distribution_manifest_has_hashes_and_relative_paths() -> None:
         internal.mkdir()
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
         (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
         assert build_windows.validate_distribution(root, version="2.5.1") == []
         manifest = build_windows.build_manifest(root, version="2.5.1")
         assert manifest["distribution"] == "onedir"
@@ -84,6 +87,7 @@ def test_onedir_evidence_detects_distribution_tampering() -> None:
         executable.write_bytes(b"MZ-original")
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
         (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
         manifest = build_windows.build_manifest(distribution, version="2.5.1")
         build_windows.write_manifest(manifest, evidence_root=build_root)
         executable.write_bytes(b"MZ-alterado")
@@ -100,6 +104,7 @@ def test_spec_is_onedir_production_without_upx() -> None:
     assert "exclude_binaries=True" in spec
     assert "upx=False" in spec
     assert 'resources" / "PERFIL_NABICODE.txt"' in spec
+    assert 'revision_file = project_root / "REVISAO.txt"' in spec
     assert 'contents_directory="_internal"' in spec
     assert "runtime_production_profile.py" in spec
     assert '"win32print"' in spec
@@ -268,6 +273,7 @@ def test_installer_validation_uses_validated_onedir_as_input() -> None:
         (distribution / "NabiCode_v2_5_1.exe").write_bytes(b"MZ-app")
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
         (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
         installer = temporary_root / "installer" / "NabiCode_2.5.1_Setup_Offline.exe"
         installer.parent.mkdir()
         installer.write_bytes(b"MZ-setup")

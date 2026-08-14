@@ -30,9 +30,11 @@ def test_release_package_controller_builds_manifest(tmp_path: Path):
         "2.4.98",
         clock=lambda: datetime(2026, 8, 8, 12, 0, 0),
     )
-    output = controller.create(minimum_source="2.4.97")
+    output = controller.create(minimum_source="2.4.97", revision=4)
     with ZipFile(output) as archive:
         manifest = json.loads(archive.read("manifest.json"))
         assert manifest["version"] == "2.4.98"
+        assert manifest["revision"] == 4
         assert manifest["accepted_source_versions"] == ["2.4.97"]
         assert archive.read("payload/main.exe") == b"binary"
+    assert output.parent == tmp_path / "build_output" / "updates"

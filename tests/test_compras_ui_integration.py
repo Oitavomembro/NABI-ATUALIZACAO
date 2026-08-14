@@ -33,6 +33,21 @@ class ComprasUIIntegrationTests(unittest.TestCase):
         self.assertIn("BidirectionalScrollableFrame", self.source)
         self.assertIn("UniversalLayoutPolicy.metrics", self.source)
         self.assertIn("COMPRA_SERVICE.criar_pedido", self.source)
+
+    def test_compras_abre_cadastro_oficial_diretamente_em_fornecedores(self) -> None:
+        self.assertIn('text="Fornecedores", command=self.abrir_fornecedores_compras', self.source)
+        self.assertIn('self.abrir_cadastros_auxiliares("fornecedor", ao_fechar=ao_fechar)', self.source)
+        self.assertIn('self._autorizar("compras", "create")', self.source)
+
+    def test_pedido_sem_fornecedor_oferece_cadastro_e_retoma_fluxo(self) -> None:
+        self.assertIn("Deseja cadastrar um fornecedor agora?", self.source)
+        self.assertIn("self.abrir_fornecedores_compras(retomar_pedido=True)", self.source)
+        self.assertIn("if retomar_pedido and COMPRA_SERVICE.repository.listar_fornecedores():", self.source)
+        self.assertIn("self.novo_pedido_compra()", self.source)
+
+    def test_produtos_preserva_marcas_fornecedores_e_unidades(self) -> None:
+        self.assertIn('values=["marca", "fornecedor", "unidade"]', self.source)
+        self.assertIn('def abrir_cadastros_auxiliares(self, tipo_inicial="marca", ao_fechar=None):', self.source)
         self.assertIn("COMPRA_SERVICE.receber", self.source)
 
 

@@ -26,6 +26,7 @@ REQUIRED_SOURCE_FILES = (
     "main.py",
     "splash_deep_trust_engine.py",
     "VERSAO.txt",
+    "REVISAO.txt",
     "requirements.txt",
     "build_tools/pyinstaller/nabicode.spec",
     "build_tools/pyinstaller/runtime_production_profile.py",
@@ -104,6 +105,13 @@ def validate_source(root: Path = PROJECT_ROOT) -> list[str]:
             read_version(root)
         except RuntimeError as exc:
             errors.append(str(exc))
+    revision = root / "REVISAO.txt"
+    if revision.is_file():
+        try:
+            if int(revision.read_text(encoding="utf-8-sig").strip()) < 0:
+                raise ValueError
+        except (OSError, UnicodeError, TypeError, ValueError):
+            errors.append("REVISAO.txt inválido; informe um inteiro não negativo.")
     profile = root / "build_tools" / "resources" / "PERFIL_NABICODE.txt"
     if profile.is_file() and profile.read_text(encoding="utf-8-sig").strip() != "PRODUCAO":
         errors.append("O perfil do artefato final não é PRODUCAO.")
@@ -232,6 +240,11 @@ def validate_distribution(root: Path, *, version: str) -> list[str]:
     profile = distribution_resource(root, "PERFIL_NABICODE.txt")
     if not profile.is_file() or profile.read_text(encoding="utf-8-sig").strip() != "PRODUCAO":
         errors.append("_internal/PERFIL_NABICODE.txt ausente ou não PRODUCAO.")
+    revision_file = distribution_resource(root, "REVISAO.txt")
+    try:
+        int(revision_file.read_text(encoding="utf-8-sig").strip())
+    except (OSError, UnicodeError, TypeError, ValueError):
+        errors.append("_internal/REVISAO.txt ausente ou inválido na distribuição.")
     findings = forbidden_distribution_files(root)
     if findings:
         errors.append("Arquivos proibidos: " + ", ".join(findings))
@@ -550,14 +563,36 @@ def build_installer() -> Path:
     return setup
 
 
+def build_update(*, minimum_source: str, revision: int) -> Path:
+    from controllers.release_package_controller import ReleasePackageController
+
+    build_windows()
+    return ReleasePackageController(PROJECT_ROOT, read_version()).create(
+        minimum_source=minimum_source,
+        revision=revision,
+    )
+
+
 def main() -> int:
     parser = argparse.ArgumentParser()
-    parser.add_argument("action", choices=("audit", "build", "installer"), nargs="?", default="audit")
+    parser.add_argument("action", choices=("audit", "build", "installer", "update"), nargs="?", default="audit")
+    parser.add_argument("--minimum-source", default=read_version())
+    parser.add_argument("--revision", type=int, default=0)
     args = parser.parse_args()
     errors = validate_source()
-    if args.action in {"build", "installer"}:
+    if args.action in {"build", "installer", "update"}:
         try:
-            result = build_windows() if args.action == "build" else build_installer()
+            if args.action == "build":
+                result = build_windows()
+            elif args.action == "installer":
+                result = build_installer()
+            else:
+                if args.revision <= 0:
+                    raise ValueError("Informe --revision maior que zero para o pacote incremental.")
+                result = build_update(
+                    minimum_source=args.minimum_source,
+                    revision=args.revision,
+                )
         except Exception as exc:
             print(f"BUILD_REPROVADO: {exc}", file=sys.stderr)
             return 2

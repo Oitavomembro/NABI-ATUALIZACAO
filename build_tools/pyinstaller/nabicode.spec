@@ -3,6 +3,7 @@ from pathlib import Path
 
 project_root = Path(SPECPATH).resolve().parents[1]
 version_file = project_root / "VERSAO.txt"
+revision_file = project_root / "REVISAO.txt"
 production_profile = project_root / "build_tools" / "resources" / "PERFIL_NABICODE.txt"
 production_runtime_hook = project_root / "build_tools" / "pyinstaller" / "runtime_production_profile.py"
 optional_app_icon = project_root / "build_tools" / "resources" / "NabiCode.ico"
@@ -11,6 +12,7 @@ name = f"NabiCode_v{version.replace('.', '_')}"
 
 datas = [
     (str(version_file), "."),
+    (str(revision_file), "."),
     (str(production_profile), "."),
 ]
 binaries = []

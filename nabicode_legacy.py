@@ -3035,7 +3035,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
         self.lbl_total_produtos.configure(text=resultado.total_texto)
 
-    def abrir_cadastros_auxiliares(self):
+    def abrir_cadastros_auxiliares(self, tipo_inicial="marca", ao_fechar=None):
+        tipo_inicial = str(tipo_inicial or "marca").strip().lower()
+        if tipo_inicial not in {"marca", "fornecedor", "unidade"}:
+            tipo_inicial = "marca"
         win = ctk.CTkToplevel(self)
         win.title("Cadastros auxiliares de produtos")
         metricas = UniversalLayoutPolicy.metrics(
@@ -3057,7 +3060,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         corpo = scroll.content
         corpo.grid_columnconfigure(0, weight=1)
 
-        tipo_var = tk.StringVar(value="marca")
+        tipo_var = tk.StringVar(value=tipo_inicial)
         ctk.CTkLabel(corpo, text="Tipo de cadastro", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=0, column=0, sticky="ew", padx=12, pady=(12, 4))
         ctk.CTkSegmentedButton(corpo, values=["marca", "fornecedor", "unidade"], variable=tipo_var).grid(row=1, column=0, sticky="ew", padx=12)
         ctk.CTkLabel(corpo, text="Nome ou sigla *", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).grid(row=2, column=0, sticky="ew", padx=12, pady=(14, 4))
@@ -3096,13 +3099,23 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             carregar()
             return True
 
+        callback_executado = False
+
+        def fechar():
+            nonlocal callback_executado
+            win.destroy()
+            if not callback_executado and callable(ao_fechar):
+                callback_executado = True
+                ao_fechar()
+
         rodape = ctk.CTkFrame(win, fg_color="#0d1117")
         rodape.pack(fill="x", padx=18, pady=(0, 12))
-        ctk.CTkButton(rodape, text="Cancelar", width=120, height=42, fg_color="#30363d", command=win.destroy).pack(side="left")
+        ctk.CTkButton(rodape, text="Voltar", width=120, height=42, fg_color="#30363d", command=fechar).pack(side="left")
         ctk.CTkButton(rodape, text="Salvar", width=150, height=42, fg_color="#2ea043", command=salvar).pack(side="right")
         tipo_var.trace_add("write", carregar)
         win.bind("<Control-s>", lambda _event: salvar(), add="+")
-        win.bind("<Escape>", lambda _event: win.destroy(), add="+")
+        win.bind("<Escape>", lambda _event: fechar(), add="+")
+        win.protocol("WM_DELETE_WINDOW", fechar)
         win._enter_navigator = install_enter_navigation([entrada, descricao], on_finish=salvar)
         carregar()
 
@@ -8413,6 +8426,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         rodape = ctk.CTkFrame(frame, fg_color="#161b22", corner_radius=10)
         rodape.pack(fill="x", padx=20, pady=(8, 18))
         ctk.CTkButton(rodape, text="Novo pedido", command=self.novo_pedido_compra).pack(side="left", padx=10, pady=10)
+        ctk.CTkButton(rodape, text="Fornecedores", command=self.abrir_fornecedores_compras).pack(side="left", padx=4, pady=10)
         ctk.CTkButton(rodape, text="Receber", command=self.receber_pedido_compra).pack(side="left", padx=4, pady=10)
         ctk.CTkButton(rodape, text="Detalhes", command=self.abrir_detalhes_compra).pack(side="left", padx=4, pady=10)
         return frame
@@ -8444,7 +8458,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         fornecedores = COMPRA_SERVICE.repository.listar_fornecedores()
         produtos = COMPRA_SERVICE.repository.listar_produtos_compra()
         if not fornecedores:
-            messagebox.showwarning("Compras", "Cadastre um fornecedor ativo antes de criar o pedido.", parent=self)
+            abrir = messagebox.askyesno(
+                "Compras",
+                "Nenhum fornecedor ativo foi encontrado.\n\nDeseja cadastrar um fornecedor agora?",
+                parent=self,
+            )
+            if abrir:
+                self.abrir_fornecedores_compras(retomar_pedido=True)
             return
         if not produtos:
             messagebox.showwarning("Compras", "Cadastre um produto ativo que controle estoque.", parent=self)
@@ -8503,6 +8523,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(rod,text="Cancelar",fg_color="#6b7280",command=janela.destroy).pack(side="right",padx=6,pady=10)
         ctk.CTkButton(rod,text="Salvar pedido",command=salvar).pack(side="right",padx=6,pady=10)
         janela.bind("<Control-s>",lambda _e: salvar()); janela.bind("<Escape>",lambda _e: janela.destroy())
+
+    def abrir_fornecedores_compras(self, retomar_pedido=False):
+        if not self._autorizar("compras", "create"):
+            return
+
+        def ao_fechar():
+            if retomar_pedido and COMPRA_SERVICE.repository.listar_fornecedores():
+                self.novo_pedido_compra()
+
+        self.abrir_cadastros_auxiliares("fornecedor", ao_fechar=ao_fechar)
 
     def receber_pedido_compra(self):
         if not self._autorizar("compras", "receive"):
@@ -9848,10 +9878,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         # ATUALIZAÇÕES, PACOTES E ROLLBACK
         aba = abas.tab("Atualizações")
+        revisao_instalada = _ADMIN_OPERATIONS.update_service().current_revision
         ctk.CTkLabel(aba, text="Atualização segura do NabiCode", font=ctk.CTkFont(size=17, weight="bold"), text_color="#00FF88").pack(pady=(14, 5))
         ctk.CTkLabel(
             aba,
-            text=f"Versão instalada: {APP_VERSION}. Selecione um pacote oficial .zip; o sistema valida, cria snapshot e aplica após fechar.",
+            text=f"Instalado: {APP_VERSION} R{revisao_instalada}. Selecione um pacote oficial .zip; o sistema valida, cria snapshot e aplica após fechar.",
             text_color="#c9d1d9", wraplength=760, justify="center"
         ).pack(pady=(0, 8))
 
@@ -9873,7 +9904,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 manifesto = _validar_pacote_atualizacao(caminho)
                 pacote_selecionado.update(path=caminho, manifest=manifesto)
-                pacote_var.set(f"Pacote validado: versão {manifesto['version']} — {Path(caminho).name}")
+                pacote_var.set(
+                    f"Pacote validado: {manifesto['version']} R{manifesto.get('revision', 0)} — {Path(caminho).name}"
+                )
                 btn_aplicar_pacote.configure(state="normal")
             except Exception as exc:
                 pacote_selecionado.update(path=None, manifest=None)
@@ -9898,7 +9931,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showerror("Atualização", "Senha administrativa inválida.", parent=janela)
                 return
             texto_confirmacao = (
-                f"Aplicar a versão {manifesto['version']}?\n\n"
+                f"Aplicar {manifesto['version']} R{manifesto.get('revision', 0)}?\n\n"
                 f"Origem aceita: {', '.join(manifesto.get('accepted_source_versions') or ['qualquer versão compatível'])}.\n"
                 "Será criado snapshot do banco e backup dos arquivos alterados. "
                 "Após reiniciar, arquivos e banco serão validados automaticamente. "
@@ -9908,7 +9941,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             try:
                 snapshot = criar_snapshot_sistema(
-                    f"antes_atualizacao_{manifesto['version'].replace('.', '_')}"
+                    f"antes_atualizacao_{manifesto['version'].replace('.', '_')}_r{manifesto.get('revision', 0)}"
                 )
                 state, command, update_cwd = _ADMIN_OPERATIONS.prepare_update(
                     caminho, manifesto, snapshot["id"], executable=sys.executable,
@@ -9918,7 +9951,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     self._usuario_financeiro(),
                     "ATUALIZAR_SISTEMA",
                     APP_VERSION,
-                    manifesto["version"],
+                    f"{manifesto['version']} R{manifesto.get('revision', 0)}",
                     "PREPARADO",
                 )
                 messagebox.showinfo(
