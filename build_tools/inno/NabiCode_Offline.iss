@@ -55,11 +55,108 @@ Filename: "{app}\{#AppExe}"; Description: "Executar NabiCode"; WorkingDir: "{app
 const
   LegacyR6UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{D8DD09BC-A699-4E77-A011-786A02A19596}_is1';
   OfficialUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{F186E71A-73A5-4E5E-B8B1-9C6488CF9267}_is1';
+  MasterPasswordSHA256 = 'f89df8c2689cb179a06efafecef653e12f99b525d12dbeb1ed3ff0484faebc57';
 
 var
   DeleteAllUserData: Boolean;
   MaintenancePage: TInputOptionWizardPage;
   MaintenanceFinished: Boolean;
+  OfficialInstallLocation: String;
+  LegacyInstallLocation: String;
+  OldInstallLocations: TStringList;
+
+function NormalizeMasterPassword(const Value: String): String;
+var
+  Normalized: String;
+begin
+  Normalized := Lowercase(Trim(Value));
+  while Pos('  ', Normalized) > 0 do
+    StringChangeEx(Normalized, '  ', ' ', True);
+  Result := Normalized;
+end;
+
+function VerifyMasterPassword(const Value: String): Boolean;
+begin
+  Result := CompareText(GetSHA256OfString(NormalizeMasterPassword(Value)),
+    MasterPasswordSHA256) = 0;
+end;
+
+function RequestMasterPassword(): Boolean;
+var
+  Form: TSetupForm;
+  Prompt: TNewStaticText;
+  PasswordEdit: TPasswordEdit;
+  OKButton: TNewButton;
+  CancelButton: TNewButton;
+  Password: String;
+begin
+  Form := CreateCustomForm(ScaleX(440), ScaleY(150), False, True);
+  try
+    Form.Caption := 'Autorização de segurança';
+    Prompt := TNewStaticText.Create(Form);
+    Prompt.Parent := Form;
+    Prompt.Left := ScaleX(16);
+    Prompt.Top := ScaleY(16);
+    Prompt.Width := Form.ClientWidth - ScaleX(32);
+    Prompt.Caption := 'Digite a senha mestra do NabiCode para confirmar a exclusão total:';
+
+    PasswordEdit := TPasswordEdit.Create(Form);
+    PasswordEdit.Parent := Form;
+    PasswordEdit.Left := ScaleX(16);
+    PasswordEdit.Top := Prompt.Top + Prompt.Height + ScaleY(12);
+    PasswordEdit.Width := Form.ClientWidth - ScaleX(32);
+
+    OKButton := TNewButton.Create(Form);
+    OKButton.Parent := Form;
+    OKButton.Caption := 'Confirmar';
+    OKButton.Width := ScaleX(100);
+    OKButton.Height := ScaleY(28);
+    OKButton.Left := Form.ClientWidth - ScaleX(216);
+    OKButton.Top := Form.ClientHeight - ScaleY(42);
+    OKButton.ModalResult := mrOk;
+    OKButton.Default := True;
+
+    CancelButton := TNewButton.Create(Form);
+    CancelButton.Parent := Form;
+    CancelButton.Caption := 'Cancelar';
+    CancelButton.Width := ScaleX(100);
+    CancelButton.Height := ScaleY(28);
+    CancelButton.Left := Form.ClientWidth - ScaleX(108);
+    CancelButton.Top := OKButton.Top;
+    CancelButton.ModalResult := mrCancel;
+    CancelButton.Cancel := True;
+    Form.ActiveControl := PasswordEdit;
+
+    Result := Form.ShowModal() = mrOk;
+    Password := PasswordEdit.Text;
+    PasswordEdit.Text := '';
+  finally
+    Form.Free();
+  end;
+  if Result and not VerifyMasterPassword(Password) then
+  begin
+    MsgBox('Senha mestra incorreta. Nenhum dado foi apagado.', mbError, MB_OK);
+    Result := False;
+  end;
+  Password := '';
+end;
+
+procedure DeleteAllNabiCodeData();
+var
+  Index: Integer;
+begin
+  { Somente raízes exatas pertencentes ao NabiCode; nunca apaga AppData/ProgramData genéricos. }
+  DelTree(ExpandConstant('{userappdata}\NabiCode'), True, True, True);
+  DelTree(ExpandConstant('{localappdata}\NabiCode'), True, True, True);
+  DelTree(ExpandConstant('{commonappdata}\NabiCode'), True, True, True);
+  if OfficialInstallLocation <> '' then
+    DelTree(RemoveBackslashUnlessRoot(OfficialInstallLocation), True, True, True);
+  if LegacyInstallLocation <> '' then
+    DelTree(RemoveBackslashUnlessRoot(LegacyInstallLocation), True, True, True);
+  if OldInstallLocations <> nil then
+    for Index := 0 to OldInstallLocations.Count - 1 do
+      DelTree(RemoveBackslashUnlessRoot(OldInstallLocations[Index]), True, True, True);
+end;
 
 function RunRegisteredUninstaller(const RegistryKey: String): Boolean;
 var
@@ -78,6 +175,40 @@ begin
   end;
   Result := Exec(Uninstaller, '/VERYSILENT /SUPPRESSMSGBOXES /NORESTART', '', SW_HIDE,
     ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
+end;
+
+procedure RemoveOtherRegisteredNabiCodeInstalls();
+var
+  Names: TArrayOfString;
+  Index: Integer;
+  RegistryKey: String;
+  DisplayName: String;
+  Publisher: String;
+  InstallLocation: String;
+begin
+  if not RegGetSubkeyNames(HKLM64,
+    'Software\Microsoft\Windows\CurrentVersion\Uninstall', Names) then
+    Exit;
+  for Index := 0 to GetArrayLength(Names) - 1 do
+  begin
+    RegistryKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + Names[Index];
+    if CompareText(RegistryKey, OfficialUninstallKey) = 0 then
+      Continue;
+    DisplayName := '';
+    Publisher := '';
+    RegQueryStringValue(HKLM64, RegistryKey, 'DisplayName', DisplayName);
+    RegQueryStringValue(HKLM64, RegistryKey, 'Publisher', Publisher);
+    if (Pos('NABICODE', Uppercase(DisplayName)) = 1) and
+      (CompareText(Publisher, 'NabiCode') = 0) then
+    begin
+      InstallLocation := '';
+      if RegQueryStringValue(HKLM64, RegistryKey, 'InstallLocation', InstallLocation) and
+        (InstallLocation <> '') then
+        OldInstallLocations.Add(InstallLocation);
+      if not RunRegisteredUninstaller(RegistryKey) then
+        RegDeleteKeyIncludingSubkeys(HKLM64, RegistryKey);
+    end;
+  end;
 end;
 
 procedure RemoveLegacyShortcuts();
@@ -134,6 +265,9 @@ end;
 procedure InitializeWizard();
 begin
   MaintenanceFinished := False;
+  OldInstallLocations := TStringList.Create;
+  RegQueryStringValue(HKLM64, OfficialUninstallKey, 'InstallLocation', OfficialInstallLocation);
+  RegQueryStringValue(HKLM64, LegacyR6UninstallKey, 'InstallLocation', LegacyInstallLocation);
   if RegKeyExists(HKLM64, OfficialUninstallKey) then
   begin
     MaintenancePage := CreateInputOptionPage(wpWelcome,
@@ -165,6 +299,11 @@ begin
     Result := False;
     Exit;
   end;
+  if DeleteData and not RequestMasterPassword() then
+  begin
+    Result := False;
+    Exit;
+  end;
 
   if not RunRegisteredUninstaller(OfficialUninstallKey) then
   begin
@@ -173,9 +312,10 @@ begin
     Exit;
   end;
   RemoveLegacyR6();
+  RemoveOtherRegisteredNabiCodeInstalls();
   RemoveLegacyShortcuts();
   if DeleteData then
-    DelTree(ExpandConstant('{userappdata}\NabiCode'), True, True, True);
+    DeleteAllNabiCodeData();
   MaintenanceFinished := True;
   MsgBox('Manutenção concluída com sucesso.', mbInformation, MB_OK);
   WizardForm.Close;
@@ -195,6 +335,8 @@ function PrepareToInstall(var NeedsRestart: Boolean): String;
 begin
   { Revisões atuais compartilham o AppId oficial; esta ponte é somente para o instalador R6 isolado. }
   Result := RemoveLegacyR6();
+  if Result = '' then
+    RemoveOtherRegisteredNabiCodeInstalls();
 end;
 
 function InitializeUninstall(): Boolean;
@@ -232,6 +374,11 @@ begin
       Result := False;
       Exit;
     end;
+    if not RequestMasterPassword() then
+    begin
+      Result := False;
+      Exit;
+    end;
   end;
   Result := True;
 end;
@@ -242,8 +389,8 @@ begin
   begin
     if DeleteAllUserData then
     begin
-      { Caminho exato da aplicação; nunca remove AppData ou outra pasta genérica. }
-      DelTree(ExpandConstant('{userappdata}\NabiCode'), True, True, True);
+      OfficialInstallLocation := ExpandConstant('{app}');
+      DeleteAllNabiCodeData();
       Log('Dados operacionais do usuário removidos por escolha explícita.');
     end
     else

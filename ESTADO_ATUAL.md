@@ -510,3 +510,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R11.zip`;
 - SHA-256 da atualização: `D0B025AB56DE65649381DDFCE0C566C75D4694B0BC379238571680522DE6C292`;
 - revisão `11` confirmada na distribuição; nenhum instalador ou desinstalador foi executado.
+
+## Checkpoint 42.33 / R12 TESTE — exclusão total protegida e versões antigas
+
+- `Apagar tudo` exige confirmação destrutiva e a mesma senha mestra validada pelo `SecurityService`;
+- o instalador armazena somente o SHA-256 já oficial da senha mestra, nunca a credencial em texto aberto;
+- a limpeza cobre exclusivamente as raízes NabiCode em AppData Roaming, AppData Local, ProgramData e pastas registradas de instalações oficiais/antigas;
+- versões antigas são descobertas pelo cadastro de programas do Windows, exigindo nome NabiCode e publicador NabiCode; não existe varredura destrutiva genérica do disco;
+- atualizar/reparar e desinstalar silenciosamente continuam preservando banco, backups, relatórios e configurações;
+- 37 testes focados de segurança, autenticação e instalador aprovados;
+- instalador R12 compilado com sucesso pelo Inno Setup 6.7.3 após validação real do código Pascal;
+- instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R12_Setup.exe`;
+- SHA-256: `B853FFF200898EB17EE649ACFCF163550D3223CFE4E3A6BD5B640B371205E264`;
+- atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R12.zip`;
+- SHA-256 da atualização: `8D72872E53542EC386C63191ABEDA2F80125B5431325D52B73D05F107CEAA2F2`;
+- revisão `12` confirmada na distribuição; nenhuma exclusão foi executada automaticamente.

@@ -26,7 +26,7 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.1"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "11"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "12"
 
 
 def test_installer_removes_only_the_known_legacy_r6_identity():
@@ -58,6 +58,33 @@ def test_single_setup_offers_update_repair_and_both_uninstall_modes():
     assert "Desinstalar e apagar completamente" in script
     assert "function NextButtonClick" in script
     assert "RunRegisteredUninstaller(OfficialUninstallKey)" in script
+
+
+def test_total_removal_requires_the_same_master_password_hash_and_exact_app_roots():
+    import re
+
+    script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
+    security = (ROOT / "services" / "security_service.py").read_text(encoding="utf-8")
+    installer_hash = re.search(r"MasterPasswordSHA256 = '([0-9a-f]{64})'", script).group(1)
+    service_hash = re.search(r'MASTER_PASSWORD_SHA256 = "([0-9a-f]{64})"', security).group(1)
+    assert installer_hash == service_hash
+    assert "RequestMasterPassword()" in script
+    assert "GetSHA256OfString(NormalizeMasterPassword(Value))" in script
+    assert "{userappdata}\\NabiCode" in script
+    assert "{localappdata}\\NabiCode" in script
+    assert "{commonappdata}\\NabiCode" in script
+    assert "OfficialInstallLocation" in script
+    assert "LegacyInstallLocation" in script
+
+
+def test_installer_discovers_other_registered_nabicode_versions_without_disk_wildcards():
+    script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
+    assert "procedure RemoveOtherRegisteredNabiCodeInstalls" in script
+    assert "RegGetSubkeyNames(HKLM64" in script
+    assert "CompareText(RegistryKey, OfficialUninstallKey) = 0" in script
+    assert "Pos('NABICODE', Uppercase(DisplayName)) = 1" in script
+    assert "CompareText(Publisher, 'NabiCode') = 0" in script
+    assert "OldInstallLocations.Add(InstallLocation)" in script
     assert str(ROOT) in build_windows.sys.path
     assert build_windows.distribution_name(ROOT) == "NabiCode_v2_5_1"
     assert (ROOT / "PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "TESTE"
