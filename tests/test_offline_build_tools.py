@@ -26,7 +26,38 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.1"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "10"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "11"
+
+
+def test_installer_removes_only_the_known_legacy_r6_identity():
+    script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
+    assert "{D8DD09BC-A699-4E77-A011-786A02A19596}_is1" in script
+    assert "function PrepareToInstall" in script
+    assert "RemoveLegacyR6()" in script
+    assert "NabiCode TESTE R6.lnk" in script
+    assert "VERYSILENT /SUPPRESSMSGBOXES /NORESTART" in script
+    assert "RegDeleteKeyIncludingSubkeys(HKLM64, LegacyR6UninstallKey)" in script
+
+
+def test_uninstaller_preserves_data_by_default_and_requires_double_confirmation_to_delete():
+    script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
+    assert "function InitializeUninstall" in script
+    assert "MB_YESNOCANCEL or MB_DEFBUTTON2" in script
+    assert "MB_YESNO or MB_DEFBUTTON2" in script
+    assert "if UninstallSilent then" in script
+    assert "DeleteAllUserData := False" in script
+    assert "DelTree(ExpandConstant('{userappdata}\\NabiCode'), True, True, True)" in script
+
+
+def test_single_setup_offers_update_repair_and_both_uninstall_modes():
+    script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
+    assert "OfficialUninstallKey" in script
+    assert "CreateInputOptionPage" in script
+    assert "Atualizar ou reparar o NabiCode" in script
+    assert "Desinstalar o programa e manter banco" in script
+    assert "Desinstalar e apagar completamente" in script
+    assert "function NextButtonClick" in script
+    assert "RunRegisteredUninstaller(OfficialUninstallKey)" in script
     assert str(ROOT) in build_windows.sys.path
     assert build_windows.distribution_name(ROOT) == "NabiCode_v2_5_1"
     assert (ROOT / "PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "TESTE"

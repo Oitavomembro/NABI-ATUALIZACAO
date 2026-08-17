@@ -496,3 +496,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - instalador de teste: `build_output/installer/NabiCode_2.5.1_TESTE_R10_Setup.exe`;
 - SHA-256 do instalador R10: `A82567505ED2804099694BFEF7A2588F674E44D63B3BA08BDE38B81004DCF4D3`;
 - revisão `10` confirmada dentro da distribuição; instalador não foi executado.
+
+## Checkpoint 42.32 / R11 TESTE — instalador único e desinstalação segura
+
+- o instalador oficial reconhece a identidade legada isolada `NabiCode TESTE R6` e remove seu desinstalador e atalhos conhecidos antes da atualização;
+- todas as revisões atuais continuam compartilhando o AppId e a pasta oficiais, impedindo novas instalações paralelas;
+- quando o NabiCode já está instalado, o mesmo assistente oferece atualizar/reparar, desinstalar mantendo dados ou desinstalar apagando os dados do usuário;
+- apagar tudo exige confirmação adicional e alcança somente `{userappdata}\NabiCode`;
+- desinstalações silenciosas, inclusive as usadas por atualização, sempre preservam banco, backups e configurações;
+- 22 testes focados do instalador e 29 testes conjuntos de instalador/atualizador aprovados;
+- instalador unificado: `build_output/installer/NabiCode_2.5.1_TESTE_R11_Setup.exe`;
+- SHA-256 do instalador: `8F6E2B5DE371E97352A6FDE0E51B8C97A7DFC1F0CBA5862789EF2899E40FF577`;
+- atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R11.zip`;
+- SHA-256 da atualização: `D0B025AB56DE65649381DDFCE0C566C75D4694B0BC379238571680522DE6C292`;
+- revisão `11` confirmada na distribuição; nenhum instalador ou desinstalador foi executado.
