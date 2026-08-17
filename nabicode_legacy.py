@@ -9886,8 +9886,48 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         pacote_var = tk.StringVar(value="Nenhum pacote selecionado.")
         pacote_selecionado = {"path": None, "manifest": None}
+        avisos_atualizacao = {}
         status_pacote = ctk.CTkLabel(aba, textvariable=pacote_var, text_color="#8b949e", wraplength=760, justify="left")
         status_pacote.pack(fill="x", padx=18, pady=(2, 8))
+
+        def mostrar_aviso_atualizacao(titulo, detalhes, *, erro=False):
+            """Aviso recuperável, minimizável e sem bloquear a janela principal."""
+            existente = avisos_atualizacao.get("janela")
+            try:
+                if existente is not None and existente.winfo_exists():
+                    existente.deiconify(); existente.lift()
+                    return
+            except tk.TclError:
+                pass
+            aviso = ctk.CTkToplevel(self)
+            avisos_atualizacao["janela"] = aviso
+            aviso.title(f"NabiCode — {titulo}")
+            aviso.geometry("620x330")
+            aviso.minsize(520, 280)
+            aviso.configure(fg_color="#0d1117")
+            ctk.CTkLabel(
+                aviso, text=titulo, font=ctk.CTkFont(size=20, weight="bold"),
+                text_color="#ff6b6b" if erro else "#f0b429",
+            ).pack(anchor="w", padx=28, pady=(24, 10))
+            ctk.CTkLabel(
+                aviso, text=str(detalhes), wraplength=550, justify="left", anchor="w",
+                text_color="#c9d1d9",
+            ).pack(fill="x", padx=28, pady=(0, 18))
+            botoes = ctk.CTkFrame(aviso, fg_color="transparent")
+            botoes.pack(side="bottom", fill="x", padx=24, pady=22)
+
+            def copiar():
+                aviso.clipboard_clear(); aviso.clipboard_append(str(detalhes))
+
+            def fechar():
+                avisos_atualizacao.pop("janela", None)
+                aviso.destroy()
+
+            ctk.CTkButton(botoes, text="Minimizar", fg_color="#30363d", command=aviso.iconify).pack(side="left", padx=4)
+            ctk.CTkButton(botoes, text="Copiar detalhes", fg_color="#1f6feb", command=copiar).pack(side="left", padx=4)
+            ctk.CTkButton(botoes, text="Fechar", command=fechar).pack(side="right", padx=4)
+            aviso.protocol("WM_DELETE_WINDOW", fechar)
+            aviso.lift()
 
         def _validar_pacote_atualizacao(caminho):
             return _ADMIN_OPERATIONS.validate_update_package(caminho)
@@ -9909,8 +9949,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 pacote_selecionado.update(path=None, manifest=None)
                 btn_aplicar_pacote.configure(state="disabled")
-                pacote_var.set("Pacote rejeitado.")
-                messagebox.showerror("Atualização", str(exc), parent=janela)
+                mesma_revisao = "não é mais novo" in str(exc).lower()
+                pacote_var.set("Nenhuma atualização necessária." if mesma_revisao else "Pacote rejeitado.")
+                mostrar_aviso_atualizacao(
+                    "Nenhuma atualização necessária" if mesma_revisao else "Pacote de atualização rejeitado",
+                    str(exc), erro=not mesma_revisao,
+                )
 
         def aplicar_pacote_atualizacao():
             caminho = pacote_selecionado.get("path")

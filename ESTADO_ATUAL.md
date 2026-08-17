@@ -525,3 +525,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R12.zip`;
 - SHA-256 da atualização: `8D72872E53542EC386C63191ABEDA2F80125B5431325D52B73D05F107CEAA2F2`;
 - revisão `12` confirmada na distribuição; nenhuma exclusão foi executada automaticamente.
+
+## Checkpoint 42.34 / R13 TESTE — aviso de atualização recuperável
+
+- selecionar um pacote da mesma revisão passa a informar `Nenhuma atualização necessária`, sem classificar a situação como falha crítica;
+- a caixa nativa bloqueante foi substituída por uma janela NabiCode normal e não modal;
+- o aviso oferece `Minimizar`, `Copiar detalhes` e `Fechar`, permanecendo recuperável durante captura de tela ou troca de aplicativo;
+- fechar ou minimizar o aviso não oculta nem encerra a janela principal;
+- 15 testes focados de atualização aprovados e `compileall` validado;
+- revisão interna avançada para R13.
+- instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R13_Setup.exe`;
+- SHA-256 do instalador: `66B978DF153583D9D0B14386C67DBAC29D64734D232AE13DF60BEBAC6E1AB474`;
+- atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R13.zip`;
+- SHA-256 da atualização: `6AD8BB522F453736DB8EBD888AE95E6BB7FF2C455DC7C0DD10E726A40906DFBC`.

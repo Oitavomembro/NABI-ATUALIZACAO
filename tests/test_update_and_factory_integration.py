@@ -23,6 +23,15 @@ class UpdateAndFactoryIntegrationTests(unittest.TestCase):
         self.assertIn("service.prepare(", ADMIN_MANAGER)
         self.assertIn("_validar_atualizacao_apos_reinicio()", SOURCE)
 
+    def test_update_rejection_uses_recoverable_minimizable_window(self):
+        self.assertIn("def mostrar_aviso_atualizacao", SOURCE)
+        self.assertIn('text="Minimizar"', SOURCE)
+        self.assertIn("command=aviso.iconify", SOURCE)
+        self.assertIn('text="Copiar detalhes"', SOURCE)
+        self.assertIn('mesma_revisao = "não é mais novo"', SOURCE)
+        block = SOURCE[SOURCE.index("def selecionar_pacote_atualizacao"):SOURCE.index("def aplicar_pacote_atualizacao")]
+        self.assertNotIn('messagebox.showerror("Atualização"', block)
+
     def test_factory_reset_requests_password_in_dedicated_modal(self):
         self.assertIn('text="Continuar e informar senha"', SOURCE)
         self.assertIn('auth.title("Autorizar restauração")', SOURCE)
