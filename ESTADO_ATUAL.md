@@ -549,3 +549,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - inspeção visual aprovada em 16, 24, 32, 48, 64, 128 e 256 pixels;
 - suíte completa: 1.112 testes, 22 subtestes e 1 teste opcional ignorado;
 - nenhum programa, banco real ou impressora física foi aberto durante a validação.
+
+## Checkpoint 42.36 / R15 TESTE — ícone 3D sem placa de fundo
+
+- removidos na fonte visual o quadrado escuro, a moldura e o fundo do ícone R14;
+- o `N` 3D passou a usar transparência alfa real, como um glifo independente na barra do Windows;
+- preservadas as nove escalas do recurso ICO e a identidade azul/ciano aprovada;
+- teste de regressão exige PNG RGBA para impedir a reintrodução de uma placa opaca;
+- inspeção visual aprovada sobre fundo roxo em 16, 24, 32, 48, 64, 128 e 256 pixels.
+- 32 testes focados de empacotamento aprovados; suíte completa da R14, sem alteração funcional posterior, permanece com 1.112 testes e 22 subtestes aprovados.

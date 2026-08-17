@@ -100,9 +100,11 @@ def test_uninstaller_preserves_appdata_and_keeps_append_only_install_log():
 def test_official_icon_is_valid_and_wired_to_executable_and_installer():
     icon = ROOT / "build_tools/resources/NabiCode.ico"
     png = ROOT / "build_tools/resources/NabiCode.png"
+    png_data = png.read_bytes()
     icon_header = icon.read_bytes()[:6]
 
-    assert png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert png_data.startswith(b"\x89PNG\r\n\x1a\n")
+    assert png_data[25] == 6  # PNG RGBA: o ícone deve permanecer sem placa de fundo.
     assert icon_header[:4] == b"\x00\x00\x01\x00"
     assert int.from_bytes(icon_header[4:6], "little") >= 9
     assert 'optional_app_icon = project_root / "build_tools" / "resources" / "NabiCode.ico"' in SPEC
