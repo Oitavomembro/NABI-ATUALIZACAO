@@ -558,3 +558,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão exige PNG RGBA para impedir a reintrodução de uma placa opaca;
 - inspeção visual aprovada sobre fundo roxo em 16, 24, 32, 48, 64, 128 e 256 pixels.
 - 32 testes focados de empacotamento aprovados; suíte completa da R14, sem alteração funcional posterior, permanece com 1.112 testes e 22 subtestes aprovados.
+
+## Checkpoint 42.37 / R16 TESTE — ícone explícito nos atalhos
+
+- confirmado por extração do recurso PE que o executável R15 já continha o `N` transparente correto;
+- causa do atalho divergente removida: os atalhos dependiam da extração automática do executável e do cache de ícones do Windows;
+- a distribuição passa a carregar `NabiCode.ico` também como arquivo independente na raiz;
+- atalhos do Menu Iniciar e da Área de Trabalho apontam explicitamente para esse recurso;
+- a entrada de desinstalação usa o mesmo ícone oficial;
+- validação da distribuição reprova pacotes sem o arquivo independente;
+- 32 testes focados de build e instalador aprovados.

@@ -23,7 +23,7 @@ SolidCompression=yes
 PrivilegesRequired=admin
 ArchitecturesAllowed=x64compatible
 ArchitecturesInstallIn64BitMode=x64compatible
-UninstallDisplayIcon={app}\{#AppExe}
+UninstallDisplayIcon={app}\NabiCode.ico
 UninstallDisplayName=NabiCode {#AppVersion}
 AppMutex=NabiCodeApplicationMutex
 CloseApplications=yes
@@ -45,8 +45,8 @@ Name: "desktopicon"; Description: "Criar atalho na Área de Trabalho"; GroupDesc
 Source: "..\..\build_output\dist\{#DistName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
-Name: "{autoprograms}\NabiCode"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"
-Name: "{autodesktop}\NabiCode"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; Tasks: desktopicon
+Name: "{autoprograms}\NabiCode"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\NabiCode.ico"; IconIndex: 0
+Name: "{autodesktop}\NabiCode"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"; IconFilename: "{app}\NabiCode.ico"; IconIndex: 0; Tasks: desktopicon
 
 [Run]
 Filename: "{app}\{#AppExe}"; Description: "Executar NabiCode"; WorkingDir: "{app}"; Flags: nowait postinstall skipifsilent

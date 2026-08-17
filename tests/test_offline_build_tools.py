@@ -26,7 +26,7 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.1"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "15"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "16"
 
 
 def test_installer_removes_only_the_known_legacy_r6_identity():
@@ -114,6 +114,7 @@ def test_distribution_manifest_has_hashes_and_relative_paths() -> None:
         root = build_root / "dist" / "NabiCode_v2_5_1"
         root.mkdir(parents=True)
         (root / "NabiCode_v2_5_1.exe").write_bytes(b"MZ-nabicode")
+        (root / "NabiCode.ico").write_bytes(b"icon")
         internal = root / "_internal"
         internal.mkdir()
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
@@ -330,6 +331,7 @@ def test_installer_validation_uses_validated_onedir_as_input() -> None:
         internal = distribution / "_internal"
         internal.mkdir(parents=True)
         (distribution / "NabiCode_v2_5_1.exe").write_bytes(b"MZ-app")
+        (distribution / "NabiCode.ico").write_bytes(b"icon")
         (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
         (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
         (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")

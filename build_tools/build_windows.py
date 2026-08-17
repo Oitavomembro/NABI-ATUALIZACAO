@@ -236,6 +236,9 @@ def validate_distribution(root: Path, *, version: str) -> list[str]:
     exe = root / f"{name}.exe"
     if not exe.is_file():
         errors.append(f"Executável ausente: {exe.name}")
+    app_icon = root / "NabiCode.ico"
+    if not app_icon.is_file() or app_icon.stat().st_size <= 0:
+        errors.append("NabiCode.ico ausente ou vazio na raiz da distribuição.")
     version_file = distribution_resource(root, "VERSAO.txt")
     if not version_file.is_file() or version_file.read_text(encoding="utf-8-sig").strip() != version:
         errors.append("_internal/VERSAO.txt ausente ou divergente na distribuição.")
@@ -426,6 +429,9 @@ def build_windows() -> Path:
             else:
                 os.environ[environment_name] = previous
     distribution = dist_root / distribution_name_value
+    app_icon = PROJECT_ROOT / "build_tools" / "resources" / "NabiCode.ico"
+    if app_icon.is_file():
+        shutil.copy2(app_icon, distribution / "NabiCode.ico")
     dist_errors = validate_distribution(distribution, version=version)
     if dist_errors:
         raise RuntimeError("\n".join(dist_errors))

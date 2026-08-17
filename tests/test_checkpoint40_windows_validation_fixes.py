@@ -112,3 +112,6 @@ def test_official_icon_is_valid_and_wired_to_executable_and_installer():
     assert "#ifdef AppIconFile" in INNO
     assert "SetupIconFile={#AppIconFile}" in INNO
     assert "if optional_icon.is_file():" in BUILD
+    assert 'shutil.copy2(app_icon, distribution / "NabiCode.ico")' in BUILD
+    assert 'IconFilename: "{app}\\NabiCode.ico"' in INNO
+    assert "UninstallDisplayIcon={app}\\NabiCode.ico" in INNO
