@@ -479,3 +479,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - corte automático continua único e nenhuma impressora física foi usada;
 - 40 testes focados aprovados;
 - revisão interna avançada para R9.
+
+## Checkpoint 42.31 / R10 TESTE — migração responsiva em segundo plano
+
+- causa raiz removida nos dois formatos: análise, preparação e importação `.sql` não executam mais trabalho pesado na thread gráfica;
+- validação e importação `.nabimig` informam progresso real para backup, categorias, integridade e confirmação da transação;
+- o painel libera o bloqueio modal enquanto uma tarefa longa está ativa, permitindo continuar usando o NabiCode;
+- a interface permanece responsável por todos os componentes gráficos; a thread de trabalho não acessa Tk;
+- migrações longas exibem etapa e percentual, e a conclusão ou falha é avisada pela interface;
+- backup obrigatório, transação única, rollback, cancelamento e verificação de chaves estrangeiras foram preservados;
+- 30 testes focados aprovados;
+- suíte: 1.087 testes e 22 subtestes aprovados na execução principal; os 19 testes impedidos pela pasta temporária do Windows foram repetidos isoladamente e os 57 testes dos arquivos afetados foram aprovados;
+- `compileall` e `git diff --check` aprovados; somente bancos temporários e perfil TESTE foram usados.

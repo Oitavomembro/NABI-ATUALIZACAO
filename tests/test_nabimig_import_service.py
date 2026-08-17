@@ -59,6 +59,14 @@ class NabiMigImportServiceTests(unittest.TestCase):
         self.assertTrue(preview.ready)
         self.assertEqual(preview.counts["sales"], 1)
 
+    def test_preview_reports_progress_without_touching_the_ui(self):
+        build_package(self.path, {"customers": [row("customers", "c1", {"name": "Cliente"})]})
+        updates = []
+        NabiMigImportService().preview(self.path, lambda value, message: updates.append((value, message)))
+        self.assertEqual(updates[-1][0], 1.0)
+        self.assertGreaterEqual(len(updates), 4)
+        self.assertEqual([value for value, _ in updates], sorted(value for value, _ in updates))
+
     def test_preview_rejects_broken_reference(self):
         build_package(self.path, {
             "customers": [row("customers", "c1", {"name": "Cliente"})],
@@ -119,6 +127,21 @@ class NabiMigImportServiceTests(unittest.TestCase):
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM estoque_movimentacoes").fetchone()[0], 1)
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM migracoes_execucoes").fetchone()[0], 2)
         connection.close()
+
+    def test_import_reports_backup_categories_integrity_and_completion(self):
+        build_package(self.path, self.catalog_records())
+        target = self.create_target()
+        updates = []
+        NabiMigImportService().execute_catalog(
+            self.path, database_path=target, backup_dir=Path(self.temp.name) / "backups",
+            connect=lambda: sqlite3.connect(target),
+            backup_database=lambda source, destination: shutil.copy2(source, destination),
+            progress=lambda value, message: updates.append((value, message)),
+        )
+        messages = " ".join(message for _, message in updates).lower()
+        self.assertIn("backup", messages)
+        self.assertIn("integridade", messages)
+        self.assertEqual(updates[-1][0], 1.0)
 
     def test_catalog_import_rolls_back_all_changes_on_failure(self):
         records = self.catalog_records()

@@ -9772,6 +9772,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         def executar_tarefa_ui(nome, trabalho, ao_concluir, ao_falhar, ao_progresso=None):
             """Executa trabalho fora da thread gráfica e consulta o estado via after()."""
+            # O painel administrativo nasce modal. Durante tarefas demoradas, liberar
+            # o grab mantém o restante do NabiCode utilizável sem tocar no Tk pelo worker.
+            if janela.grab_current() == janela:
+                janela.grab_release()
             tarefa = TASK_MANAGER.submit(nome, trabalho)
 
             def acompanhar():
@@ -10116,22 +10120,25 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showwarning("Migração", "Selecione um arquivo .sql válido.", parent=janela); return
             progresso_mig.set(0); status_mig.configure(text="Analisando backup...", text_color="#ffd700")
             resultado_mig.delete("1.0", "end"); resultado_mig.insert("end", "Análise em andamento. Aguarde...\n")
-            janela.update_idletasks()
-            try:
-                def atualizar(valor):
-                    progresso_mig.set(valor)
-                    status_mig.configure(text=f"Analisando... {valor*100:.0f}%")
-                    janela.update_idletasks()
-                rel = analisar_dump_mysql(caminho, atualizar)
+            def trabalho(ctx):
+                return analisar_dump_mysql(caminho, lambda valor: ctx.report_progress(valor, "Analisando o backup..."))
+
+            def concluir(rel):
                 self.ultimo_relatorio_migracao = rel
                 texto = mysql_migration_report_text(rel)
                 resultado_mig.delete("1.0", "end"); resultado_mig.insert("end", texto)
                 status_mig.configure(text="Simulação concluída. Nenhum dado foi alterado.", text_color="#00FF88")
                 registrar_log_mig(caminho, "ANÁLISE", "SUCESSO", texto)
-            except Exception as exc:
+
+            def falhar(erro):
                 progresso_mig.set(0); status_mig.configure(text="Falha na análise.", text_color="#ff6b6b")
-                registrar_log_mig(caminho, "ANÁLISE", "ERRO", str(exc))
-                messagebox.showerror("Migração", f"Não foi possível analisar o arquivo:\n{exc}", parent=janela)
+                registrar_log_mig(caminho, "ANÁLISE", "ERRO", erro)
+                messagebox.showerror("Migração", f"Não foi possível analisar o arquivo:\n{erro}", parent=janela)
+
+            executar_tarefa_ui(
+                "Analisar backup SQL", trabalho, concluir, falhar,
+                lambda valor, mensagem, _status: (progresso_mig.set(valor), status_mig.configure(text=f"{mensagem} {valor*100:.0f}%")),
+            )
 
         def salvar_relatorio_mig():
             if Path(entrada_sql.get().strip()).suffix.lower() == ".nabimig":
@@ -10156,20 +10163,25 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showwarning("Migração", "Selecione um arquivo .sql válido.", parent=janela); return
             progresso_mig.set(0); status_mig.configure(text="Calculando saldos e escolhendo as 12 últimas transações...", text_color="#ffd700")
             resultado_mig.delete("1.0", "end"); resultado_mig.insert("end", "Preparação da Fase 2 em andamento. Aguarde...\n")
-            janela.update_idletasks()
-            try:
-                def atualizar(valor):
-                    progresso_mig.set(valor); status_mig.configure(text=f"Preparando Fase 2... {valor*100:.0f}%"); janela.update_idletasks()
-                dados = preparar_migracao_resumida(caminho, atualizar)
+            def trabalho(ctx):
+                return preparar_migracao_resumida(caminho, lambda valor: ctx.report_progress(valor, "Preparando dados..."))
+
+            def concluir(dados):
                 self.dados_migracao_fase2 = dados
                 texto = migration_phase2_preview_text(dados)
                 resultado_mig.delete("1.0", "end"); resultado_mig.insert("end", texto)
                 status_mig.configure(text="Prévia concluída. Confira e use Importar Fase 2.", text_color="#00FF88")
                 registrar_log_mig(caminho, "PREPARAÇÃO FASE 2", "SUCESSO", texto)
-            except Exception as exc:
+
+            def falhar(erro):
                 status_mig.configure(text="Falha ao preparar a Fase 2.", text_color="#ff6b6b")
-                registrar_log_mig(caminho, "PREPARAÇÃO FASE 2", "ERRO", str(exc))
-                messagebox.showerror("Migração", f"Não foi possível preparar a migração:\n{exc}", parent=janela)
+                registrar_log_mig(caminho, "PREPARAÇÃO FASE 2", "ERRO", erro)
+                messagebox.showerror("Migração", f"Não foi possível preparar a migração:\n{erro}", parent=janela)
+
+            executar_tarefa_ui(
+                "Preparar migração SQL", trabalho, concluir, falhar,
+                lambda valor, mensagem, _status: (progresso_mig.set(valor), status_mig.configure(text=f"{mensagem} {valor*100:.0f}%")),
+            )
 
         def importar_fase2_ui():
             if not self.dados_migracao_fase2:
@@ -10178,22 +10190,28 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             pergunta = (f"Serão importados/atualizados {len(dados['clientes'])} clientes, o saldo atual e até 12 transações por cliente.\n\n"
                         "Um backup automático será criado antes da gravação.\nOs clientes de demonstração serão removidos.\n\nContinuar?")
             if not messagebox.askyesno("Confirmar Migração — Fase 2", pergunta, parent=janela): return
-            progresso_mig.set(0); status_mig.configure(text="Importando dados... não feche o programa.", text_color="#ffd700")
-            janela.update_idletasks()
-            try:
-                def atualizar(valor):
-                    progresso_mig.set(valor); status_mig.configure(text=f"Importando... {valor*100:.0f}%"); janela.update_idletasks()
-                res = executar_migracao_resumida(dados, remover_demos=True, progresso=atualizar)
+            progresso_mig.set(0); status_mig.configure(text="Migração em segundo plano. Você pode continuar usando o NabiCode.", text_color="#ffd700")
+
+            def trabalho(ctx):
+                return executar_migracao_resumida(dados, remover_demos=True, progresso=lambda valor: ctx.report_progress(valor, "Importando dados..."))
+
+            def concluir(res):
                 texto = migration_phase2_result_text(res)
                 resultado_mig.delete("1.0", "end"); resultado_mig.insert("end", texto)
                 status_mig.configure(text="Migração Fase 2 concluída com sucesso.", text_color="#00FF88")
                 registrar_log_mig(dados["arquivo"], "IMPORTAÇÃO FASE 2", "SUCESSO", texto)
                 self.carregar_clientes(); self.atualizar_resumo_lateral()
                 messagebox.showinfo("Migração", "Migração concluída. Cadastros, saldos e histórico resumido já estão disponíveis.", parent=janela)
-            except Exception as exc:
+
+            def falhar(erro):
                 status_mig.configure(text="Falha na importação; a transação foi desfeita.", text_color="#ff6b6b")
-                registrar_log_mig(dados["arquivo"], "IMPORTAÇÃO FASE 2", "ERRO", str(exc))
-                messagebox.showerror("Migração", f"A importação falhou e nenhum dado parcial foi mantido:\n{exc}", parent=janela)
+                registrar_log_mig(dados["arquivo"], "IMPORTAÇÃO FASE 2", "ERRO", erro)
+                messagebox.showerror("Migração", f"A importação falhou e nenhum dado parcial foi mantido:\n{erro}", parent=janela)
+
+            executar_tarefa_ui(
+                "Importar migração SQL", trabalho, concluir, falhar,
+                lambda valor, mensagem, _status: (progresso_mig.set(valor), status_mig.configure(text=f"{mensagem} {valor*100:.0f}% — você pode continuar usando o programa")),
+            )
 
         frame_botoes_mig = ctk.CTkFrame(conteudo_mig, fg_color="transparent"); frame_botoes_mig.pack(fill="x", padx=14, pady=(0, 10))
         def arquivo_nabimig_selecionado():
@@ -10327,7 +10345,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 status_nabimig.configure(text="Pacote reprovado.", text_color="#ff6b6b")
                 messagebox.showerror("Migração .nabimig", f"O pacote não passou na validação:\n{erro}", parent=janela)
 
-            executar_tarefa_ui("Validar pacote .nabimig", lambda ctx: servico_nabimig.preview(caminho), concluir, falhar)
+            executar_tarefa_ui(
+                "Validar pacote .nabimig",
+                lambda ctx: servico_nabimig.preview(caminho, ctx.report_progress),
+                concluir, falhar,
+                lambda valor, mensagem, _status: (progresso_nabimig.set(valor), status_nabimig.configure(text=mensagem)),
+            )
 
         def importar_nabimig_ui():
             preview = estado_nabimig.get("preview")
@@ -10353,7 +10376,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             estado_nabimig["cancelar"] = False
             remover_demos = bool(remover_demos_nabimig.get())
             progresso_nabimig.set(0.2)
-            status_nabimig.configure(text="Criando backup consistente...", text_color="#ffd700")
+            status_nabimig.configure(text="Migração em segundo plano. Você pode continuar usando o NabiCode.", text_color="#ffd700")
             botao_importar_nabimig.configure(state="disabled")
             botao_cancelar_nabimig.configure(state="normal")
 
@@ -10365,7 +10388,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         origem, destino, timeout=60, network_mode=MODO_REDE, logger=logger,
                     ),
                     categories=escolhidas, remove_demo_customers=remover_demos,
-                    cancel_check=lambda: bool(estado_nabimig["cancelar"]),
+                    cancel_check=lambda: ctx.cancelled() or bool(estado_nabimig["cancelar"]),
+                    progress=ctx.report_progress,
                 )
 
             def concluir(result):
@@ -10392,7 +10416,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if not cancelado:
                     messagebox.showerror("Migração .nabimig", f"A importação falhou e foi desfeita:\n{erro}", parent=janela)
 
-            executar_tarefa_ui("Importar pacote .nabimig", trabalho, concluir, falhar)
+            executar_tarefa_ui(
+                "Importar pacote .nabimig", trabalho, concluir, falhar,
+                lambda valor, mensagem, _status: (
+                    progresso_nabimig.set(valor),
+                    status_nabimig.configure(text=f"{mensagem} — você pode continuar usando o programa"),
+                ),
+            )
 
         def cancelar_nabimig_ui():
             estado_nabimig["cancelar"] = True

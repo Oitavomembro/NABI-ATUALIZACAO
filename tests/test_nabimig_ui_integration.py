@@ -22,6 +22,16 @@ def test_existing_phase2_and_nabimig_share_the_migration_tab():
     assert "validar_nabimig_ui(True) if arquivo_nabimig_selecionado()" in LEGACY
 
 
+def test_all_migration_formats_run_outside_the_graphical_thread():
+    assert '"Analisar backup SQL", trabalho, concluir, falhar' in LEGACY
+    assert '"Importar migração SQL", trabalho, concluir, falhar' in LEGACY
+    assert '"Importar pacote .nabimig", trabalho, concluir, falhar' in LEGACY
+    migration_block = LEGACY[LEGACY.index("        def analisar_sql_ui():"):LEGACY.index("        # DEMONSTRAÇÃO")]
+    assert "janela.update_idletasks()" not in migration_block
+    assert "janela.grab_release()" in LEGACY
+    assert "você pode continuar usando o programa" in migration_block
+
+
 def test_report_is_technical_and_contains_required_audit_fields():
     preview = NabiMigImportPreview(
         package="C:/temp/pacote.nabimig", package_sha256="abc", source_system="HOST_FIREBIRD_2_5",

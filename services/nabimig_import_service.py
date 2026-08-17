@@ -89,16 +89,24 @@ class NabiMigImportService:
     def _sha256(content: bytes) -> str:
         return hashlib.sha256(content).hexdigest()
 
-    def preview(self, package: str | Path) -> NabiMigImportPreview:
+    def preview(
+        self,
+        package: str | Path,
+        progress: Callable[[float, str], None] | None = None,
+    ) -> NabiMigImportPreview:
+        report = progress or (lambda _value, _message: None)
         path = Path(package).expanduser().resolve()
         if path.suffix.lower() != ".nabimig" or not path.is_file() or path.stat().st_size == 0:
             raise ValueError("Selecione um pacote .nabimig valido.")
+        report(0.05, "Lendo e identificando o pacote...")
         package_sha256 = self._sha256(path.read_bytes())
+        report(0.25, "Conferindo a assinatura do pacote...")
         with zipfile.ZipFile(path) as archive:
             records, manifest = self._read_validated(archive)
+        report(0.75, "Validando contagens e vínculos...")
         errors, warnings = self._validate_records(records)
         source = manifest.get("source", {})
-        return NabiMigImportPreview(
+        result = NabiMigImportPreview(
             package=str(path),
             package_sha256=package_sha256,
             source_system=str(source.get("system") or ""),
@@ -107,6 +115,8 @@ class NabiMigImportService:
             warnings=tuple(warnings),
             errors=tuple(errors),
         )
+        report(1.0, "Validação concluída.")
+        return result
 
     def execute_catalog(
         self,
@@ -127,14 +137,24 @@ class NabiMigImportService:
         categories: tuple[str, ...] = ("customers", "suppliers", "products", "stock"),
         remove_demo_customers: bool = False,
         cancel_check: Callable[[], bool] | None = None,
+        progress: Callable[[float, str], None] | None = None,
     ) -> NabiMigImportResult:
         """Importa as categorias escolhidas numa única transação auditável."""
+        report = progress or (lambda _value, _message: None)
+        cancelled = cancel_check or (lambda: False)
+
+        def checkpoint(value: float, message: str) -> None:
+            if cancelled():
+                raise InterruptedError("Importacao cancelada antes da transacao.")
+            report(value, message)
+
         allowed = {"customers", "suppliers", "products", "stock", "sales", "sale_items", "credit_accounts", "receipts"}
         selected, automatic_dependencies = self.resolve_categories(categories)
         unknown = set(selected) - allowed
         if unknown:
             raise ValueError("Categorias ainda nao liberadas para escrita: " + ", ".join(sorted(unknown)))
-        preview = self.preview(package)
+        checkpoint(0.02, "Validando o pacote antes da importação...")
+        preview = self.preview(package, lambda value, message: report(0.02 + value * 0.13, message))
         if not preview.ready:
             raise ValueError("Pacote reprovado: " + "; ".join(preview.errors))
         missing = set(selected) - set(preview.counts)
@@ -147,11 +167,11 @@ class NabiMigImportService:
         source_system = str(manifest.get("source", {}).get("system") or "NABIMIG")
         backup_path = Path(backup_dir).expanduser().resolve() / f"antes_nabimig_{datetime.now():%Y%m%d_%H%M%S_%f}.db"
         backup_path.parent.mkdir(parents=True, exist_ok=True)
+        checkpoint(0.18, "Criando backup obrigatório...")
         backup_database(database_path, backup_path)
         if not backup_path.is_file() or backup_path.stat().st_size == 0:
             raise RuntimeError("O backup obrigatorio nao foi criado; importacao cancelada.")
-        if cancel_check is not None and cancel_check():
-            raise InterruptedError("Importacao cancelada antes da transacao.")
+        checkpoint(0.25, "Backup concluído. Preparando transação...")
 
         connection = connect()
         inserted = Counter()
@@ -164,27 +184,44 @@ class NabiMigImportService:
             if remove_demo_customers:
                 demos_removed, demos_preserved = self._remove_unlinked_demo_customers(connection)
             target_ids: dict[str, dict[str, int]] = {}
+            ordered = [item for item in ("customers", "suppliers", "products", "stock", "sales", "sale_items", "credit_accounts", "receipts") if item in selected]
+            completed = 0
+
+            def category_done(label: str) -> None:
+                nonlocal completed
+                completed += 1
+                checkpoint(0.30 + 0.58 * completed / max(1, len(ordered)), f"{label} concluído ({completed}/{len(ordered)})...")
+
             if "customers" in selected:
                 target_ids["customers"] = self._import_customers(connection, records["customers"], source_system, inserted, updated)
+                category_done("Clientes")
             if "suppliers" in selected:
                 target_ids["suppliers"] = self._import_suppliers(connection, records["suppliers"], source_system, inserted, updated)
+                category_done("Fornecedores")
             if "products" in selected:
                 target_ids["products"] = self._import_products(connection, records["products"], source_system, inserted, updated)
+                category_done("Produtos")
             if "stock" in selected:
                 product_ids = target_ids.get("products") or self._load_target_ids(connection, source_system, "products")
                 self._import_stock(connection, records["stock"], product_ids, source_system, inserted, updated)
+                category_done("Estoque")
             customer_ids = target_ids.get("customers") or self._load_target_ids(connection, source_system, "customers")
             product_ids = target_ids.get("products") or self._load_target_ids(connection, source_system, "products")
             if "sales" in selected:
                 target_ids["sales"] = self._import_sales(connection, records["sales"], customer_ids, source_system, inserted, updated)
+                category_done("Vendas")
             if "sale_items" in selected:
                 sale_ids = target_ids.get("sales") or self._load_target_ids(connection, source_system, "sales")
                 self._import_sale_items(connection, records["sale_items"], sale_ids, product_ids, source_system, inserted, updated)
+                category_done("Itens das vendas")
             if "credit_accounts" in selected:
                 self._import_credit_accounts(connection, records["credit_accounts"], customer_ids, source_system, inserted, updated)
                 self._refresh_customer_balances(connection, customer_ids, source_system)
+                category_done("Contas a receber")
             if "receipts" in selected:
                 self._import_receipts(connection, records["receipts"], customer_ids, source_system, inserted, updated)
+                category_done("Recebimentos")
+            checkpoint(0.91, "Verificando integridade do banco...")
             violations = connection.execute("PRAGMA foreign_key_check").fetchall()
             if violations:
                 raise RuntimeError(f"Integridade relacional invalida apos importacao: {violations[0]}")
@@ -199,7 +236,9 @@ class NabiMigImportService:
                  "NABIMIG: " + ",".join(selected)),
             )
             open_balance = self._imported_open_balance(connection, source_system)
+            checkpoint(0.97, "Confirmando a transação...")
             connection.commit()
+            report(1.0, "Importação concluída e verificada.")
             return NabiMigImportResult(
                 str(backup_path), dict(inserted), dict(updated), preview.package_sha256,
                 selected, automatic_dependencies, demos_removed, demos_preserved,
