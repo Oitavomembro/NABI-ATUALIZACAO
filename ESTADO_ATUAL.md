@@ -491,3 +491,8 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 30 testes focados aprovados;
 - suíte: 1.087 testes e 22 subtestes aprovados na execução principal; os 19 testes impedidos pela pasta temporária do Windows foram repetidos isoladamente e os 57 testes dos arquivos afetados foram aprovados;
 - `compileall` e `git diff --check` aprovados; somente bancos temporários e perfil TESTE foram usados.
+- distribuição Windows recompilada com Python 3.14.7 e PyInstaller 6.21.0;
+- 49 testes focados aprovados novamente no ambiente canônico de build;
+- instalador de teste: `build_output/installer/NabiCode_2.5.1_TESTE_R10_Setup.exe`;
+- SHA-256 do instalador R10: `A82567505ED2804099694BFEF7A2588F674E44D63B3BA08BDE38B81004DCF4D3`;
+- revisão `10` confirmada dentro da distribuição; instalador não foi executado.
