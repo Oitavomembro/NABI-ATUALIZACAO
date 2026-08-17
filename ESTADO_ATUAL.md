@@ -538,3 +538,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - SHA-256 do instalador: `66B978DF153583D9D0B14386C67DBAC29D64734D232AE13DF60BEBAC6E1AB474`;
 - atualização incremental: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R13.zip`;
 - SHA-256 da atualização: `6AD8BB522F453736DB8EBD888AE95E6BB7FF2C455DC7C0DD10E726A40906DFBC`.
+
+## Checkpoint 42.35 / R14 TESTE — identidade visual 3D oficial
+
+- o conceito aprovado `N Nebulosa` foi reconstruído como ícone 3D de alta definição;
+- a fonte visual oficial foi preservada em `build_tools/resources/NabiCode.png`;
+- o recurso Windows `NabiCode.ico` contém nove escalas, de 16 a 256 pixels;
+- executável, instalador, atalhos e entrada de desinstalação passam a compartilhar a mesma identidade;
+- teste de regressão valida as assinaturas PNG/ICO e a presença das nove escalas antes do empacotamento;
+- inspeção visual aprovada em 16, 24, 32, 48, 64, 128 e 256 pixels;
+- suíte completa: 1.112 testes, 22 subtestes e 1 teste opcional ignorado;
+- nenhum programa, banco real ou impressora física foi aberto durante a validação.

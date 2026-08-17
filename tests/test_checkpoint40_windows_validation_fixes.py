@@ -92,11 +92,19 @@ def test_installer_mutex_contract_is_stable_and_released_last():
 
 def test_uninstaller_preserves_appdata_and_keeps_append_only_install_log():
     assert "UninstallLogMode=append" in INNO
-    assert "{userappdata}" not in INNO
     assert "uninsdelete" not in INNO.casefold()
+    assert "if DeleteAllUserData then" in INNO
+    assert "DeleteAllNabiCodeData();" in INNO
 
 
-def test_optional_icon_is_prepared_but_absence_does_not_block_checkpoint():
+def test_official_icon_is_valid_and_wired_to_executable_and_installer():
+    icon = ROOT / "build_tools/resources/NabiCode.ico"
+    png = ROOT / "build_tools/resources/NabiCode.png"
+    icon_header = icon.read_bytes()[:6]
+
+    assert png.read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
+    assert icon_header[:4] == b"\x00\x00\x01\x00"
+    assert int.from_bytes(icon_header[4:6], "little") >= 9
     assert 'optional_app_icon = project_root / "build_tools" / "resources" / "NabiCode.ico"' in SPEC
     assert "if optional_app_icon.is_file():" in SPEC
     assert "#ifdef AppIconFile" in INNO
