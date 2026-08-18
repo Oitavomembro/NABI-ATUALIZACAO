@@ -1,5 +1,16 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — tributos da nota original e devolução sem pagamento
+
+- o leitor de NF-e passa a extrair efetivamente base, alíquota e valor de ICMS, PIS, COFINS e IPI;
+- valores tributários malformados no XML são recusados com indicação do campo, sem virar zero silenciosamente;
+- os tributos lidos alimentam o cálculo proporcional já existente da devolução integral ou parcial;
+- NF-e de devolução define centralmente pagamento `90 — sem pagamento` e valor `0,00`;
+- foi removido o risco de representar devolução como pagamento em dinheiro;
+- validação focada: 125 testes e 10 subtestes aprovados;
+- suíte completa: 1.168 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — pagamentos completos no XML
 
 - cada forma recebida pelo PDV gera seu próprio grupo `detPag`, sem transformar pagamentos mistos em “Outros”;

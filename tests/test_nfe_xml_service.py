@@ -10,7 +10,7 @@ XML = '''<?xml version="1.0" encoding="UTF-8"?>
   <NFe><infNFe Id="NFe351234">
     <ide><nNF>123</nNF></ide>
     <emit><CNPJ>12345678000199</CNPJ><xNome>Fornecedor Teste</xNome></emit>
-    <det nItem="1"><prod><cProd>ABC1</cProd><xProd>Produto XML</xProd><qCom>2.0000</qCom><uCom>UN</uCom><vUnCom>12.50</vUnCom><vProd>25.00</vProd><NCM>12345678</NCM><CFOP>5102</CFOP><CEST>0100100</CEST><cEAN>7890000000000</cEAN></prod><imposto><IBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib><gIBSCBS><vBC>25.00</vBC><gIBSUF><pIBSUF>0.1000</pIBSUF><vIBSUF>0.03</vIBSUF></gIBSUF><gIBSMun><pIBSMun>0.0000</pIBSMun><vIBSMun>0.00</vIBSMun></gIBSMun><vIBS>0.03</vIBS><gCBS><pCBS>0.9000</pCBS><vCBS>0.23</vCBS></gCBS></gIBSCBS></IBSCBS></imposto></det>
+    <det nItem="1"><prod><cProd>ABC1</cProd><xProd>Produto XML</xProd><qCom>2.0000</qCom><uCom>UN</uCom><vUnCom>12.50</vUnCom><vProd>25.00</vProd><NCM>12345678</NCM><CFOP>5102</CFOP><CEST>0100100</CEST><cEAN>7890000000000</cEAN></prod><imposto><ICMS><ICMS00><orig>0</orig><CST>00</CST><vBC>25.00</vBC><pICMS>18.00</pICMS><vICMS>4.50</vICMS></ICMS00></ICMS><IPI><IPITrib><CST>50</CST><vBC>25.00</vBC><pIPI>5.00</pIPI><vIPI>1.25</vIPI></IPITrib></IPI><PIS><PISAliq><CST>01</CST><vBC>25.00</vBC><pPIS>1.65</pPIS><vPIS>0.41</vPIS></PISAliq></PIS><COFINS><COFINSAliq><CST>01</CST><vBC>25.00</vBC><pCOFINS>7.60</pCOFINS><vCOFINS>1.90</vCOFINS></COFINSAliq></COFINS><IBSCBS><CST>000</CST><cClassTrib>000001</cClassTrib><gIBSCBS><vBC>25.00</vBC><gIBSUF><pIBSUF>0.1000</pIBSUF><vIBSUF>0.03</vIBSUF></gIBSUF><gIBSMun><pIBSMun>0.0000</pIBSMun><vIBSMun>0.00</vIBSMun></gIBSMun><vIBS>0.03</vIBS><gCBS><pCBS>0.9000</pCBS><vCBS>0.23</vCBS></gCBS></gIBSCBS></IBSCBS></imposto></det>
   </infNFe></NFe>
 </nfeProc>'''
 
@@ -32,6 +32,12 @@ class NFeXMLServiceTests(unittest.TestCase):
             self.assertEqual(doc.itens[0].ibs_cbs_base, 25.0)
             self.assertEqual(doc.itens[0].ibs_uf_rate, 0.1)
             self.assertEqual(doc.itens[0].cbs_rate, 0.9)
+            self.assertEqual(doc.itens[0].base_icms, 25.0)
+            self.assertEqual(doc.itens[0].aliquota_icms, 18.0)
+            self.assertEqual(doc.itens[0].valor_icms, 4.5)
+            self.assertEqual(doc.itens[0].valor_pis, 0.41)
+            self.assertEqual(doc.itens[0].valor_cofins, 1.9)
+            self.assertEqual(doc.itens[0].valor_ipi, 1.25)
             self.assertEqual(doc.itens[0].preco_por_margem(30), 16.25)
 
     def test_rejeita_xml_sem_nfe(self):

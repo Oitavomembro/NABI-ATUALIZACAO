@@ -287,6 +287,8 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         self.assertIn("<finNFe>4</finNFe>", texto)
         self.assertIn(f"<refNFe>{'1' * 44}</refNFe>", texto)
         self.assertIn("<CFOP>5202</CFOP>", texto)
+        self.assertIn("<tPag>90</tPag>", texto)
+        self.assertIn("<vPag>0.00</vPag>", texto)
 
     def test_preparo_oficial_transporta_tributos_proporcionais_para_xml(self):
         _, itens = self.service.localizar_nota("123")

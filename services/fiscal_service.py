@@ -1445,16 +1445,17 @@ class FiscalService:
         pag = etree.SubElement(inf, etree.QName(ns, "pag"))
         payment_rows = list(document.get("payments") or [])
         if not payment_rows:
+            fallback_code = str(document.get("payment_code", "01"))
             payment_rows = [{
-                "code": str(document.get("payment_code", "01")),
-                "amount": total_with_rtc,
+                "code": fallback_code,
+                "amount": Decimal("0.00") if fallback_code == "90" else total_with_rtc,
                 **dict(document.get("payment_detail") or {}),
             }]
         payment_total = Decimal("0.00")
         for payment_row in payment_rows:
             payment_code = str(payment_row.get("code", "99"))
             payment_amount = Decimal(str(payment_row.get("amount", 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            if payment_amount <= 0:
+            if payment_amount < 0 or (payment_amount == 0 and payment_code != "90"):
                 raise ValueError("Cada pagamento fiscal deve possuir valor maior que zero.")
             payment_total += payment_amount
             detpag = etree.SubElement(pag, etree.QName(ns, "detPag"))

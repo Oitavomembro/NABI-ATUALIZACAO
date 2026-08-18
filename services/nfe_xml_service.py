@@ -74,6 +74,14 @@ class NFeXMLService:
         encontrado = elemento.find(caminho) if elemento is not None else None
         return (encontrado.text or "").strip() if encontrado is not None else padrao
 
+    @classmethod
+    def _numero_fiscal(cls, elemento, caminho: str) -> float:
+        texto = cls._texto(elemento, caminho, "0").replace(",", ".")
+        try:
+            return float(texto or 0)
+        except ValueError as exc:
+            raise ValueError(f"A NF-e contém valor tributário inválido em {caminho}.") from exc
+
     def ler(self, caminho: str | Path) -> NFeDocument:
         arquivo = Path(caminho)
         if arquivo.suffix.lower() != ".xml":
@@ -132,6 +140,10 @@ class NFeXMLService:
             pis_regra = next(iter(pis), None) if pis is not None else None
             cofins = imposto.find("COFINS") if imposto is not None else None
             cofins_regra = next(iter(cofins), None) if cofins is not None else None
+            ipi = imposto.find("IPI") if imposto is not None else None
+            ipi_regra = next(
+                (child for child in list(ipi) if child.tag in {"IPITrib", "IPINT"}), None
+            ) if ipi is not None else None
             ibs_cbs = imposto.find("IBSCBS") if imposto is not None else None
             ibs_cbs_group = ibs_cbs.find("gIBSCBS") if ibs_cbs is not None else None
             try:
@@ -155,12 +167,24 @@ class NFeXMLService:
                 csosn=self._texto(icms_regra, "CSOSN"),
                 cst_pis=self._texto(pis_regra, "CST"),
                 cst_cofins=self._texto(cofins_regra, "CST"),
+                base_icms=self._numero_fiscal(icms_regra, "vBC"),
+                aliquota_icms=self._numero_fiscal(icms_regra, "pICMS"),
+                valor_icms=self._numero_fiscal(icms_regra, "vICMS"),
+                base_pis=self._numero_fiscal(pis_regra, "vBC"),
+                aliquota_pis=self._numero_fiscal(pis_regra, "pPIS"),
+                valor_pis=self._numero_fiscal(pis_regra, "vPIS"),
+                base_cofins=self._numero_fiscal(cofins_regra, "vBC"),
+                aliquota_cofins=self._numero_fiscal(cofins_regra, "pCOFINS"),
+                valor_cofins=self._numero_fiscal(cofins_regra, "vCOFINS"),
+                base_ipi=self._numero_fiscal(ipi_regra, "vBC"),
+                aliquota_ipi=self._numero_fiscal(ipi_regra, "pIPI"),
+                valor_ipi=self._numero_fiscal(ipi_regra, "vIPI"),
                 ibs_cbs_cst=self._texto(ibs_cbs, "CST"),
                 ibs_cbs_class=self._texto(ibs_cbs, "cClassTrib"),
-                ibs_cbs_base=float(self._texto(ibs_cbs_group, "vBC", "0").replace(",", ".")),
-                ibs_uf_rate=float(self._texto(ibs_cbs_group, "gIBSUF/pIBSUF", "0").replace(",", ".")),
-                ibs_city_rate=float(self._texto(ibs_cbs_group, "gIBSMun/pIBSMun", "0").replace(",", ".")),
-                cbs_rate=float(self._texto(ibs_cbs_group, "gCBS/pCBS", "0").replace(",", ".")),
+                ibs_cbs_base=self._numero_fiscal(ibs_cbs_group, "vBC"),
+                ibs_uf_rate=self._numero_fiscal(ibs_cbs_group, "gIBSUF/pIBSUF"),
+                ibs_city_rate=self._numero_fiscal(ibs_cbs_group, "gIBSMun/pIBSMun"),
+                cbs_rate=self._numero_fiscal(ibs_cbs_group, "gCBS/pCBS"),
             ))
 
         if not itens:

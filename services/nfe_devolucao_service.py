@@ -424,6 +424,7 @@ class NFeDevolucaoService:
             "model": "55",
             "purpose": 4,
             "operation_type": 1,
+            "payment_code": "90",
             "nature": fiscal_document.get("nature") or "DEVOLUCAO DE MERCADORIA",
             "referenced_access_keys": [str(rascunho["nota_chave"])],
             "additional_info": fiscal_document.get("additional_info") or (
