@@ -1,5 +1,19 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — destinatário automático da venda
+
+- schema 16 amplia o cadastro oficial do cliente com e-mail, inscrição estadual, indicador de contribuinte e endereço fiscal estruturado;
+- não foi criado cadastro paralelo: criação e edição usam a mesma tabela `clientes` e o mesmo serviço oficial;
+- NFC-e de consumidor final continua sem exigir identificação desnecessária;
+- cliente identificado reutiliza automaticamente nome, CPF/CNPJ, e-mail e inscrição estadual;
+- NF-e bloqueia antes da venda quando CPF/CNPJ ou endereço fiscal obrigatório estiver incompleto;
+- UF do cliente e do emitente determinam automaticamente operação interna ou interestadual e ajustam o CFOP pelo fluxo já existente;
+- XML passa a gerar `enderDest` e e-mail quando disponíveis;
+- validação de CPF possui cálculo dos dígitos verificadores e rejeita sequências fictícias;
+- validação focada: 105 testes e 10 subtestes aprovados;
+- suíte completa: 1.153 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — venda do PDV vinculada ao documento
 
 - schema 15 cria vínculo único entre venda, reserva de numeração, chave de acesso, XML e fila fiscal;

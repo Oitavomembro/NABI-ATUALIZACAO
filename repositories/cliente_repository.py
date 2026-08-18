@@ -207,15 +207,22 @@ class ClienteRepository:
         return row is not None
 
     def criar(self, dados: dict[str, Any], connection=None) -> int:
-        sql = """INSERT INTO clientes
-               (codigo, numero_ficha, nome, cpf, rg, telefone, endereco, observacoes, limite, saldo_devedor)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"""
-        params = (
-                dados["codigo"], dados.get("numero_ficha"), dados["nome"],
-                dados.get("cpf", ""), dados.get("rg", ""), dados.get("telefone", ""),
-                dados.get("endereco", ""), dados.get("observacoes", ""),
-                dados.get("limite", 0.0), dados.get("saldo_devedor", 0.0),
+        target = connection
+        columns = {
+            str(row[1]) for row in (
+                target.execute("PRAGMA table_info(clientes)").fetchall()
+                if target is not None else self.database.fetch_all("PRAGMA table_info(clientes)")
             )
+        }
+        ordered = [
+            "codigo", "numero_ficha", "nome", "cpf", "rg", "telefone", "endereco",
+            "observacoes", "limite", "saldo_devedor", "email", "inscricao_estadual",
+            "contribuinte_icms", "fiscal_logradouro", "fiscal_numero", "fiscal_bairro",
+            "fiscal_codigo_municipio", "fiscal_municipio", "fiscal_uf", "fiscal_cep",
+        ]
+        selected = [name for name in ordered if name in columns]
+        sql = f"INSERT INTO clientes ({','.join(selected)}) VALUES ({','.join('?' for _ in selected)})"
+        params = tuple(dados.get(name, "") for name in selected)
         if connection is not None:
             return int(connection.execute(sql, params).lastrowid)
         return self.database.execute(sql, params)
@@ -237,6 +244,20 @@ class ClienteRepository:
                    )"""
             )
             return int(cursor.lastrowid)
+
+    def atualizar_perfil_fiscal(self, customer_id: int, dados: dict[str, Any]) -> None:
+        fields = (
+            "email", "inscricao_estadual", "contribuinte_icms", "fiscal_logradouro",
+            "fiscal_numero", "fiscal_bairro", "fiscal_codigo_municipio",
+            "fiscal_municipio", "fiscal_uf", "fiscal_cep",
+        )
+        with self.database.session(write=True) as connection:
+            cursor = connection.execute(
+                "UPDATE clientes SET " + ",".join(f"{field}=?" for field in fields) + " WHERE id=?",
+                tuple(dados.get(field, "") for field in fields) + (int(customer_id),),
+            )
+            if cursor.rowcount != 1:
+                raise ValueError("Cliente não encontrado.")
 
 
     def toggle_favorite(self, customer_id: int, *, event_date: str = "") -> bool:

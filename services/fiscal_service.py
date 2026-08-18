@@ -1310,6 +1310,14 @@ class FiscalService:
         if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
         elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
         if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
+        if any(recipient.get(key) for key in ("street", "city_code", "state", "zip_code")):
+            address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
+            for name, key_name in (("xLgr","street"),("nro","number"),("xBairro","district"),("cMun","city_code"),("xMun","city"),("UF","state"),("CEP","zip_code")):
+                value = recipient.get(key_name)
+                if value not in (None, ""):
+                    el(address, name, self._digits(value) if name in {"cMun", "CEP"} else value)
+        if recipient.get("email"):
+            el(dest, "email", str(recipient.get("email")).strip())
         recipient_ie = self._digits(recipient.get("state_registration"))
         taxpayer_indicator = recipient.get("state_taxpayer_indicator")
         if taxpayer_indicator in (None, ""):
@@ -2464,6 +2472,20 @@ class FiscalService:
     def _normalize_tax_document(value: Any) -> str:
         raw = str(value or "")
         return FiscalService._normalize_cnpj(raw) if re.search(r"[A-Za-z]", raw) else FiscalService._digits(raw)
+
+    @staticmethod
+    def _is_valid_cpf(value: Any) -> bool:
+        cpf = FiscalService._digits(value)
+        if len(cpf) != 11 or cpf == cpf[0] * 11:
+            return False
+        for size in (9, 10):
+            total = sum(int(cpf[index]) * (size + 1 - index) for index in range(size))
+            digit = 11 - total % 11
+            if digit >= 10:
+                digit = 0
+            if int(cpf[size]) != digit:
+                return False
+        return True
 
     @staticmethod
     def _digits(value: Any) -> str:

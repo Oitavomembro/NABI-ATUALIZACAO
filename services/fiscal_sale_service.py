@@ -75,6 +75,58 @@ class FiscalSaleService:
             )
             raise
 
+    def recipient_for_customer(self, customer_id: int, *, model: str | None = None) -> tuple[dict[str, Any], int]:
+        config = self.fiscal_service.load_config()
+        fiscal_model = str(model or config.get("default_model") or "65")
+        connection = self.fiscal_service.connection_factory()
+        try:
+            cursor = connection.execute("SELECT * FROM clientes WHERE id=?", (int(customer_id),))
+            names = [column[0] for column in cursor.description]
+            row = cursor.fetchone()
+        finally:
+            connection.close()
+        if not row:
+            raise ValueError("Cliente selecionado não foi encontrado.")
+        customer = dict(zip(names, row))
+        technical_consumer = str(customer.get("codigo") or "").upper() == "CONSUMIDOR_FINAL"
+        if technical_consumer and fiscal_model == "65":
+            return {}, 1
+        document = self.fiscal_service._normalize_tax_document(customer.get("cpf"))
+        valid_document = (
+            self.fiscal_service._is_valid_cnpj(document) if len(document) == 14
+            else self.fiscal_service._is_valid_cpf(document) if len(document) == 11
+            else False
+        )
+        if not valid_document:
+            if fiscal_model == "65":
+                return {}, 1
+            raise ValueError("NF-e exige CPF ou CNPJ válido no cadastro do cliente.")
+        recipient = {"document": document, "name": str(customer.get("nome") or "").strip()}
+        customer_state = str(customer.get("fiscal_uf") or "").strip().upper()
+        if fiscal_model == "55":
+            required = {
+                "street": customer.get("fiscal_logradouro"), "number": customer.get("fiscal_numero"),
+                "district": customer.get("fiscal_bairro"), "city_code": customer.get("fiscal_codigo_municipio"),
+                "city": customer.get("fiscal_municipio"), "state": customer_state,
+                "zip_code": customer.get("fiscal_cep"),
+            }
+            if any(not str(value or "").strip() for value in required.values()):
+                raise ValueError(
+                    "NF-e exige o endereço fiscal completo do cliente. Preencha logradouro, número, "
+                    "bairro, município, código IBGE, UF e CEP no cadastro."
+                )
+            recipient.update(required)
+        state_registration = str(customer.get("inscricao_estadual") or "").strip()
+        taxpayer = bool(customer.get("contribuinte_icms"))
+        recipient.update({
+            "state_registration": state_registration,
+            "state_taxpayer_indicator": 1 if taxpayer and state_registration else 9,
+            "email": str(customer.get("email") or "").strip(),
+        })
+        issuer_state = str(config.get("state") or "").upper()
+        destination = 2 if customer_state and customer_state != issuer_state else 1
+        return recipient, destination
+
     @classmethod
     def _payment_code(cls, payments: Sequence[Mapping[str, Any]]) -> str:
         if len(payments) != 1:

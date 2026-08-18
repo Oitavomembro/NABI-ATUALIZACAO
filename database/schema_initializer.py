@@ -73,7 +73,17 @@ def initialize_database(
 
     cursor.execute("PRAGMA table_info(clientes)")
     colunas=[c[1] for c in cursor.fetchall()]
-    for coluna,tipo in {"numero_ficha":"INTEGER","cpf":"TEXT","rg":"TEXT","telefone":"TEXT","favorito":"INTEGER DEFAULT 0","observacoes":"TEXT DEFAULT ''","ficticio":"INTEGER DEFAULT 0","data_nascimento":"TEXT DEFAULT ''","origem_migracao":"TEXT DEFAULT ''"}.items():
+    for coluna,tipo in {
+        "numero_ficha":"INTEGER", "cpf":"TEXT", "rg":"TEXT", "telefone":"TEXT",
+        "favorito":"INTEGER DEFAULT 0", "observacoes":"TEXT DEFAULT ''",
+        "ficticio":"INTEGER DEFAULT 0", "data_nascimento":"TEXT DEFAULT ''",
+        "origem_migracao":"TEXT DEFAULT ''", "email":"TEXT DEFAULT ''",
+        "inscricao_estadual":"TEXT DEFAULT ''", "contribuinte_icms":"INTEGER DEFAULT 0",
+        "fiscal_logradouro":"TEXT DEFAULT ''", "fiscal_numero":"TEXT DEFAULT ''",
+        "fiscal_bairro":"TEXT DEFAULT ''", "fiscal_codigo_municipio":"TEXT DEFAULT ''",
+        "fiscal_municipio":"TEXT DEFAULT ''", "fiscal_uf":"TEXT DEFAULT ''",
+        "fiscal_cep":"TEXT DEFAULT ''",
+    }.items():
         if coluna not in colunas:
             cursor.execute(f"ALTER TABLE clientes ADD COLUMN {coluna} {tipo}")
 

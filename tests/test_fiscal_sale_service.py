@@ -4,11 +4,15 @@ import unittest
 from pathlib import Path
 
 from services.fiscal_sale_service import FiscalSaleDraft, FiscalSaleService
+from services.fiscal_service import FiscalService
 
 
 class FakeFiscalService:
     TAX_REGIME_CODES = {"SIMPLES_NACIONAL": 1}
     STATE_CODES = {"BA": "29"}
+    _normalize_tax_document = staticmethod(FiscalService._normalize_tax_document)
+    _is_valid_cnpj = staticmethod(FiscalService._is_valid_cnpj)
+    _is_valid_cpf = staticmethod(FiscalService._is_valid_cpf)
 
     def __init__(self, db):
         self.db = db
@@ -62,6 +66,21 @@ class FiscalSaleServiceTests(unittest.TestCase):
                 xml_b64 TEXT, queue_id TEXT DEFAULT '', protocol TEXT DEFAULT '',
                 last_error TEXT DEFAULT '', created_at TEXT, updated_at TEXT)"""
         )
+        connection.execute(
+            """CREATE TABLE clientes(
+                id INTEGER PRIMARY KEY,codigo TEXT,nome TEXT,cpf TEXT,email TEXT,
+                inscricao_estadual TEXT,contribuinte_icms INTEGER,
+                fiscal_logradouro TEXT,fiscal_numero TEXT,fiscal_bairro TEXT,
+                fiscal_codigo_municipio TEXT,fiscal_municipio TEXT,fiscal_uf TEXT,fiscal_cep TEXT)"""
+        )
+        connection.execute(
+            """INSERT INTO clientes VALUES(
+                1,'CLI1','CLIENTE VÁLIDO','52998224725','cliente@example.com','',0,
+                'RUA A','10','CENTRO','3550308','SÃO PAULO','SP','01001000')"""
+        )
+        connection.execute(
+            "INSERT INTO clientes(id,codigo,nome,cpf) VALUES(2,'CONSUMIDOR_FINAL','CONSUMIDOR FINAL','')"
+        )
         connection.commit(); connection.close()
         self.fiscal = FakeFiscalService(self.db)
         self.service = FiscalSaleService(self.fiscal)
@@ -94,6 +113,18 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.fiscal.queued), 1)
         self.assertEqual(self.service.list_pending()[0]["status"], "ENFILEIRADO")
+
+    def test_destinatario_e_destino_sao_obtidos_do_cliente(self):
+        recipient, destination = self.service.recipient_for_customer(1, model="55")
+        self.assertEqual(recipient["document"], "52998224725")
+        self.assertEqual(recipient["city_code"], "3550308")
+        self.assertEqual(recipient["state"], "SP")
+        self.assertEqual(destination, 2)
+
+    def test_consumidor_final_na_nfce_nao_exige_documento(self):
+        recipient, destination = self.service.recipient_for_customer(2, model="65")
+        self.assertEqual(recipient, {})
+        self.assertEqual(destination, 1)
 
 
 if __name__ == "__main__":

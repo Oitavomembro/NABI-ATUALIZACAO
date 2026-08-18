@@ -279,7 +279,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 15
+DB_SCHEMA_VERSION = 16
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -6659,10 +6659,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         rascunho_fiscal = None
         if self.fiscal_service.is_enabled():
             try:
+                config_fiscal = self.fiscal_service.load_config()
+                destinatario_fiscal, destino_fiscal = self.fiscal_sale_service.recipient_for_customer(
+                    int(cliente_id), model=str(config_fiscal.get("default_model") or "65")
+                )
                 rascunho_fiscal = self.fiscal_sale_service.prepare(
                     items=[dict(item) for item in itens_finalizados],
                     payments=pagamentos,
                     actor=usuario_venda,
+                    recipient=destinatario_fiscal,
+                    destination=destino_fiscal,
                 )
             except (ValueError, RuntimeError) as exc:
                 messagebox.showerror(
@@ -7061,7 +7067,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         e_tel = campo("Telefone", 3, 0)
         e_lim = campo("Limite de crédito (R$)", 3, 1, valor="500.00")
         e_end = campo("Endereço", 4, 0, colspan=2)
-        e_obs = campo("Observações", 5, 0, colspan=2)
+        e_email = campo("E-mail fiscal (opcional)", 5, 0, colspan=2)
+        ctk.CTkLabel(form, text="Dados fiscais — necessários para NF-e", font=ctk.CTkFont(size=14, weight="bold"), text_color="#58a6ff").grid(row=6, column=0, columnspan=2, sticky="w", padx=8, pady=(12, 2))
+        e_fiscal_logradouro = campo("Logradouro", 7, 0)
+        e_fiscal_numero = campo("Número", 7, 1)
+        e_fiscal_bairro = campo("Bairro", 8, 0)
+        e_fiscal_municipio = campo("Município", 8, 1)
+        e_fiscal_codigo = campo("Código IBGE do município", 9, 0)
+        e_fiscal_uf = campo("UF", 9, 1)
+        e_fiscal_cep = campo("CEP", 10, 0)
+        e_ie = campo("Inscrição estadual", 10, 1)
+        contribuinte_var = tk.IntVar(value=0)
+        ctk.CTkCheckBox(form, text="Cliente contribuinte de ICMS", variable=contribuinte_var).grid(row=11, column=0, columnspan=2, sticky="w", padx=16, pady=8)
+        e_obs = campo("Observações", 12, 0, colspan=2)
 
         def salvar_novo_cliente():
             nome = e_nome.get().strip()
@@ -7076,6 +7094,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     endereco=e_end.get(),
                     observacoes=e_obs.get(),
                     limite=e_lim.get(),
+                    email=e_email.get(),
+                    inscricao_estadual=e_ie.get(),
+                    contribuinte_icms=bool(contribuinte_var.get()),
+                    fiscal_logradouro=e_fiscal_logradouro.get() or e_end.get(),
+                    fiscal_numero=e_fiscal_numero.get(),
+                    fiscal_bairro=e_fiscal_bairro.get(),
+                    fiscal_codigo_municipio=e_fiscal_codigo.get(),
+                    fiscal_municipio=e_fiscal_municipio.get(),
+                    fiscal_uf=e_fiscal_uf.get(),
+                    fiscal_cep=e_fiscal_cep.get(),
                 )
                 janela_cad.destroy(); self.carregar_clientes(); self.atualizar_resumo_lateral()
                 if callable(on_saved):
@@ -7093,7 +7121,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         janela_cad.bind("<Control-s>", lambda _e: salvar_novo_cliente(), add="+")
         janela_cad.bind("<Escape>", lambda _e: janela_cad.destroy(), add="+")
         janela_cad._enter_navigator = install_enter_navigation(
-            [e_ficha, e_cod, e_nome, e_cpf, e_rg, e_tel, e_lim, e_end, e_obs],
+            [e_ficha, e_cod, e_nome, e_cpf, e_rg, e_tel, e_lim, e_end, e_email,
+             e_fiscal_logradouro, e_fiscal_numero, e_fiscal_bairro, e_fiscal_municipio,
+             e_fiscal_codigo, e_fiscal_uf, e_fiscal_cep, e_ie, e_obs],
             on_finish=salvar_novo_cliente,
         )
 
@@ -7145,6 +7175,61 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         botoes.pack(fill="x", padx=25, pady=12)
         ctk.CTkButton(botoes, text="💬 Cobrar Cliente", fg_color="#25D366", hover_color="#1da851", height=40, command=self.cobrar_cliente_selecionado).pack(side="left", expand=True, fill="x", padx=(0,5))
         ctk.CTkButton(botoes, text="💾 Salvar Alterações", fg_color="#2ea043", hover_color="#238636", height=40, command=salvar).pack(side="left", expand=True, fill="x", padx=(5,0))
+        ctk.CTkButton(win, text="🧾 Dados fiscais do cliente", fg_color="#1f6feb", height=38, command=lambda: self.editar_perfil_fiscal_cliente(cliente_id)).pack(fill="x", padx=25, pady=(0, 12))
+
+    def editar_perfil_fiscal_cliente(self, cliente_id):
+        conn = conectar_banco()
+        try:
+            row = conn.execute(
+                """SELECT email,inscricao_estadual,contribuinte_icms,fiscal_logradouro,
+                          fiscal_numero,fiscal_bairro,fiscal_codigo_municipio,
+                          fiscal_municipio,fiscal_uf,fiscal_cep
+                     FROM clientes WHERE id=?""", (int(cliente_id),)
+            ).fetchone()
+        finally:
+            conn.close()
+        if not row:
+            messagebox.showerror("Dados fiscais", "Cliente não encontrado.")
+            return
+        win = ctk.CTkToplevel(self)
+        win.title("Dados fiscais do cliente")
+        win.geometry("620x720")
+        win.configure(fg_color="#0d1117")
+        win.transient(self)
+        win.grab_set()
+        ctk.CTkLabel(win, text="Dados fiscais do cliente", font=ctk.CTkFont(size=19, weight="bold"), text_color="#00FF88").pack(pady=(16, 4))
+        ctk.CTkLabel(win, text="Preencha uma vez; o NabiCode reutiliza automaticamente nas próximas NF-e.", text_color="#8b949e").pack(pady=(0, 10))
+        frame = ctk.CTkScrollableFrame(win, fg_color="#161b22")
+        frame.pack(fill="both", expand=True, padx=18, pady=8)
+        labels = ("E-mail", "Inscrição estadual", "Logradouro", "Número", "Bairro", "Código IBGE do município", "Município", "UF", "CEP")
+        indexes = (0, 1, 3, 4, 5, 6, 7, 8, 9)
+        entries = []
+        for label, index in zip(labels, indexes):
+            ctk.CTkLabel(frame, text=label, anchor="w").pack(fill="x", padx=8)
+            entry = ctk.CTkEntry(frame, height=34)
+            entry.pack(fill="x", padx=8, pady=(2, 7))
+            entry.insert(0, str(row[index] or ""))
+            entries.append(entry)
+        contribuinte = tk.IntVar(value=int(row[2] or 0))
+        ctk.CTkCheckBox(frame, text="Contribuinte de ICMS", variable=contribuinte).pack(anchor="w", padx=8, pady=8)
+
+        def salvar_fiscal():
+            try:
+                CUSTOMER_REGISTRATION_SERVICE.atualizar_perfil_fiscal(
+                    int(cliente_id), email=entries[0].get(), inscricao_estadual=entries[1].get(),
+                    contribuinte_icms=bool(contribuinte.get()), fiscal_logradouro=entries[2].get(),
+                    fiscal_numero=entries[3].get(), fiscal_bairro=entries[4].get(),
+                    fiscal_codigo_municipio=entries[5].get(), fiscal_municipio=entries[6].get(),
+                    fiscal_uf=entries[7].get(), fiscal_cep=entries[8].get(),
+                )
+            except ValueError as exc:
+                messagebox.showerror("Dados fiscais", str(exc), parent=win)
+                return
+            registrar_historico(int(cliente_id), "FISCAL", "Perfil fiscal do cliente atualizado.")
+            win.destroy()
+            messagebox.showinfo("Dados fiscais", "Perfil fiscal atualizado com sucesso.")
+
+        ctk.CTkButton(win, text="Salvar dados fiscais", height=42, fg_color="#2ea043", command=salvar_fiscal).pack(fill="x", padx=18, pady=(0, 16))
 
     def cobrar_cliente_selecionado(self):
         cliente_id = self._cliente_selecionado_id()

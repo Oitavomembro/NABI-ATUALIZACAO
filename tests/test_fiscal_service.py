@@ -234,6 +234,11 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.service.list_transmission_queue()), 1)
 
+    def test_validador_cpf_recusa_sequencia_e_aceita_digitos_validos(self):
+        self.assertTrue(self.service._is_valid_cpf("529.982.247-25"))
+        self.assertFalse(self.service._is_valid_cpf("111.111.111-11"))
+        self.assertFalse(self.service._is_valid_cpf("529.982.247-24"))
+
     def test_endpoint_manual_bloqueia_destino_capaz_de_capturar_certificado(self):
         invalid_endpoints = (
             "http://nfe.sefaz.ba.gov.br/autorizacao",
