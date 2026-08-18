@@ -3815,15 +3815,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             item = selecionado()
             if not item:
                 return
-            destino = filedialog.asksaveasfilename(parent=janela, title="Salvar DANFE da devolução",
+            destino = filedialog.asksaveasfilename(parent=janela, title="Salvar espelho fiscal da devolução",
                 defaultextension=".pdf", filetypes=[("PDF", "*.pdf")])
             if not destino:
                 return
             try:
-                NFE_DEVOLUCAO_SERVICE.gerar_danfe_devolucao(
+                NFE_DEVOLUCAO_SERVICE.gerar_espelho_fiscal_devolucao(
                     int(item["id"]), fiscal_service=self.fiscal_service, output_path=destino
                 )
-                self.mostrar_notificacao("DANFE gerado", destino, nivel="success")
+                self.mostrar_notificacao("Espelho fiscal gerado", destino, nivel="success")
             except Exception as exc:
                 messagebox.showerror("Devoluções", str(exc), parent=janela)
 
@@ -4062,7 +4062,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         barra.pack(fill="x", padx=18, pady=(0, 16))
         ctk.CTkButton(barra, text="Atualizar", command=carregar, fg_color="#1f6feb").pack(side="left")
         ctk.CTkButton(barra, text="Abrir XML", command=abrir_arquivo, fg_color="#30363d").pack(side="left", padx=8)
-        ctk.CTkButton(barra, text="Gerar DANFE", command=gerar_danfe, fg_color="#8957e5").pack(side="left")
+        ctk.CTkButton(barra, text="Gerar espelho fiscal", command=gerar_danfe, fg_color="#8957e5").pack(side="left")
         ctk.CTkButton(barra, text="Emitir oficial", command=emitir_oficial, fg_color="#2ea043").pack(side="left", padx=8)
         ctk.CTkButton(barra, text="Cancelar oficial", command=cancelar_oficial, fg_color="#b62324").pack(side="left")
         ctk.CTkButton(barra, text="Recuperar estoque", command=recuperar_estoque_pendente, fg_color="#bf8700").pack(side="left", padx=8)
@@ -10209,13 +10209,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def danfe():
             row = selected()
             if not row or not row.get("processed_path"):
-                messagebox.showwarning("DANFE", "Selecione um documento autorizado com XML processado.", parent=janela); return
-            output = filedialog.asksaveasfilename(parent=janela, defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"DANFE_{row.get('access_key','')}.pdf")
+                messagebox.showwarning("Espelho fiscal", "Selecione um documento autorizado com XML processado.", parent=janela); return
+            output = filedialog.asksaveasfilename(parent=janela, defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"ESPELHO_{row.get('access_key','')}.pdf")
             if not output: return
             try:
-                self.fiscal_service.generate_danfe_pdf(authorized_xml=Path(row["processed_path"]).read_bytes(), output_path=output)
-                self.mostrar_notificacao("DANFE gerado", output, nivel="success")
-            except Exception as exc: messagebox.showerror("DANFE", str(exc), parent=janela)
+                self.fiscal_service.generate_fiscal_mirror_pdf(authorized_xml=Path(row["processed_path"]).read_bytes(), output_path=output)
+                self.mostrar_notificacao("Espelho fiscal gerado", output, nivel="success")
+            except Exception as exc: messagebox.showerror("Espelho fiscal", str(exc), parent=janela)
         today = datetime.now().date()
         period = ctk.CTkFrame(frame, fg_color="transparent")
         period.pack(fill="x", padx=12, pady=(2, 4))
@@ -10538,7 +10538,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Baixar XML", command=download_xml).pack(side="left", padx=4)
-        ctk.CTkButton(actions, text="Gerar DANFE", command=danfe).pack(side="left", padx=4)
+        ctk.CTkButton(actions, text="Gerar espelho PDF", command=danfe).pack(side="left", padx=4)
         transmit_button = ctk.CTkButton(actions, text="Transmitir pendentes", command=transmit_queue, fg_color="#2ea043")
         transmit_button.pack(side="left", padx=4)
         retry_button = ctk.CTkButton(actions, text="Reenviar selecionado", command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922")

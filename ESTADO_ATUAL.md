@@ -1032,3 +1032,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 106 testes e 10 subtestes aprovados;
 - suíte completa: 1.230 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.69 — auditoria de prontidão comercial fiscal
+
+- realizada auditoria consolidada entre requisitos prometidos, serviços reais, interface e testes;
+- criado `AUDITORIA_COMERCIAL_FISCAL.md` com cobertura implementada, bloqueadores de produção e funções ainda ausentes;
+- identificado que o PDF simples de conferência era anunciado incorretamente como DANFE;
+- o gerador e todos os acessos visuais foram reclassificados para `Espelho fiscal — não é DANFE`, preservando a utilidade sem representar um leiaute oficial inexistente;
+- o mesmo ajuste foi aplicado ao fluxo de devoluções, sem alterar XML, autorização, estoque ou regras tributárias;
+- DANFE/DANFE NFC-e oficial, contingência completa no PDV, catálogos NCM/CEST/IBPT, consulta cadastral, DF-e, e-mail, NFS-e, cadeia ICP-Brasil e matrizes tributárias especiais permanecem bloqueadores explícitos;
+- o bloqueio de produção foi preservado: não houve liberação fiscal artificial ou uso de alíquotas presumidas;
+- validação focada: 141 testes e 10 subtestes aprovados;
+- suíte completa: 1.230 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

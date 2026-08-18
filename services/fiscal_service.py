@@ -2300,7 +2300,8 @@ class FiscalService:
         result=[dict(r) for r in rows if isinstance(r,dict)]
         return [r for r in result if r.get("access_key")==key] if key else result
 
-    def generate_danfe_pdf(self, *, authorized_xml: bytes|str, output_path: str|Path) -> Path:
+    def generate_fiscal_mirror_pdf(self, *, authorized_xml: bytes|str, output_path: str|Path) -> Path:
+        """Gera um espelho interno; não substitui o DANFE de leiaute oficial."""
         self._require_dependency("lxml")
         self._require_dependency("reportlab")
         raw=authorized_xml.encode() if isinstance(authorized_xml,str) else authorized_xml
@@ -2308,13 +2309,13 @@ class FiscalService:
         text=lambda n: str(root.xpath(f"string(//*[local-name()='{n}'][1])") or "").strip()
         protocol=text("nProt"); status=text("cStat")
         if not protocol or status not in self.AUTHORIZED_STATUS:
-            raise ValueError("DANFE só pode ser gerado para documento autorizado com protocolo válido.")
+            raise ValueError("Espelho fiscal só pode ser gerado para documento autorizado com protocolo válido.")
         key=text("chNFe") or str(root.xpath("string(//*[local-name()='infNFe'][1]/@Id)")).replace("NFe","")
         output=Path(output_path); output.parent.mkdir(parents=True,exist_ok=True)
         document_record = next((row for row in reversed(self.list_documents()) if row.get("access_key") == key), {})
         cancelled = str(document_record.get("status") or "").upper() == "CANCELADO"
         c=canvas.Canvas(str(output),pagesize=A4); width,height=A4
-        c.setFont("Helvetica-Bold",14); c.drawString(15*mm,height-18*mm,"DANFE — Documento Auxiliar da NF-e")
+        c.setFont("Helvetica-Bold",14); c.drawString(15*mm,height-18*mm,"ESPELHO FISCAL — NÃO É DANFE")
         if cancelled:
             c.saveState()
             c.setFont("Helvetica-Bold", 42)
@@ -2335,7 +2336,7 @@ class FiscalService:
             line=f"{det.get('nItem','')}  {get('cProd')[:12]}  {get('xProd')[:42]}  {get('qCom')}  {get('uCom')}  {get('vUnCom')}  {get('vProd')}"
             c.drawString(15*mm,y,line); y-=4.5*mm
             if y<20*mm: c.showPage(); y=height-20*mm; c.setFont("Helvetica",7)
-        c.setFont("Helvetica-Oblique",7); c.drawString(15*mm,12*mm,"Documento auxiliar gerado pelo NabiCode. A validade fiscal depende do XML autorizado armazenado.")
+        c.setFont("Helvetica-Oblique",7); c.drawString(15*mm,12*mm,"Espelho interno para conferência. Não substitui o DANFE de leiaute oficial.")
         c.save(); return output
 
 

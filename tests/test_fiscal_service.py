@@ -1015,7 +1015,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(rows[1]["status"], "INUTILIZADO")
         self.assertEqual(rows[1]["numero"], "82-84")
 
-    def test_registra_evento_e_gera_danfe_apenas_autorizada(self):
+    def test_registra_evento_e_gera_espelho_fiscal_apenas_para_autorizada(self):
         key = "2" * 44
         response = FiscalResponse(True, "135", "Evento registrado", "EV123", raw_xml="<ret><cStat>135</cStat><nProt>EV123</nProt></ret>")
         record = self.service.register_event(access_key=key, event_type="CCE", response=response, request_xml="<evento/>", actor="admin")
@@ -1030,11 +1030,11 @@ class FiscalServiceTests(unittest.TestCase):
             '</ICMSTot></total></infNFe></NFe><protNFe><infProt><cStat>100</cStat><chNFe>' + key +
             '</chNFe><nProt>12345</nProt></infProt></protNFe></nfeProc>'
         )
-        pdf = self.service.generate_danfe_pdf(authorized_xml=proc, output_path=Path(self.tmp.name) / "danfe.pdf")
+        pdf = self.service.generate_fiscal_mirror_pdf(authorized_xml=proc, output_path=Path(self.tmp.name) / "espelho.pdf")
         self.assertTrue(pdf.is_file())
         self.assertGreater(pdf.stat().st_size, 500)
         with self.assertRaises(ValueError):
-            self.service.generate_danfe_pdf(authorized_xml="<NFe/>", output_path=Path(self.tmp.name) / "invalido.pdf")
+            self.service.generate_fiscal_mirror_pdf(authorized_xml="<NFe/>", output_path=Path(self.tmp.name) / "invalido.pdf")
 
 
     def test_fluxos_assinados_de_autorizacao_consulta_evento_e_inutilizacao(self):

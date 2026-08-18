@@ -540,16 +540,16 @@ class NFeDevolucaoService:
             raise RuntimeError(state["last_error"]) from exc
         return self.repository.salvar_estado_fiscal(devolucao_id, state, status="AUTORIZADA")
 
-    def gerar_danfe_devolucao(
+    def gerar_espelho_fiscal_devolucao(
         self, devolucao_id: int, *, fiscal_service: FiscalService, output_path: str | Path
     ) -> Path:
         state = self.repository.carregar_estado_fiscal(devolucao_id)
         if str(state.get("status") or "").upper() not in {"AUTORIZADA", "AUTORIZADA_PENDENTE_ESTOQUE"}:
-            raise ValueError("DANFE só pode ser gerado para devolução autorizada.")
+            raise ValueError("Espelho fiscal só pode ser gerado para devolução autorizada.")
         processed_path = str((state.get("fiscal_record") or {}).get("processed_path") or "").strip()
         if not processed_path or not Path(processed_path).is_file():
             raise ValueError("XML processado da devolução não foi localizado.")
-        return fiscal_service.generate_danfe_pdf(
+        return fiscal_service.generate_fiscal_mirror_pdf(
             authorized_xml=Path(processed_path).read_bytes(), output_path=output_path
         )
 
