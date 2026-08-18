@@ -9686,6 +9686,53 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=verify_certificate_now,
             fg_color="#8957e5",
         ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        certificate_management = ctk.CTkFrame(certificado_card, fg_color="transparent")
+        certificate_management.pack(fill="x", padx=12, pady=(0, 10))
+
+        def show_certificate_metadata():
+            info = dict(self.fiscal_service.load_config().get("certificate_info") or {})
+            if not info:
+                messagebox.showinfo(
+                    "Certificado digital", "Nenhum certificado A1 está instalado.", parent=janela
+                )
+                return
+            messagebox.showinfo(
+                "Certificado digital ativo",
+                (
+                    f"Razão social: {info.get('company_name') or 'não identificada'}\n"
+                    f"CNPJ: {info.get('document') or 'não identificado'}\n"
+                    f"Validade: {info.get('valid_until') or 'não identificada'}"
+                ),
+                parent=janela,
+            )
+
+        def remove_certificate():
+            if not self._confirmar_senha_mestra(
+                title="Remover certificado digital",
+                prompt="Digite a senha mestra para remover o A1 instalado no NabiCode.",
+                parent=janela,
+            ):
+                return
+            if not messagebox.askyesno(
+                "Remover certificado digital",
+                "A cópia protegida e a credencial serão removidas. O arquivo original não será apagado. Continuar?",
+                parent=janela,
+            ):
+                return
+            self.fiscal_service.remove_managed_certificate()
+            config.update(self.fiscal_service.load_config())
+            certificate.delete(0, "end")
+            password.delete(0, "end")
+            certificate_status.configure(text="Certificado removido do NabiCode.", text_color="#d29922")
+
+        ctk.CTkButton(
+            certificate_management, text="Visualizar metadados",
+            command=show_certificate_metadata, fg_color="#1f6feb",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        ctk.CTkButton(
+            certificate_management, text="Remover certificado",
+            command=remove_certificate, fg_color="#da3633",
+        ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
         endpoints = config.get("endpoints") or {}
         for ambiente, titulo in (("HOMOLOGACAO", "homologação"), ("PRODUCAO", "produção")):
@@ -9697,6 +9744,51 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         status = ctk.CTkLabel(content, text="", wraplength=610, justify="left")
         status.pack(anchor="w", padx=16, pady=8)
+        def test_sefaz_connection():
+            secret = self._obter_senha_certificado(parent=janela, title="Testar conexão SEFAZ")
+            if secret is None:
+                return
+            selected_model = next(
+                model for model, label in self.fiscal_service.MODEL_LABELS.items()
+                if label == default_model.get()
+            )
+            status.configure(text="Consultando o status da SEFAZ em segundo plano...", text_color="#d29922")
+            sefaz_test_button.configure(state="disabled")
+            task = TASK_MANAGER.submit(
+                "Consultar status da SEFAZ",
+                lambda _context: self.fiscal_service.check_service_status(
+                    model=selected_model, password=secret
+                ),
+            )
+
+            def follow_status():
+                nonlocal secret
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    result = current.result
+                    status.configure(
+                        text=(
+                            "Conexão estabelecida com sucesso. Serviço em operação."
+                            if result.available else
+                            f"SEFAZ respondeu {result.status_code}: {result.message}"
+                        ),
+                        text_color="#2ea043" if result.available else "#d29922",
+                    )
+                    secret = ""
+                    sefaz_test_button.configure(state="normal")
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    status.configure(
+                        text=current.error or "Não foi possível consultar a SEFAZ.",
+                        text_color="#da3633",
+                    )
+                    secret = ""
+                    sefaz_test_button.configure(state="normal")
+                    return
+                janela.after(150, follow_status)
+            janela.after(100, follow_status)
         def verify_fiscal_catalog():
             try:
                 regime = regime_by_label[tax_regime.get()]
@@ -9795,6 +9887,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     if label == default_model.get()
                 )
                 previous_certificate = str(config.get("certificate_path") or "").strip()
+                selected_certificate = certificate.get().strip()
+                if selected_certificate and selected_certificate != previous_certificate and not password.get():
+                    raise ValueError(
+                        "Informe a senha para validar e instalar o novo certificado A1."
+                    )
                 saved = self.fiscal_service.save_config({
                     "enabled": enabled.get(), "environment": environment.get(),
                     "cnpj": fields["cnpj"].get(), "state": fields["state"].get(),
@@ -9802,7 +9899,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     "enabled_models": selected_models, "default_model": selected_default,
                     "sale_series_55": fields["sale_series_55"].get(),
                     "sale_series_65": fields["sale_series_65"].get(),
-                    "certificate_path": certificate.get(),
+                    "certificate_path": previous_certificate,
                     "issuer": {
                         "name": fields["issuer_name"].get(),
                         "state_registration": fields["issuer_ie"].get(),
@@ -9823,10 +9920,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         for ambiente in ("HOMOLOGACAO", "PRODUCAO")
                     },
                 })
-                if str(saved.get("certificate_path") or "").strip() != previous_certificate:
-                    self.fiscal_service.clear_session_certificate_password()
-                if certificate.get().strip() and password.get():
-                    info = self.fiscal_service.configure_certificate(certificate.get().strip(), password.get())
+                if selected_certificate and password.get():
+                    info = self.fiscal_service.install_certificate_securely(
+                        selected_certificate, password.get()
+                    )
+                    certificate.delete(0, "end")
+                    certificate.insert(0, self.fiscal_service.load_config()["certificate_path"])
                     warning = (
                         f" Atenção: vence em {info.expires_in_days} dia(s)."
                         if info.expiring_soon else ""
@@ -9841,6 +9940,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 status.configure(text=str(exc), text_color="#f85149")
         ctk.CTkButton(content, text="Salvar configuração fiscal", fg_color="#2ea043", command=save).pack(fill="x", padx=16, pady=(8, 6))
+        sefaz_test_button = ctk.CTkButton(
+            content, text="Testar conexão com a SEFAZ", fg_color="#1f6feb",
+            command=test_sefaz_connection,
+        )
+        sefaz_test_button.pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))

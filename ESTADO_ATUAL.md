@@ -956,3 +956,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 143 testes e 10 subtestes aprovados;
 - suíte completa: 1.219 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.63 — cofre local do A1 e status SEFAZ
+
+- criado um protetor de segredos baseado na DPAPI do Windows, vinculado ao usuário atual e sem chave fixa no código ou no banco;
+- a instalação segura valida validade e CNPJ antes de copiar o A1 para a área fiscal gerenciada;
+- o `.pfx` permanece criptografado pelo PKCS#12 e a senha é armazenada separadamente em conteúdo protegido pela DPAPI;
+- a senha protegida pode ser recuperada automaticamente nas próximas execuções pelo mesmo usuário do Windows;
+- remover ou substituir o A1 apaga somente a cópia e a credencial gerenciadas, preservando o arquivo original escolhido pelo cliente;
+- a tela oferece visualização restrita a razão social, CNPJ e validade, além da remoção protegida por senha mestra;
+- implementada consulta direta de `consStatServ` para NF-e/NFC-e, sem emitir documento, reservar numeração ou gravar retorno fiscal;
+- o botão `Testar conexão com a SEFAZ` executa a consulta fora da thread visual e diferencia serviço em operação de resposta indisponível ou erro de comunicação;
+- validação focada: 100 testes e 10 subtestes aprovados, incluindo round-trip real da DPAPI com segredo temporário;
+- suíte completa: 1.222 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.

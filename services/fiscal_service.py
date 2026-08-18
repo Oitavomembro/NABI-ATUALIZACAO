@@ -19,6 +19,7 @@ from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, st
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
+from services.windows_data_protector import WindowsDataProtector
 
 try:
     import requests
@@ -73,6 +74,15 @@ class FiscalResponse:
     receipt: str = ""
     access_key: str = ""
     raw_xml: str = ""
+
+
+@dataclass(frozen=True)
+class FiscalServiceStatus:
+    available: bool
+    status_code: str
+    message: str
+    model: str
+    environment: str
 
 
 class FiscalService:
@@ -132,6 +142,7 @@ class FiscalService:
         storage_dir: str | Path | None = None,
         schema_dir: str | Path | None = None,
         http_post: Callable[..., Any] | None = None,
+        secret_protector: Any | None = None,
     ) -> None:
         self.connection_factory = connection_factory
         self.storage_dir = Path(storage_dir or (Path.home() / ".nabicode" / "fiscal"))
@@ -147,6 +158,10 @@ class FiscalService:
         else:
             self.http_post = None
         self._session_certificate_password: str | None = None
+        self.secret_protector = secret_protector or WindowsDataProtector()
+        self._managed_certificate_dir = self.storage_dir / "certificate"
+        self._managed_certificate_path = self._managed_certificate_dir / "active.pfx"
+        self._managed_secret_path = self._managed_certificate_dir / "active.secret"
 
     def cache_certificate_password(self, password: str) -> FiscalCertificateInfo:
         config = self.load_config()
@@ -158,10 +173,65 @@ class FiscalService:
         return info
 
     def session_certificate_password(self) -> str | None:
+        if self._session_certificate_password is None:
+            try:
+                self._session_certificate_password = self.load_managed_certificate_password()
+            except (OSError, RuntimeError, UnicodeError, ValueError):
+                return None
         return self._session_certificate_password
 
     def clear_session_certificate_password(self) -> None:
         self._session_certificate_password = None
+
+    def install_certificate_securely(
+        self, pfx_path: str | Path, password: str
+    ) -> FiscalCertificateInfo:
+        """Valida e instala o A1 sem modificar ou remover o arquivo escolhido."""
+        source = Path(pfx_path)
+        info = self.inspect_certificate(source, password)
+        if info.expired:
+            raise ValueError("O certificado A1 está expirado ou ainda não é válido.")
+        config = self.load_config()
+        configured_cnpj = self._normalize_cnpj(config.get("cnpj"))
+        if configured_cnpj and info.document and configured_cnpj != info.document:
+            raise ValueError("O CNPJ do certificado não corresponde ao emitente configurado.")
+        protected_password = self.secret_protector.protect(str(password).encode("utf-8"))
+        self._managed_certificate_dir.mkdir(parents=True, exist_ok=True)
+        self._atomic_write_bytes(self._managed_certificate_path, source.read_bytes())
+        try:
+            self._atomic_write_bytes(self._managed_secret_path, protected_password)
+        except Exception:
+            self._secure_delete_file(self._managed_certificate_path)
+            raise
+        config["certificate_path"] = str(self._managed_certificate_path.resolve())
+        config["certificate_info"] = asdict(info)
+        config["certificate_managed"] = True
+        self._set_setting(self.CONFIG_KEY, json.dumps(config, ensure_ascii=False, sort_keys=True))
+        self._session_certificate_password = str(password)
+        return info
+
+    def load_managed_certificate_password(self) -> str:
+        config = self.load_config()
+        if not config.get("certificate_managed"):
+            raise ValueError("O certificado configurado não está no cofre seguro.")
+        configured = Path(str(config.get("certificate_path") or ""))
+        if configured.resolve() != self._managed_certificate_path.resolve():
+            raise ValueError("O caminho do certificado gerenciado é inconsistente.")
+        protected = self._managed_secret_path.read_bytes()
+        secret = self.secret_protector.unprotect(protected).decode("utf-8")
+        self.inspect_certificate(self._managed_certificate_path, secret)
+        return secret
+
+    def remove_managed_certificate(self) -> None:
+        config = self.load_config()
+        if config.get("certificate_managed"):
+            self._secure_delete_file(self._managed_certificate_path)
+            self._secure_delete_file(self._managed_secret_path)
+        config["certificate_path"] = ""
+        config["certificate_info"] = {}
+        config["certificate_managed"] = False
+        self._set_setting(self.CONFIG_KEY, json.dumps(config, ensure_ascii=False, sort_keys=True))
+        self.clear_session_certificate_password()
 
     @staticmethod
     def _require_dependency(name: str) -> None:
@@ -190,6 +260,7 @@ class FiscalService:
             "sale_series_65": 1,
             "certificate_path": "",
             "certificate_info": {},
+            "certificate_managed": False,
             "issuer": {
                 "name": "", "state_registration": "", "city_code": "",
                 "city": "", "street": "", "number": "", "district": "",
@@ -848,6 +919,48 @@ class FiscalService:
             bool(protocol) or status in self.INUTILIZATION_ACCEPTED_STATUS
         )
         return FiscalResponse(success, status, message, protocol, receipt, access_key, raw)
+
+    def check_service_status(self, *, model: str, password: str) -> FiscalServiceStatus:
+        """Consulta o serviço da SEFAZ sem emitir, reservar ou persistir documento."""
+        self._require_dependency("lxml")
+        config = self.load_config()
+        model = str(model)
+        if model not in self.VALID_MODELS:
+            raise ValueError("Modelo fiscal deve ser 55 ou 65.")
+        if model not in {str(item) for item in config.get("enabled_models", ())}:
+            raise ValueError(f"O modelo fiscal {model} não está habilitado.")
+        state = str(config.get("state") or "").upper()
+        state_code = self.STATE_CODES.get(state)
+        if not state_code:
+            raise ValueError("UF do emitente não configurada.")
+        certificate_path = str(config.get("certificate_path") or "")
+        info = self.inspect_certificate(certificate_path, password)
+        configured_cnpj = self._normalize_cnpj(config.get("cnpj"))
+        if configured_cnpj and info.document and configured_cnpj != info.document:
+            raise ValueError("O CNPJ do certificado não corresponde ao emitente configurado.")
+        environment = str(config.get("environment") or "HOMOLOGACAO").upper()
+        root = etree.Element(
+            etree.QName("http://www.portalfiscal.inf.br/nfe", "consStatServ"),
+            versao="4.00",
+            nsmap={None: "http://www.portalfiscal.inf.br/nfe"},
+        )
+        etree.SubElement(root, etree.QName(root.nsmap[None], "tpAmb")).text = (
+            "2" if environment == "HOMOLOGACAO" else "1"
+        )
+        etree.SubElement(root, etree.QName(root.nsmap[None], "cUF")).text = state_code
+        etree.SubElement(root, etree.QName(root.nsmap[None], "xServ")).text = "STATUS"
+        response = self.transmit(
+            operation="status", model=model,
+            xml=etree.tostring(root, xml_declaration=True, encoding="utf-8"),
+            pfx_path=certificate_path, password=password,
+        )
+        return FiscalServiceStatus(
+            available=response.status_code == "107",
+            status_code=response.status_code,
+            message=response.message,
+            model=model,
+            environment=environment,
+        )
 
 
 

@@ -51,6 +51,13 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert 'fields["sale_series_65"]' in block
     assert 'fields["issuer_im"]' in block
     assert "Nenhum documento foi transmitido" in block
+    assert 'text="Visualizar metadados"' in block
+    assert 'text="Remover certificado"' in block
+    assert "install_certificate_securely" in block
+    assert "remove_managed_certificate" in block
+    assert 'text="Testar conexão com a SEFAZ"' in block
+    assert "check_service_status" in block
+    assert "TASK_MANAGER.submit" in block
 
 
 def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():

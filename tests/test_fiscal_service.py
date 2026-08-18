@@ -87,6 +87,36 @@ class FiscalServiceTests(unittest.TestCase):
                     pfx_path=self.pfx_path, password=self.password,
                 )
 
+    def test_consulta_status_sefaz_sem_emitir_ou_reservar_numero(self):
+        calls = []
+
+        class Response:
+            content = b"""<retConsStatServ xmlns='http://www.portalfiscal.inf.br/nfe'>
+                <tpAmb>2</tpAmb><verAplic>TESTE</verAplic><cStat>107</cStat>
+                <xMotivo>Servico em Operacao</xMotivo><cUF>29</cUF>
+            </retConsStatServ>"""
+
+            @staticmethod
+            def raise_for_status():
+                return None
+
+        def post(url, **kwargs):
+            calls.append((url, kwargs))
+            return Response()
+
+        self.service.http_post = post
+        self.service.save_config({
+            "cnpj": "12345678000195", "state": "BA", "environment": "HOMOLOGACAO",
+            "enabled_models": ["55", "65"], "default_model": "65",
+            "certificate_path": str(self.pfx_path),
+        })
+        result = self.service.check_service_status(model="65", password=self.password)
+        self.assertTrue(result.available)
+        self.assertEqual(result.status_code, "107")
+        self.assertIn("NfeStatusServico", calls[0][0])
+        self.assertIn(b"consStatServ", calls[0][1]["data"])
+        self.assertEqual(self.service.numbering_status(), [])
+
     def test_configuracao_e_certificado_opcionais(self):
         config = self.service.save_config({
             "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12.345.678/0001-95",
@@ -120,6 +150,38 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertIsNone(self.service.session_certificate_password())
         config_text = json.dumps(self.service.load_config(), ensure_ascii=False)
         self.assertNotIn(self.password, config_text)
+
+    def test_instalacao_segura_gerencia_copia_senha_e_remocao(self):
+        class FakeProtector:
+            def protect(self, data):
+                return b"PROTECTED:" + bytes(data)[::-1]
+
+            def unprotect(self, data):
+                assert data.startswith(b"PROTECTED:")
+                return data.removeprefix(b"PROTECTED:")[::-1]
+
+        storage = Path(self.tmp.name) / "cofre_fiscal"
+        service = FiscalService(
+            self.connect, storage_dir=storage, secret_protector=FakeProtector()
+        )
+        service.save_config({"cnpj": "12345678000195"})
+        info = service.install_certificate_securely(self.pfx_path, self.password)
+        config = service.load_config()
+        managed = Path(config["certificate_path"])
+        self.assertTrue(config["certificate_managed"])
+        self.assertTrue(managed.is_file())
+        self.assertNotEqual(managed.resolve(), self.pfx_path.resolve())
+        self.assertTrue(self.pfx_path.is_file())
+        secret_path = storage / "certificate" / "active.secret"
+        self.assertNotEqual(secret_path.read_bytes(), self.password.encode())
+        service.clear_session_certificate_password()
+        self.assertEqual(service.session_certificate_password(), self.password)
+        self.assertEqual(info.company_name, "EMPRESA TESTE")
+        service.remove_managed_certificate()
+        self.assertFalse(managed.exists())
+        self.assertFalse(secret_path.exists())
+        self.assertTrue(self.pfx_path.is_file())
+        self.assertFalse(service.load_config()["certificate_managed"])
 
     def test_senha_incorreta_nao_e_guardada_na_sessao(self):
         self.service.configure_certificate(self.pfx_path, self.password)
