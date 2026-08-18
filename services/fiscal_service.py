@@ -82,7 +82,7 @@ class FiscalService:
     VALID_EVENTS = {"CANCELAMENTO", "CCE"}
     STATE_CODES = {"RO":"11","AC":"12","AM":"13","RR":"14","PA":"15","AP":"16","TO":"17","MA":"21","PI":"22","CE":"23","RN":"24","PB":"25","PE":"26","AL":"27","SE":"28","BA":"29","MG":"31","ES":"32","RJ":"33","SP":"35","PR":"41","SC":"42","RS":"43","MS":"50","MT":"51","GO":"52","DF":"53"}
     TAX_REGIME_CODES = {
-        "MEI": 1,
+        "MEI": 4,
         "SIMPLES": 1,
         "SIMPLES_NACIONAL": 1,
         "EXCESSO_SUBLIMITE": 2,
@@ -797,8 +797,8 @@ class FiscalService:
         if state not in self.STATE_CODES:
             problems.append("UF do emitente é inválida.")
         regime_code = int(issuer.get("tax_regime_code", 0) or 0)
-        if regime_code not in {1, 2, 3}:
-            problems.append("CRT do emitente deve ser 1, 2 ou 3.")
+        if regime_code not in {1, 2, 3, 4}:
+            problems.append("CRT do emitente deve ser 1, 2, 3 ou 4.")
         if len(self._digits(issuer.get("city_code"))) != 7:
             problems.append("Código IBGE do município do emitente deve possuir 7 dígitos.")
         if not self._digits(issuer.get("state_registration")):
@@ -1129,8 +1129,8 @@ class FiscalService:
         crt = int(issuer.get("tax_regime_code", self.TAX_REGIME_CODES.get(str(issuer.get("tax_regime", "SIMPLES")).upper(), 1)))
         if model not in self.VALID_MODELS:
             problems.append("Modelo fiscal deve ser 55 ou 65.")
-        if crt not in {1, 2, 3}:
-            problems.append("CRT do emitente deve ser 1, 2 ou 3.")
+        if crt not in {1, 2, 3, 4}:
+            problems.append("CRT do emitente deve ser 1, 2, 3 ou 4.")
         state = str(issuer.get("state", "")).strip().upper()
         expected_state_code = self.STATE_CODES.get(state, "")
         informed_state_code = self._digits(document.get("state_code"))

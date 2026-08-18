@@ -628,3 +628,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - todas as rotinas, permissões técnicas e proteções anteriores foram preservadas;
 - 31 testes focados aprovados; `compileall` e `git diff --check` aprovados;
 - nenhuma janela do programa foi aberta durante a validação automática.
+
+## Checkpoint 42.43 — CRT 4 oficial do MEI
+
+- corrigido na fonte o enquadramento do MEI de CRT 1 para CRT 4, conforme regra oficial da NF-e;
+- validações do perfil e do documento passam a aceitar exclusivamente os CRT 1, 2, 3 e 4;
+- teste de regressão impede que o perfil MEI volte a gerar CRT 1;
+- 59 testes fiscais aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum banco real, certificado real, endpoint fiscal, interface ou impressora foi utilizado.

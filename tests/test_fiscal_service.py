@@ -107,7 +107,7 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
         expected_regimes = {
-            "MEI": 1,
+            "MEI": 4,
             "SIMPLES_NACIONAL": 1,
             "EXCESSO_SUBLIMITE": 2,
             "LUCRO_PRESUMIDO": 3,
