@@ -1442,7 +1442,19 @@ class FiscalService:
             total_with_rtc += total_ibs_uf + total_ibs_city + total_cbs
             el(total, "vNFTot", f"{total_with_rtc:.2f}")
         transp=etree.SubElement(inf, etree.QName(ns,"transp")); el(transp,"modFrete",9)
-        pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); el(detpag,"tPag",document.get("payment_code","01")); el(detpag,"vPag",f"{total_with_rtc:.2f}")
+        pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); payment_code=str(document.get("payment_code","01")); el(detpag,"tPag",payment_code); el(detpag,"vPag",f"{total_with_rtc:.2f}")
+        payment_detail = dict(document.get("payment_detail") or {})
+        if payment_code in {"03", "04"}:
+            card = etree.SubElement(detpag, etree.QName(ns, "card"))
+            integration = int(payment_detail.get("integration", 2) or 2)
+            if integration not in {1, 2}:
+                raise ValueError("Tipo de integração do cartão inválido.")
+            el(card, "tpIntegra", integration)
+            authorization = str(payment_detail.get("authorization") or "").strip()
+            if authorization:
+                if len(authorization) > 20:
+                    raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
+                el(card, "cAut", authorization)
         if document.get("additional_info"):
             infad=etree.SubElement(inf, etree.QName(ns,"infAdic")); el(infad,"infCpl",document.get("additional_info"))
         if model == "65" and int(document.get("emission_type", 1)) == 1:
@@ -2029,6 +2041,13 @@ class FiscalService:
                 config = self.load_config()
                 xml = base64.b64decode(str(record.get("xml_b64", "")))
                 operation = str(record.get("operation", "")).lower()
+                if operation in {"autorizacao", "recibo"}:
+                    readiness = self.validate_ready(
+                        operation=operation,
+                        model=str(record.get("model") or config.get("default_model") or "65"),
+                    )
+                    if readiness:
+                        raise ValueError("; ".join(readiness))
                 if operation == "autorizacao":
                     try:
                         root = etree.fromstring(xml, parser=etree.XMLParser(resolve_entities=False, no_network=True))

@@ -6434,6 +6434,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         desconto_tipo = tk.StringVar(value="VALOR")
         acrescimo_tipo = tk.StringVar(value="VALOR")
         recebido_var = tk.StringVar(value="")
+        autorizacao_cartao_var = tk.StringVar(value="")
         desconto_var = tk.StringVar(value="0,00")
         acrescimo_var = tk.StringVar(value="0,00")
         estado = {"total_final": round(float(total), 2), "recebido": 0.0, "troco": 0.0, "falta": round(float(total), 2)}
@@ -6467,6 +6468,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkLabel(col_pag,text="Valor recebido",font=ctk.CTkFont(size=14,weight="bold")).pack(anchor="w",padx=16,pady=(14,5))
         recebido_entry=ctk.CTkEntry(col_pag,textvariable=recebido_var,height=42,placeholder_text="0,00")
         recebido_entry.pack(fill="x",padx=16,pady=(0,16))
+        cartao_frame = ctk.CTkFrame(col_pag, fg_color="#0d1117", corner_radius=8)
+        ctk.CTkLabel(cartao_frame, text="Autorização da maquininha (opcional)", font=ctk.CTkFont(size=12, weight="bold")).pack(anchor="w", padx=10, pady=(8, 3))
+        autorizacao_cartao_entry = ctk.CTkEntry(cartao_frame, textvariable=autorizacao_cartao_var, height=34, placeholder_text="NSU / código do comprovante")
+        autorizacao_cartao_entry.pack(fill="x", padx=10, pady=(0, 8))
 
         def bloco(parent,titulo,tipo_var,valor_var):
             ctk.CTkLabel(parent,text=titulo,font=ctk.CTkFont(size=15,weight="bold")).pack(anchor="w",padx=16,pady=(16,7))
@@ -6526,7 +6531,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except (ValueError,TypeError) as exc: erro_label.configure(text=str(exc))
         def forma_alterada(*_):
             crediario_frame.pack_forget()
+            cartao_frame.pack_forget()
             if forma_var.get()=="CREDIARIO": recebido_var.set(f"{estado['total_final']:.2f}".replace(".",","))
+            if forma_var.get() in {"DEBITO", "CREDITO"}:
+                cartao_frame.pack(fill="x", padx=12, pady=(0, 10))
             recalcular()
         forma_var.trace_add("write",forma_alterada); recebido_var.trace_add("write",recalcular); desconto_var.trace_add("write",recalcular); acrescimo_var.trace_add("write",recalcular)
         def cancelar(_event=None): resultado["valor"]=None; janela.destroy(); return "break"
@@ -6540,6 +6548,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if not pagamentos: janela.lift(); return "break"
             else:
                 pagamentos=[{"forma":forma_var.get(),"valor":estado["recebido"]}]
+                if forma_var.get() in {"DEBITO", "CREDITO"}:
+                    pagamentos[0].update({
+                        "card_integration": 2,
+                        "card_authorization": autorizacao_cartao_var.get().strip()[:20],
+                    })
             try:
                 recebido,troco=self.pdv_service.validar_pagamentos(estado['total_final'],pagamentos)
                 itens=self.pdv_service.ratear_total_itens(self.carrinho_venda,estado['total_final'])
@@ -6552,7 +6565,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(btns,text="Cancelar",fg_color="#30363d",command=cancelar).pack(fill="x",pady=(0,7))
         finalizar_btn=ctk.CTkButton(btns,text="Finalizar venda",height=46,fg_color="#2ea043",command=concluir)
         finalizar_btn.pack(fill="x")
-        fluxo=radios+[recebido_entry,desconto_combo,desconto_entry,acrescimo_combo,acrescimo_entry,parcelas_combo,primeiro_vencimento_entry,finalizar_btn]
+        fluxo=radios+[recebido_entry,autorizacao_cartao_entry,desconto_combo,desconto_entry,acrescimo_combo,acrescimo_entry,parcelas_combo,primeiro_vencimento_entry,finalizar_btn]
         def avancar(event=None):
             atual=janela.focus_get()
             if atual in fluxo:
@@ -9591,6 +9604,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             frame, text=f"Arquivos locais: {self.fiscal_service.storage_dir}",
             text_color="#8b949e", anchor="w",
         ).pack(fill="x", padx=12, pady=(0, 6))
+        summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
+        summary_frame.pack(fill="x", padx=12, pady=(0, 8))
+        summary_labels = {}
+        for key, title, color in (("authorized","Autorizadas","#2ea043"),("pending","Pendentes","#d29922"),("failed","Com erro","#da3633"),("total","Total","#1f6feb")):
+            label = ctk.CTkLabel(summary_frame, text=f"{title}: 0", fg_color=color, corner_radius=7, height=34, font=ctk.CTkFont(weight="bold"))
+            label.pack(side="left", fill="x", expand=True, padx=4)
+            summary_labels[key] = label
         filters = ctk.CTkFrame(frame, fg_color="transparent")
         filters.pack(fill="x", padx=12, pady=(0, 8))
         document_search = ctk.CTkEntry(
@@ -9610,18 +9630,35 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             for item in tree.get_children(): tree.delete(item)
             rows.clear()
             query = document_search.get().strip().casefold()
+            summary = self.fiscal_sale_service.summary()
+            for key, label in summary_labels.items():
+                title = {"authorized":"Autorizadas","pending":"Pendentes","failed":"Com erro","total":"Total"}[key]
+                label.configure(text=f"{title}: {summary[key]}")
+            queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
+            for row in self.fiscal_sale_service.list_sales():
+                queue = queue_by_id.get(str(row.get("queue_id")), {})
+                merged = dict(row)
+                merged.update({
+                    "_kind": "VENDA", "_queue": queue,
+                    "last_error": row.get("last_error") or queue.get("last_error", ""),
+                })
+                searchable = " ".join(str(merged.get(field, "")) for field in ("sale_id", "access_key", "protocol", "status", "environment", "last_error")).casefold()
+                if query and query not in searchable:
+                    continue
+                item = tree.insert("", "end", values=(f"VENDA #{row.get('sale_id')}", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
+                rows[item] = merged
             for row in self.fiscal_service.list_documents():
                 searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status", "model", "environment", "created_at")).casefold()
                 if query and query not in searchable:
                     continue
                 item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
-                rows[item] = row
+                rows[item] = dict(row, _kind="DOCUMENTO")
             for row in self.fiscal_service.list_events():
                 searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
                 if query and query not in searchable:
                     continue
                 item = tree.insert("", "end", values=(row.get("event_type","EVENTO"), row.get("access_key",""), row.get("status_code",""), row.get("protocol",""), row.get("created_at",""), ""))
-                rows[item] = row
+                rows[item] = dict(row, _kind="EVENTO")
         document_search.bind("<Return>", lambda _event: load())
         ctk.CTkButton(filters, text="Buscar", width=90, command=load).pack(side="left")
         def selected():
@@ -9634,6 +9671,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if path and os.path.exists(path):
                 self._abrir_arquivo_sistema(path)
             else: messagebox.showwarning("Fiscal", "Arquivo fiscal não localizado.", parent=janela)
+        def details():
+            row = selected()
+            if not row:
+                messagebox.showwarning("Central fiscal", "Selecione uma linha.", parent=janela)
+                return
+            queue = dict(row.get("_queue") or {})
+            text = (
+                f"Tipo: {row.get('_kind','-')}\nVenda: {row.get('sale_id','-')}\n"
+                f"Status: {row.get('status') or row.get('status_code','-')}\n"
+                f"Chave: {row.get('access_key','-')}\nProtocolo: {row.get('protocol','-')}\n"
+                f"Fila: {row.get('queue_id') or queue.get('id','-')}\n"
+                f"Tentativas: {queue.get('attempts','-')}\n\n"
+                f"Última informação:\n{row.get('last_error') or queue.get('last_message') or 'Nenhuma pendência registrada.'}"
+            )
+            messagebox.showinfo("Detalhes fiscais", text, parent=janela)
         def danfe():
             row = selected()
             if not row or not row.get("processed_path"):
@@ -9680,17 +9732,86 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             except Exception as exc:
                 messagebox.showerror("Exportação fiscal", str(exc), parent=janela)
+        transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
+        transmission_status.pack(fill="x", padx=16, pady=(0, 3))
+
+        def transmit_queue(*, retry_selected=False):
+            if not self._autorizar("fiscal", "configure"):
+                return
+            row = selected() if retry_selected else None
+            if retry_selected:
+                if not row or row.get("_kind") != "VENDA":
+                    messagebox.showwarning("Central fiscal", "Selecione uma venda fiscal pendente.", parent=janela)
+                    return
+                queue = dict(row.get("_queue") or {})
+                if queue.get("status") == "CONCLUIDO":
+                    messagebox.showinfo("Central fiscal", "Este documento já foi concluído.", parent=janela)
+                    return
+                if queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
+                    self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
+                else:
+                    self.fiscal_sale_service.enqueue_pending(
+                        sale_id=int(row["sale_id"]), actor=self._usuario_financeiro()
+                    )
+            password = simpledialog.askstring(
+                "Transmitir documentos fiscais", "Senha do certificado A1:",
+                show="*", parent=janela,
+            )
+            if password is None:
+                return
+            transmission_status.configure(text="Transmitindo em segundo plano. Você pode continuar usando o NabiCode.")
+            transmit_button.configure(state="disabled")
+            retry_button.configure(state="disabled")
+            task = TASK_MANAGER.submit(
+                "Transmitir documentos fiscais",
+                lambda context: self.fiscal_service.process_transmission_queue(
+                    password=password, limit=20
+                ),
+            )
+
+            def follow():
+                nonlocal password
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    processed = current.result or []
+                    transmission_status.configure(
+                        text=f"Transmissão concluída: {len(processed)} item(ns) processado(s).",
+                        text_color="#2ea043",
+                    )
+                    transmit_button.configure(state="normal")
+                    retry_button.configure(state="normal")
+                    password = ""
+                    load()
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    transmission_status.configure(text=current.error or "Transmissão cancelada.", text_color="#da3633")
+                    transmit_button.configure(state="normal")
+                    retry_button.configure(state="normal")
+                    password = ""
+                    load()
+                    return
+                janela.after(150, follow)
+            janela.after(100, follow)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
+        ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Gerar DANFE", command=danfe).pack(side="left", padx=4)
+        transmit_button = ctk.CTkButton(actions, text="Transmitir pendentes", command=transmit_queue, fg_color="#2ea043")
+        transmit_button.pack(side="left", padx=4)
+        retry_button = ctk.CTkButton(actions, text="Reenviar selecionado", command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922")
+        retry_button.pack(side="left", padx=4)
+        export_actions = ctk.CTkFrame(frame, fg_color="transparent")
+        export_actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(
-            actions, text="Abrir pasta fiscal",
+            export_actions, text="Abrir pasta fiscal",
             command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),
             fg_color="#8957e5",
         ).pack(side="left", padx=4)
         ctk.CTkButton(
-            actions, text="Gerar arquivos para contabilidade", command=export_accounting,
+            export_actions, text="Gerar arquivos para contabilidade", command=export_accounting,
             fg_color="#2ea043",
         ).pack(side="left", padx=4)
         load()

@@ -1,5 +1,20 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — Central Fiscal e cartão POS
+
+- Central Fiscal existente passa a reunir vendas vinculadas, documentos autorizados e eventos sem duplicar persistência;
+- cartões mostram autorizadas, pendentes, falhas e total;
+- detalhes exibem venda, chave, protocolo, fila, tentativas e última mensagem;
+- transmissão e reenvio usam a fila oficial em segundo plano, mantendo a interface responsiva;
+- senha do A1 é solicitada somente para a tarefa, não é persistida e a referência em memória é limpa ao terminar;
+- a fila não contorna o bloqueio de produção;
+- Débito e Crédito mostram no PDV o campo opcional de NSU/autorização da maquininha;
+- POS comum é identificado corretamente como não integrado (`tpIntegra=2`) e não exige número do comprovante;
+- quando informado, `cAut` é preservado no pagamento e incluído no XML, limitado a 20 caracteres;
+- validação focada: 119 testes e 13 subtestes aprovados;
+- suíte completa: 1.160 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — destinatário automático da venda
 
 - schema 16 amplia o cadastro oficial do cliente com e-mail, inscrição estadual, indicador de contribuinte e endereço fiscal estruturado;

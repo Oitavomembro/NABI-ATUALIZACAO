@@ -97,6 +97,19 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(self.fiscal.document["number"], 7)
         self.assertEqual(self.fiscal.document["payment_code"], "17")
 
+    def test_cartao_pos_aceita_autorizacao_opcional(self):
+        self.service.prepare(
+            items=[{"produto_id": 1}],
+            payments=[{"forma": "CREDITO", "valor": 10, "card_integration": 2,
+                       "card_authorization": "NSU123"}],
+            actor="caixa",
+        )
+        self.assertEqual(self.fiscal.document["payment_code"], "03")
+        self.assertEqual(
+            self.fiscal.document["payment_detail"],
+            {"integration": 2, "authorization": "NSU123"},
+        )
+
     def test_falha_na_geracao_libera_numero_reservado(self):
         self.fiscal.build_document_xml = lambda **_kwargs: (_ for _ in ()).throw(ValueError("xml inválido"))
         with self.assertRaisesRegex(ValueError, "xml inválido"):
@@ -113,6 +126,10 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.fiscal.queued), 1)
         self.assertEqual(self.service.list_pending()[0]["status"], "ENFILEIRADO")
+        self.assertEqual(
+            self.service.summary(),
+            {"total": 1, "authorized": 0, "pending": 1, "failed": 0},
+        )
 
     def test_destinatario_e_destino_sao_obtidos_do_cliente(self):
         recipient, destination = self.service.recipient_for_customer(1, model="55")

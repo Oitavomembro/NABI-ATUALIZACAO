@@ -95,6 +95,22 @@ class PDVServiceTests(unittest.TestCase):
         self.assertEqual(dados["troco"], 10)
         self.assertEqual(dados["pagamentos"][0]["forma"], "PIX")
 
+    def test_preserva_autorizacao_opcional_do_cartao_pos(self):
+        conn = sqlite3.connect(self.db_path)
+        try:
+            self.service.registrar_pagamentos_transacao(
+                conn, 8,
+                [{"forma": "CREDITO", "valor": 100, "card_integration": 2,
+                  "card_authorization": "NSU-987"}],
+                total=100, recebido=100, troco=0,
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        payment = self.service.obter_pagamentos_venda(8)["pagamentos"][0]
+        self.assertEqual(payment["card_integration"], 2)
+        self.assertEqual(payment["card_authorization"], "NSU-987")
+
     def test_modo_pdv_normalizado(self):
         self.assertEqual(self.service.normalizar_modo("touch"), "TOUCH")
         with self.assertRaises(ValueError):

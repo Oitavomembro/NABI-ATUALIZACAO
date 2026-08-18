@@ -232,7 +232,15 @@ class PDVService:
             "total": DecimalStorage.canonical(total_decimal, field="total da venda"),
             "recebido": DecimalStorage.canonical(recebido_validado, field="valor recebido"),
             "troco": DecimalStorage.canonical(troco_validado, field="troco"),
-            "pagamentos": [{"forma": str(p["forma"]).strip().upper(), "valor": DecimalStorage.canonical(cls._money(p["valor"], field="valor do pagamento"))} for p in pagamentos],
+            "pagamentos": [
+                {
+                    "forma": str(p["forma"]).strip().upper(),
+                    "valor": DecimalStorage.canonical(cls._money(p["valor"], field="valor do pagamento")),
+                    **({"card_integration": int(p.get("card_integration", 2))} if str(p.get("forma", "")).strip().upper() in {"DEBITO", "CREDITO"} else {}),
+                    **({"card_authorization": str(p.get("card_authorization") or "").strip()[:20]} if str(p.get("card_authorization") or "").strip() else {}),
+                }
+                for p in pagamentos
+            ],
             "registrado_em": datetime.now().isoformat(timespec="seconds"),
         }
         chave = f"{cls.PAYMENT_KEY_PREFIX}{int(venda_id)}"

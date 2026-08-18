@@ -468,6 +468,25 @@ class FiscalServiceTests(unittest.TestCase):
             "http://hinternet.sefaz.ba.gov.br/nfce/consulta",
         )
 
+    def test_pagamento_cartao_pos_gera_grupo_sem_exigir_autorizacao(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={},
+            items=[{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,
+                    "ncm":"94036000","cfop":"5102","unit":"UN"}],
+            document={"model":"65","series":1,"number":2,"state_code":"29",
+                      "environment":"HOMOLOGACAO","numeric_code":"12345679",
+                      "payment_code":"04","payment_detail":{"integration":2}},
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='card']/*[local-name()='tpIntegra'])"), "2")
+        self.assertEqual(root.xpath("string(//*[local-name()='card']/*[local-name()='cAut'])"), "")
+
     def test_nfce_offline_assina_parametros_qrcode_v3_com_certificado(self):
         issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         key = self.service.build_access_key(
@@ -887,6 +906,28 @@ class FiscalServiceTests(unittest.TestCase):
     def test_fila_autorizacao_rejeita_xml_sem_chave(self):
         with self.assertRaisesRegex(ValueError, "chave de acesso"):
             self.service.enqueue_transmission(operation="autorizacao", xml="<enviNFe/>", actor="admin")
+
+    def test_fila_nao_contorna_bloqueio_de_producao(self):
+        self.service.save_config({
+            "enabled": True, "environment": "PRODUCAO", "cnpj": "12345678000195",
+            "state": "BA", "tax_regime": "SIMPLES", "certificate_path": str(self.pfx_path),
+            "endpoints": {"HOMOLOGACAO": {}, "PRODUCAO": {"autorizacao": "https://sefaz.invalid/aut"}},
+        })
+        key = "29" + "0" * 18 + "65" + "0" * 22
+        xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
+        self.service.enqueue_transmission(
+            operation="autorizacao", xml=xml, actor="admin", model="65", max_attempts=1
+        )
+        called = []
+        original = self.service.transmit
+        self.service.transmit = lambda **kwargs: called.append(kwargs)
+        try:
+            processed = self.service.process_transmission_queue(password=self.password)
+        finally:
+            self.service.transmit = original
+        self.assertEqual(processed[0]["status"], "FALHA")
+        self.assertIn("produção bloqueada", processed[0]["last_error"])
+        self.assertEqual(called, [])
 
     def test_fila_autorizacao_bloqueia_resposta_de_outra_chave(self):
         self.service.save_config({

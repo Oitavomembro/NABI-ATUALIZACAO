@@ -64,6 +64,7 @@ class FiscalSaleService:
                     "state_code": self.fiscal_service.STATE_CODES[str(config["state"]).upper()],
                     "issued_at": when, "environment": environment, "numeric_code": numeric_code,
                     "destination": int(destination), "payment_code": self._payment_code(payments),
+                    "payment_detail": self._payment_detail(payments),
                     "final_consumer": 1, "presence": 1,
                 },
             )
@@ -134,6 +135,22 @@ class FiscalSaleService:
         name = str(payments[0].get("forma") or "").strip().upper().replace(" ", "_")
         return cls.PAYMENT_CODES.get(name, "99")
 
+    @classmethod
+    def _payment_detail(cls, payments: Sequence[Mapping[str, Any]]) -> dict[str, Any]:
+        if len(payments) != 1:
+            return {}
+        payment = payments[0]
+        code = cls._payment_code(payments)
+        if code not in {"03", "04"}:
+            return {}
+        integration = int(payment.get("card_integration", 2) or 2)
+        if integration not in {1, 2}:
+            raise ValueError("Tipo de integração do cartão deve ser TEF (1) ou POS (2).")
+        authorization = str(payment.get("card_authorization") or "").strip()
+        if len(authorization) > 20:
+            raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
+        return {"integration": integration, "authorization": authorization}
+
     @staticmethod
     def persist_draft(connection: Any, sale_id: int, draft: FiscalSaleDraft) -> None:
         now = datetime.now().astimezone().isoformat()
@@ -187,14 +204,33 @@ class FiscalSaleService:
             connection.close()
 
     def list_pending(self) -> list[dict[str, Any]]:
+        return [
+            row for row in self.list_sales()
+            if str(row.get("status")) not in {"AUTORIZADO", "CANCELADO"}
+        ]
+
+    def list_sales(self) -> list[dict[str, Any]]:
         connection = self.fiscal_service.connection_factory()
         try:
             cursor = connection.execute(
-                """SELECT sale_id,access_key,model,environment,status,queue_id,last_error,created_at
-                     FROM fiscal_sale_documents
-                    WHERE status NOT IN ('AUTORIZADO','CANCELADO') ORDER BY id"""
+                """SELECT sale_id,access_key,model,environment,status,queue_id,protocol,
+                          last_error,created_at,updated_at
+                     FROM fiscal_sale_documents ORDER BY id DESC"""
             )
             names = [column[0] for column in cursor.description]
             return [dict(zip(names, row)) for row in cursor.fetchall()]
         finally:
             connection.close()
+
+    def summary(self) -> dict[str, int]:
+        result = {"total": 0, "authorized": 0, "pending": 0, "failed": 0}
+        for row in self.list_sales():
+            result["total"] += 1
+            status = str(row.get("status") or "").upper()
+            if status == "AUTORIZADO":
+                result["authorized"] += 1
+            elif status == "FALHA":
+                result["failed"] += 1
+            else:
+                result["pending"] += 1
+        return result
