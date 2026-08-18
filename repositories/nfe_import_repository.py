@@ -82,7 +82,7 @@ class NFeImportRepository:
             (codigo, str(item.descricao or "").strip().upper(), preco_real, custo_real, 0.0, margem_real,
              preco_decimal, custo_decimal, "0", margem_decimal, fator_decimal, fornecedor_id, unidade_id,
              unidade_compra_id, fator_real, str(item.codigo_barras or ""), str(item.ncm or ""),
-             str(item.cest or ""), str(item.cfop or ""), agora, agora),
+             str(item.cest or ""), "", agora, agora),
         )
         produto_id = int(cursor.lastrowid)
         self._salvar_tributacao_rtc(connection, produto_id=produto_id, item=item)
@@ -122,11 +122,11 @@ class NFeImportRepository:
                margem_lucro=?,margem_lucro_decimal=?,preco_venda=?,preco_venda_decimal=?,
                codigo_barras=CASE WHEN ?<>'' THEN ? ELSE codigo_barras END,
                ncm=CASE WHEN ?<>'' THEN ? ELSE ncm END, cest=CASE WHEN ?<>'' THEN ? ELSE cest END,
-               cfop=CASE WHEN ?<>'' THEN ? ELSE cfop END, atualizado_em=? WHERE id=?""",
+               atualizado_em=? WHERE id=?""",
             (fornecedor_id, unidade_id, unidade_compra_id, fator_real, fator_decimal, custo_real, custo_decimal,
              margem_real, margem_decimal, preco_real, preco_decimal,
              str(item.codigo_barras or ""), str(item.codigo_barras or ""), str(item.ncm or ""), str(item.ncm or ""),
-             str(item.cest or ""), str(item.cest or ""), str(item.cfop or ""), str(item.cfop or ""), agora, int(produto_id)),
+             str(item.cest or ""), str(item.cest or ""), agora, int(produto_id)),
         )
         self._salvar_tributacao_rtc(connection, produto_id=int(produto_id), item=item)
         preco_anterior = DecimalStorage.to_decimal(atual["preco_venda"], field="preço anterior")
@@ -145,6 +145,16 @@ class NFeImportRepository:
     @staticmethod
     def _salvar_tributacao_rtc(connection, *, produto_id: int, item) -> None:
         """Preserva a ficha RTC recebida no XML sem inferir regra tributária."""
+        origin = str(getattr(item, "origem_mercadoria", "") or "").strip()
+        if origin and origin not in set("012345678"):
+            raise ValueError("O XML possui origem da mercadoria inválida.")
+        if origin:
+            connection.execute(
+                """UPDATE produtos SET fiscal_origin=?,
+                          fiscal_profile_source=CASE WHEN fiscal_profile_source='' THEN 'XML_IMPORT' ELSE fiscal_profile_source END
+                     WHERE id=?""",
+                (origin, int(produto_id)),
+            )
         cst = str(getattr(item, "ibs_cbs_cst", "") or "").strip()
         classification = str(getattr(item, "ibs_cbs_class", "") or "").strip()
         if not cst and not classification:
@@ -355,6 +365,8 @@ class NFeImportRepository:
         cest: str,
         cfop: str,
     ) -> None:
+        # CFOP descreve a operação do fornecedor, não a futura venda do destinatário.
+        # O parâmetro permanece por compatibilidade, mas nunca altera a ficha de saída.
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         self.database.execute(
             """UPDATE produtos
@@ -364,7 +376,6 @@ class NFeImportRepository:
                    codigo_barras=CASE WHEN ?<>'' THEN ? ELSE codigo_barras END,
                    ncm=CASE WHEN ?<>'' THEN ? ELSE ncm END,
                    cest=CASE WHEN ?<>'' THEN ? ELSE cest END,
-                   cfop=CASE WHEN ?<>'' THEN ? ELSE cfop END,
                    atualizado_em=?
                WHERE id=?""",
             (
@@ -375,7 +386,6 @@ class NFeImportRepository:
                 codigo_barras, codigo_barras,
                 ncm, ncm,
                 cest, cest,
-                cfop, cfop,
                 agora,
                 int(produto_id),
             ),

@@ -17,6 +17,7 @@ import webbrowser
 import logging
 from time import perf_counter
 from decimal import Decimal
+from dataclasses import replace
 
 from core import ConfigManager, EventBus, TaskManager, TaskStatus, GlobalShortcutManager, EnterField, install_enter_navigation, WindowActionController, UniversalTextInteractionManager, ContextHelpController, CommandDefinition, CommandPalette, GlobalSearchEngine, SearchResult, UniversalLayoutPolicy
 from core.scroll_utils import PercentScrollController
@@ -279,7 +280,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 16
+DB_SCHEMA_VERSION = 17
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -3278,11 +3279,28 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         e_fator = campo(estoque, "Fator de conversão compra → estoque", 1, 2, placeholder="Ex.: 12 para 1 CX = 12 UN")
 
         e_ean = campo(fiscal, "Código de barras / EAN", 0, 0)
+        e_ncm = campo(fiscal, "NCM (8 dígitos)", 0, 1)
+        e_cest = campo(fiscal, "CEST (quando aplicável)", 0, 2)
+        e_cfop = campo(fiscal, "CFOP de referência", 1, 0)
+        e_origem = campo(fiscal, "Origem da mercadoria (0 a 8)", 1, 1)
+        e_csosn = campo(fiscal, "CSOSN — Simples Nacional", 2, 0)
+        e_icms_cst = campo(fiscal, "CST ICMS — regime normal", 2, 1)
+        e_icms_rate = campo(fiscal, "Alíquota ICMS (%)", 2, 2)
+        e_pis_cst = campo(fiscal, "CST PIS", 3, 0)
+        e_pis_rate = campo(fiscal, "Alíquota PIS (%)", 3, 1)
+        e_cofins_cst = campo(fiscal, "CST COFINS", 3, 2)
+        e_cofins_rate = campo(fiscal, "Alíquota COFINS (%)", 4, 0)
+        e_ibs_cst = campo(fiscal, "CST IBS/CBS", 4, 1)
+        e_ibs_class = campo(fiscal, "Classificação IBS/CBS", 4, 2)
+        e_ibs_uf_rate = campo(fiscal, "IBS estadual (%)", 5, 0)
+        e_ibs_city_rate = campo(fiscal, "IBS municipal (%)", 5, 1)
+        e_cbs_rate = campo(fiscal, "CBS (%)", 5, 2)
         ctk.CTkLabel(
             fiscal,
-            text="Os campos fiscais específicos (NCM, CEST e CFOP) são mantidos pelo fluxo XML quando disponíveis.",
+            text=("A NF-e de compra atualiza NCM, CEST, origem e IBS/CBS quando presentes. "
+                  "CSOSN/CST de venda devem refletir a tributação da sua empresa e não são copiados cegamente do fornecedor."),
             anchor="w", justify="left", text_color="#8b949e", wraplength=780,
-        ).grid(row=1, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
+        ).grid(row=6, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
 
         opcoes = ctk.CTkFrame(estoque, fg_color="transparent")
         opcoes.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=6)
@@ -3317,6 +3335,24 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             estoque_minimo=e_estoque_minimo, permite_estoque_negativo=permite_negativo_var,
         ))
         formulario_produto.apply(preparacao_cadastro.state, codigo_editavel=bool(produto_id))
+        perfil_fiscal = PRODUTO_SERVICE.buscar(int(produto_id)) if produto_id else {}
+        for widget, value in (
+            (e_ncm, perfil_fiscal.get("ncm", "")), (e_cest, perfil_fiscal.get("cest", "")),
+            (e_cfop, perfil_fiscal.get("cfop", "")), (e_origem, perfil_fiscal.get("fiscal_origin", "")),
+            (e_csosn, perfil_fiscal.get("fiscal_csosn", "")),
+            (e_icms_cst, perfil_fiscal.get("fiscal_icms_cst", "")),
+            (e_icms_rate, perfil_fiscal.get("fiscal_icms_rate", "0")),
+            (e_pis_cst, perfil_fiscal.get("fiscal_pis_cst", "")),
+            (e_pis_rate, perfil_fiscal.get("fiscal_pis_rate", "0")),
+            (e_cofins_cst, perfil_fiscal.get("fiscal_cofins_cst", "")),
+            (e_cofins_rate, perfil_fiscal.get("fiscal_cofins_rate", "0")),
+            (e_ibs_cst, perfil_fiscal.get("ibs_cbs_cst", "")),
+            (e_ibs_class, perfil_fiscal.get("ibs_cbs_class", "")),
+            (e_ibs_uf_rate, perfil_fiscal.get("ibs_uf_rate", "0")),
+            (e_ibs_city_rate, perfil_fiscal.get("ibs_city_rate", "0")),
+            (e_cbs_rate, perfil_fiscal.get("cbs_rate", "0")),
+        ):
+            widget.insert(0, str(value or ""))
 
         def salvar():
             try:
@@ -3335,6 +3371,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     estado_atual, categorias=mapa, marcas=mapa_marcas,
                     fornecedores=mapa_fornecedores, unidades=mapa_unidades,
                     produto_id=produto_id, usuario="Sistema",
+                )
+                dados_formulario = replace(
+                    dados_formulario,
+                    ncm=e_ncm.get(), cest=e_cest.get(), cfop=e_cfop.get(),
+                    fiscal_origin=e_origem.get(), fiscal_csosn=e_csosn.get(),
+                    fiscal_icms_cst=e_icms_cst.get(), fiscal_icms_rate=e_icms_rate.get(),
+                    fiscal_pis_cst=e_pis_cst.get(), fiscal_pis_rate=e_pis_rate.get(),
+                    fiscal_cofins_cst=e_cofins_cst.get(), fiscal_cofins_rate=e_cofins_rate.get(),
+                    fiscal_profile_source="MANUAL", ibs_cbs_cst=e_ibs_cst.get(),
+                    ibs_cbs_class=e_ibs_class.get(), ibs_uf_rate=e_ibs_uf_rate.get(),
+                    ibs_city_rate=e_ibs_city_rate.get(), cbs_rate=e_cbs_rate.get(),
                 )
                 comando = PRODUCT_APPLICATION_SERVICE.criar_comando(dados_formulario)
                 resultado_salvamento = PRODUCT_APPLICATION_SERVICE.salvar(comando)
@@ -3835,7 +3882,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if status in {"AUTORIZADA", "AUTORIZADA_PENDENTE_ESTOQUE", "CANCELADA", "CANCELADA_PENDENTE_ESTOQUE"}:
                 messagebox.showwarning("Devoluções", "A devolução já possui ciclo fiscal definitivo.", parent=janela)
                 return
-            senha = simpledialog.askstring("Certificado A1", "Senha do certificado A1:", show="*", parent=janela)
+            senha = self._obter_senha_certificado(parent=janela)
             if senha is None:
                 return
             reservation = None
@@ -3896,7 +3943,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
             if justificativa is None:
                 return
-            senha = simpledialog.askstring("Certificado A1", "Senha do certificado A1:", show="*", parent=janela)
+            senha = self._obter_senha_certificado(parent=janela)
             if senha is None:
                 return
             if not messagebox.askyesno("Confirmar cancelamento", "Transmitir o evento oficial de cancelamento?", parent=janela):
@@ -9362,6 +9409,34 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         return frame
 
+    def _obter_senha_certificado(self, *, parent=None, title="Certificado A1"):
+        cached = self.fiscal_service.session_certificate_password()
+        if cached is not None:
+            return cached
+        config = self.fiscal_service.load_config()
+        path = str(config.get("certificate_path") or "").strip()
+        if not path or not Path(path).is_file():
+            messagebox.showwarning(
+                title,
+                "Selecione e salve o certificado A1 uma única vez na Configuração Fiscal.",
+                parent=parent or self,
+            )
+            return None
+        secret = simpledialog.askstring(
+            title,
+            "Senha do certificado A1 (será lembrada somente até fechar o NabiCode):",
+            show="*",
+            parent=parent or self,
+        )
+        if secret is None:
+            return None
+        try:
+            self.fiscal_service.cache_certificate_password(secret)
+        except Exception as exc:
+            messagebox.showerror(title, str(exc), parent=parent or self)
+            return None
+        return secret
+
     def abrir_configuracao_fiscal(self):
         if not modo_fiscal_ativo():
             messagebox.showinfo("Modo Comercial", "Os recursos fiscais estão ocultos. Ative o modo Fiscal em Configurações.", parent=self)
@@ -9509,6 +9584,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     ),
                     text_color="#3fb950",
                 )
+                if str(Path(path).resolve()) == str(Path(config.get("certificate_path") or path).resolve()):
+                    self.fiscal_service.cache_certificate_password(secret)
             except Exception as exc:
                 certificate_status.configure(text=str(exc), text_color="#f85149")
 
@@ -9558,6 +9635,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     model for model, label in self.fiscal_service.MODEL_LABELS.items()
                     if label == default_model.get()
                 )
+                previous_certificate = str(config.get("certificate_path") or "").strip()
                 saved = self.fiscal_service.save_config({
                     "enabled": enabled.get(), "environment": environment.get(),
                     "cnpj": fields["cnpj"].get(), "state": fields["state"].get(),
@@ -9583,6 +9661,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         for ambiente in ("HOMOLOGACAO", "PRODUCAO")
                     },
                 })
+                if str(saved.get("certificate_path") or "").strip() != previous_certificate:
+                    self.fiscal_service.clear_session_certificate_password()
                 if certificate.get().strip() and password.get():
                     info = self.fiscal_service.configure_certificate(certificate.get().strip(), password.get())
                     status.configure(text=f"Certificado válido até {info.valid_until}.", text_color="#3fb950")
@@ -9761,9 +9841,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     self.fiscal_sale_service.enqueue_pending(
                         sale_id=int(row["sale_id"]), actor=self._usuario_financeiro()
                     )
-            password = simpledialog.askstring(
-                "Transmitir documentos fiscais", "Senha do certificado A1:",
-                show="*", parent=janela,
+            password = self._obter_senha_certificado(
+                parent=janela, title="Transmitir documentos fiscais"
             )
             if password is None:
                 return
@@ -9819,8 +9898,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if len(justification.strip()) < 15:
                 messagebox.showwarning("Cancelamento fiscal", "Informe ao menos 15 caracteres.", parent=janela)
                 return
-            password = simpledialog.askstring(
-                "Cancelar documento autorizado", "Senha do certificado A1:", show="*", parent=janela,
+            password = self._obter_senha_certificado(
+                parent=janela, title="Cancelar documento autorizado"
             )
             if password is None:
                 return

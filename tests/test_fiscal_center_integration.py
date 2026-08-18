@@ -18,9 +18,12 @@ def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
 
 def test_transmissao_fiscal_roda_fora_da_interface_e_nao_persiste_senha():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
+    password_helper = SOURCE.split("def _obter_senha_certificado", 1)[1].split("def abrir_configuracao_fiscal", 1)[0]
     assert "TASK_MANAGER.submit" in block
     assert "process_transmission_queue" in block
-    assert 'show="*"' in block
+    assert "self._obter_senha_certificado" in block
+    assert 'show="*"' in password_helper
+    assert "session_certificate_password" in password_helper
     assert 'password = ""' in block
     assert "salvar_config" not in block
 

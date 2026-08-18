@@ -16,6 +16,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
+from services.fiscal_product_profile import FiscalProductProfile
 
 try:
     import requests
@@ -136,6 +137,22 @@ class FiscalService:
             self.http_post = requests.post
         else:
             self.http_post = None
+        self._session_certificate_password: str | None = None
+
+    def cache_certificate_password(self, password: str) -> FiscalCertificateInfo:
+        config = self.load_config()
+        secret = str(password or "")
+        info = self.inspect_certificate(config.get("certificate_path", ""), secret)
+        if info.expired:
+            raise ValueError("O certificado A1 está fora da validade.")
+        self._session_certificate_password = secret
+        return info
+
+    def session_certificate_password(self) -> str | None:
+        return self._session_certificate_password
+
+    def clear_session_certificate_password(self) -> None:
+        self._session_certificate_password = None
 
     @staticmethod
     def _require_dependency(name: str) -> None:
@@ -1169,6 +1186,7 @@ class FiscalService:
             problems.append("Código da UF do documento não corresponde à UF do emitente.")
         operation_type = int(document.get("operation_type", 1))
         destination = int(document.get("destination", 1))
+        strict_tax_profile = bool(document.get("strict_tax_profile"))
         if operation_type not in {0, 1}:
             problems.append("Tipo de operação deve ser 0 (entrada) ou 1 (saída).")
         if destination not in {1, 2, 3}:
@@ -1211,14 +1229,17 @@ class FiscalService:
                 problems.append(f"{prefix}: quantidade deve ser maior que zero.")
             if unit_price < 0:
                 problems.append(f"{prefix}: preço não pode ser negativo.")
+            origin = self._digits(item.get("origin"))
+            if strict_tax_profile and origin not in set("012345678"):
+                problems.append(f"{prefix}: origem da mercadoria deve ficar entre 0 e 8.")
             if crt in {1, 2}:
-                csosn = self._digits(item.get("csosn") or "102")
-                if len(csosn) != 3:
-                    problems.append(f"{prefix}: CSOSN deve possuir 3 dígitos.")
+                csosn = self._digits(item.get("csosn") or ("" if strict_tax_profile else "102"))
+                if csosn not in FiscalProductProfile.SIMPLE_CSOSN:
+                    problems.append(f"{prefix}: CSOSN suportado deve ser 102, 103, 300, 400 ou 500.")
             else:
                 cst = self._digits(item.get("cst"))
-                if cst not in {"00", "40", "41", "50"}:
-                    problems.append(f"{prefix}: CST suportado deve ser 00, 40, 41 ou 50.")
+                if cst not in FiscalProductProfile.NORMAL_ICMS_CST:
+                    problems.append(f"{prefix}: CST suportado deve ser 00, 40, 41, 50 ou 60.")
                 if cst == "00":
                     try:
                         rate = Decimal(str(item.get("icms_rate", "0")))
@@ -1226,6 +1247,14 @@ class FiscalService:
                         rate = Decimal("-1")
                     if rate < 0 or rate > 100:
                         problems.append(f"{prefix}: alíquota de ICMS inválida.")
+            contribution_codes = (
+                FiscalProductProfile.CONTRIBUTION_TAXED
+                | FiscalProductProfile.CONTRIBUTION_UNTAXED
+                | FiscalProductProfile.CONTRIBUTION_OTHER
+            )
+            for field, label in (("pis_cst", "PIS"), ("cofins_cst", "COFINS")):
+                if strict_tax_profile and self._digits(item.get(field)) not in contribution_codes:
+                    problems.append(f"{prefix}: CST {label} inválido ou ausente.")
         purpose = int(document.get("purpose", 1) or 1)
         referenced = [self._normalize_access_key(value) for value in document.get("referenced_access_keys", []) or []]
         if purpose == 4:
@@ -1346,7 +1375,11 @@ class FiscalService:
             value=(qty*unit).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP); total_products += value
             det=etree.SubElement(inf, etree.QName(ns,"det"), nItem=str(index)); prod=etree.SubElement(det, etree.QName(ns,"prod"))
             el(prod,"cProd",item.get("code",index)); el(prod,"cEAN",item.get("ean") or "SEM GTIN"); el(prod,"xProd",str(item.get("description","")).upper())
-            el(prod,"NCM",self._digits(item.get("ncm")) or "00000000"); el(prod,"CFOP",item.get("cfop") or "5102"); el(prod,"uCom",str(item.get("unit","UN")).upper())
+            el(prod,"NCM",self._digits(item.get("ncm")) or "00000000")
+            cest = self._digits(item.get("cest"))
+            if cest:
+                el(prod, "CEST", cest)
+            el(prod,"CFOP",item.get("cfop") or "5102"); el(prod,"uCom",str(item.get("unit","UN")).upper())
             el(prod,"qCom",f"{qty:.4f}"); el(prod,"vUnCom",f"{unit:.10f}"); el(prod,"vProd",f"{value:.2f}"); el(prod,"cEANTrib",item.get("ean") or "SEM GTIN")
             el(prod,"uTrib",str(item.get("unit","UN")).upper()); el(prod,"qTrib",f"{qty:.4f}"); el(prod,"vUnTrib",f"{unit:.10f}"); el(prod,"indTot",1)
             imposto=etree.SubElement(det, etree.QName(ns,"imposto")); icms=etree.SubElement(imposto, etree.QName(ns,"ICMS"))
@@ -1354,7 +1387,9 @@ class FiscalService:
             explicit_icms_base = Decimal(str(item.get("icms_base", 0))).quantize(Decimal("0.01"))
             explicit_icms_value = Decimal(str(item.get("icms_value", 0))).quantize(Decimal("0.01"))
             if crt in {1, 2}:
-                icmssn=etree.SubElement(icms, etree.QName(ns,"ICMSSN102")); el(icmssn,"orig",int(item.get("origin",0))); el(icmssn,"CSOSN",self._digits(item.get("csosn") or "102"))
+                csosn = self._digits(item.get("csosn") or "102")
+                group_name = "ICMSSN500" if csosn == "500" else "ICMSSN102"
+                icmssn=etree.SubElement(icms, etree.QName(ns,group_name)); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
             else:
                 cst = self._digits(item.get("cst"))
                 if cst == "00":
@@ -1364,30 +1399,44 @@ class FiscalService:
                     total_icms_base += tax_base; total_icms += tax_value
                     icms00=etree.SubElement(icms, etree.QName(ns,"ICMS00")); el(icms00,"orig",int(item.get("origin",0))); el(icms00,"CST","00")
                     el(icms00,"modBC",int(item.get("bc_mode",3))); el(icms00,"vBC",f"{tax_base:.2f}"); el(icms00,"pICMS",f"{rate:.2f}"); el(icms00,"vICMS",f"{tax_value:.2f}")
-                else:
+                elif cst in {"40", "41", "50"}:
                     icms40=etree.SubElement(icms, etree.QName(ns,"ICMS40")); el(icms40,"orig",int(item.get("origin",0))); el(icms40,"CST",cst)
+                else:
+                    icms60=etree.SubElement(icms, etree.QName(ns,"ICMS60")); el(icms60,"orig",int(item.get("origin",0))); el(icms60,"CST","60")
 
-            pis_value = Decimal(str(item.get("pis_value", 0))).quantize(Decimal("0.01"))
-            pis_base = Decimal(str(item.get("pis_base", 0))).quantize(Decimal("0.01"))
+            pis_has_values = any(Decimal(str(item.get(field, 0) or 0)) > 0 for field in ("pis_value", "pis_base", "pis_rate"))
+            pis_cst = self._digits(item.get("pis_cst") or ("49" if pis_has_values else "07"))
             pis_rate = Decimal(str(item.get("pis_rate", 0))).quantize(Decimal("0.01"))
+            pis_base = Decimal(str(item.get("pis_base", value if pis_cst in FiscalProductProfile.CONTRIBUTION_TAXED | FiscalProductProfile.CONTRIBUTION_OTHER else 0))).quantize(Decimal("0.01"))
+            pis_value = Decimal(str(item.get("pis_value", pis_base * pis_rate / Decimal("100")))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             pis=etree.SubElement(imposto, etree.QName(ns,"PIS"))
-            if pis_value > 0 or pis_base > 0 or pis_rate > 0:
-                pis_out=etree.SubElement(pis, etree.QName(ns,"PISOutr")); el(pis_out,"CST",self._digits(item.get("pis_cst") or "49"))
+            if pis_cst in FiscalProductProfile.CONTRIBUTION_TAXED:
+                pis_out=etree.SubElement(pis, etree.QName(ns,"PISAliq")); el(pis_out,"CST",pis_cst)
                 el(pis_out,"vBC",f"{pis_base:.2f}"); el(pis_out,"pPIS",f"{pis_rate:.2f}"); el(pis_out,"vPIS",f"{pis_value:.2f}")
                 total_pis += pis_value
+            elif pis_cst in FiscalProductProfile.CONTRIBUTION_UNTAXED:
+                pisnt=etree.SubElement(pis, etree.QName(ns,"PISNT")); el(pisnt,"CST",pis_cst)
             else:
-                pisnt=etree.SubElement(pis, etree.QName(ns,"PISNT")); el(pisnt,"CST","07")
+                pis_out=etree.SubElement(pis, etree.QName(ns,"PISOutr")); el(pis_out,"CST",pis_cst)
+                el(pis_out,"vBC",f"{pis_base:.2f}"); el(pis_out,"pPIS",f"{pis_rate:.2f}"); el(pis_out,"vPIS",f"{pis_value:.2f}")
+                total_pis += pis_value
 
-            cofins_value = Decimal(str(item.get("cofins_value", 0))).quantize(Decimal("0.01"))
-            cofins_base = Decimal(str(item.get("cofins_base", 0))).quantize(Decimal("0.01"))
+            cofins_has_values = any(Decimal(str(item.get(field, 0) or 0)) > 0 for field in ("cofins_value", "cofins_base", "cofins_rate"))
+            cofins_cst = self._digits(item.get("cofins_cst") or ("49" if cofins_has_values else "07"))
             cofins_rate = Decimal(str(item.get("cofins_rate", 0))).quantize(Decimal("0.01"))
+            cofins_base = Decimal(str(item.get("cofins_base", value if cofins_cst in FiscalProductProfile.CONTRIBUTION_TAXED | FiscalProductProfile.CONTRIBUTION_OTHER else 0))).quantize(Decimal("0.01"))
+            cofins_value = Decimal(str(item.get("cofins_value", cofins_base * cofins_rate / Decimal("100")))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
             cof=etree.SubElement(imposto, etree.QName(ns,"COFINS"))
-            if cofins_value > 0 or cofins_base > 0 or cofins_rate > 0:
-                cof_out=etree.SubElement(cof, etree.QName(ns,"COFINSOutr")); el(cof_out,"CST",self._digits(item.get("cofins_cst") or "49"))
+            if cofins_cst in FiscalProductProfile.CONTRIBUTION_TAXED:
+                cof_out=etree.SubElement(cof, etree.QName(ns,"COFINSAliq")); el(cof_out,"CST",cofins_cst)
                 el(cof_out,"vBC",f"{cofins_base:.2f}"); el(cof_out,"pCOFINS",f"{cofins_rate:.2f}"); el(cof_out,"vCOFINS",f"{cofins_value:.2f}")
                 total_cofins += cofins_value
+            elif cofins_cst in FiscalProductProfile.CONTRIBUTION_UNTAXED:
+                cofnt=etree.SubElement(cof, etree.QName(ns,"COFINSNT")); el(cofnt,"CST",cofins_cst)
             else:
-                cofnt=etree.SubElement(cof, etree.QName(ns,"COFINSNT")); el(cofnt,"CST","07")
+                cof_out=etree.SubElement(cof, etree.QName(ns,"COFINSOutr")); el(cof_out,"CST",cofins_cst)
+                el(cof_out,"vBC",f"{cofins_base:.2f}"); el(cof_out,"pCOFINS",f"{cofins_rate:.2f}"); el(cof_out,"vCOFINS",f"{cofins_value:.2f}")
+                total_cofins += cofins_value
 
             rtc_cst = self._digits(item.get("ibs_cbs_cst"))
             if rtc_cst:
@@ -1504,7 +1553,7 @@ class FiscalService:
 
     def prepare_sale_items(
         self, cart_items: Sequence[Mapping[str, Any]], *, destination: int = 1,
-        require_rtc: bool = True,
+        require_rtc: bool = True, crt: int = 1,
     ) -> list[dict[str, Any]]:
         """Transforma o carrinho em itens fiscais usando uma única ficha por produto."""
         if destination not in {1, 2, 3}:
@@ -1517,7 +1566,10 @@ class FiscalService:
         conn = self.connection_factory()
         try:
             cursor = conn.execute(
-                f"""SELECT id,codigo,nome,ncm,cfop,
+                f"""SELECT id,codigo,nome,ncm,cest,cfop,
+                           fiscal_origin,fiscal_csosn,fiscal_icms_cst,fiscal_icms_rate,
+                           fiscal_pis_cst,fiscal_pis_rate,fiscal_cofins_cst,fiscal_cofins_rate,
+                           fiscal_profile_source,
                            ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate
                     FROM produtos WHERE id IN ({placeholders})""",
                 tuple(unique_ids),
@@ -1532,20 +1584,17 @@ class FiscalService:
             product = products.get(product_id)
             if not product:
                 raise ValueError(f"Item {index}: produto cadastrado não foi encontrado.")
-            ncm = self._digits(product.get("ncm"))
-            stored_cfop = self._digits(product.get("cfop"))
-            cst = self._digits(product.get("ibs_cbs_cst"))
-            classification = self._digits(product.get("ibs_cbs_class"))
-            missing = []
-            if len(ncm) != 8: missing.append("NCM")
-            if len(stored_cfop) != 4: missing.append("CFOP")
-            if require_rtc and len(cst) != 3: missing.append("CST IBS/CBS")
-            if require_rtc and len(classification) != 6: missing.append("classificação IBS/CBS")
-            if missing:
+            try:
+                profile = FiscalProductProfile.validate_for_regime(
+                    product, crt=int(crt), require_rtc=require_rtc
+                )
+            except ValueError as exc:
                 raise ValueError(
                     f"Item {index} ({product.get('nome') or product.get('codigo')}): "
-                    f"ficha fiscal incompleta — {', '.join(missing)}. Importe a NF-e de compra ou revise o cadastro."
-                )
+                    f"{exc} Importe a NF-e de compra ou revise o cadastro."
+                ) from exc
+            ncm = profile["ncm"]
+            stored_cfop = profile["cfop"]
             cfop_prefix = {1: "5", 2: "6", 3: "7"}[destination]
             fiscal_item = {
                 "product_id": product_id,
@@ -1555,15 +1604,24 @@ class FiscalService:
                 "unit_price": cart_item.get("preco"),
                 "unit": "UN",
                 "ncm": ncm,
+                "cest": profile["cest"],
                 "cfop": cfop_prefix + stored_cfop[1:],
+                "origin": profile["fiscal_origin"],
+                "csosn": profile["fiscal_csosn"],
+                "cst": profile["fiscal_icms_cst"],
+                "icms_rate": profile["fiscal_icms_rate"],
+                "pis_cst": profile["fiscal_pis_cst"],
+                "pis_rate": profile["fiscal_pis_rate"],
+                "cofins_cst": profile["fiscal_cofins_cst"],
+                "cofins_rate": profile["fiscal_cofins_rate"],
             }
             if require_rtc:
                 fiscal_item.update({
-                    "ibs_cbs_cst": cst,
-                    "ibs_cbs_class": classification,
-                    "ibs_uf_rate": product.get("ibs_uf_rate") or "0",
-                    "ibs_city_rate": product.get("ibs_city_rate") or "0",
-                    "cbs_rate": product.get("cbs_rate") or "0",
+                    "ibs_cbs_cst": profile["ibs_cbs_cst"],
+                    "ibs_cbs_class": profile["ibs_cbs_class"],
+                    "ibs_uf_rate": profile["ibs_uf_rate"],
+                    "ibs_city_rate": profile["ibs_city_rate"],
+                    "cbs_rate": profile["cbs_rate"],
                 })
             result.append(fiscal_item)
         return result
@@ -2583,7 +2641,7 @@ class FiscalService:
 
     @staticmethod
     def _digits(value: Any) -> str:
-        return "".join(ch for ch in str(value or "") if ch.isdigit())
+        return "".join(ch for ch in str("" if value is None else value) if ch.isdigit())
 
     def _load_numbering(self) -> dict[str, Any]:
         conn = self.connection_factory()

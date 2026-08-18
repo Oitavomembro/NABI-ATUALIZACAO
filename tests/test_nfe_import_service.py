@@ -43,6 +43,8 @@ class NFeImportServiceTests(unittest.TestCase):
                 ncm TEXT NOT NULL DEFAULT '',
                 cest TEXT NOT NULL DEFAULT '',
                 cfop TEXT NOT NULL DEFAULT '',
+                fiscal_origin TEXT NOT NULL DEFAULT '',
+                fiscal_profile_source TEXT NOT NULL DEFAULT '',
                 ibs_cbs_cst TEXT NOT NULL DEFAULT '',
                 ibs_cbs_class TEXT NOT NULL DEFAULT '',
                 ibs_uf_rate TEXT NOT NULL DEFAULT '0',
@@ -149,9 +151,10 @@ class NFeImportServiceTests(unittest.TestCase):
             fator_conversao=1,
             ultimo_custo=12.5,
         )
-        row = self.repo.database.fetch_one("SELECT preco_custo,codigo_barras,ncm FROM produtos WHERE id=?", (produto_id,))
+        row = self.repo.database.fetch_one("SELECT preco_custo,codigo_barras,ncm,cfop FROM produtos WHERE id=?", (produto_id,))
         self.assertEqual(row["preco_custo"], 12.5)
         self.assertEqual(row["codigo_barras"], "7891")
+        self.assertEqual(row["cfop"], "")
         vinculo = self.repo.database.fetch_one("SELECT ultimo_custo FROM produto_fornecedores WHERE produto_id=?", (produto_id,))
         self.assertEqual(vinculo["ultimo_custo"], 12.5)
 
@@ -175,16 +178,17 @@ class NFeImportServiceTests(unittest.TestCase):
         produto_id = conn.execute("SELECT id FROM produtos WHERE codigo='RTC'").fetchone()[0]
         item = NFeItem(
             "RTC", "Produto RTC", 1, "UN", 10,
+            origem_mercadoria="1",
             ibs_cbs_cst="000", ibs_cbs_class="000001",
             ibs_uf_rate=0.1, ibs_city_rate=0, cbs_rate=0.9,
         )
         self.repo._salvar_tributacao_rtc(conn, produto_id=produto_id, item=item)
         row = conn.execute(
-            "SELECT ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate FROM produtos WHERE id=?",
+            "SELECT fiscal_origin,fiscal_profile_source,ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate FROM produtos WHERE id=?",
             (produto_id,),
         ).fetchone()
         conn.close()
-        self.assertEqual(row, ("000", "000001", "0.1", "0", "0.9"))
+        self.assertEqual(row, ("1", "XML_IMPORT", "000", "000001", "0.1", "0", "0.9"))
 
     def test_validar_decisao_exige_vinculo_coerente(self):
         self.service.validar_decisao('CRIAR', None)

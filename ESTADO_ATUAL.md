@@ -847,3 +847,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o prefixo do CFOP é ajustado de forma determinística para operação interna, interestadual ou exterior, preservando a natureza cadastrada;
 - produto inexistente, item avulso ou ficha incompleta interrompe somente a emissão e apresenta uma orientação simples para importar a NF-e ou revisar o cadastro;
 - testes confirmam preenchimento automático e bloqueio preventivo sem qualquer gravação parcial.
+
+## Checkpoint 42.55 — Fase 1 da ficha fiscal completa
+
+- produtos passam a ter uma ficha fiscal estruturada com origem, CSOSN, CST ICMS, alíquotas de ICMS, CST e alíquotas de PIS/COFINS, CEST e os campos IBS/CBS já existentes;
+- o cadastro oficial de produtos edita e persiste a ficha no mesmo fluxo, sem tabela ou formulário fiscal paralelo;
+- a emissão valida a ficha conforme o regime do emitente e gera os grupos suportados de ICMS, PIS e COFINS, incluindo substituição tributária com CEST obrigatório;
+- a importação de NF-e preserva NCM, CEST, origem e IBS/CBS, mas não copia o CFOP da operação do fornecedor como se fosse automaticamente o CFOP da futura venda;
+- o certificado A1 configurado é reutilizado nas notas seguintes e sua senha permanece somente na memória até o NabiCode ser fechado;
+- a troca do arquivo de certificado invalida imediatamente a senha anterior mantida na sessão;
+- produção continua bloqueada até a homologação fiscal das regras e classificações aplicáveis ao contribuinte;
+- 210 testes focados e 10 subtestes aprovados;
+- suíte completa: 1.182 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

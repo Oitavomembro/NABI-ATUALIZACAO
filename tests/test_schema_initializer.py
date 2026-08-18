@@ -72,6 +72,14 @@ class SchemaInitializerTests(unittest.TestCase):
             self.assertIn("produtos", tables)
             self.assertIn("movimentacoes", tables)
             self.assertIn("configuracoes", tables)
+            product_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(produtos)")
+            }
+            self.assertTrue({
+                "fiscal_origin", "fiscal_csosn", "fiscal_icms_cst", "fiscal_icms_rate",
+                "fiscal_pis_cst", "fiscal_pis_rate", "fiscal_cofins_cst",
+                "fiscal_cofins_rate", "fiscal_profile_source",
+            }.issubset(product_columns))
             movement_indexes = {
                 row[1] for row in connection.execute("PRAGMA index_list(movimentacoes)")
             }

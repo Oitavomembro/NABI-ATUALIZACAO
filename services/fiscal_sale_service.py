@@ -39,7 +39,12 @@ class FiscalSaleService:
         problems = self.fiscal_service.validate_ready(operation="autorizacao", model=model)
         if problems:
             raise ValueError("; ".join(problems))
-        fiscal_items = self.fiscal_service.prepare_sale_items(items, destination=destination)
+        crt = self.fiscal_service.TAX_REGIME_CODES.get(
+            str(config.get("tax_regime") or "").upper(), 0
+        )
+        fiscal_items = self.fiscal_service.prepare_sale_items(
+            items, destination=destination, crt=crt
+        )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
         reservation = self.fiscal_service.reserve_number(
@@ -49,9 +54,7 @@ class FiscalSaleService:
             issuer = dict(config.get("issuer") or {})
             issuer.update({
                 "cnpj": config.get("cnpj", ""), "state": config.get("state", ""),
-                "tax_regime_code": self.fiscal_service.TAX_REGIME_CODES.get(
-                    str(config.get("tax_regime") or "").upper(), 0
-                ),
+                "tax_regime_code": crt,
             })
             when = issued_at or datetime.now().astimezone()
             digest = hashlib.sha256(
@@ -67,6 +70,7 @@ class FiscalSaleService:
                     "destination": int(destination), "payment_code": self._payment_code(payments),
                     "payment_detail": self._payment_detail(payments),
                     "payments": self._payment_details(payments),
+                    "strict_tax_profile": True,
                     "final_consumer": 1, "presence": 1,
                 },
             )

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 import sqlite3
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any
@@ -9,6 +9,7 @@ import unicodedata
 from .estoque_service import EstoqueService, ResultadoMovimentacaoEstoque
 from .produto_service import ProdutoService
 from .pricing_service import PricingService
+from .fiscal_product_profile import FiscalProductProfile
 from validators import AuxiliaryRegistrationValidator, ProductValidator
 
 
@@ -110,6 +111,23 @@ class ProductFormData:
     despesas_percentual: str = "0"
     margem_lucro: str = "0"
     codigo_barras: str = ""
+    ncm: str = ""
+    cest: str = ""
+    cfop: str = ""
+    fiscal_origin: str = ""
+    fiscal_csosn: str = ""
+    fiscal_icms_cst: str = ""
+    fiscal_icms_rate: str = "0"
+    fiscal_pis_cst: str = ""
+    fiscal_pis_rate: str = "0"
+    fiscal_cofins_cst: str = ""
+    fiscal_cofins_rate: str = "0"
+    fiscal_profile_source: str = ""
+    ibs_cbs_cst: str = ""
+    ibs_cbs_class: str = ""
+    ibs_uf_rate: str = "0"
+    ibs_city_rate: str = "0"
+    cbs_rate: str = "0"
     estoque_atual: str = "0"
     estoque_minimo: str = "0"
     permite_estoque_negativo: bool = False
@@ -136,6 +154,20 @@ class ProductSaveCommand:
     ncm: str = ""
     cest: str = ""
     cfop: str = ""
+    fiscal_origin: str = ""
+    fiscal_csosn: str = ""
+    fiscal_icms_cst: str = ""
+    fiscal_icms_rate: str = "0"
+    fiscal_pis_cst: str = ""
+    fiscal_pis_rate: str = "0"
+    fiscal_cofins_cst: str = ""
+    fiscal_cofins_rate: str = "0"
+    fiscal_profile_source: str = ""
+    ibs_cbs_cst: str = ""
+    ibs_cbs_class: str = ""
+    ibs_uf_rate: str = "0"
+    ibs_city_rate: str = "0"
+    cbs_rate: str = "0"
     estoque_atual: float = 0.0
     estoque_minimo: float = 0.0
     permite_estoque_negativo: bool = False
@@ -547,12 +579,28 @@ class ProductApplicationService:
             despesas_percentual=cls.converter_numero(dados.despesas_percentual),
             margem_lucro=cls.converter_numero(dados.margem_lucro),
             codigo_barras=str(dados.codigo_barras or "").strip(),
+            ncm=str(dados.ncm or "").strip(), cest=str(dados.cest or "").strip(),
+            cfop=str(dados.cfop or "").strip(), fiscal_origin=str(dados.fiscal_origin or "").strip(),
+            fiscal_csosn=str(dados.fiscal_csosn or "").strip(),
+            fiscal_icms_cst=str(dados.fiscal_icms_cst or "").strip(),
+            fiscal_icms_rate=str(dados.fiscal_icms_rate or "0").strip(),
+            fiscal_pis_cst=str(dados.fiscal_pis_cst or "").strip(),
+            fiscal_pis_rate=str(dados.fiscal_pis_rate or "0").strip(),
+            fiscal_cofins_cst=str(dados.fiscal_cofins_cst or "").strip(),
+            fiscal_cofins_rate=str(dados.fiscal_cofins_rate or "0").strip(),
+            fiscal_profile_source=str(dados.fiscal_profile_source or "").strip(),
+            ibs_cbs_cst=str(dados.ibs_cbs_cst or "").strip(),
+            ibs_cbs_class=str(dados.ibs_cbs_class or "").strip(),
+            ibs_uf_rate=str(dados.ibs_uf_rate or "0").strip(),
+            ibs_city_rate=str(dados.ibs_city_rate or "0").strip(),
+            cbs_rate=str(dados.cbs_rate or "0").strip(),
             estoque_atual=cls.converter_numero(dados.estoque_atual),
             estoque_minimo=cls.converter_numero(dados.estoque_minimo),
             permite_estoque_negativo=bool(dados.permite_estoque_negativo),
             produto_id=dados.produto_id,
             usuario=str(dados.usuario or "Sistema").strip() or "Sistema",
         )
+        command = replace(command, **FiscalProductProfile.normalize(command.__dict__))
         return cls.validar_comando(command)
 
     def avaliar_duplicidade(
@@ -591,6 +639,14 @@ class ProductApplicationService:
             despesas_percentual=command.despesas_percentual, margem_lucro=command.margem_lucro,
             codigo_barras=command.codigo_barras, ncm=command.ncm, cest=command.cest,
             cfop=command.cfop, estoque_atual=command.estoque_atual,
+            fiscal_origin=command.fiscal_origin, fiscal_csosn=command.fiscal_csosn,
+            fiscal_icms_cst=command.fiscal_icms_cst, fiscal_icms_rate=command.fiscal_icms_rate,
+            fiscal_pis_cst=command.fiscal_pis_cst, fiscal_pis_rate=command.fiscal_pis_rate,
+            fiscal_cofins_cst=command.fiscal_cofins_cst, fiscal_cofins_rate=command.fiscal_cofins_rate,
+            fiscal_profile_source=command.fiscal_profile_source,
+            ibs_cbs_cst=command.ibs_cbs_cst, ibs_cbs_class=command.ibs_cbs_class,
+            ibs_uf_rate=command.ibs_uf_rate, ibs_city_rate=command.ibs_city_rate,
+            cbs_rate=command.cbs_rate,
             estoque_minimo=command.estoque_minimo,
             permite_estoque_negativo=command.permite_estoque_negativo,
             produto_id=command.produto_id,

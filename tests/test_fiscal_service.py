@@ -94,6 +94,23 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(info.document, "12345678000195")
         self.assertEqual(self.service.validate_ready(operation="autorizacao"), [])
 
+    def test_certificado_configurado_reutiliza_senha_somente_na_sessao(self):
+        self.service.configure_certificate(self.pfx_path, self.password)
+        self.assertIsNone(self.service.session_certificate_password())
+        info = self.service.cache_certificate_password(self.password)
+        self.assertEqual(info.document, "12345678000195")
+        self.assertEqual(self.service.session_certificate_password(), self.password)
+        self.service.clear_session_certificate_password()
+        self.assertIsNone(self.service.session_certificate_password())
+        config_text = json.dumps(self.service.load_config(), ensure_ascii=False)
+        self.assertNotIn(self.password, config_text)
+
+    def test_senha_incorreta_nao_e_guardada_na_sessao(self):
+        self.service.configure_certificate(self.pfx_path, self.password)
+        with self.assertRaises(ValueError):
+            self.service.cache_certificate_password("senha-errada")
+        self.assertIsNone(self.service.session_certificate_password())
+
     def test_configuracao_preserva_cnpj_alfanumerico_oficial(self):
         config = self.service.save_config({"cnpj": "12.ABC.345/01DE-35"})
         self.assertEqual(config["cnpj"], "12ABC34501DE35")
@@ -403,17 +420,74 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
 
+    def test_ficha_simples_com_st_gera_icmssn500_e_contribuicoes_nt(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto st", "quantity": 1, "unit_price": 100,
+                "ncm": "94036000", "cest": "0100100", "cfop": "5405", "unit": "UN",
+                "origin": "0", "csosn": "500", "pis_cst": "07", "cofins_cst": "07",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 14, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "12345671",
+                "strict_tax_profile": True,
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSSN500']/*[local-name()='CSOSN'])"), "500")
+        self.assertEqual(root.xpath("string(//*[local-name()='CEST'])"), "0100100")
+        self.assertEqual(root.xpath("string(//*[local-name()='PISNT']/*[local-name()='CST'])"), "07")
+        self.assertEqual(root.xpath("string(//*[local-name()='COFINSNT']/*[local-name()='CST'])"), "07")
+
+    def test_ficha_regime_normal_calcula_icms_pis_e_cofins(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 3,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto tributado", "quantity": 2, "unit_price": 50,
+                "ncm": "94036000", "cfop": "5102", "unit": "UN", "origin": "0",
+                "cst": "00", "icms_rate": "18", "pis_cst": "01", "pis_rate": "1.65",
+                "cofins_cst": "01", "cofins_rate": "7.6",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 15, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "12345672",
+                "strict_tax_profile": True,
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMS00']/*[local-name()='vICMS'])"), "18.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='PISAliq']/*[local-name()='vPIS'])"), "1.65")
+        self.assertEqual(root.xpath("string(//*[local-name()='COFINSAliq']/*[local-name()='vCOFINS'])"), "7.60")
+
     def test_prepara_itens_da_venda_com_ficha_fiscal_automatica(self):
         conn = self.connect()
         conn.execute(
             """CREATE TABLE produtos (
-                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cfop TEXT,
+                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cest TEXT, cfop TEXT,
+                fiscal_origin TEXT, fiscal_csosn TEXT, fiscal_icms_cst TEXT, fiscal_icms_rate TEXT,
+                fiscal_pis_cst TEXT, fiscal_pis_rate TEXT, fiscal_cofins_cst TEXT, fiscal_cofins_rate TEXT,
+                fiscal_profile_source TEXT,
                 ibs_cbs_cst TEXT, ibs_cbs_class TEXT,
                 ibs_uf_rate TEXT, ibs_city_rate TEXT, cbs_rate TEXT
             )"""
         )
         conn.execute(
-            "INSERT INTO produtos VALUES(1,'P1','PRODUTO','94036000','5102','000','000001','0.1','0','0.9')"
+            """INSERT INTO produtos VALUES(
+                1,'P1','PRODUTO','94036000','','5102','0','102','','0','07','0','07','0','XML_IMPORT',
+                '000','000001','0.1','0','0.9')"""
         )
         conn.commit(); conn.close()
         items = self.service.prepare_sale_items(
@@ -428,12 +502,15 @@ class FiscalServiceTests(unittest.TestCase):
         conn = self.connect()
         conn.execute(
             """CREATE TABLE produtos (
-                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cfop TEXT,
+                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cest TEXT, cfop TEXT,
+                fiscal_origin TEXT, fiscal_csosn TEXT, fiscal_icms_cst TEXT, fiscal_icms_rate TEXT,
+                fiscal_pis_cst TEXT, fiscal_pis_rate TEXT, fiscal_cofins_cst TEXT, fiscal_cofins_rate TEXT,
+                fiscal_profile_source TEXT,
                 ibs_cbs_cst TEXT, ibs_cbs_class TEXT,
                 ibs_uf_rate TEXT, ibs_city_rate TEXT, cbs_rate TEXT
             )"""
         )
-        conn.execute("INSERT INTO produtos VALUES(1,'P1','PRODUTO','','','','','0','0','0')")
+        conn.execute("INSERT INTO produtos(id,codigo,nome) VALUES(1,'P1','PRODUTO')")
         conn.commit(); conn.close()
         with self.assertRaisesRegex(ValueError, "ficha fiscal incompleta"):
             self.service.prepare_sale_items(

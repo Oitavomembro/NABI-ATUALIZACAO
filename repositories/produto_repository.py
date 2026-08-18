@@ -103,16 +103,12 @@ class ProdutoRepository:
         ]
 
     def buscar_por_id(self, produto_id: int, connection=None) -> dict[str, Any] | None:
-        sql = """SELECT id,codigo,nome,
+        sql = """SELECT *,
                  preco_venda_decimal AS preco_venda_canonico, preco_venda AS preco_venda_legado,
                  preco_custo_decimal AS preco_custo_canonico, preco_custo AS preco_custo_legado,
                  despesas_percentual_decimal AS despesas_percentual_canonico, despesas_percentual AS despesas_percentual_legado,
                  margem_lucro_decimal AS margem_lucro_canonico, margem_lucro AS margem_lucro_legado,
-                 categoria_id,marca_id,fornecedor_id,unidade_id,unidade_compra_id,
-                 fator_conversao_decimal AS fator_conversao_canonico, fator_conversao AS fator_conversao_legado,
-                 tipo_produto,ativo,codigo_barras,ncm,cest,cfop,controla_estoque,participa_xml,
-                 COALESCE(estoque_atual,0) AS estoque_atual,COALESCE(estoque_minimo,0) AS estoque_minimo,
-                 COALESCE(permite_estoque_negativo,0) AS permite_estoque_negativo
+                 fator_conversao_decimal AS fator_conversao_canonico, fator_conversao AS fator_conversao_legado
                  FROM produtos WHERE id=?"""
         row = (connection.execute(sql, (int(produto_id),)).fetchone()
                if connection is not None else self.database.fetch_one(sql, (int(produto_id),)))
@@ -167,6 +163,15 @@ class ProdutoRepository:
         if self._produto_tem_coluna("descricao", connection):
             campos.insert(2, "descricao")
             valores.insert(2,dados["nome"])
+        for fiscal_field in (
+            "fiscal_origin", "fiscal_csosn", "fiscal_icms_cst", "fiscal_icms_rate",
+            "fiscal_pis_cst", "fiscal_pis_rate", "fiscal_cofins_cst", "fiscal_cofins_rate",
+            "fiscal_profile_source", "ibs_cbs_cst", "ibs_cbs_class", "ibs_uf_rate",
+            "ibs_city_rate", "cbs_rate",
+        ):
+            if self._produto_tem_coluna(fiscal_field, connection):
+                campos.append(fiscal_field)
+                valores.append(dados.get(fiscal_field, "0" if fiscal_field.endswith("_rate") else ""))
         return campos, valores
 
     def criar(self, dados: dict[str, Any], connection=None) -> int:
