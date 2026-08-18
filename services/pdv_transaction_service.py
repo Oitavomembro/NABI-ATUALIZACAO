@@ -44,6 +44,7 @@ class PDVTransactionService:
         change: Any,
         user: str,
         now: datetime | None = None,
+        after_sale_in_transaction: Callable[[Any, int], None] | None = None,
     ) -> FinalizedSale:
         if int(customer_id) <= 0:
             raise ValueError("Cliente inválido para finalizar a venda.")
@@ -187,6 +188,8 @@ class PDVTransactionService:
                 venda_id=sale_id,
                 usuario=normalized_user,
             )
+            if after_sale_in_transaction is not None:
+                after_sale_in_transaction(conn, sale_id)
             conn.commit()
         except Exception:
             conn.rollback()

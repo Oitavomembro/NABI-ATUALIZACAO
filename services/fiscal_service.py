@@ -1932,6 +1932,7 @@ class FiscalService:
         actor: str,
         access_key: str = "",
         model: str = "55",
+        reservation_id: str = "",
         max_attempts: int = 5,
         retry_minutes: int = 5,
     ) -> dict[str, Any]:
@@ -1953,11 +1954,22 @@ class FiscalService:
             raise ValueError("Autorização enfileirada exige uma chave de acesso válida no XML ou no parâmetro access_key.")
         now = datetime.now(timezone.utc)
         rows = self.list_transmission_queue()
+        if operation == "autorizacao" and resolved_key:
+            existing = next(
+                (row for row in rows
+                 if str(row.get("operation")) in {"autorizacao", "recibo"}
+                 and self._normalize_access_key(row.get("access_key")) == resolved_key
+                 and str(row.get("status")) != "FALHA"),
+                None,
+            )
+            if existing is not None:
+                return dict(existing)
         record = {
             "id": f"{now.strftime('%Y%m%d%H%M%S%f')}-{len(rows)+1}",
             "operation": operation,
             "access_key": resolved_key,
             "model": model,
+            "reservation_id": str(reservation_id or ""),
             "xml_b64": base64.b64encode(raw_xml).decode("ascii"),
             "original_xml_b64": base64.b64encode(raw_xml).decode("ascii") if operation == "autorizacao" else "",
             "receipt": "",
@@ -2008,8 +2020,31 @@ class FiscalService:
             try:
                 config = self.load_config()
                 xml = base64.b64decode(str(record.get("xml_b64", "")))
+                operation = str(record.get("operation", "")).lower()
+                if operation == "autorizacao":
+                    try:
+                        root = etree.fromstring(xml, parser=etree.XMLParser(resolve_entities=False, no_network=True))
+                        is_draft = etree.QName(root).localname == "NFe"
+                    except (etree.XMLSyntaxError, ValueError, TypeError):
+                        is_draft = False
+                    if is_draft:
+                        model = str(record.get("model") or config.get("default_model") or "65")
+                        if model == "65":
+                            xml = self.add_nfce_qr_code_v3(
+                                xml, pfx_path=config.get("certificate_path", ""), password=password
+                            )
+                        queued_key = self._normalize_access_key(record.get("access_key", ""))
+                        signed = self.sign_xml(
+                            xml, reference_id=f"NFe{queued_key}",
+                            pfx_path=config.get("certificate_path", ""), password=password,
+                        )
+                        self.validate_official_xml(signed, document_type="nfe")
+                        record["original_xml_b64"] = base64.b64encode(signed).decode("ascii")
+                        xml = self._authorization_envelope(
+                            signed, environment=str(config.get("environment", "HOMOLOGACAO"))
+                        )
                 response = self.transmit(
-                    operation=str(record.get("operation")),
+                    operation=operation,
                     model=str(record.get("model") or config.get("default_model") or "65"),
                     xml=xml,
                     pfx_path=config.get("certificate_path", ""),
@@ -2018,7 +2053,6 @@ class FiscalService:
                 record["last_status_code"] = response.status_code
                 record["last_message"] = response.message
                 record["last_error"] = ""
-                operation = str(record.get("operation", "")).lower()
                 queued_key = self._normalize_access_key(record.get("access_key", ""))
                 if operation == "autorizacao" and response.status_code == "103" and response.receipt:
                     record["operation"] = "recibo"
@@ -2062,8 +2096,15 @@ class FiscalService:
                             "processed_path": stored.get("processed_path", ""),
                             "protocol": stored.get("protocol", ""),
                         }
+                        reservation_id = str(record.get("reservation_id") or "")
+                        if reservation_id:
+                            self.confirm_number(
+                                reservation_id, access_key=queued_key,
+                                actor=str(record.get("actor", "")),
+                            )
                     record["status"] = "CONCLUIDO"
                     record["completed_at"] = current.isoformat()
+                    self._sync_sale_document(record, status="AUTORIZADO", protocol=response.protocol)
                 else:
                     raise ValueError(f"{response.status_code}: {response.message}")
             except Exception as exc:
@@ -2071,13 +2112,38 @@ class FiscalService:
                 if int(record["attempts"]) >= int(record.get("max_attempts", 1)):
                     record["status"] = "FALHA"
                     record["failed_at"] = current.isoformat()
+                    self._sync_sale_document(record, status="FALHA", error=str(exc))
                 else:
                     record["status"] = "ERRO"
                     retry = max(1, int(record.get("retry_minutes", 5)))
                     record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
+                    self._sync_sale_document(record, status="PENDENTE", error=str(exc))
             processed.append(dict(record))
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
         return processed
+
+    def _sync_sale_document(
+        self, record: Mapping[str, Any], *, status: str, protocol: str = "", error: str = ""
+    ) -> None:
+        """Sincroniza o vínculo do PDV quando o schema 15 já estiver disponível."""
+        access_key = self._normalize_access_key(record.get("access_key", ""))
+        if len(access_key) != 44:
+            return
+        conn = self.connection_factory()
+        try:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+            ).fetchone()
+            if not exists:
+                return
+            conn.execute(
+                """UPDATE fiscal_sale_documents
+                      SET status=?,protocol=?,last_error=?,updated_at=? WHERE access_key=?""",
+                (status, str(protocol or ""), str(error or ""), datetime.now(timezone.utc).isoformat(), access_key),
+            )
+            conn.commit()
+        finally:
+            conn.close()
 
     def retry_transmission(self, queue_id: str, *, actor: str) -> dict[str, Any]:
         rows = self.list_transmission_queue()

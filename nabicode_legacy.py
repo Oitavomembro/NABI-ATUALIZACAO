@@ -30,6 +30,7 @@ from repositories import CadastroAuxiliarRepository, CategoriaRepository, Produt
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
 from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services.fiscal_sale_service import FiscalSaleService
 from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -278,7 +279,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 14
+DB_SCHEMA_VERSION = 15
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -725,6 +726,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
+        self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.pdv_service = PDVService(conectar_banco)
         self.pdv_transaction_service = PDVTransactionService(
             conectar_banco, estoque_service=ESTOQUE_SERVICE,
@@ -6653,6 +6655,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if pagamento is None:
             return
         pagamentos, recebido, troco, itens_finalizados = pagamento
+        usuario_venda = getattr(getattr(self, "security", None), "current_username", "Sistema")
+        rascunho_fiscal = None
+        if self.fiscal_service.is_enabled():
+            try:
+                rascunho_fiscal = self.fiscal_sale_service.prepare(
+                    items=[dict(item) for item in itens_finalizados],
+                    payments=pagamentos,
+                    actor=usuario_venda,
+                )
+            except (ValueError, RuntimeError) as exc:
+                messagebox.showerror(
+                    "Venda fiscal não concluída",
+                    "A venda não foi gravada porque o documento fiscal precisa ser corrigido:\n\n" + str(exc),
+                    parent=getattr(self, "pdv_window", self),
+                )
+                return
         try:
             resultado = self.pdv_transaction_service.finalize_sale(
                 customer_id=int(cliente_id),
@@ -6661,11 +6679,37 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 payments=pagamentos,
                 received=recebido,
                 change=troco,
-                user=getattr(getattr(self, "security", None), "current_username", "Sistema"),
+                user=usuario_venda,
+                after_sale_in_transaction=(
+                    (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
+                        connection, sale_id, rascunho_fiscal
+                    )) if rascunho_fiscal is not None else None
+                ),
             )
-        except ValueError as exc:
+        except (ValueError, RuntimeError) as exc:
+            if rascunho_fiscal is not None:
+                try:
+                    self.fiscal_service.release_number(
+                        rascunho_fiscal.reservation_id, actor=usuario_venda,
+                        reason="A transação comercial da venda foi revertida.",
+                    )
+                except Exception:
+                    logger.exception("Falha ao liberar numeração fiscal de venda revertida")
             messagebox.showerror("Venda", str(exc), parent=getattr(self, "pdv_window", self))
             return
+
+        aviso_fiscal = ""
+        if rascunho_fiscal is not None:
+            try:
+                self.fiscal_sale_service.enqueue_pending(
+                    sale_id=resultado.sale_id, actor=usuario_venda
+                )
+                aviso_fiscal = " Documento fiscal colocado na fila segura de transmissão."
+            except Exception as exc:
+                logger.exception("Venda salva com documento fiscal pendente", exc_info=exc)
+                aviso_fiscal = (
+                    " Documento fiscal preservado como pendente e será reenviado pela Central Fiscal."
+                )
 
         registrar_historico(
             int(cliente_id),
@@ -6693,7 +6737,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.mostrar_notificacao(
             "Venda concluída",
             f"Venda de R$ {resultado.total:.2f} registrada com sucesso. "
-            f"Pagamento: {resultado.payment_description}. Troco: R$ {resultado.change:.2f}.{aviso_impressao}",
+            f"Pagamento: {resultado.payment_description}. Troco: R$ {resultado.change:.2f}."
+            f"{aviso_fiscal}{aviso_impressao}",
             nivel="success", duracao_ms=7000,
         )
         self.carrinho_venda.clear()

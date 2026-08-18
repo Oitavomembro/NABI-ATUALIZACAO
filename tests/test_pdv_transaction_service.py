@@ -111,6 +111,42 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 0)
         conn.close()
 
+    def test_vinculo_fiscal_participa_da_mesma_transacao_da_venda(self):
+        conn = sqlite3.connect(self.db)
+        conn.execute("CREATE TABLE fiscal_sale_documents(sale_id INTEGER UNIQUE, access_key TEXT)")
+        conn.commit(); conn.close()
+
+        result = self.service.finalize_sale(
+            customer_id=1, customer_name="CLIENTE", items=[self.item],
+            payments=[{"forma": "DINHEIRO", "valor": 10}], received=10, change=0,
+            user="admin",
+            after_sale_in_transaction=lambda connection, sale_id: connection.execute(
+                "INSERT INTO fiscal_sale_documents(sale_id,access_key) VALUES(?,?)",
+                (sale_id, "29" + "0" * 42),
+            ),
+        )
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(
+            conn.execute("SELECT sale_id FROM fiscal_sale_documents").fetchone()[0],
+            result.sale_id,
+        )
+        conn.close()
+
+    def test_falha_ao_vincular_documento_fiscal_reverte_venda_inteira(self):
+        def fail_link(_connection, _sale_id):
+            raise RuntimeError("falha no vínculo fiscal")
+
+        with self.assertRaisesRegex(RuntimeError, "vínculo fiscal"):
+            self.service.finalize_sale(
+                customer_id=1, customer_name="CLIENTE", items=[self.item],
+                payments=[{"forma": "DINHEIRO", "valor": 10}], received=10, change=0,
+                user="admin", after_sale_in_transaction=fail_link,
+            )
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 0)
+        self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 10)
+        conn.close()
+
     def test_falha_depois_do_movimento_financeiro_reverte_saldo_e_venda(self):
         class BrokenAfterFinance(FakeFinanceService):
             def registrar_venda_crediario_transacao(self, conn, **kwargs):

@@ -1,5 +1,19 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — venda do PDV vinculada ao documento
+
+- schema 15 cria vínculo único entre venda, reserva de numeração, chave de acesso, XML e fila fiscal;
+- preparação fiscal ocorre antes da gravação: ficha incompleta, certificado ausente ou XML inválido não deixam venda/estoque/financeiro parcialmente persistidos;
+- vínculo fiscal participa da mesma transação SQLite da venda;
+- após o commit comercial, o documento é enfileirado de forma idempotente pela chave de acesso;
+- reinício ou nova tentativa não cria uma segunda autorização da mesma nota;
+- a fila reconhece o rascunho, inclui QR Code da NFC-e, assina com o certificado A1, valida no XSD e monta o lote antes da transmissão;
+- sucesso confirma a numeração e sincroniza protocolo/status com a venda; falha preserva a pendência para recuperação;
+- validação focada: 100 testes e 10 subtestes aprovados;
+- suíte completa: 1.150 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` aprovado para os arquivos acessíveis; diretórios antigos de build protegidos pelo Windows foram apenas ignorados;
+- `git diff --check` aprovado.
+
 ## Checkpoint fiscal — preparação nacional das 27 UFs
 
 - catálogo fiscal nacional centralizado em `services/fiscal_state_catalog.py`;

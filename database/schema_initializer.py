@@ -753,6 +753,25 @@ def initialize_database(
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_movements_session ON cash_movements(cash_session_id,created_at)")
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fiscal_sale_documents (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER NOT NULL UNIQUE,
+            reservation_id TEXT NOT NULL UNIQUE,
+            access_key TEXT NOT NULL UNIQUE,
+            model TEXT NOT NULL CHECK(model IN ('55','65')),
+            environment TEXT NOT NULL CHECK(environment IN ('HOMOLOGACAO','PRODUCAO')),
+            status TEXT NOT NULL DEFAULT 'RASCUNHO',
+            xml_b64 TEXT NOT NULL,
+            queue_id TEXT NOT NULL DEFAULT '',
+            protocol TEXT NOT NULL DEFAULT '',
+            last_error TEXT NOT NULL DEFAULT '',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(sale_id) REFERENCES movimentacoes(id)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fiscal_sale_status ON fiscal_sale_documents(status,created_at)")
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS documentos_emitidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             movimentacao_id INTEGER,

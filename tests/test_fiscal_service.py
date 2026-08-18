@@ -222,6 +222,18 @@ class FiscalServiceTests(unittest.TestCase):
         })
         self.assertEqual(self.service.endpoint("autorizacao", model="55"), custom)
 
+    def test_fila_nao_duplica_autorizacao_da_mesma_chave(self):
+        key = "29" + "0" * 18 + "65" + "0" * 22
+        xml = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}"/></NFe>'
+        first = self.service.enqueue_transmission(
+            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+        )
+        second = self.service.enqueue_transmission(
+            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+        )
+        self.assertEqual(first["id"], second["id"])
+        self.assertEqual(len(self.service.list_transmission_queue()), 1)
+
     def test_endpoint_manual_bloqueia_destino_capaz_de_capturar_certificado(self):
         invalid_endpoints = (
             "http://nfe.sefaz.ba.gov.br/autorizacao",
