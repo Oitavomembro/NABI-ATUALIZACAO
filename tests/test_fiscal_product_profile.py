@@ -35,6 +35,14 @@ def test_regime_normal_exige_cst_icms_em_vez_de_csosn():
     assert Decimal(profile["fiscal_icms_rate"]) == Decimal("18")
 
 
+def test_mei_usa_csosn_e_nao_cst_de_regime_normal():
+    profile = FiscalProductProfile.validate_for_regime(
+        complete_profile(fiscal_csosn="102", fiscal_icms_cst=""),
+        crt=4, require_rtc=True,
+    )
+    assert profile["fiscal_csosn"] == "102"
+
+
 @pytest.mark.parametrize("field", ["fiscal_pis_cst", "fiscal_cofins_cst"])
 def test_contribuicoes_nao_podem_ficar_sem_classificacao(field):
     with pytest.raises(ValueError, match="incompleta"):

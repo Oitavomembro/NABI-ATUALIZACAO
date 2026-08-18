@@ -861,3 +861,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.182 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.56 — Fase 2 da decisão fiscal de venda
+
+- criado um resolvedor único para a natureza e o CFOP das vendas, sem regras duplicadas no PDV ou no gerador XML;
+- a matriz inicial cobre venda de produção própria, revenda e operações com substituição tributária nos destinos oficialmente correspondentes;
+- corrigida a conversão indevida de `5405` para o CFOP inexistente `6405`: a correspondência interestadual oficial usada é `6404`;
+- exportações e naturezas fora da matriz segura são bloqueadas com orientação para cadastrar regra aprovada pela contabilidade, em vez de trocar o primeiro dígito silenciosamente;
+- CRT 4 do MEI passa a gerar o grupo ICMS do Simples Nacional, corrigindo o enquadramento anterior como regime normal;
+- para MEI, a automação de venda fica limitada a CFOP `5102/6102` e CSOSN `102`, `300` ou `400`, conforme a restrição oficial vigente;
+- a matriz foi confrontada com a tabela oficial de CFOP da Receita Federal e com a orientação oficial específica para MEI;
+- validação focada: 115 testes e 10 subtestes aprovados;
+- integração fiscal/produtos/schema: 314 testes e 13 subtestes aprovados;
+- suíte completa: 1.194 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

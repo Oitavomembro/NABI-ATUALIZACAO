@@ -17,6 +17,7 @@ from urllib.parse import urlsplit
 
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
 from services.fiscal_product_profile import FiscalProductProfile
+from services.fiscal_operation_resolver import FiscalOperationResolver
 
 try:
     import requests
@@ -1232,7 +1233,7 @@ class FiscalService:
             origin = self._digits(item.get("origin"))
             if strict_tax_profile and origin not in set("012345678"):
                 problems.append(f"{prefix}: origem da mercadoria deve ficar entre 0 e 8.")
-            if crt in {1, 2}:
+            if crt in {1, 2, 4}:
                 csosn = self._digits(item.get("csosn") or ("" if strict_tax_profile else "102"))
                 if csosn not in FiscalProductProfile.SIMPLE_CSOSN:
                     problems.append(f"{prefix}: CSOSN suportado deve ser 102, 103, 300, 400 ou 500.")
@@ -1386,7 +1387,7 @@ class FiscalService:
             crt = int(issuer.get("tax_regime_code", 1))
             explicit_icms_base = Decimal(str(item.get("icms_base", 0))).quantize(Decimal("0.01"))
             explicit_icms_value = Decimal(str(item.get("icms_value", 0))).quantize(Decimal("0.01"))
-            if crt in {1, 2}:
+            if crt in {1, 2, 4}:
                 csosn = self._digits(item.get("csosn") or "102")
                 group_name = "ICMSSN500" if csosn == "500" else "ICMSSN102"
                 icmssn=etree.SubElement(icms, etree.QName(ns,group_name)); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
@@ -1594,8 +1595,10 @@ class FiscalService:
                     f"{exc} Importe a NF-e de compra ou revise o cadastro."
                 ) from exc
             ncm = profile["ncm"]
-            stored_cfop = profile["cfop"]
-            cfop_prefix = {1: "5", 2: "6", 3: "7"}[destination]
+            operation = FiscalOperationResolver.resolve_sale(
+                profile["cfop"], destination=destination, crt=int(crt),
+                csosn=profile["fiscal_csosn"], icms_cst=profile["fiscal_icms_cst"],
+            )
             fiscal_item = {
                 "product_id": product_id,
                 "code": product.get("codigo") or product_id,
@@ -1605,7 +1608,7 @@ class FiscalService:
                 "unit": "UN",
                 "ncm": ncm,
                 "cest": profile["cest"],
-                "cfop": cfop_prefix + stored_cfop[1:],
+                "cfop": operation.cfop,
                 "origin": profile["fiscal_origin"],
                 "csosn": profile["fiscal_csosn"],
                 "cst": profile["fiscal_icms_cst"],

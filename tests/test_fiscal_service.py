@@ -446,6 +446,31 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='PISNT']/*[local-name()='CST'])"), "07")
         self.assertEqual(root.xpath("string(//*[local-name()='COFINSNT']/*[local-name()='CST'])"), "07")
 
+    def test_mei_crt4_gera_grupo_do_simples_com_csosn(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 4,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto mei", "quantity": 1, "unit_price": 20,
+                "ncm": "94036000", "cfop": "5102", "unit": "UN", "origin": "0",
+                "csosn": "102", "pis_cst": "07", "cofins_cst": "07",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 16, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "12345673",
+                "strict_tax_profile": True,
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='emit']/*[local-name()='CRT'])"), "4")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSSN102']/*[local-name()='CSOSN'])"), "102")
+        self.assertEqual(root.xpath("count(//*[local-name()='ICMS00'])"), 0.0)
+
     def test_ficha_regime_normal_calcula_icms_pis_e_cofins(self):
         xml, _key = self.service.build_document_xml(
             issuer={

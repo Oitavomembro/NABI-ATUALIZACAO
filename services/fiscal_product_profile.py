@@ -83,9 +83,9 @@ class FiscalProductProfile:
     def validate_for_regime(cls, values: Mapping[str, Any], *, crt: int, require_rtc: bool) -> dict[str, str]:
         profile = cls.normalize(values)
         required = [field for field in ("ncm", "cfop", "fiscal_origin", "fiscal_pis_cst", "fiscal_cofins_cst") if not profile[field]]
-        if crt in {1, 2} and not profile["fiscal_csosn"]:
+        if crt in {1, 2, 4} and not profile["fiscal_csosn"]:
             required.append("fiscal_csosn")
-        if crt in {3, 4} and not profile["fiscal_icms_cst"]:
+        if crt == 3 and not profile["fiscal_icms_cst"]:
             required.append("fiscal_icms_cst")
         if (
             profile["fiscal_csosn"] == "500"
