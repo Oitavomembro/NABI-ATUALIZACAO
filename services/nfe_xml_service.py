@@ -64,6 +64,17 @@ class NFeDocument:
     serie: str = ""
     modelo: str = ""
     valor_total: float = 0.0
+    emitente_fantasia: str = ""
+    emitente_ie: str = ""
+    emitente_crt: str = ""
+    emitente_logradouro: str = ""
+    emitente_numero: str = ""
+    emitente_bairro: str = ""
+    emitente_codigo_municipio: str = ""
+    emitente_municipio: str = ""
+    emitente_uf: str = ""
+    emitente_cep: str = ""
+    protocolo_status: str = ""
 
 
 class NFeXMLService:
@@ -100,6 +111,7 @@ class NFeXMLService:
             raise ValueError("O arquivo não contém uma NF-e reconhecida (infNFe ausente).")
 
         emit = inf_nfe.find("emit")
+        ender_emit = emit.find("enderEmit") if emit is not None else None
         dest = inf_nfe.find("dest")
         ide = inf_nfe.find("ide")
         total = inf_nfe.find("total/ICMSTot")
@@ -112,6 +124,7 @@ class NFeXMLService:
         serie = self._texto(ide, "serie")
         modelo = self._texto(ide, "mod")
         chave = (inf_nfe.attrib.get("Id") or "").removeprefix("NFe")
+        protocolo_status = self._texto(raiz.find(".//protNFe/infProt"), "cStat")
         try:
             valor_total = float(self._texto(total, "vNF", "0").replace(",", "."))
         except ValueError:
@@ -201,6 +214,17 @@ class NFeXMLService:
             serie=serie,
             modelo=modelo,
             valor_total=valor_total,
+            emitente_fantasia=self._texto(emit, "xFant"),
+            emitente_ie=self._texto(emit, "IE"),
+            emitente_crt=self._texto(emit, "CRT"),
+            emitente_logradouro=self._texto(ender_emit, "xLgr"),
+            emitente_numero=self._texto(ender_emit, "nro"),
+            emitente_bairro=self._texto(ender_emit, "xBairro"),
+            emitente_codigo_municipio=self._texto(ender_emit, "cMun"),
+            emitente_municipio=self._texto(ender_emit, "xMun"),
+            emitente_uf=self._texto(ender_emit, "UF"),
+            emitente_cep=self._texto(ender_emit, "CEP"),
+            protocolo_status=protocolo_status,
         )
 
     @staticmethod

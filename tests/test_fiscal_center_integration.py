@@ -46,7 +46,20 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert 'text="Executar pré-voo fiscal local"' in block
     assert "Modelos aprovados:" in block
     assert "result.xml_sha256_by_model" in block
+    assert "Preencher usando uma NF-e/NFC-e antiga da empresa" in block
+    assert 'fields["sale_series_55"]' in block
+    assert 'fields["sale_series_65"]' in block
+    assert 'fields["issuer_im"]' in block
     assert "Nenhum documento foi transmitido" in block
+
+
+def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
+    block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
+    assert 'text="Baixar XML"' in block
+    assert 'text="Enviar CC-e"' in block
+    assert 'text="Inutilizar numeração"' in block
+    assert "self.fiscal_service.send_event" in block
+    assert "self.fiscal_service.inutilize_numbers" in block
 
 
 def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():

@@ -34,6 +34,7 @@ from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolu
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
+from services.fiscal_onboarding_service import FiscalOnboardingService
 from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -9483,7 +9484,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             entry.pack(fill="x", padx=16)
             entry.insert(0, str(value or ""))
             return entry
-        fields["cnpj"] = field("CNPJ do emitente", config.get("cnpj"))
+        fields["cnpj"] = field("CNPJ do emitente", config.get("cnpj") or obter_config("cnpj"))
         fields["state"] = field("UF", config.get("state"))
         ctk.CTkLabel(content, text="Regime tributário", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
         regime_labels = dict(self.fiscal_service.TAX_REGIME_LABELS)
@@ -9511,9 +9512,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         default_model.pack(fill="x", padx=16)
         default_model.set(self.fiscal_service.MODEL_LABELS.get(str(config.get("default_model") or "65"), self.fiscal_service.MODEL_LABELS["65"]))
+        fields["sale_series_55"] = field("Série de venda da NF-e 55", config.get("sale_series_55", 1))
+        fields["sale_series_65"] = field("Série de venda da NFC-e 65", config.get("sale_series_65", 1))
         issuer_config = config.get("issuer") or {}
-        fields["issuer_name"] = field("Razão social do emitente", issuer_config.get("name"))
+        fields["issuer_name"] = field("Razão social do emitente", issuer_config.get("name") or obter_config("nome_loja"))
         fields["issuer_ie"] = field("Inscrição estadual", issuer_config.get("state_registration"))
+        fields["issuer_im"] = field("Inscrição municipal (quando aplicável)", issuer_config.get("municipal_registration"))
         fields["issuer_city_code"] = field("Código IBGE do município", issuer_config.get("city_code"))
         fields["issuer_city"] = field("Município", issuer_config.get("city"))
         fields["issuer_street"] = field("Logradouro", issuer_config.get("street"))
@@ -9521,6 +9525,60 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         fields["issuer_district"] = field("Bairro", issuer_config.get("district"))
         fields["issuer_zip"] = field("CEP", issuer_config.get("zip_code"))
         fields["return_series"] = field("Série padrão para NF-e de devolução", issuer_config.get("return_series", 1))
+
+        def replace_field(name, value):
+            if value in (None, ""):
+                return
+            fields[name].delete(0, "end")
+            fields[name].insert(0, str(value))
+
+        def fill_from_own_xml():
+            path = filedialog.askopenfilename(
+                parent=janela,
+                title="Selecionar NF-e/NFC-e antiga emitida pela empresa",
+                filetypes=[("Documento fiscal XML", "*.xml"), ("Todos", "*.*")],
+            )
+            if not path:
+                return
+            try:
+                draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(path)
+                current_cnpj = self.fiscal_service._normalize_cnpj(fields["cnpj"].get())
+                if current_cnpj and current_cnpj != draft.cnpj and not messagebox.askyesno(
+                    "Configuração fiscal",
+                    "O CNPJ do XML é diferente do informado. Deseja usar os dados do XML autorizado?",
+                    parent=janela,
+                ):
+                    return
+                replace_field("cnpj", draft.cnpj)
+                replace_field("state", draft.state)
+                mapping = {
+                    "issuer_name": "name", "issuer_ie": "state_registration",
+                    "issuer_city_code": "city_code", "issuer_city": "city",
+                    "issuer_street": "street", "issuer_number": "number",
+                    "issuer_district": "district", "issuer_zip": "zip_code",
+                }
+                for field_name, issuer_name in mapping.items():
+                    replace_field(field_name, draft.issuer.get(issuer_name))
+                model_vars[draft.model].set(True)
+                default_model.set(self.fiscal_service.MODEL_LABELS[draft.model])
+                replace_field(f"sale_series_{draft.model}", draft.series)
+                if draft.tax_regime:
+                    tax_regime.set(regime_labels[draft.tax_regime])
+                details = (
+                    "Dados recuperados do XML autorizado. Confira e clique em Salvar configuração fiscal."
+                )
+                if draft.warnings:
+                    details += "\n\n" + "\n".join(f"• {item}" for item in draft.warnings)
+                messagebox.showinfo("Configuração fiscal preenchida", details, parent=janela)
+            except Exception as exc:
+                messagebox.showerror("Configuração fiscal", str(exc), parent=janela)
+
+        ctk.CTkButton(
+            content,
+            text="Preencher usando uma NF-e/NFC-e antiga da empresa",
+            fg_color="#0969da",
+            command=fill_from_own_xml,
+        ).pack(fill="x", padx=16, pady=(12, 4))
         ctk.CTkLabel(content, text="Ambiente", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
         environment = ctk.CTkComboBox(content, values=["HOMOLOGACAO", "PRODUCAO"], state="readonly")
         environment.pack(fill="x", padx=16); environment.set(config.get("environment") or "HOMOLOGACAO")
@@ -9593,12 +9651,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         text_color="#f85149",
                     )
                     return
+                configured_cnpj = self.fiscal_service._normalize_cnpj(fields["cnpj"].get())
+                if info.document and configured_cnpj and info.document != configured_cnpj:
+                    certificate_status.configure(
+                        text="O CNPJ do certificado é diferente do emitente informado.",
+                        text_color="#f85149",
+                    )
+                    return
+                if info.document and not configured_cnpj:
+                    replace_field("cnpj", info.document)
                 certificate_status.configure(
                     text=(
-                        f"Certificado válido. Documento: {info.document or 'não identificado'} | "
-                        f"Validade: {info.valid_until}."
+                        f"Certificado válido. Empresa: {info.company_name or 'não identificada'} | "
+                        f"CNPJ: {info.document or 'não identificado'} | Validade: {info.valid_until}."
                     ),
-                    text_color="#3fb950",
+                    text_color="#d29922" if info.expiring_soon else "#3fb950",
                 )
                 if str(Path(path).resolve()) == str(Path(config.get("certificate_path") or path).resolve()):
                     self.fiscal_service.cache_certificate_password(secret)
@@ -9733,10 +9800,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     "cnpj": fields["cnpj"].get(), "state": fields["state"].get(),
                     "tax_regime": regime_by_label[tax_regime.get()],
                     "enabled_models": selected_models, "default_model": selected_default,
+                    "sale_series_55": fields["sale_series_55"].get(),
+                    "sale_series_65": fields["sale_series_65"].get(),
                     "certificate_path": certificate.get(),
                     "issuer": {
                         "name": fields["issuer_name"].get(),
                         "state_registration": fields["issuer_ie"].get(),
+                        "municipal_registration": fields["issuer_im"].get(),
                         "city_code": fields["issuer_city_code"].get(),
                         "city": fields["issuer_city"].get(),
                         "street": fields["issuer_street"].get(),
@@ -9757,7 +9827,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     self.fiscal_service.clear_session_certificate_password()
                 if certificate.get().strip() and password.get():
                     info = self.fiscal_service.configure_certificate(certificate.get().strip(), password.get())
-                    status.configure(text=f"Certificado válido até {info.valid_until}.", text_color="#3fb950")
+                    warning = (
+                        f" Atenção: vence em {info.expires_in_days} dia(s)."
+                        if info.expiring_soon else ""
+                    )
+                    status.configure(
+                        text=f"Certificado válido até {info.valid_until}.{warning}",
+                        text_color="#d29922" if info.expiring_soon else "#3fb950",
+                    )
                 else:
                     status.configure(text="Configuração salva. Certificado não validado nesta operação.", text_color="#d29922")
                 registrar_auditoria(self._usuario_financeiro(), "CONFIGURAR_FISCAL", "Fiscal", saved.get("environment", ""), "SUCESSO")
@@ -9850,6 +9927,26 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if path and os.path.exists(path):
                 self._abrir_arquivo_sistema(path)
             else: messagebox.showwarning("Fiscal", "Arquivo fiscal não localizado.", parent=janela)
+        def download_xml():
+            row = selected()
+            source = str((row or {}).get("processed_path") or "")
+            if not source or not Path(source).is_file():
+                messagebox.showwarning(
+                    "Baixar XML", "Selecione um documento autorizado com XML processado.", parent=janela
+                )
+                return
+            output = filedialog.asksaveasfilename(
+                parent=janela, title="Salvar XML autorizado", defaultextension=".xml",
+                filetypes=[("Documento fiscal XML", "*.xml")],
+                initialfile=f"NFe{row.get('access_key', '')}.xml",
+            )
+            if not output:
+                return
+            try:
+                Path(output).write_bytes(Path(source).read_bytes())
+                self.mostrar_notificacao("XML salvo", output, nivel="success")
+            except OSError as exc:
+                messagebox.showerror("Baixar XML", str(exc), parent=janela)
         def details():
             row = selected()
             if not row:
@@ -10040,10 +10137,113 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 janela.after(150, follow_cancel)
             janela.after(100, follow_cancel)
+
+        def send_correction_letter():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            row = selected()
+            key = str((row or {}).get("access_key") or "")
+            if not row or len(key) != 44:
+                messagebox.showwarning("CC-e", "Selecione uma NF-e autorizada.", parent=janela)
+                return
+            correction = simpledialog.askstring(
+                "Carta de Correção Eletrônica",
+                "Descreva a correção permitida pela legislação (mínimo 15 caracteres):",
+                parent=janela,
+            )
+            if correction is None:
+                return
+            if len(correction.strip()) < 15:
+                messagebox.showwarning("CC-e", "Informe ao menos 15 caracteres.", parent=janela)
+                return
+            password = self._obter_senha_certificado(parent=janela, title="Enviar CC-e")
+            if password is None:
+                return
+            sequence = 1 + sum(
+                1 for event in self.fiscal_service.list_events(key)
+                if str(event.get("event_type") or "").upper() == "CCE"
+                and event.get("success")
+            )
+            try:
+                response, _event = self.fiscal_service.send_event(
+                    event_type="CCE", access_key=key, sequence=sequence,
+                    password=password, actor=self._usuario_financeiro(),
+                    correction=correction.strip(),
+                )
+                if not response.success:
+                    raise ValueError(
+                        f"CC-e rejeitada: {response.status_code} — {response.message}"
+                    )
+                self.mostrar_notificacao("CC-e aceita", response.message, nivel="success")
+                load()
+            except Exception as exc:
+                messagebox.showerror("CC-e", str(exc), parent=janela)
+
+        def open_inutilization():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            modal = ctk.CTkToplevel(janela)
+            modal.title("Inutilizar numeração fiscal")
+            modal.geometry("520x470")
+            modal.transient(janela)
+            modal.grab_set()
+            entries = {}
+            defaults = {
+                "year": str(datetime.now().year), "series": "1",
+                "start": "", "end": "", "justification": "",
+            }
+            for key, label in (
+                ("year", "Ano"), ("series", "Série"),
+                ("start", "Número inicial"), ("end", "Número final"),
+                ("justification", "Justificativa (mínimo 15 caracteres)"),
+            ):
+                ctk.CTkLabel(modal, text=label).pack(anchor="w", padx=20, pady=(9, 2))
+                entry = ctk.CTkEntry(modal, height=34)
+                entry.pack(fill="x", padx=20)
+                entry.insert(0, defaults[key])
+                entries[key] = entry
+            model_choice = ctk.CTkComboBox(
+                modal,
+                values=[self.fiscal_service.MODEL_LABELS["55"], self.fiscal_service.MODEL_LABELS["65"]],
+                state="readonly",
+            )
+            model_choice.set(self.fiscal_service.MODEL_LABELS[str(self.fiscal_service.load_config().get("default_model") or "65")])
+            ctk.CTkLabel(modal, text="Modelo").pack(anchor="w", padx=20, pady=(9, 2))
+            model_choice.pack(fill="x", padx=20)
+
+            def confirm():
+                password = self._obter_senha_certificado(parent=modal, title="Inutilizar numeração")
+                if password is None:
+                    return
+                model = next(
+                    code for code, label in self.fiscal_service.MODEL_LABELS.items()
+                    if label == model_choice.get()
+                )
+                try:
+                    response, _record = self.fiscal_service.inutilize_numbers(
+                        year=int(entries["year"].get()), model=model,
+                        series=int(entries["series"].get()),
+                        start_number=int(entries["start"].get()),
+                        end_number=int(entries["end"].get()),
+                        justification=entries["justification"].get().strip(),
+                        password=password, actor=self._usuario_financeiro(),
+                    )
+                    if not response.success:
+                        raise ValueError(
+                            f"Inutilização rejeitada: {response.status_code} — {response.message}"
+                        )
+                    modal.destroy()
+                    self.mostrar_notificacao("Numeração inutilizada", response.message, nivel="success")
+                    load()
+                except Exception as exc:
+                    messagebox.showerror("Inutilização", str(exc), parent=modal)
+
+            ctk.CTkButton(modal, text="Confirmar inutilização", command=confirm, fg_color="#da3633").pack(fill="x", padx=20, pady=18)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
+        ctk.CTkButton(actions, text="Baixar XML", command=download_xml).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Gerar DANFE", command=danfe).pack(side="left", padx=4)
         transmit_button = ctk.CTkButton(actions, text="Transmitir pendentes", command=transmit_queue, fg_color="#2ea043")
         transmit_button.pack(side="left", padx=4)
@@ -10053,6 +10253,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         export_actions.pack(fill="x", padx=12, pady=(0, 10))
         cancel_button = ctk.CTkButton(export_actions, text="Cancelar autorizado", command=cancel_authorized_sale, fg_color="#da3633")
         cancel_button.pack(side="left", padx=4)
+        ctk.CTkButton(export_actions, text="Enviar CC-e", command=send_correction_letter, fg_color="#d29922").pack(side="left", padx=4)
+        ctk.CTkButton(export_actions, text="Inutilizar numeração", command=open_inutilization, fg_color="#da3633").pack(side="left", padx=4)
         ctk.CTkButton(
             export_actions, text="Abrir pasta fiscal",
             command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),

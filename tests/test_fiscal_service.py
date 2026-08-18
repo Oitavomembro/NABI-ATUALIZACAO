@@ -17,7 +17,11 @@ from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 from lxml import etree
 
-from services.fiscal_service import FiscalResponse, FiscalService
+from services.fiscal_service import (
+    FiscalResponse,
+    FiscalService,
+    InvalidCertificatePasswordError,
+)
 from services.fiscal_preflight_service import FiscalPreflightService
 
 
@@ -93,7 +97,18 @@ class FiscalServiceTests(unittest.TestCase):
         info = self.service.configure_certificate(self.pfx_path, self.password)
         self.assertFalse(info.expired)
         self.assertEqual(info.document, "12345678000195")
+        self.assertEqual(info.company_name, "EMPRESA TESTE")
+        self.assertTrue(info.expiring_soon)
+        self.assertGreaterEqual(info.expires_in_days, 29)
         self.assertEqual(self.service.validate_ready(operation="autorizacao"), [])
+
+    def test_certificado_rejeita_extensao_e_senha_invalidas(self):
+        wrong_extension = Path(self.tmp.name) / "certificado.txt"
+        wrong_extension.write_bytes(self.pfx_path.read_bytes())
+        with self.assertRaisesRegex(ValueError, r"\.pfx ou \.p12"):
+            self.service.inspect_certificate(wrong_extension, self.password)
+        with self.assertRaises(InvalidCertificatePasswordError):
+            self.service.inspect_certificate(self.pfx_path, "senha-incorreta")
 
     def test_certificado_configurado_reutiliza_senha_somente_na_sessao(self):
         self.service.configure_certificate(self.pfx_path, self.password)
@@ -200,6 +215,17 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(issuer["zip_code"], "40000000")
         self.assertEqual(issuer["return_series"], 7)
         self.assertEqual(self.service.load_config()["issuer"]["name"], "EMPRESA TESTE")
+
+    def test_configuracao_preserva_series_de_venda_por_modelo(self):
+        config = self.service.save_config({"sale_series_55": "2", "sale_series_65": "7"})
+        self.assertEqual(config["sale_series_55"], 2)
+        self.assertEqual(config["sale_series_65"], 7)
+        loaded = self.service.load_config()
+        self.assertEqual((loaded["sale_series_55"], loaded["sale_series_65"]), (2, 7))
+
+    def test_configuracao_rejeita_serie_de_venda_fora_do_intervalo(self):
+        with self.assertRaisesRegex(ValueError, "entre 0 e 999"):
+            self.service.save_config({"sale_series_65": 1000})
 
     def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
         expected_regimes = {

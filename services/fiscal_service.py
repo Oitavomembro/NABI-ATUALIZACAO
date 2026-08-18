@@ -55,6 +55,13 @@ class FiscalCertificateInfo:
     valid_until: str
     document: str
     expired: bool
+    company_name: str = ""
+    expires_in_days: int = 0
+    expiring_soon: bool = False
+
+
+class InvalidCertificatePasswordError(ValueError):
+    """Senha incorreta ou conteúdo PKCS#12 que não pôde ser aberto com segurança."""
 
 
 @dataclass(frozen=True)
@@ -179,12 +186,14 @@ class FiscalService:
             "tax_regime": "SIMPLES_NACIONAL",
             "enabled_models": ["55", "65"],
             "default_model": "65",
+            "sale_series_55": 1,
+            "sale_series_65": 1,
             "certificate_path": "",
             "certificate_info": {},
             "issuer": {
                 "name": "", "state_registration": "", "city_code": "",
                 "city": "", "street": "", "number": "", "district": "",
-                "zip_code": "", "return_series": 1,
+                "zip_code": "", "municipal_registration": "", "return_series": 1,
             },
             "endpoints": {"HOMOLOGACAO": {}, "PRODUCAO": {}},
         }
@@ -205,6 +214,13 @@ class FiscalService:
         result["enabled_models"] = models or list(default["enabled_models"])
         default_model = str(loaded.get("default_model", default["default_model"]))
         result["default_model"] = default_model if default_model in result["enabled_models"] else result["enabled_models"][0]
+        for model in self.VALID_MODELS:
+            key = f"sale_series_{model}"
+            try:
+                series = int(result.get(key, 1))
+            except (TypeError, ValueError):
+                series = 1
+            result[key] = series if 0 <= series <= 999 else 1
         return result
 
     def save_config(self, config: Mapping[str, Any]) -> dict[str, Any]:
@@ -225,6 +241,16 @@ class FiscalService:
         default_model = str(config.get("default_model", current.get("default_model", "65")))
         if default_model not in enabled_models:
             raise ValueError("O modelo fiscal padrão precisa estar entre os modelos habilitados.")
+        sale_series: dict[str, int] = {}
+        for model in self.VALID_MODELS:
+            key = f"sale_series_{model}"
+            try:
+                series = int(config.get(key, current.get(key, 1)) or 0)
+            except (TypeError, ValueError) as exc:
+                raise ValueError(f"Série fiscal do modelo {model} inválida.") from exc
+            if series < 0 or series > 999:
+                raise ValueError(f"Série fiscal do modelo {model} deve estar entre 0 e 999.")
+            sale_series[key] = series
         current.update({
             "enabled": bool(config.get("enabled", current["enabled"])),
             "environment": environment,
@@ -233,6 +259,7 @@ class FiscalService:
             "tax_regime": tax_regime,
             "enabled_models": enabled_models,
             "default_model": default_model,
+            **sale_series,
             "certificate_path": str(config.get("certificate_path", current["certificate_path"])).strip(),
         })
         if "issuer" in config:
@@ -240,6 +267,7 @@ class FiscalService:
             issuer.update({str(k): v for k, v in dict(config.get("issuer") or {}).items()})
             issuer["name"] = str(issuer.get("name") or "").strip()
             issuer["state_registration"] = self._digits(issuer.get("state_registration"))
+            issuer["municipal_registration"] = self._digits(issuer.get("municipal_registration"))
             issuer["city_code"] = self._digits(issuer.get("city_code"))
             issuer["zip_code"] = self._digits(issuer.get("zip_code"))
             issuer["city"] = str(issuer.get("city") or "").strip()
@@ -454,7 +482,19 @@ class FiscalService:
         path = Path(pfx_path)
         if not path.is_file():
             raise ValueError("Arquivo do certificado A1 não encontrado.")
-        key, cert, _chain = pkcs12.load_key_and_certificates(path.read_bytes(), str(password).encode("utf-8"))
+        if path.suffix.lower() not in {".pfx", ".p12"}:
+            raise ValueError("O certificado A1 deve usar a extensão .pfx ou .p12.")
+        raw = path.read_bytes()
+        if not raw or len(raw) > 10 * 1024 * 1024:
+            raise ValueError("O arquivo do certificado A1 está vazio ou excede 10 MB.")
+        try:
+            key, cert, _chain = pkcs12.load_key_and_certificates(
+                raw, str(password).encode("utf-8")
+            )
+        except ValueError as exc:
+            raise InvalidCertificatePasswordError(
+                "Senha incorreta ou arquivo PKCS#12 inválido. Confira o A1 selecionado."
+            ) from exc
         if key is None or cert is None:
             raise ValueError("O arquivo não contém chave privada e certificado válidos.")
         now = datetime.now(timezone.utc)
@@ -462,6 +502,18 @@ class FiscalService:
         valid_until = self._cert_datetime(cert, "not_valid_after_utc", "not_valid_after")
         subject = cert.subject.rfc4514_string()
         document = self._document_from_certificate(cert)
+        common_name = next(
+            (
+                str(attribute.value).strip()
+                for attribute in cert.subject
+                if attribute.oid.dotted_string == "2.5.4.3"
+            ),
+            "",
+        )
+        company_name = common_name
+        if document and self._normalize_cnpj(common_name[-len(document):]) == document:
+            company_name = common_name[:-len(document)].rstrip(" :-")
+        expires_in_days = (valid_until.date() - now.date()).days
         return FiscalCertificateInfo(
             subject=subject,
             issuer=cert.issuer.rfc4514_string(),
@@ -470,6 +522,9 @@ class FiscalService:
             valid_until=valid_until.isoformat(),
             document=document,
             expired=not (valid_from <= now <= valid_until),
+            company_name=company_name,
+            expires_in_days=expires_in_days,
+            expiring_soon=0 <= expires_in_days <= 30,
         )
 
     def configure_certificate(self, pfx_path: str | Path, password: str) -> FiscalCertificateInfo:

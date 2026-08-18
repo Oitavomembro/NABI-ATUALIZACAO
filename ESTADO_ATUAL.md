@@ -941,3 +941,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 107 testes e 10 subtestes aprovados;
 - suíte completa: 1.212 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.62 — primeira configuração e ações fiscais oficiais
+
+- a configuração fiscal pode ser preenchida a partir de uma NF-e/NFC-e antiga da própria empresa, desde que o XML possua protocolo autorizado `cStat 100`;
+- o leitor oficial reaproveitado extrai CNPJ, razão social, IE, CRT, endereço, município/IBGE, UF, CEP, modelo e série, sem importar produtos ou gravar automaticamente;
+- CRT 3 não é convertido silenciosamente em Lucro Presumido ou Real e exige confirmação contábil;
+- séries de venda da NF-e 55 e NFC-e 65 passam a ser configuradas e validadas separadamente entre 0 e 999;
+- a configuração do emitente ganhou inscrição municipal e aproveita apenas nome/CNPJ gerais como sugestões revisáveis;
+- o certificado A1 passa a rejeitar extensão diferente de `.pfx/.p12`, arquivo vazio ou maior que 10 MB e apresenta erro específico para senha/PKCS#12 inválido;
+- CNPJ, razão social extraída, validade, dias restantes e alerta nos 30 dias anteriores ao vencimento ficam disponíveis sem expor a senha;
+- a Central Fiscal ganhou ações explícitas para baixar o XML autorizado, enviar CC-e e inutilizar uma faixa de numeração usando os serviços fiscais existentes;
+- cancelamento, CC-e e inutilização continuam sujeitos a permissão, senha do A1, validação local e retorno efetivo da SEFAZ;
+- validação focada: 143 testes e 10 subtestes aprovados;
+- suíte completa: 1.219 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.
