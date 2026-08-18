@@ -1,5 +1,16 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — estados determinísticos na Central Fiscal
+
+- documentos cancelados deixam de ser contabilizados como pendentes;
+- a Central Fiscal apresenta cartão próprio de canceladas sem ocultar autorizadas, pendentes ou falhas;
+- somente estados realmente aguardando transmissão aparecem em `list_pending`;
+- documentos em cancelamento local, cancelamento fiscal aceito ou cancelamento concluído não podem voltar à fila;
+- a tentativa de reenvio pela interface aplica a mesma proteção do serviço central;
+- validação focada: 13 testes aprovados;
+- suíte completa: 1.168 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — tributos da nota original e devolução sem pagamento
 
 - o leitor de NF-e passa a extrair efetivamente base, alíquota e valor de ICMS, PIS, COFINS e IPI;

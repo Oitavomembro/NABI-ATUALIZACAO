@@ -9612,7 +9612,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
         summary_frame.pack(fill="x", padx=12, pady=(0, 8))
         summary_labels = {}
-        for key, title, color in (("authorized","Autorizadas","#2ea043"),("pending","Pendentes","#d29922"),("failed","Com erro","#da3633"),("total","Total","#1f6feb")):
+        for key, title, color in (("authorized","Autorizadas","#2ea043"),("pending","Pendentes","#d29922"),("failed","Com erro","#da3633"),("cancelled","Canceladas","#6e7681"),("total","Total","#1f6feb")):
             label = ctk.CTkLabel(summary_frame, text=f"{title}: 0", fg_color=color, corner_radius=7, height=34, font=ctk.CTkFont(weight="bold"))
             label.pack(side="left", fill="x", expand=True, padx=4)
             summary_labels[key] = label
@@ -9637,7 +9637,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             query = document_search.get().strip().casefold()
             summary = self.fiscal_sale_service.summary()
             for key, label in summary_labels.items():
-                title = {"authorized":"Autorizadas","pending":"Pendentes","failed":"Com erro","total":"Total"}[key]
+                title = {"authorized":"Autorizadas","pending":"Pendentes","failed":"Com erro","cancelled":"Canceladas","total":"Total"}[key]
                 label.configure(text=f"{title}: {summary[key]}")
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
             for row in self.fiscal_sale_service.list_sales():
@@ -9752,7 +9752,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if queue.get("status") == "CONCLUIDO":
                     messagebox.showinfo("Central fiscal", "Este documento já foi concluído.", parent=janela)
                     return
-                if queue.get("status") == "CANCELADO" or row.get("status") in {"CANCELADO", "CANCELADO_LOCAL"}:
+                if queue.get("status") == "CANCELADO" or row.get("status") in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
                     messagebox.showinfo("Central fiscal", "Este documento foi cancelado e não pode ser reenviado.", parent=janela)
                     return
                 if queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:

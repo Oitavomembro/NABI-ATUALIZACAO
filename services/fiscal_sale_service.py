@@ -203,8 +203,11 @@ class FiscalSaleService:
             connection.close()
         if not row:
             raise ValueError("Venda não possui documento fiscal preparado.")
-        if str(row[5]) in {"AUTORIZADO", "CANCELADO"}:
+        status = str(row[5] or "").upper()
+        if status == "AUTORIZADO":
             return {"id": str(row[4]), "status": str(row[5]), "access_key": str(row[1])}
+        if status in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
+            raise ValueError("Documento cancelado não pode ser colocado novamente na fila fiscal.")
         queued = self.fiscal_service.enqueue_transmission(
             operation="autorizacao", xml=base64.b64decode(row[3]), actor=actor,
             access_key=str(row[1]), model=str(row[2]), reservation_id=str(
@@ -236,7 +239,7 @@ class FiscalSaleService:
     def list_pending(self) -> list[dict[str, Any]]:
         return [
             row for row in self.list_sales()
-            if str(row.get("status")) not in {"AUTORIZADO", "CANCELADO"}
+            if str(row.get("status") or "").upper() in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}
         ]
 
     def list_sales(self) -> list[dict[str, Any]]:
@@ -253,7 +256,7 @@ class FiscalSaleService:
             connection.close()
 
     def summary(self) -> dict[str, int]:
-        result = {"total": 0, "authorized": 0, "pending": 0, "failed": 0}
+        result = {"total": 0, "authorized": 0, "pending": 0, "failed": 0, "cancelled": 0}
         for row in self.list_sales():
             result["total"] += 1
             status = str(row.get("status") or "").upper()
@@ -261,7 +264,9 @@ class FiscalSaleService:
                 result["authorized"] += 1
             elif status == "FALHA":
                 result["failed"] += 1
-            else:
+            elif status in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
+                result["cancelled"] += 1
+            elif status in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}:
                 result["pending"] += 1
         return result
 

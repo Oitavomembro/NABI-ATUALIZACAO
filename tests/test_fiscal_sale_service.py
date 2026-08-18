@@ -157,7 +157,7 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(self.service.list_pending()[0]["status"], "ENFILEIRADO")
         self.assertEqual(
             self.service.summary(),
-            {"total": 1, "authorized": 0, "pending": 1, "failed": 0},
+            {"total": 1, "authorized": 0, "pending": 1, "failed": 0, "cancelled": 0},
         )
 
     def test_destinatario_e_destino_sao_obtidos_do_cliente(self):
@@ -188,6 +188,13 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(status, "CANCELADO")
         self.assertEqual(self.fiscal.queued[0]["status"], "CANCELADO")
         self.assertEqual(self.fiscal.released, ["RES-1"])
+        self.assertEqual(self.service.list_pending(), [])
+        self.assertEqual(
+            self.service.summary(),
+            {"total": 1, "authorized": 0, "pending": 0, "failed": 0, "cancelled": 1},
+        )
+        with self.assertRaisesRegex(ValueError, "cancelado"):
+            self.service.enqueue_pending(sale_id=20, actor="caixa")
 
     def test_cancelamento_local_bloqueia_documento_autorizado(self):
         draft = FiscalSaleDraft("RES-2", "29" + "1" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
