@@ -37,6 +37,12 @@ class NFeItem:
     base_ipi: float = 0.0
     aliquota_ipi: float = 0.0
     valor_ipi: float = 0.0
+    ibs_cbs_cst: str = ""
+    ibs_cbs_class: str = ""
+    ibs_cbs_base: float = 0.0
+    ibs_uf_rate: float = 0.0
+    ibs_city_rate: float = 0.0
+    cbs_rate: float = 0.0
 
     def preco_por_margem(self, margem_percentual: float) -> float:
         margem = float(margem_percentual)
@@ -126,6 +132,8 @@ class NFeXMLService:
             pis_regra = next(iter(pis), None) if pis is not None else None
             cofins = imposto.find("COFINS") if imposto is not None else None
             cofins_regra = next(iter(cofins), None) if cofins is not None else None
+            ibs_cbs = imposto.find("IBSCBS") if imposto is not None else None
+            ibs_cbs_group = ibs_cbs.find("gIBSCBS") if ibs_cbs is not None else None
             try:
                 item_numero = int(det.attrib.get("nItem") or indice)
             except (TypeError, ValueError):
@@ -147,6 +155,12 @@ class NFeXMLService:
                 csosn=self._texto(icms_regra, "CSOSN"),
                 cst_pis=self._texto(pis_regra, "CST"),
                 cst_cofins=self._texto(cofins_regra, "CST"),
+                ibs_cbs_cst=self._texto(ibs_cbs, "CST"),
+                ibs_cbs_class=self._texto(ibs_cbs, "cClassTrib"),
+                ibs_cbs_base=float(self._texto(ibs_cbs_group, "vBC", "0").replace(",", ".")),
+                ibs_uf_rate=float(self._texto(ibs_cbs_group, "gIBSUF/pIBSUF", "0").replace(",", ".")),
+                ibs_city_rate=float(self._texto(ibs_cbs_group, "gIBSMun/pIBSMun", "0").replace(",", ".")),
+                cbs_rate=float(self._texto(ibs_cbs_group, "gCBS/pCBS", "0").replace(",", ".")),
             ))
 
         if not itens:

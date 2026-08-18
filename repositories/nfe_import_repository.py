@@ -85,6 +85,7 @@ class NFeImportRepository:
              str(item.cest or ""), str(item.cfop or ""), agora, agora),
         )
         produto_id = int(cursor.lastrowid)
+        self._salvar_tributacao_rtc(connection, produto_id=produto_id, item=item)
         connection.execute(
             """INSERT INTO historico_precos_produtos
                (produto_id,preco_anterior,preco_novo,custo,margem_percentual,
@@ -127,6 +128,7 @@ class NFeImportRepository:
              str(item.codigo_barras or ""), str(item.codigo_barras or ""), str(item.ncm or ""), str(item.ncm or ""),
              str(item.cest or ""), str(item.cest or ""), str(item.cfop or ""), str(item.cfop or ""), agora, int(produto_id)),
         )
+        self._salvar_tributacao_rtc(connection, produto_id=int(produto_id), item=item)
         preco_anterior = DecimalStorage.to_decimal(atual["preco_venda"], field="preço anterior")
         custo_anterior = DecimalStorage.to_decimal(atual["preco_custo"], field="custo anterior")
         if preco_anterior != novo_preco or custo_anterior != novo_custo:
@@ -139,6 +141,29 @@ class NFeImportRepository:
                  DecimalStorage.canonical(preco_anterior), preco_decimal, custo_decimal, margem_decimal,
                  "NFE_XML_ATUALIZAR", agora),
             )
+
+    @staticmethod
+    def _salvar_tributacao_rtc(connection, *, produto_id: int, item) -> None:
+        """Preserva a ficha RTC recebida no XML sem inferir regra tributária."""
+        cst = str(getattr(item, "ibs_cbs_cst", "") or "").strip()
+        classification = str(getattr(item, "ibs_cbs_class", "") or "").strip()
+        if not cst and not classification:
+            return
+        if len(cst) != 3 or not cst.isdigit() or len(classification) != 6 or not classification.isdigit():
+            raise ValueError("O XML possui CST ou classificação IBS/CBS inválida.")
+        connection.execute(
+            """UPDATE produtos
+               SET ibs_cbs_cst=?, ibs_cbs_class=?, ibs_uf_rate=?, ibs_city_rate=?, cbs_rate=?
+               WHERE id=?""",
+            (
+                cst,
+                classification,
+                str(getattr(item, "ibs_uf_rate", 0) or 0),
+                str(getattr(item, "ibs_city_rate", 0) or 0),
+                str(getattr(item, "cbs_rate", 0) or 0),
+                int(produto_id),
+            ),
+        )
 
     def vincular_produto_fornecedor_transacao(
         self, connection, *, produto_id: int, fornecedor_id: int, codigo_fornecedor: str,

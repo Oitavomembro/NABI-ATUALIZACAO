@@ -43,6 +43,11 @@ class NFeImportServiceTests(unittest.TestCase):
                 ncm TEXT NOT NULL DEFAULT '',
                 cest TEXT NOT NULL DEFAULT '',
                 cfop TEXT NOT NULL DEFAULT '',
+                ibs_cbs_cst TEXT NOT NULL DEFAULT '',
+                ibs_cbs_class TEXT NOT NULL DEFAULT '',
+                ibs_uf_rate TEXT NOT NULL DEFAULT '0',
+                ibs_city_rate TEXT NOT NULL DEFAULT '0',
+                cbs_rate TEXT NOT NULL DEFAULT '0',
                 fornecedor_id INTEGER,
                 unidade_compra_id INTEGER,
                 preco_venda REAL NOT NULL DEFAULT 0,
@@ -163,6 +168,23 @@ class NFeImportServiceTests(unittest.TestCase):
         self.assertGreaterEqual(analise.similaridade, 45)
         self.assertTrue(analise.candidatos)
         self.assertEqual(analise.produto_id, analise.candidatos[0].produto_id)
+
+    def test_preserva_ficha_ibs_cbs_recebida_no_xml(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute("INSERT INTO produtos(codigo,nome) VALUES('RTC','Produto RTC')")
+        produto_id = conn.execute("SELECT id FROM produtos WHERE codigo='RTC'").fetchone()[0]
+        item = NFeItem(
+            "RTC", "Produto RTC", 1, "UN", 10,
+            ibs_cbs_cst="000", ibs_cbs_class="000001",
+            ibs_uf_rate=0.1, ibs_city_rate=0, cbs_rate=0.9,
+        )
+        self.repo._salvar_tributacao_rtc(conn, produto_id=produto_id, item=item)
+        row = conn.execute(
+            "SELECT ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate FROM produtos WHERE id=?",
+            (produto_id,),
+        ).fetchone()
+        conn.close()
+        self.assertEqual(row, ("000", "000001", "0.1", "0", "0.9"))
 
     def test_validar_decisao_exige_vinculo_coerente(self):
         self.service.validar_decisao('CRIAR', None)

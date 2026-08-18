@@ -720,3 +720,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - estrutura comparada com o schema `010e v1.02` e com a implementação aberta NFePHP/SPED-NFe, sem incorporar código PHP ao NabiCode;
 - XML de regressão foi assinado com certificado temporário e aprovado integralmente pelo schema oficial local;
 - nenhuma alíquota ou classificação é inventada: os valores precisam vir da ficha fiscal rastreável do produto ou do XML de origem.
+
+## Checkpoint 42.53 — ficha IBS/CBS reaproveitada do XML
+
+- leitor oficial de NF-e passou a extrair CST, classificação tributária, base e alíquotas de IBS estadual, IBS municipal e CBS;
+- o schema de produtos recebeu campos próprios para a ficha RTC, criados automaticamente também em bancos existentes;
+- criar ou atualizar produto pela importação preserva a tributação recebida no XML dentro da mesma transação;
+- XML sem IBS/CBS não apaga uma ficha fiscal já existente e XML com códigos estruturalmente inválidos é recusado antes do commit;
+- a automação elimina o preenchimento imposto a imposto nas vendas seguintes sem tentar deduzir tributação somente pelo CNPJ;
+- 25 testes de XML, importação, atomicidade, exclusão e schema aprovados em bancos temporários.
