@@ -1,5 +1,17 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — cancelamento consistente da venda
+
+- venda fiscal pendente pode ser cancelada localmente sem deixar fila, numeração, estoque ou financeiro em estado divergente;
+- venda já autorizada é bloqueada no cancelamento comum e exige o evento oficial pela Central Fiscal;
+- após a autorização do cancelamento pela SEFAZ, a reversão comercial ocorre de forma transacional;
+- se a reversão local falhar depois do evento oficial, o estado `CANCELADO_FISCAL` permite recuperação sem reenviar o evento;
+- filas canceladas não são transmitidas nem podem ser reativadas por engano;
+- a Central Fiscal executa o cancelamento em segundo plano e mantém a senha do A1 apenas em memória;
+- foram adicionados testes de regressão para rollback comercial, fila cancelada e cancelamento autorizado;
+- suíte completa: 1.166 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — Central Fiscal e cartão POS
 
 - Central Fiscal existente passa a reunir vendas vinculadas, documentos autorizados e eventos sem duplicar persistência;

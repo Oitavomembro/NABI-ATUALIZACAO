@@ -929,6 +929,39 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertIn("produção bloqueada", processed[0]["last_error"])
         self.assertEqual(called, [])
 
+    def test_fila_nao_transmite_venda_cancelada_localmente(self):
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12345678000195",
+            "state": "BA", "tax_regime": "SIMPLES", "certificate_path": str(self.pfx_path),
+        })
+        key = "29" + "3" * 18 + "65" + "4" * 22
+        connection = self.service.connection_factory()
+        connection.execute("CREATE TABLE fiscal_sale_documents(access_key TEXT,status TEXT)")
+        connection.execute("INSERT INTO fiscal_sale_documents VALUES(?, 'CANCELADO_LOCAL')", (key,))
+        connection.commit(); connection.close()
+        xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
+        self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", model="65")
+        called = []
+        original = self.service.transmit
+        self.service.transmit = lambda **kwargs: called.append(kwargs)
+        try:
+            processed = self.service.process_transmission_queue(password=self.password)
+        finally:
+            self.service.transmit = original
+        self.assertEqual(processed[0]["status"], "CANCELADO")
+        self.assertEqual(called, [])
+
+    def test_fila_cancelada_nao_pode_ser_reativada(self):
+        key = "29" + "1" * 42
+        xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
+        item = self.service.enqueue_transmission(
+            operation="autorizacao", xml=xml, actor="admin", model="65"
+        )
+        self.service.cancel_transmission(item["id"], actor="admin", reason="Venda cancelada")
+
+        with self.assertRaisesRegex(ValueError, "cancelada"):
+            self.service.retry_transmission(item["id"], actor="admin")
+
     def test_fila_autorizacao_bloqueia_resposta_de_outra_chave(self):
         self.service.save_config({
             "enabled": True,

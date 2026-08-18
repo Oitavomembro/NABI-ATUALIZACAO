@@ -234,3 +234,95 @@ class FiscalSaleService:
             else:
                 result["pending"] += 1
         return result
+
+    @staticmethod
+    def prepare_local_cancellation(connection: Any, sale_id: int) -> None:
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+        ).fetchone()
+        if not exists:
+            return
+        row = connection.execute(
+            "SELECT status FROM fiscal_sale_documents WHERE sale_id=?", (int(sale_id),)
+        ).fetchone()
+        if not row:
+            return
+        status = str(row[0] or "").upper()
+        if status == "AUTORIZADO":
+            raise ValueError(
+                "Esta venda possui documento autorizado. Cancele pela Central Fiscal antes de reverter estoque e financeiro."
+            )
+        if status == "CANCELADO":
+            raise ValueError("O documento fiscal desta venda já está cancelado.")
+        new_status = "CANCELADO" if status == "CANCELADO_FISCAL" else "CANCELADO_LOCAL"
+        connection.execute(
+            "UPDATE fiscal_sale_documents SET status=?,updated_at=? WHERE sale_id=?",
+            (new_status, datetime.now().astimezone().isoformat(), int(sale_id)),
+        )
+
+    def finalize_local_cancellation(self, *, sale_id: int, actor: str) -> None:
+        connection = self.fiscal_service.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT reservation_id,queue_id,status FROM fiscal_sale_documents WHERE sale_id=?",
+                (int(sale_id),),
+            ).fetchone()
+        finally:
+            connection.close()
+        if not row or str(row[2]) == "CANCELADO":
+            return
+        if str(row[1] or ""):
+            self.fiscal_service.cancel_transmission(
+                str(row[1]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+            )
+        if str(row[0] or ""):
+            try:
+                self.fiscal_service.release_number(
+                    str(row[0]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+                )
+            except ValueError as exc:
+                if "confirmada" not in str(exc).lower():
+                    raise
+        connection = self.fiscal_service.connection_factory()
+        try:
+            connection.execute(
+                "UPDATE fiscal_sale_documents SET status='CANCELADO',updated_at=? WHERE sale_id=?",
+                (datetime.now().astimezone().isoformat(), int(sale_id)),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+
+    def cancel_authorized(
+        self, *, sale_id: int, password: str, actor: str, justification: str
+    ) -> dict[str, Any]:
+        connection = self.fiscal_service.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT access_key,protocol,status FROM fiscal_sale_documents WHERE sale_id=?",
+                (int(sale_id),),
+            ).fetchone()
+        finally:
+            connection.close()
+        if row and str(row[2]) == "CANCELADO_FISCAL":
+            return {"recovery": True, "access_key": str(row[0])}
+        if not row or str(row[2]) != "AUTORIZADO":
+            raise ValueError("A venda selecionada não possui documento autorizado para cancelar.")
+        response, event = self.fiscal_service.send_event(
+            event_type="CANCELAMENTO", access_key=str(row[0]), sequence=1,
+            password=password, actor=actor, protocol=str(row[1]),
+            justification=str(justification or "").strip(),
+        )
+        if not response.success:
+            raise ValueError(f"Cancelamento rejeitado pela SEFAZ: {response.status_code} — {response.message}")
+        connection = self.fiscal_service.connection_factory()
+        try:
+            connection.execute(
+                """UPDATE fiscal_sale_documents SET status='CANCELADO_FISCAL',
+                          protocol=?,last_error='',updated_at=? WHERE sale_id=?""",
+                (str(response.protocol or row[1]), datetime.now().astimezone().isoformat(), int(sale_id)),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        return event

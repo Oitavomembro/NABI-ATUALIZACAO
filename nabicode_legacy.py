@@ -6623,10 +6623,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             parent=getattr(self, "pdv_window", self),
         ):
             return
+        actor = getattr(getattr(self, "security", None), "current_username", "Sistema")
         try:
             self.pdv_transaction_service.cancel_sale(
                 venda["id"],
-                user=getattr(getattr(self, "security", None), "current_username", "Sistema"),
+                user=actor,
+                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+            )
+            self.fiscal_sale_service.finalize_local_cancellation(
+                sale_id=int(venda["id"]), actor=actor
             )
         except (ValueError, RuntimeError) as exc:
             messagebox.showerror("Cancelar venda", str(exc), parent=getattr(self, "pdv_window", self))
@@ -9747,6 +9752,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if queue.get("status") == "CONCLUIDO":
                     messagebox.showinfo("Central fiscal", "Este documento já foi concluído.", parent=janela)
                     return
+                if queue.get("status") == "CANCELADO" or row.get("status") in {"CANCELADO", "CANCELADO_LOCAL"}:
+                    messagebox.showinfo("Central fiscal", "Este documento foi cancelado e não pode ser reenviado.", parent=janela)
+                    return
                 if queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
                     self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
                 else:
@@ -9794,6 +9802,71 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 janela.after(150, follow)
             janela.after(100, follow)
+
+        def cancel_authorized_sale():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            row = selected()
+            if not row or row.get("_kind") != "VENDA" or str(row.get("status")) not in {"AUTORIZADO", "CANCELADO_FISCAL"}:
+                messagebox.showwarning("Central fiscal", "Selecione uma venda fiscal autorizada.", parent=janela)
+                return
+            justification = simpledialog.askstring(
+                "Cancelar documento autorizado",
+                "Justificativa para a SEFAZ (mínimo 15 caracteres):", parent=janela,
+            )
+            if justification is None:
+                return
+            if len(justification.strip()) < 15:
+                messagebox.showwarning("Cancelamento fiscal", "Informe ao menos 15 caracteres.", parent=janela)
+                return
+            password = simpledialog.askstring(
+                "Cancelar documento autorizado", "Senha do certificado A1:", show="*", parent=janela,
+            )
+            if password is None:
+                return
+            if not messagebox.askyesno(
+                "Confirmar cancelamento fiscal",
+                "O evento será enviado à SEFAZ. Somente após a aceitação estoque e financeiro serão revertidos. Continuar?",
+                parent=janela,
+            ):
+                return
+            actor = self._usuario_financeiro()
+            sale_id = int(row["sale_id"])
+            cancel_button.configure(state="disabled")
+            transmission_status.configure(text="Enviando cancelamento à SEFAZ em segundo plano...", text_color="#d29922")
+
+            def work(_context):
+                self.fiscal_sale_service.cancel_authorized(
+                    sale_id=sale_id, password=password, actor=actor, justification=justification
+                )
+                self.pdv_transaction_service.cancel_sale(
+                    sale_id, user=actor,
+                    before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+                )
+                self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id, actor=actor)
+                return sale_id
+
+            task = TASK_MANAGER.submit("Cancelar venda fiscal autorizada", work)
+
+            def follow_cancel():
+                nonlocal password
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    password = ""
+                    cancel_button.configure(state="normal")
+                    transmission_status.configure(text=f"Venda #{sale_id} cancelada na SEFAZ e revertida localmente.", text_color="#2ea043")
+                    load()
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    password = ""
+                    cancel_button.configure(state="normal")
+                    transmission_status.configure(text=current.error or "Cancelamento não concluído.", text_color="#da3633")
+                    load()
+                    return
+                janela.after(150, follow_cancel)
+            janela.after(100, follow_cancel)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
@@ -9805,6 +9878,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         retry_button.pack(side="left", padx=4)
         export_actions = ctk.CTkFrame(frame, fg_color="transparent")
         export_actions.pack(fill="x", padx=12, pady=(0, 10))
+        cancel_button = ctk.CTkButton(export_actions, text="Cancelar autorizado", command=cancel_authorized_sale, fg_color="#da3633")
+        cancel_button.pack(side="left", padx=4)
         ctk.CTkButton(
             export_actions, text="Abrir pasta fiscal",
             command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),

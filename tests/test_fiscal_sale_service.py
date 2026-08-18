@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from types import SimpleNamespace
 from pathlib import Path
 
 from services.fiscal_sale_service import FiscalSaleDraft, FiscalSaleService
@@ -40,6 +41,14 @@ class FakeFiscalService:
 
     def release_number(self, reservation_id, **_kwargs):
         self.released.append(reservation_id)
+
+    def cancel_transmission(self, queue_id, **_kwargs):
+        row = next(item for item in self.queued if item["id"] == queue_id)
+        row["status"] = "CANCELADO"
+        return row
+
+    def send_event(self, **_kwargs):
+        return SimpleNamespace(success=True, protocol="PROTO-CANCEL", status_code="135", message="Evento registrado"), {"event": "CANCELAMENTO"}
 
     def build_document_xml(self, **kwargs):
         self.document = kwargs["document"]
@@ -142,6 +151,49 @@ class FiscalSaleServiceTests(unittest.TestCase):
         recipient, destination = self.service.recipient_for_customer(2, model="65")
         self.assertEqual(recipient, {})
         self.assertEqual(destination, 1)
+
+    def test_cancelamento_pendente_cancela_fila_e_libera_numero(self):
+        draft = FiscalSaleDraft("RES-1", "29" + "0" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 20, draft)
+        connection.commit(); connection.close()
+        self.service.enqueue_pending(sale_id=20, actor="caixa")
+        connection = sqlite3.connect(self.db)
+        self.service.prepare_local_cancellation(connection, 20)
+        connection.commit(); connection.close()
+        self.service.finalize_local_cancellation(sale_id=20, actor="caixa")
+        connection = sqlite3.connect(self.db)
+        status = connection.execute("SELECT status FROM fiscal_sale_documents WHERE sale_id=20").fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "CANCELADO")
+        self.assertEqual(self.fiscal.queued[0]["status"], "CANCELADO")
+        self.assertEqual(self.fiscal.released, ["RES-1"])
+
+    def test_cancelamento_local_bloqueia_documento_autorizado(self):
+        draft = FiscalSaleDraft("RES-2", "29" + "1" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 21, draft)
+        connection.execute("UPDATE fiscal_sale_documents SET status='AUTORIZADO',protocol='P1' WHERE sale_id=21")
+        connection.commit()
+        with self.assertRaisesRegex(ValueError, "Central Fiscal"):
+            self.service.prepare_local_cancellation(connection, 21)
+        connection.close()
+
+    def test_cancelamento_autorizado_registra_evento_antes_da_reversao(self):
+        draft = FiscalSaleDraft("RES-3", "29" + "2" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 22, draft)
+        connection.execute("UPDATE fiscal_sale_documents SET status='AUTORIZADO',protocol='P2' WHERE sale_id=22")
+        connection.commit(); connection.close()
+        event = self.service.cancel_authorized(
+            sale_id=22, password="senha", actor="gerente",
+            justification="Cancelamento solicitado corretamente.",
+        )
+        self.assertEqual(event["event"], "CANCELAMENTO")
+        connection = sqlite3.connect(self.db)
+        status = connection.execute("SELECT status FROM fiscal_sale_documents WHERE sale_id=22").fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "CANCELADO_FISCAL")
 
 
 if __name__ == "__main__":

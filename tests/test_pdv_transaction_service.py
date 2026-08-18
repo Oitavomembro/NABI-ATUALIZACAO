@@ -210,6 +210,23 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT status FROM financeiro_titulos WHERE origem_id=?", (result.sale_id,)).fetchone()[0], "CANCELADO")
         conn.close()
 
+    def test_falha_na_protecao_fiscal_reverte_cancelamento_local(self):
+        result = self.service.finalize_sale(
+            customer_id=1, customer_name="CLIENTE", items=[self.item],
+            payments=[{"forma":"DINHEIRO","valor":10}], received=10, change=0, user="admin"
+        )
+        with self.assertRaisesRegex(ValueError, "documento autorizado"):
+            self.service.cancel_sale(
+                result.sale_id, user="admin",
+                before_cancel_commit=lambda _conn, _sale_id: (_ for _ in ()).throw(
+                    ValueError("documento autorizado")
+                ),
+            )
+        conn = sqlite3.connect(self.db)
+        self.assertNotEqual(conn.execute("SELECT status_pagamento FROM movimentacoes WHERE id=?", (result.sale_id,)).fetchone()[0], "CANCELADO")
+        self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 8)
+        conn.close()
+
     def test_cancelar_venda_paga_nao_reduz_saldo_de_outra_venda_crediario(self):
         self.service.finalize_sale(
             customer_id=1, customer_name="CLIENTE", items=[self.item],

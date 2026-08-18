@@ -235,7 +235,10 @@ class PDVTransactionService:
             for row in rows
         ]
 
-    def cancel_sale(self, sale_id: int, *, user: str) -> None:
+    def cancel_sale(
+        self, sale_id: int, *, user: str,
+        before_cancel_commit: Callable[[Any, int], None] | None = None,
+    ) -> None:
         normalized_id = int(sale_id)
         if normalized_id <= 0:
             raise ValueError("Venda inválida para cancelamento.")
@@ -306,6 +309,8 @@ class PDVTransactionService:
                         "UPDATE clientes SET saldo_devedor=MAX(0, saldo_devedor-?) WHERE id=?",
                         (DecimalStorage.legacy_real(open_value, field="saldo devedor"), int(customer_id)),
                     )
+            if before_cancel_commit is not None:
+                before_cancel_commit(conn, normalized_id)
             conn.commit()
         except Exception:
             conn.rollback()

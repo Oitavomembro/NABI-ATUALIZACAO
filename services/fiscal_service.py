@@ -2041,6 +2041,14 @@ class FiscalService:
                 config = self.load_config()
                 xml = base64.b64decode(str(record.get("xml_b64", "")))
                 operation = str(record.get("operation", "")).lower()
+                if operation in {"autorizacao", "recibo"} and self._sale_document_cancelled(
+                    record.get("access_key", "")
+                ):
+                    record["status"] = "CANCELADO"
+                    record["cancelled_at"] = current.isoformat()
+                    record["last_error"] = "Venda cancelada antes da autorização fiscal."
+                    processed.append(dict(record))
+                    continue
                 if operation in {"autorizacao", "recibo"}:
                     readiness = self.validate_ready(
                         operation=operation,
@@ -2149,6 +2157,24 @@ class FiscalService:
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
         return processed
 
+    def _sale_document_cancelled(self, access_key: Any) -> bool:
+        key = self._normalize_access_key(access_key)
+        if len(key) != 44:
+            return False
+        conn = self.connection_factory()
+        try:
+            exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+            ).fetchone()
+            if not exists:
+                return False
+            row = conn.execute(
+                "SELECT status FROM fiscal_sale_documents WHERE access_key=?", (key,)
+            ).fetchone()
+            return bool(row and str(row[0]).upper() in {"CANCELADO_LOCAL", "CANCELADO"})
+        finally:
+            conn.close()
+
     def _sync_sale_document(
         self, record: Mapping[str, Any], *, status: str, protocol: str = "", error: str = ""
     ) -> None:
@@ -2181,14 +2207,29 @@ class FiscalService:
                 break
         if target is None:
             raise ValueError("Item da fila fiscal não encontrado.")
-        if target.get("status") == "CONCLUIDO":
-            raise ValueError("Transmissão concluída não pode ser reenviada.")
+        if target.get("status") in {"CONCLUIDO", "CANCELADO"}:
+            raise ValueError("Transmissão concluída ou cancelada não pode ser reenviada.")
         target.update({
             "status": "PENDENTE",
             "next_attempt_at": datetime.now(timezone.utc).isoformat(),
             "retried_by": str(actor or "").strip(),
             "retried_at": datetime.now(timezone.utc).isoformat(),
             "last_error": "",
+        })
+        self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
+        return dict(target)
+
+    def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
+        rows = self.list_transmission_queue()
+        target = next((record for record in rows if str(record.get("id")) == str(queue_id)), None)
+        if target is None:
+            raise ValueError("Item da fila fiscal não encontrado.")
+        if target.get("status") == "CONCLUIDO":
+            raise ValueError("Transmissão concluída não pode ser cancelada localmente.")
+        target.update({
+            "status": "CANCELADO", "cancelled_by": str(actor or "").strip(),
+            "cancelled_at": datetime.now(timezone.utc).isoformat(),
+            "cancel_reason": str(reason or "").strip(), "next_attempt_at": "",
         })
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
         return dict(target)
