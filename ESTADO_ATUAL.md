@@ -692,3 +692,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - chave fiscal ganhou validação estrutural compatível com o schema oficial: seis dígitos, doze posições alfanuméricas e vinte e seis dígitos;
 - perfil do emitente, geração de chave, XML autorizado e inutilização rejeitam identificadores inconsistentes antes da transmissão;
 - 66 testes do serviço fiscal aprovados com `NABICODE_PROFILE=TESTE`.
+
+## Checkpoint 42.50 — homologação técnica da frente fiscal
+
+- suíte completa executada com o executor oficial de testes após instalar `pytest` somente no ambiente local de desenvolvimento;
+- resultado final: 1.137 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- o único aviso pertence ao cache local do pytest e não afeta runtime, dados, empacotamento ou instalação;
+- `pip check` confirmou todas as dependências satisfeitas;
+- validações fiscais focadas, devolução, schemas oficiais, certificado A1, documentos, exportação contábil e empacotamento permanecem aprovados;
+- nenhum programa foi aberto, nenhuma impressora foi acionada e nenhum banco, certificado ou endpoint real foi utilizado;
+- geração de instalador de produção permanece fora deste checkpoint.
