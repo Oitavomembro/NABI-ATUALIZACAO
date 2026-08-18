@@ -9306,6 +9306,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         status.pack(anchor="w", padx=16, pady=8)
         def save():
             try:
+                enabled_changed = bool(config.get("enabled")) != bool(enabled.get())
+                if enabled_changed and not self._confirmar_senha_mestra(
+                    title="Alterar emissão fiscal oficial",
+                    prompt=(
+                        "Digite a senha mestra para habilitar ou desabilitar a emissão "
+                        "fiscal oficial."
+                    ),
+                    parent=janela,
+                ):
+                    enabled.set(bool(config.get("enabled")))
+                    status.configure(
+                        text="A emissão fiscal não foi alterada.", text_color="#d29922"
+                    )
+                    return
                 selected_models = [model for model, variable in model_vars.items() if variable.get()]
                 selected_default = next(
                     model for model, label in self.fiscal_service.MODEL_LABELS.items()
@@ -9489,7 +9503,43 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         salvar_config("pasta_backup_nuvem", self.entry_backup_nuvem.get().strip())
         salvar_config("backup_diario_ativo", "1" if self.var_backup_diario.get() else "0")
 
+    def _confirmar_senha_mestra(self, *, title, prompt, parent=None):
+        senha = simpledialog.askstring(
+            title,
+            prompt,
+            show="*",
+            parent=parent or self,
+        )
+        if senha is None:
+            return False
+        if not self.security.verify_master_password(senha):
+            messagebox.showerror(
+                title,
+                "Senha mestra inválida. Nenhuma alteração protegida foi aplicada.",
+                parent=parent or self,
+            )
+            return False
+        return True
+
     def salvar_configuracoes_gerais(self):
+        modo_anterior = (obter_config("modo_operacao") or "COMERCIAL").strip().upper()
+        modo_operacao_texto = self.combo_modo_operacao.get() if hasattr(self, "combo_modo_operacao") else "COMERCIAL"
+        modo_novo = "FISCAL" if modo_operacao_texto.startswith("FISCAL") else "COMERCIAL"
+        modo_alterado = modo_anterior != modo_novo
+        if modo_alterado and not self._confirmar_senha_mestra(
+            title="Alterar modo Comercial/Fiscal",
+            prompt=(
+                f"A mudança de {modo_anterior} para {modo_novo} altera regras do PDV e "
+                "o acesso às ferramentas fiscais.\n\nDigite a senha mestra para confirmar."
+            ),
+            parent=self,
+        ):
+            self.combo_modo_operacao.set(
+                "FISCAL — com recursos fiscais"
+                if modo_anterior == "FISCAL"
+                else "COMERCIAL — sem emissão fiscal"
+            )
+            return
         novo_nome = self.entry_cfg_loja.get().strip()
         novo_tel = self.entry_cfg_tel.get().strip()
         novo_endereco = self.entry_cfg_endereco.get().strip()
@@ -9507,11 +9557,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         salvar_config("email", novo_email)
         salvar_config("aparencia_sistema", aparencia)
         salvar_config("cor_destaque", cor_nome)
-        modo_anterior = (obter_config("modo_operacao") or "COMERCIAL").strip().upper()
-        modo_operacao_texto = self.combo_modo_operacao.get() if hasattr(self, "combo_modo_operacao") else "COMERCIAL"
-        modo_novo = "FISCAL" if modo_operacao_texto.startswith("FISCAL") else "COMERCIAL"
         salvar_config("modo_operacao", modo_novo)
-        modo_alterado = modo_anterior != modo_novo
         self._salvar_preferencias_interface()
         self._salvar_opcoes_backup_dos_campos()
         try:

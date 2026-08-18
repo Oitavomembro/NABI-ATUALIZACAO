@@ -636,3 +636,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - teste de regressão impede que o perfil MEI volte a gerar CRT 1;
 - 59 testes fiscais aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum banco real, certificado real, endpoint fiscal, interface ou impressora foi utilizado.
+
+## Checkpoint 42.44 — retenção fiscal e modo protegido
+
+- documentos e eventos fiscais deixam de ser descartados silenciosamente dos índices após 1.000 e 2.000 registros;
+- a Central Fiscal e a exportação contábil continuam alcançando todo o histórico persistido;
+- trocar o modo Comercial/Fiscal exige a senha mestra antes de qualquer configuração ser gravada;
+- habilitar ou desabilitar a emissão fiscal oficial também exige a senha mestra e restaura o controle ao valor persistido quando a autenticação é cancelada ou recusada;
+- proteção implementada nos pontos únicos de persistência, sem sobreposição visual ou regra duplicada por tela;
+- 69 testes focados e `compileall` aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum banco real, certificado real, endpoint fiscal, interface ou impressora foi utilizado.

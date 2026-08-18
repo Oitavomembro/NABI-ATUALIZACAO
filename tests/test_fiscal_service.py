@@ -125,6 +125,35 @@ class FiscalServiceTests(unittest.TestCase):
                 self.assertEqual(config["enabled_models"], ["55", "65"])
                 self.assertEqual(config["default_model"], "65")
 
+    def test_indice_fiscal_nao_descarta_documentos_antigos(self):
+        key = "29260812345678000195650010000000011000000017"
+        rows = [
+            {
+                "access_key": f"{position:044d}",
+                "environment": "HOMOLOGACAO",
+                "status": "AUTORIZADO",
+                "protocol": str(position),
+            }
+            for position in range(1001)
+        ]
+        rows[-1].update({"access_key": key, "protocol": "123", "status": "AUTORIZADO"})
+        self.service._set_setting(
+            self.service.DOCUMENT_INDEX_KEY,
+            json.dumps(rows, ensure_ascii=False),
+        )
+
+        self.service._mark_document_cancelled(
+            access_key=key,
+            event_protocol="456",
+            actor="admin",
+            event_record={"status_code": "135", "message": "Evento registrado"},
+        )
+
+        persisted = self.service.list_documents()
+        self.assertEqual(len(persisted), 1001)
+        self.assertEqual(persisted[0]["access_key"], f"{0:044d}")
+        self.assertEqual(persisted[-1]["status"], "CANCELADO")
+
     def test_modelo_padrao_precisa_estar_habilitado(self):
         with self.assertRaisesRegex(ValueError, "modelo fiscal padrão"):
             self.service.save_config({"enabled_models": ["55"], "default_model": "65"})

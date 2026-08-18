@@ -14,6 +14,21 @@ class ItemAvulsoIntegrationTests(unittest.TestCase):
         self.assertIn("FISCAL — com recursos fiscais", self.source)
         self.assertIn('salvar_config("modo_operacao"', self.source)
 
+    def test_troca_de_modo_exige_senha_mestra_antes_de_salvar(self):
+        inicio = self.source.index("def salvar_configuracoes_gerais(self):")
+        fim = self.source.index("def abrir_restauracao_fabrica(self):", inicio)
+        fluxo = self.source[inicio:fim]
+        self.assertIn("self._confirmar_senha_mestra(", fluxo)
+        self.assertIn("self.security.verify_master_password(senha)", self.source)
+        self.assertLess(
+            fluxo.index("self._confirmar_senha_mestra("),
+            fluxo.index('salvar_config("modo_operacao"'),
+        )
+
+    def test_habilitar_emissao_oficial_tambem_exige_senha_mestra(self):
+        self.assertIn('title="Alterar emissão fiscal oficial"', self.source)
+        self.assertIn('enabled.set(bool(config.get("enabled")))', self.source)
+
     def test_pdv_expoe_item_avulso_sem_estoque(self):
         self.assertIn("Produto avulso — não cadastra e não movimenta estoque", self.source)
         self.assertIn("def alternar_item_avulso_pdv", self.source)

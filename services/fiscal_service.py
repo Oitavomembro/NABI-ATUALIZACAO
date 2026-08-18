@@ -682,7 +682,7 @@ class FiscalService:
             if row.get("access_key") != key or row.get("environment") != environment
         ]
         index.append(record)
-        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(index[-1000:], ensure_ascii=False, sort_keys=True))
+        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(index, ensure_ascii=False, sort_keys=True))
         return record
 
     def transmit(
@@ -931,7 +931,7 @@ class FiscalService:
         index = self.list_documents()
         index = [row for row in index if row.get("access_key") != key or row.get("environment") != environment]
         index.append(record)
-        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(index[-1000:], ensure_ascii=False, sort_keys=True))
+        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(index, ensure_ascii=False, sort_keys=True))
         if not authorized:
             self.register_rejection(operation="AUTORIZACAO", response=response, access_key=key, actor=actor)
         return record
@@ -1587,7 +1587,7 @@ class FiscalService:
             "request_sha256":hashlib.sha256(request_bytes).hexdigest(),
             "response_sha256":hashlib.sha256(response_bytes).hexdigest(),
         }
-        rows=self.list_events(); rows.append(record); self._set_setting(self.EVENT_INDEX_KEY,json.dumps(rows[-2000:],ensure_ascii=False,sort_keys=True))
+        rows=self.list_events(); rows.append(record); self._set_setting(self.EVENT_INDEX_KEY,json.dumps(rows,ensure_ascii=False,sort_keys=True))
         if response.success and str(event_type).upper() == "CANCELAMENTO":
             self._mark_document_cancelled(
                 access_key=key,
@@ -1637,7 +1637,7 @@ class FiscalService:
             "cancellation_request_sha256": str(event_record.get("request_sha256") or ""),
             "cancellation_response_sha256": str(event_record.get("response_sha256") or ""),
         })
-        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(rows[-1000:], ensure_ascii=False, sort_keys=True))
+        self._set_setting(self.DOCUMENT_INDEX_KEY, json.dumps(rows, ensure_ascii=False, sort_keys=True))
         return dict(matched)
 
     def list_events(self, access_key: str="") -> list[dict[str,Any]]:
