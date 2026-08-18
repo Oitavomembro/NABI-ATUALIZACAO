@@ -89,6 +89,29 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(info.document, "12345678000195")
         self.assertEqual(self.service.validate_ready(operation="autorizacao"), [])
 
+    def test_configuracao_preserva_cnpj_alfanumerico_oficial(self):
+        config = self.service.save_config({"cnpj": "12.ABC.345/01DE-35"})
+        self.assertEqual(config["cnpj"], "12ABC34501DE35")
+        self.assertTrue(self.service._is_valid_cnpj_format(config["cnpj"]))
+
+    def test_chave_de_acesso_preserva_cnpj_alfanumerico(self):
+        key = self.service.build_access_key(
+            state_code="29",
+            issued_at=datetime(2026, 8, 18, tzinfo=timezone.utc),
+            cnpj="12.ABC.345/01DE-35",
+            model="55",
+            series=1,
+            number=1,
+            numeric_code="12345678",
+        )
+        self.assertEqual(len(key), 44)
+        self.assertEqual(key[6:20], "12ABC34501DE35")
+        self.assertEqual(key[-1], self.service.calculate_access_key_digit(key[:43]))
+
+    def test_normalizacao_nao_remove_letras_de_chave_fiscal(self):
+        key = "29260812ABC34501DE35550010000000011123456789"
+        self.assertEqual(self.service._normalize_access_key(key.lower()), key)
+
     def test_configuracao_preserva_dados_do_emitente_e_serie_devolucao(self):
         config = self.service.save_config({
             "issuer": {

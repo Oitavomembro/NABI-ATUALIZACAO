@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import re
 import sys
 import tempfile
 import zipfile
@@ -247,7 +248,7 @@ class FiscalService:
         current.update({
             "enabled": bool(config.get("enabled", current["enabled"])),
             "environment": environment,
-            "cnpj": self._digits(config.get("cnpj", current["cnpj"])),
+            "cnpj": self._normalize_cnpj(config.get("cnpj", current["cnpj"])),
             "state": state,
             "tax_regime": tax_regime,
             "enabled_models": enabled_models,
@@ -365,7 +366,7 @@ class FiscalService:
             conn.close()
 
     def confirm_number(self, reservation_id: str, *, access_key: str, actor: str) -> dict[str, Any]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para confirmar numeração.")
         conn = self.connection_factory()
@@ -442,7 +443,7 @@ class FiscalService:
             problems.append("Modelo fiscal deve ser 55 (NF-e) ou 65 (NFC-e).")
         elif model not in {str(item) for item in config.get("enabled_models", self.VALID_MODELS)}:
             problems.append(f"O modelo fiscal {model} não está habilitado para esta empresa.")
-        if len(self._digits(config.get("cnpj"))) != 14:
+        if not self._is_valid_cnpj_format(config.get("cnpj")):
             problems.append("CNPJ do emitente não configurado.")
         state = str(config.get("state", "")).upper()
         if state not in self.STATE_CODES:
@@ -486,7 +487,7 @@ class FiscalService:
         if info.expired:
             raise ValueError("O certificado A1 está expirado ou ainda não é válido.")
         config = self.load_config()
-        configured_cnpj = self._digits(config.get("cnpj"))
+        configured_cnpj = self._normalize_cnpj(config.get("cnpj"))
         if configured_cnpj and info.document and configured_cnpj != info.document:
             raise ValueError("O CNPJ do certificado não corresponde ao emitente configurado.")
         config["certificate_path"] = str(Path(pfx_path).resolve())
@@ -651,8 +652,8 @@ class FiscalService:
         inf = inf_nodes[0]
         protocol = protocol_nodes[0]
         identifier = str(inf.get("Id") or "")
-        access_key = self._digits(identifier[3:] if identifier.startswith("NFe") else identifier)
-        protocol_key = self._digits(protocol.xpath("string(./*[local-name()='chNFe'])"))
+        access_key = self._normalize_access_key(identifier[3:] if identifier.startswith("NFe") else identifier)
+        protocol_key = self._normalize_access_key(protocol.xpath("string(./*[local-name()='chNFe'])"))
         protocol_number = str(protocol.xpath("string(./*[local-name()='nProt'])") or "").strip()
         status_code = str(protocol.xpath("string(./*[local-name()='cStat'])") or "").strip()
         model = str(inf.xpath("string(.//*[local-name()='ide']/*[local-name()='mod'])") or "").zfill(2)
@@ -787,7 +788,7 @@ class FiscalService:
         protocol = value(detail, "nProt") or value(root, "nProt")
         message = value(detail, "xMotivo") or value(root, "xMotivo") or "Resposta recebida"
         receipt = value(root, "nRec")
-        access_key = self._digits(value(detail, "chNFe") or value(root, "chNFe"))
+        access_key = self._normalize_access_key(value(detail, "chNFe") or value(root, "chNFe"))
 
         # 128 apenas informa que o lote de eventos foi processado; sem um retorno
         # interno aceito ele não representa sucesso fiscal por si só.
@@ -846,9 +847,9 @@ class FiscalService:
         model = str(model).zfill(2)
         if model not in self.VALID_MODELS:
             problems.append("Modelo fiscal deve ser 55 ou 65.")
-        cnpj = self._digits(issuer.get("cnpj"))
-        if len(cnpj) != 14:
-            problems.append("CNPJ do emitente deve possuir 14 dígitos.")
+        cnpj = self._normalize_cnpj(issuer.get("cnpj"))
+        if not self._is_valid_cnpj_format(cnpj):
+            problems.append("CNPJ do emitente deve possuir 14 caracteres válidos.")
         state = str(issuer.get("state", "")).upper()
         if state not in self.STATE_CODES:
             problems.append("UF do emitente é inválida.")
@@ -864,7 +865,7 @@ class FiscalService:
     def register_rejection(self, *, operation: str, response: FiscalResponse, access_key: str = "", actor: str = "") -> dict[str, Any]:
         record = {
             "operation": str(operation).upper(),
-            "access_key": self._digits(access_key) or self._digits(response.access_key),
+            "access_key": self._normalize_access_key(access_key) or self._normalize_access_key(response.access_key),
             "status_code": response.status_code,
             "message": response.message,
             "protocol": response.protocol,
@@ -887,7 +888,7 @@ class FiscalService:
             wanted = str(operation).upper()
             result = [row for row in result if row.get("operation") == wanted]
         if access_key:
-            wanted_key = self._digits(access_key)
+            wanted_key = self._normalize_access_key(access_key)
             result = [row for row in result if row.get("access_key") == wanted_key]
         return result
 
@@ -898,8 +899,8 @@ class FiscalService:
         protocol_nodes = response_root.xpath("//*[local-name()='protNFe'][1]")
         if not nfe_nodes or not protocol_nodes:
             raise ValueError("XML de autorização não contém NF-e e protocolo completos.")
-        request_key = self._digits(str(nfe_nodes[0].xpath("string(.//*[local-name()='infNFe'][1]/@Id)") or "").replace("NFe", ""))
-        protocol_key = self._digits(str(protocol_nodes[0].xpath("string(.//*[local-name()='chNFe'][1])") or ""))
+        request_key = self._normalize_access_key(str(nfe_nodes[0].xpath("string(.//*[local-name()='infNFe'][1]/@Id)") or "").replace("NFe", ""))
+        protocol_key = self._normalize_access_key(str(protocol_nodes[0].xpath("string(.//*[local-name()='chNFe'][1])") or ""))
         if request_key and protocol_key and request_key != protocol_key:
             raise ValueError("O protocolo retornado pertence a outra chave de acesso.")
         ns = "http://www.portalfiscal.inf.br/nfe"
@@ -918,9 +919,9 @@ class FiscalService:
         response: FiscalResponse,
         actor: str,
     ) -> dict[str, Any]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
-            raise ValueError("Chave de acesso deve possuir 44 dígitos.")
+            raise ValueError("Chave de acesso deve possuir 44 caracteres válidos.")
         model = str(model).strip()
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal inválido.")
@@ -994,9 +995,9 @@ class FiscalService:
 
 
     def verify_document_integrity(self, *, access_key: str, environment: str = "") -> dict[str, Any]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
-            raise ValueError("Chave de acesso deve possuir 44 dígitos.")
+            raise ValueError("Chave de acesso deve possuir 44 caracteres válidos.")
         wanted_environment = str(environment or "").strip().upper()
         records = [
             row for row in self.list_documents()
@@ -1146,11 +1147,11 @@ class FiscalService:
 
     @staticmethod
     def calculate_access_key_digit(base43: str) -> str:
-        digits = FiscalService._digits(base43)
-        if len(digits) != 43:
-            raise ValueError("A base da chave de acesso deve possuir 43 dígitos.")
+        normalized = FiscalService._normalize_access_key(base43)
+        if len(normalized) != 43 or not re.fullmatch(r"[0-9]{6}[A-Z0-9]{12}[0-9]{25}", normalized):
+            raise ValueError("A base da chave de acesso possui formato inválido.")
         weights = [2, 3, 4, 5, 6, 7, 8, 9]
-        total = sum(int(ch) * weights[i % len(weights)] for i, ch in enumerate(reversed(digits)))
+        total = sum((ord(ch) - 48) * weights[i % len(weights)] for i, ch in enumerate(reversed(normalized)))
         remainder = total % 11
         digit = 11 - remainder
         return "0" if digit in (10, 11) else str(digit)
@@ -1162,15 +1163,15 @@ class FiscalService:
         model = str(model).zfill(2)
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal inválido.")
-        cnpj_digits = self._digits(cnpj)
-        if len(cnpj_digits) != 14:
-            raise ValueError("CNPJ deve possuir 14 dígitos para gerar a chave de acesso.")
+        normalized_cnpj = self._normalize_cnpj(cnpj)
+        if not self._is_valid_cnpj_format(normalized_cnpj):
+            raise ValueError("CNPJ deve possuir 14 caracteres válidos para gerar a chave de acesso.")
         state = self._digits(state_code).zfill(2)
         if len(state) != 2:
             raise ValueError("Código numérico da UF inválido.")
         code = self._digits(numeric_code).zfill(8)[-8:]
         base = (
-            f"{state}{issued_at:%y%m}{cnpj_digits}{model}{int(series):03d}"
+            f"{state}{issued_at:%y%m}{normalized_cnpj}{model}{int(series):03d}"
             f"{int(number):09d}{int(emission_type)}{code}"
         )
         return base + self.calculate_access_key_digit(base)
@@ -1205,7 +1206,7 @@ class FiscalService:
                 problems.append("Indicador de presença inválido para NFC-e.")
             if operation_type != 1:
                 problems.append("NFC-e somente pode representar operação de saída.")
-        recipient_document = self._digits(recipient.get("document"))
+        recipient_document = self._normalize_tax_document(recipient.get("document"))
         if recipient_document and len(recipient_document) not in {11, 14}:
             problems.append("Documento do destinatário deve ser CPF ou CNPJ válido em tamanho.")
         for index, item in enumerate(items, 1):
@@ -1252,7 +1253,7 @@ class FiscalService:
                     if rate < 0 or rate > 100:
                         problems.append(f"{prefix}: alíquota de ICMS inválida.")
         purpose = int(document.get("purpose", 1) or 1)
-        referenced = [self._digits(value) for value in document.get("referenced_access_keys", []) or []]
+        referenced = [self._normalize_access_key(value) for value in document.get("referenced_access_keys", []) or []]
         if purpose == 4:
             if model != "55":
                 problems.append("NF-e de devolução deve utilizar o modelo 55.")
@@ -1285,7 +1286,7 @@ class FiscalService:
         problems = profile_problems + rule_problems
         if problems:
             raise ValueError("; ".join(problems))
-        cnpj = self._digits(issuer.get("cnpj"))
+        cnpj = self._normalize_cnpj(issuer.get("cnpj"))
         issued_at = document.get("issued_at") or datetime.now().astimezone()
         if not isinstance(issued_at, datetime):
             issued_at = datetime.fromisoformat(str(issued_at))
@@ -1296,7 +1297,7 @@ class FiscalService:
                 model=model, series=int(document.get("series", 1)), number=int(document.get("number", 1)),
                 emission_type=int(document.get("emission_type", 1)), numeric_code=document.get("numeric_code", "00000000")
             )
-        if len(self._digits(key)) != 44:
+        if len(self._normalize_access_key(key)) != 44:
             raise ValueError("Chave de acesso inválida.")
         ns = "http://www.portalfiscal.inf.br/nfe"
         root = etree.Element(etree.QName(ns, "NFe"), nsmap={None: ns})
@@ -1319,7 +1320,7 @@ class FiscalService:
         el(ide, "finNFe", int(document.get("purpose", 1))); el(ide, "indFinal", int(document.get("final_consumer", 1)))
         el(ide, "indPres", int(document.get("presence", 1))); el(ide, "procEmi", 0); el(ide, "verProc", document.get("app_version", "NabiCode"))
         for referenced_key in document.get("referenced_access_keys", []) or []:
-            digits = self._digits(referenced_key)
+            digits = self._normalize_access_key(referenced_key)
             if len(digits) != 44:
                 raise ValueError("Chave de NF-e referenciada deve possuir 44 dígitos.")
             nfref = etree.SubElement(ide, etree.QName(ns, "NFref"))
@@ -1331,7 +1332,7 @@ class FiscalService:
             if value not in (None, ""): el(ender, name, self._digits(value) if name in {"cMun","CEP"} else value)
         el(emit, "IE", self._digits(issuer.get("state_registration"))); el(emit, "CRT", int(issuer.get("tax_regime_code", 1)))
         dest = etree.SubElement(inf, etree.QName(ns, "dest"))
-        doc_rec = self._digits(recipient.get("document"))
+        doc_rec = self._normalize_tax_document(recipient.get("document"))
         if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
         elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
         if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
@@ -1437,7 +1438,7 @@ class FiscalService:
         pfx_path: str | Path = "", password: str = "",
     ) -> str:
         """Monta o QR Code 3.00 oficial da NFC-e, sem CSC."""
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44 or key[20:22] != "65":
             raise ValueError("QR Code NFC-e exige chave válida do modelo 65.")
         env_name = str(environment or "").strip().upper()
@@ -1449,7 +1450,7 @@ class FiscalService:
                 raise ValueError("QR Code offline exige data de emissão e valor total.")
             when = issued_at if isinstance(issued_at, datetime) else datetime.fromisoformat(str(issued_at))
             amount = Decimal(str(total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-            document = self._digits(recipient_document)
+            document = self._normalize_tax_document(recipient_document)
             foreign_id = str(recipient_foreign_id or "").strip()
             if len(document) == 14:
                 recipient_type, recipient_id = "1", document
@@ -1515,7 +1516,7 @@ class FiscalService:
         event_type = str(event_type).strip().upper()
         if event_type not in self.VALID_EVENTS:
             raise ValueError("Evento fiscal suportado: CANCELAMENTO ou CCE.")
-        key=self._digits(access_key); actor=self._digits(actor_document)
+        key=self._normalize_access_key(access_key); actor=self._normalize_tax_document(actor_document)
         if len(key)!=44 or len(actor) not in {11,14}: raise ValueError("Chave ou documento do autor inválido.")
         if event_type=="CANCELAMENTO":
             if not protocol: raise ValueError("Protocolo de autorização é obrigatório para cancelamento.")
@@ -1534,7 +1535,7 @@ class FiscalService:
         return etree.tostring(root,xml_declaration=True,encoding="utf-8"), event_id
 
     def build_inutilization_xml(self, *, state_code: str, year: int, cnpj: str, model: str, series: int, start_number: int, end_number: int, justification: str, environment: str="HOMOLOGACAO") -> tuple[bytes,str]:
-        cnpj=self._digits(cnpj); model=str(model).zfill(2)
+        cnpj=self._normalize_cnpj(cnpj); model=str(model).zfill(2)
         if len(cnpj)!=14 or model not in self.VALID_MODELS: raise ValueError("Dados da inutilização inválidos.")
         if int(start_number)>int(end_number): raise ValueError("Faixa de inutilização inválida.")
         if len(str(justification).strip())<15: raise ValueError("Justificativa deve possuir ao menos 15 caracteres.")
@@ -1545,7 +1546,7 @@ class FiscalService:
         return etree.tostring(root,xml_declaration=True,encoding="utf-8"),identifier
 
     def build_query_xml(self, *, access_key: str, environment: str="HOMOLOGACAO") -> bytes:
-        key=self._digits(access_key)
+        key=self._normalize_access_key(access_key)
         if len(key)!=44: raise ValueError("Chave de acesso inválida para consulta.")
         ns="http://www.portalfiscal.inf.br/nfe"; root=etree.Element(etree.QName(ns,"consSitNFe"),nsmap={None:ns},versao="4.00")
         for name,value in (("tpAmb",2 if str(environment).upper()=="HOMOLOGACAO" else 1),("xServ","CONSULTAR"),("chNFe",key)):
@@ -1574,7 +1575,7 @@ class FiscalService:
         sequence: int,
         protocol: str = "",
     ) -> dict[str, Any]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida.")
         kind = str(event_type or "").strip().upper()
@@ -1624,7 +1625,7 @@ class FiscalService:
         return dict(document)
 
     def register_event(self, *, access_key: str, event_type: str, response: FiscalResponse, request_xml: bytes|str, actor: str) -> dict[str,Any]:
-        key=self._digits(access_key)
+        key=self._normalize_access_key(access_key)
         if len(key)!=44: raise ValueError("Chave de acesso inválida.")
         folder=self.storage_dir/"eventos"/key; folder.mkdir(parents=True,exist_ok=True)
         stamp=datetime.now().strftime("%Y%m%d_%H%M%S_%f"); request_path=folder/f"{stamp}_{event_type.lower()}_envio.xml"; response_path=folder/f"{stamp}_{event_type.lower()}_retorno.xml"
@@ -1676,7 +1677,7 @@ class FiscalService:
     def _mark_document_cancelled(
         self, *, access_key: str, event_protocol: str, actor: str, event_record: Mapping[str, Any]
     ) -> dict[str, Any]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para cancelamento.")
         rows = self.list_documents()
@@ -1712,7 +1713,7 @@ class FiscalService:
         raw=self._get_setting(self.EVENT_INDEX_KEY)
         try: rows=json.loads(raw) if raw else []
         except (TypeError,ValueError): rows=[]
-        key=self._digits(access_key)
+        key=self._normalize_access_key(access_key)
         result=[dict(r) for r in rows if isinstance(r,dict)]
         return [r for r in result if r.get("access_key")==key] if key else result
 
@@ -1842,7 +1843,7 @@ class FiscalService:
         raw_xml = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
         if not raw_xml.strip():
             raise ValueError("XML fiscal é obrigatório para enfileirar transmissão.")
-        supplied_key = self._digits(access_key)
+        supplied_key = self._normalize_access_key(access_key)
         embedded_key = self._extract_access_key_from_xml(raw_xml)
         if supplied_key and embedded_key and supplied_key != embedded_key:
             raise ValueError("A chave informada não corresponde ao XML enfileirado.")
@@ -1917,7 +1918,7 @@ class FiscalService:
                 record["last_message"] = response.message
                 record["last_error"] = ""
                 operation = str(record.get("operation", "")).lower()
-                queued_key = self._digits(record.get("access_key", ""))
+                queued_key = self._normalize_access_key(record.get("access_key", ""))
                 if operation == "autorizacao" and response.status_code == "103" and response.receipt:
                     record["operation"] = "recibo"
                     record["receipt"] = self._digits(response.receipt)
@@ -1938,7 +1939,7 @@ class FiscalService:
                     record["last_error"] = ""
                 elif response.success:
                     if operation in {"autorizacao", "recibo"}:
-                        response_key = self._digits(response.access_key)
+                        response_key = self._normalize_access_key(response.access_key)
                         if len(queued_key) != 44:
                             raise ValueError("Item de autorização sem chave de acesso válida.")
                         if response_key != queued_key:
@@ -2012,7 +2013,7 @@ class FiscalService:
         if problems:
             raise ValueError("; ".join(problems))
         config = self.load_config()
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para autorização.")
 
@@ -2062,7 +2063,7 @@ class FiscalService:
         return response, record
 
     def consult_document(self, *, access_key: str, password: str) -> FiscalResponse:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
         problems = self.validate_ready(operation="consulta", model=model)
         if problems:
@@ -2073,7 +2074,7 @@ class FiscalService:
         return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
     def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, actor: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
-        key = self._digits(access_key)
+        key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
         problems = self.validate_ready(operation="evento", model=model)
         if problems:
@@ -2114,10 +2115,10 @@ class FiscalService:
         except (etree.XMLSyntaxError, ValueError, TypeError):
             return ""
         identifier = str(root.xpath("string(//*[local-name()='infNFe'][1]/@Id)") or "")
-        key = cls._digits(identifier.replace("NFe", ""))
+        key = cls._normalize_access_key(identifier.replace("NFe", ""))
         if len(key) == 44:
             return key
-        protocol_key = cls._digits(str(root.xpath("string(//*[local-name()='chNFe'][1])") or ""))
+        protocol_key = cls._normalize_access_key(str(root.xpath("string(//*[local-name()='chNFe'][1])") or ""))
         return protocol_key if len(protocol_key) == 44 else ""
 
     @staticmethod
@@ -2233,10 +2234,44 @@ class FiscalService:
     def _document_from_certificate(cert: x509.Certificate) -> str:
         for attribute in cert.subject:
             value = str(attribute.value)
+            for token in re.findall(r"(?<![A-Z0-9])[A-Z0-9][A-Z0-9./-]{12,20}(?![A-Z0-9])", value.upper()):
+                try:
+                    document = FiscalService._normalize_cnpj(token)
+                except ValueError:
+                    continue
+                if FiscalService._is_valid_cnpj_format(document):
+                    return document
             digits = FiscalService._digits(value)
             if len(digits) == 14:
                 return digits
         return ""
+
+    @staticmethod
+    def _normalize_cnpj(value: Any) -> str:
+        normalized = re.sub(r"[\s./-]+", "", str(value or "").upper())
+        if normalized and not re.fullmatch(r"[A-Z0-9]+", normalized):
+            raise ValueError("CNPJ contém caracteres inválidos.")
+        return normalized
+
+    @staticmethod
+    def _is_valid_cnpj_format(value: Any) -> bool:
+        try:
+            normalized = FiscalService._normalize_cnpj(value)
+        except ValueError:
+            return False
+        return bool(re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", normalized))
+
+    @staticmethod
+    def _normalize_access_key(value: Any) -> str:
+        normalized = re.sub(r"[\s.-]+", "", str(value or "").upper())
+        if normalized and not re.fullmatch(r"[A-Z0-9]+", normalized):
+            raise ValueError("Chave de acesso contém caracteres inválidos.")
+        return normalized
+
+    @staticmethod
+    def _normalize_tax_document(value: Any) -> str:
+        raw = str(value or "")
+        return FiscalService._normalize_cnpj(raw) if re.search(r"[A-Za-z]", raw) else FiscalService._digits(raw)
 
     @staticmethod
     def _digits(value: Any) -> str:

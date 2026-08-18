@@ -675,3 +675,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação usa parser sem rede e sem resolução de entidades externas;
 - 100 testes fiscais, de devolução e empacotamento aprovados; `compileall` e `git diff --check` aprovados;
 - nenhum endpoint, certificado real, banco real, interface ou impressora foi utilizado.
+
+## Checkpoint 42.48 — base para CNPJ alfanumérico
+
+- CNPJ fiscal deixou de passar pelo normalizador exclusivamente numérico e agora preserva as 12 posições alfanuméricas e os dois dígitos verificadores numéricos;
+- chave de acesso preserva o CNPJ alfanumérico e calcula o dígito pelo valor oficial `ASCII - 48`, sem alterar os campos que continuam estritamente numéricos;
+- configuração, certificado, XML, eventos, consultas, fila e índices usam normalizadores fiscais dedicados, eliminando a remoção silenciosa de letras;
+- o exemplo oficial `12.ABC.345/01DE-35` foi coberto por regressão, incluindo persistência e geração de chave com 44 caracteres;
+- 65 testes do serviço fiscal aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum endpoint, certificado real, banco real, interface ou impressora foi utilizado.
