@@ -5050,6 +5050,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             font=ctk.CTkFont(size=15, weight="bold"),
             command=lambda: self.finalizar_venda("COMPROVANTE"),
         ).grid(row=7, column=0, sticky="ew", padx=16, pady=(5, 12))
+        ctk.CTkButton(
+            resumo, text="PRÉ-VISUALIZAR FISCAL", height=36,
+            fg_color="#1f6feb", command=self.previsualizar_venda_fiscal,
+        ).grid(row=8, column=0, sticky="ew", padx=16, pady=(0, 12))
 
         rodape = ctk.CTkFrame(win, fg_color="#161b22", corner_radius=0)
         rodape.grid(row=2, column=0, sticky="ew")
@@ -5623,6 +5627,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=lambda: self.finalizar_venda("COMPROVANTE"),
         )
         btn_finalizar_venda.pack(side="right", padx=10, pady=4)
+        ctk.CTkButton(
+            frame_fechar, text="PRÉ-VISUALIZAR FISCAL", fg_color="#1f6feb",
+            height=44, width=190, command=self.previsualizar_venda_fiscal,
+        ).pack(side="right", padx=(4, 0), pady=4)
         self.btn_finalizar_venda = btn_finalizar_venda
         parent.bind("<F9>", lambda _event: self.finalizar_venda("COMPROVANTE"), add="+")
         
@@ -6706,11 +6714,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             nivel="success",
         )
 
-    def finalizar_venda(self, tipo_comprovante):
-        if not self.carrinho_venda:
-            messagebox.showwarning("Aviso", "O carrinho de compras está vazio!")
-            return
-
+    def _resolver_cliente_venda_atual(self):
         cli_selecionado = self.entry_cliente_venda.get().strip()
         cliente_id = getattr(self, "cliente_venda_selecionado_id", None)
         if not cliente_id:
@@ -6731,6 +6735,46 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if not cliente_id:
             cliente_id = self._cliente_consumidor_final()
             cli_selecionado = "CONSUMIDOR FINAL"
+        return int(cliente_id), cli_selecionado
+
+    def previsualizar_venda_fiscal(self):
+        if not self.carrinho_venda:
+            messagebox.showwarning("Pré-visualização fiscal", "O carrinho está vazio.", parent=getattr(self, "pdv_window", self))
+            return
+        if not self.fiscal_service.is_enabled():
+            messagebox.showinfo("Pré-visualização fiscal", "O modo fiscal está desativado.", parent=getattr(self, "pdv_window", self))
+            return
+        try:
+            cliente_id, cliente_nome = self._resolver_cliente_venda_atual()
+            config = self.fiscal_service.load_config()
+            recipient, destination = self.fiscal_sale_service.recipient_for_customer(
+                cliente_id, model=str(config.get("default_model") or "65")
+            )
+            preview = self.fiscal_sale_service.preview(
+                items=[dict(item) for item in self.carrinho_venda],
+                recipient=recipient, destination=destination,
+            )
+        except (ValueError, RuntimeError) as exc:
+            messagebox.showerror("Pré-visualização fiscal", str(exc), parent=getattr(self, "pdv_window", self))
+            return
+        itens = "\n".join(
+            f"{item.get('qtd')} x {item.get('item')} — R$ {float(item.get('subtotal') or 0):.2f}"
+            for item in self.carrinho_venda
+        )
+        self.janela_preview_documento(
+            f"Modelo: {preview.model}   Série: {preview.series}   Ambiente: {preview.environment}\n"
+            f"Cliente: {cliente_nome}\nItens: {preview.item_count}\n\n{itens}\n\n"
+            f"TOTAL FISCAL: R$ {preview.total:.2f}\n\nDOCUMENTO SEM VALIDADE FISCAL",
+            categoria="recibo", titulo="Pré-visualização fiscal",
+            subtitulo="Conferência local — não reserva número e não transmite à SEFAZ",
+        )
+
+    def finalizar_venda(self, tipo_comprovante):
+        if not self.carrinho_venda:
+            messagebox.showwarning("Aviso", "O carrinho de compras está vazio!")
+            return
+
+        cliente_id, cli_selecionado = self._resolver_cliente_venda_atual()
 
         total_venda = self.pdv_service.totalizar(self.carrinho_venda)
         pagamento = self.solicitar_pagamentos_pdv(total_venda)

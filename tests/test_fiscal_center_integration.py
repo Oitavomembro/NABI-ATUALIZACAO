@@ -35,6 +35,15 @@ def test_pdv_oferece_autorizacao_opcional_para_cartao_pos():
     assert '"card_authorization"' in block
 
 
+def test_pdv_previsualiza_documento_fiscal_sem_reservar_numeracao():
+    block = SOURCE.split("def previsualizar_venda_fiscal", 1)[1].split("def finalizar_venda", 1)[0]
+    assert "self.fiscal_sale_service.preview" in block
+    assert "não reserva número e não transmite à SEFAZ" in block
+    assert "DOCUMENTO SEM VALIDADE FISCAL" in block
+    assert "reserve_number" not in block
+    assert SOURCE.count('text="PRÉ-VISUALIZAR FISCAL"') == 2
+
+
 def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     block = SOURCE.split("def abrir_configuracao_fiscal", 1)[1].split("def abrir_central_fiscal", 1)[0]
     assert "self.fiscal_catalog_readiness_service.audit" in block

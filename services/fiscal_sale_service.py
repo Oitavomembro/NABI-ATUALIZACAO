@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -14,6 +15,16 @@ class FiscalSaleDraft:
     access_key: str
     model: str
     environment: str
+    xml: bytes
+
+
+@dataclass(frozen=True)
+class FiscalSalePreview:
+    model: str
+    environment: str
+    series: int
+    item_count: int
+    total: Decimal
     xml: bytes
 
 
@@ -81,6 +92,55 @@ class FiscalSaleService:
                 reason="Falha ao preparar documento antes da venda.",
             )
             raise
+
+    def preview(
+        self, *, items: Sequence[Mapping[str, Any]],
+        recipient: Mapping[str, Any] | None = None, destination: int = 1,
+        issued_at: datetime | None = None,
+    ) -> FiscalSalePreview:
+        """Gera uma conferência fiscal local sem reservar número nem persistir documento."""
+        config = self.fiscal_service.load_config()
+        model = str(config.get("default_model") or "65")
+        problems = self.fiscal_service.validate_ready(operation="autorizacao", model=model)
+        if problems:
+            raise ValueError("; ".join(problems))
+        crt = self.fiscal_service.TAX_REGIME_CODES.get(
+            str(config.get("tax_regime") or "").upper(), 0
+        )
+        fiscal_items = self.fiscal_service.prepare_sale_items(
+            items, destination=destination, crt=crt
+        )
+        environment = str(config.get("environment") or "HOMOLOGACAO").upper()
+        series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
+        issuer = dict(config.get("issuer") or {})
+        issuer.update({
+            "cnpj": config.get("cnpj", ""), "state": config.get("state", ""),
+            "tax_regime_code": crt,
+        })
+        when = issued_at or datetime.now().astimezone()
+        xml, _temporary_key = self.fiscal_service.build_document_xml(
+            issuer=issuer, recipient=dict(recipient or {}), items=fiscal_items,
+            document={
+                "model": model, "series": series, "number": 1,
+                "state_code": self.fiscal_service.STATE_CODES[str(config["state"]).upper()],
+                "issued_at": when, "environment": environment,
+                "numeric_code": "00000001", "destination": int(destination),
+                "payment_code": "90", "strict_tax_profile": True,
+                "final_consumer": 1, "presence": 1,
+            },
+        )
+        root = ET.fromstring(xml)
+        total_text = next(
+            (node.text for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "vNFTot"),
+            None,
+        ) or next(
+            (node.text for node in root.iter() if node.tag.rsplit("}", 1)[-1] == "vNF"),
+            "0",
+        )
+        return FiscalSalePreview(
+            model=model, environment=environment, series=series,
+            item_count=len(fiscal_items), total=Decimal(str(total_text)), xml=xml,
+        )
 
     def recipient_for_customer(self, customer_id: int, *, model: str | None = None) -> tuple[dict[str, Any], int]:
         config = self.fiscal_service.load_config()

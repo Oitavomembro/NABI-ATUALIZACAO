@@ -996,3 +996,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 102 testes e 10 subtestes aprovados;
 - suíte completa: 1.225 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.66 — pré-visualização fiscal sem consumir numeração
+
+- o PDV ganhou `PRÉ-VISUALIZAR FISCAL` tanto na janela independente quanto na área integrada de vendas;
+- a conferência usa o mesmo cadastro do cliente, destino, produtos, CFOP e perfis tributários da emissão oficial;
+- o total exibido é produzido pelo próprio gerador fiscal e inclui os cálculos vigentes do documento;
+- a prévia identifica modelo, série, ambiente, cliente e itens e traz marca explícita de documento sem validade fiscal;
+- a operação não chama a reserva de numeração, não persiste rascunho, não assina e não transmite à SEFAZ;
+- a resolução do cliente atual foi centralizada para evitar divergência entre prévia e finalização da venda;
+- validação focada: 114 testes e 10 subtestes aprovados;
+- suíte completa: 1.227 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

@@ -20,6 +20,7 @@ class FakeFiscalService:
         self.db = db
         self.released = []
         self.queued = []
+        self.reservations = 0
 
     def connection_factory(self):
         return sqlite3.connect(self.db)
@@ -38,6 +39,7 @@ class FakeFiscalService:
         return [{"code": "P1", "quantity": 1, "unit_price": 10}] if items else []
 
     def reserve_number(self, **_kwargs):
+        self.reservations += 1
         return {"id": "RES-1", "number": 7}
 
     def release_number(self, reservation_id, **_kwargs):
@@ -106,6 +108,13 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(draft.model, "65")
         self.assertEqual(self.fiscal.document["number"], 7)
         self.assertEqual(self.fiscal.document["payment_code"], "17")
+
+    def test_previsualiza_sem_reservar_numeracao_ou_persistir(self):
+        preview = self.service.preview(items=[{"produto_id": 1}])
+        self.assertEqual(preview.model, "65")
+        self.assertEqual(preview.item_count, 1)
+        self.assertEqual(self.fiscal.reservations, 0)
+        self.assertEqual(self.fiscal.document["payment_code"], "90")
 
     def test_cartao_pos_aceita_autorizacao_opcional(self):
         self.service.prepare(
