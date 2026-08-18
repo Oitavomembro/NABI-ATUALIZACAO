@@ -983,3 +983,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 101 testes e 10 subtestes aprovados;
 - suíte completa: 1.224 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.65 — relatório fiscal para a contabilidade
+
+- a Central Fiscal passa a exportar relatório CSV por período, ambiente e situação dos documentos;
+- os valores bruto, base de ICMS, ICMS, IPI, PIS, COFINS, IBS e CBS são derivados dos XMLs fiscais preservados, sem duplicar dados calculados;
+- o relatório inclui chave, modelo, número, série, destinatário, protocolo e documentos cancelados;
+- faixas de numeração inutilizadas com aceite fiscal passam a integrar o relatório;
+- corrigida na fonte a persistência dos metadados da inutilização, que antes existiam apenas no resultado em memória;
+- a gravação do CSV usa arquivo temporário e substituição atômica, com codificação compatível com planilhas brasileiras;
+- os comandos de exportação contábil foram distribuídos em uma linha própria para preservar acesso em 1280×768;
+- validação focada: 102 testes e 10 subtestes aprovados;
+- suíte completa: 1.225 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

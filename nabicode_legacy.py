@@ -10208,6 +10208,29 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             except Exception as exc:
                 messagebox.showerror("Exportação fiscal", str(exc), parent=janela)
+        def export_fiscal_report():
+            output = filedialog.asksaveasfilename(
+                parent=janela, title="Salvar relatório fiscal",
+                defaultextension=".csv", filetypes=[("Planilha CSV", "*.csv")],
+                initialfile=f"NabiCode_Relatorio_Fiscal_{start_entry.get()}_{end_entry.get()}.csv",
+            )
+            if not output:
+                return
+            try:
+                result = self.fiscal_service.export_fiscal_report_csv(
+                    start_date=start_entry.get(), end_date=end_entry.get(),
+                    output_path=output, include_homologation=include_homologation.get(),
+                )
+                registrar_auditoria(
+                    self._usuario_financeiro(), "EXPORTAR_RELATORIO_FISCAL", "Fiscal",
+                    f"{start_entry.get()} a {end_entry.get()}", "SUCESSO",
+                )
+                self.mostrar_notificacao(
+                    "Relatório fiscal gerado",
+                    f"{result['rows']} linha(s).\n{result['path']}", nivel="success",
+                )
+            except Exception as exc:
+                messagebox.showerror("Relatório fiscal", str(exc), parent=janela)
         transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
         transmission_status.pack(fill="x", padx=16, pady=(0, 3))
 
@@ -10460,9 +10483,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),
             fg_color="#8957e5",
         ).pack(side="left", padx=4)
+        accounting_actions = ctk.CTkFrame(frame, fg_color="transparent")
+        accounting_actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(
-            export_actions, text="Gerar arquivos para contabilidade", command=export_accounting,
+            accounting_actions, text="Gerar arquivos para contabilidade", command=export_accounting,
             fg_color="#2ea043",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            accounting_actions, text="Exportar relatório CSV", command=export_fiscal_report,
+            fg_color="#1f6feb",
         ).pack(side="left", padx=4)
         load()
 

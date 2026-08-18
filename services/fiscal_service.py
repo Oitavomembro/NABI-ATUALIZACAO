@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import hashlib
 import json
 import os
@@ -1364,6 +1365,113 @@ class FiscalService:
             "period_start": start.isoformat(), "period_end": end.isoformat(),
         }
 
+    def export_fiscal_report_csv(
+        self, *, start_date: str | datetime, end_date: str | datetime,
+        output_path: str | Path, include_homologation: bool = False,
+        statuses: Sequence[str] = ("AUTORIZADO", "CANCELADO", "INUTILIZADO"),
+    ) -> dict[str, Any]:
+        """Exporta relatório legível pelo Excel derivado dos XMLs e eventos persistidos."""
+        self._require_dependency("lxml")
+
+        def as_date(value: str | datetime):
+            return value.date() if isinstance(value, datetime) else datetime.fromisoformat(str(value)).date()
+
+        start, end = as_date(start_date), as_date(end_date)
+        if start > end:
+            raise ValueError("A data inicial não pode ser posterior à data final.")
+        wanted = {str(status).strip().upper() for status in statuses}
+        rows: list[dict[str, str]] = []
+
+        def xml_text(root: Any, path: str) -> str:
+            return str(root.xpath(f"string({path})") or "").strip()
+
+        for document in self.list_documents():
+            status = str(document.get("status") or "").upper()
+            if status not in wanted or status not in {"AUTORIZADO", "CANCELADO"}:
+                continue
+            environment = str(document.get("environment") or "").upper()
+            if environment != "PRODUCAO" and not include_homologation:
+                continue
+            path = Path(str(document.get("processed_path") or ""))
+            if not path.is_file():
+                raise ValueError(f"XML fiscal {document.get('access_key', '')} não foi localizado.")
+            integrity = self.verify_document_integrity(
+                access_key=str(document.get("access_key") or ""), environment=environment
+            )
+            if not integrity["valid"]:
+                raise ValueError(f"XML fiscal {document.get('access_key', '')} falhou na integridade.")
+            root = etree.fromstring(
+                path.read_bytes(), parser=etree.XMLParser(resolve_entities=False, no_network=True)
+            )
+            issued = xml_text(root, "//*[local-name()='ide']/*[local-name()='dhEmi'][1]") or xml_text(
+                root, "//*[local-name()='ide']/*[local-name()='dEmi'][1]"
+            )
+            try:
+                issued_date = datetime.fromisoformat(issued.replace("Z", "+00:00")).date()
+            except ValueError:
+                issued_date = datetime.fromisoformat(str(document.get("created_at") or "")).date()
+            if not start <= issued_date <= end:
+                continue
+            rows.append({
+                "status": status,
+                "modelo": str(document.get("model") or ""),
+                "numero": xml_text(root, "//*[local-name()='ide']/*[local-name()='nNF'][1]"),
+                "serie": xml_text(root, "//*[local-name()='ide']/*[local-name()='serie'][1]"),
+                "data_emissao": issued_date.isoformat(),
+                "chave": str(document.get("access_key") or ""),
+                "cnpj_cliente": xml_text(root, "//*[local-name()='dest']/*[local-name()='CNPJ'][1]"),
+                "cpf_cliente": xml_text(root, "//*[local-name()='dest']/*[local-name()='CPF'][1]"),
+                "valor_bruto": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vNF'][1]"),
+                "base_icms": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vBC'][1]"),
+                "valor_icms": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vICMS'][1]"),
+                "valor_ipi": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vIPI'][1]"),
+                "valor_pis": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vPIS'][1]"),
+                "valor_cofins": xml_text(root, "//*[local-name()='ICMSTot']/*[local-name()='vCOFINS'][1]"),
+                "valor_ibs": xml_text(root, "//*[local-name()='IBSCBSTot']/*[local-name()='vIBS'][1]"),
+                "valor_cbs": xml_text(root, "//*[local-name()='IBSCBSTot']/*[local-name()='vCBS'][1]"),
+                "protocolo": str(document.get("protocol") or ""),
+            })
+        if "INUTILIZADO" in wanted:
+            for event in self.list_events():
+                if str(event.get("event_type") or "").upper() != "INUTILIZACAO" or not event.get("success"):
+                    continue
+                environment = str(event.get("environment") or "").upper()
+                if environment != "PRODUCAO" and not include_homologation:
+                    continue
+                created = datetime.fromisoformat(str(event.get("created_at") or "")).date()
+                if start <= created <= end:
+                    rows.append({
+                        "status": "INUTILIZADO", "modelo": str(event.get("model") or ""),
+                        "numero": f"{event.get('start_number', '')}-{event.get('end_number', '')}",
+                        "serie": str(event.get("series") or ""), "data_emissao": created.isoformat(),
+                        "chave": "", "cnpj_cliente": "", "cpf_cliente": "",
+                        "valor_bruto": "", "base_icms": "", "valor_icms": "",
+                        "valor_ipi": "", "valor_pis": "", "valor_cofins": "",
+                        "valor_ibs": "", "valor_cbs": "", "protocolo": str(event.get("protocol") or ""),
+                    })
+        columns = (
+            "status", "modelo", "numero", "serie", "data_emissao", "chave",
+            "cnpj_cliente", "cpf_cliente", "valor_bruto", "base_icms", "valor_icms",
+            "valor_ipi", "valor_pis", "valor_cofins", "valor_ibs", "valor_cbs", "protocolo",
+        )
+        destination = Path(output_path)
+        if destination.suffix.lower() != ".csv":
+            destination = destination.with_suffix(".csv")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        fd, temp_name = tempfile.mkstemp(prefix=f".{destination.name}.", suffix=".tmp", dir=destination.parent)
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=columns, delimiter=";")
+                writer.writeheader()
+                writer.writerows(rows)
+                stream.flush()
+                os.fsync(stream.fileno())
+            os.replace(temp_name, destination)
+        except Exception:
+            Path(temp_name).unlink(missing_ok=True)
+            raise
+        return {"path": str(destination), "rows": len(rows)}
+
     def list_documents(self) -> list[dict[str, Any]]:
         value = self._get_setting(self.DOCUMENT_INDEX_KEY)
         if not value:
@@ -2097,7 +2205,7 @@ class FiscalService:
             raise ValueError("Carta de correção não pode ser enviada após cancelamento aceito.")
         return dict(document)
 
-    def register_event(self, *, access_key: str, event_type: str, response: FiscalResponse, request_xml: bytes|str, actor: str) -> dict[str,Any]:
+    def register_event(self, *, access_key: str, event_type: str, response: FiscalResponse, request_xml: bytes|str, actor: str, metadata: Mapping[str, Any] | None = None) -> dict[str,Any]:
         key=self._normalize_access_key(access_key)
         if len(key)!=44: raise ValueError("Chave de acesso inválida.")
         folder=self.storage_dir/"eventos"/key; folder.mkdir(parents=True,exist_ok=True)
@@ -2129,6 +2237,8 @@ class FiscalService:
             "request_sha256":hashlib.sha256(request_bytes).hexdigest(),
             "response_sha256":hashlib.sha256(response_bytes).hexdigest(),
         }
+        if metadata:
+            record.update({str(key): value for key, value in metadata.items()})
         rows=self.list_events(); rows.append(record); self._set_setting(self.EVENT_INDEX_KEY,json.dumps(rows,ensure_ascii=False,sort_keys=True))
         if response.success and str(event_type).upper() == "CANCELAMENTO":
             self._mark_document_cancelled(
@@ -2690,8 +2800,15 @@ class FiscalService:
         signed = self.sign_xml(xml, reference_id=identifier, pfx_path=config["certificate_path"], password=password)
         self.validate_official_xml(signed, document_type="inutilizacao")
         response = self.transmit(operation="inutilizacao", model=model, xml=signed, pfx_path=config["certificate_path"], password=password)
-        record = self.register_event(access_key="0" * 44, event_type="INUTILIZACAO", response=response, request_xml=signed, actor=actor)
-        record.update({"model": model, "series": int(series), "start_number": int(start_number), "end_number": int(end_number), "year": int(year)})
+        record = self.register_event(
+            access_key="0" * 44, event_type="INUTILIZACAO", response=response,
+            request_xml=signed, actor=actor,
+            metadata={
+                "model": model, "series": int(series),
+                "start_number": int(start_number), "end_number": int(end_number),
+                "year": int(year), "environment": str(config.get("environment") or ""),
+            },
+        )
         return response, record
 
     @classmethod

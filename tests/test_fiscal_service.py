@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import base64
+import csv
 import json
 import sqlite3
 import tempfile
@@ -972,6 +973,47 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(result["documents"], 0)
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(archive.namelist(), ["manifesto.json"])
+
+    def test_relatorio_fiscal_csv_deriva_valores_do_xml_e_inutilizacoes(self):
+        now = datetime.now().astimezone()
+        key = self.service.build_access_key(
+            state_code="29", issued_at=now, cnpj="12345678000195", model="55",
+            series=2, number=81, emission_type=1, numeric_code="76543212",
+        )
+        request = f"""<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00">
+          <ide><mod>55</mod><serie>2</serie><nNF>81</nNF><dhEmi>{now.isoformat()}</dhEmi></ide>
+          <dest><CNPJ>98765432000198</CNPJ></dest><total><ICMSTot>
+          <vBC>100.00</vBC><vICMS>18.00</vICMS><vIPI>5.00</vIPI><vPIS>1.65</vPIS>
+          <vCOFINS>7.60</vCOFINS><vNF>125.00</vNF></ICMSTot>
+          <IBSCBSTot><vIBS>0.10</vIBS><vCBS>0.90</vCBS></IBSCBSTot></total>
+        </infNFe></NFe>"""
+        response_xml = f"<ret><protNFe><infProt><cStat>100</cStat><chNFe>{key}</chNFe><nProt>12381</nProt></infProt></protNFe></ret>"
+        self.service.store_document(
+            access_key=key, model="55", environment="PRODUCAO", request_xml=request,
+            response=FiscalResponse(True, "100", "Autorizado", "12381", access_key=key, raw_xml=response_xml),
+            actor="admin",
+        )
+        self.service.register_event(
+            access_key="0" * 44, event_type="INUTILIZACAO", actor="admin",
+            request_xml="<inutNFe><infInut><tpAmb>1</tpAmb></infInut></inutNFe>",
+            response=FiscalResponse(True, "102", "Inutilizacao homologada", "", raw_xml="<ret><cStat>102</cStat></ret>"),
+            metadata={
+                "environment": "PRODUCAO", "model": "55", "series": 2,
+                "start_number": 82, "end_number": 84, "year": now.year,
+            },
+        )
+        output = Path(self.tmp.name) / "relatorio.csv"
+        result = self.service.export_fiscal_report_csv(
+            start_date=now.date().isoformat(), end_date=now.date().isoformat(), output_path=output,
+        )
+        self.assertEqual(result["rows"], 2)
+        with output.open(encoding="utf-8-sig", newline="") as stream:
+            rows = list(csv.DictReader(stream, delimiter=";"))
+        self.assertEqual(rows[0]["numero"], "81")
+        self.assertEqual(rows[0]["valor_bruto"], "125.00")
+        self.assertEqual(rows[0]["valor_icms"], "18.00")
+        self.assertEqual(rows[1]["status"], "INUTILIZADO")
+        self.assertEqual(rows[1]["numero"], "82-84")
 
     def test_registra_evento_e_gera_danfe_apenas_autorizada(self):
         key = "2" * 44
