@@ -2406,6 +2406,18 @@ class FiscalService:
             result = [row for row in result if str(row.get("status", "")).upper() == wanted]
         return sorted(result, key=lambda row: str(row.get("created_at", "")))
 
+    @staticmethod
+    def _xml_emission_type(xml: bytes | str) -> int:
+        raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
+        try:
+            root = etree.fromstring(
+                raw, parser=etree.XMLParser(resolve_entities=False, no_network=True)
+            )
+            value = str(root.xpath("string(//*[local-name()='ide']/*[local-name()='tpEmis'][1])"))
+            return int(value or 1)
+        except (etree.XMLSyntaxError, TypeError, ValueError):
+            return 1
+
     def enqueue_transmission(
         self,
         *,
@@ -2465,6 +2477,7 @@ class FiscalService:
             "last_error": "",
             "last_status_code": "",
             "last_message": "",
+            "contingency": self._xml_emission_type(raw_xml) != 1,
         }
         rows.append(record)
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
@@ -2476,6 +2489,7 @@ class FiscalService:
         password: str,
         limit: int = 20,
         now: datetime | None = None,
+        queue_ids: Sequence[str] | None = None,
     ) -> list[dict[str, Any]]:
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None:
@@ -2483,10 +2497,13 @@ class FiscalService:
         rows = self.list_transmission_queue()
         processed: list[dict[str, Any]] = []
         count = 0
+        selected_ids = {str(value) for value in queue_ids or () if str(value)}
         for record in rows:
             if count >= max(1, int(limit)):
                 break
             if record.get("status") not in {"PENDENTE", "ERRO"}:
+                continue
+            if selected_ids and str(record.get("id") or "") not in selected_ids:
                 continue
             try:
                 next_attempt = datetime.fromisoformat(str(record.get("next_attempt_at") or record.get("created_at")))
@@ -2702,6 +2719,40 @@ class FiscalService:
             json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True),
         )
         return dict(target)
+
+    def retry_contingency_batch(self, *, actor: str) -> dict[str, Any]:
+        """Reagenda em lote somente documentos NFC-e emitidos em contingência."""
+        rows = self.list_transmission_queue()
+        now = datetime.now(timezone.utc).isoformat()
+        selected: list[str] = []
+        for target in rows:
+            if str(target.get("model") or "") != "65":
+                continue
+            if target.get("status") in {"CONCLUIDO", "CANCELADO"}:
+                continue
+            if str(target.get("operation") or "").lower() not in {"autorizacao", "recibo"}:
+                continue
+            try:
+                original_xml = base64.b64decode(
+                    str(target.get("original_xml_b64") or target.get("xml_b64") or "")
+                )
+            except (ValueError, TypeError):
+                continue
+            is_contingency = bool(target.get("contingency")) or self._xml_emission_type(original_xml) != 1
+            if not is_contingency:
+                continue
+            target.update({
+                "contingency": True, "status": "PENDENTE", "next_attempt_at": now,
+                "contingency_batch_requested_by": str(actor or "").strip(),
+                "contingency_batch_requested_at": now, "last_error": "",
+            })
+            selected.append(str(target.get("id") or ""))
+        if selected:
+            self._set_setting(
+                self.TRANSMISSION_QUEUE_KEY,
+                json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True),
+            )
+        return {"scheduled": len(selected), "queue_ids": selected, "requested_at": now}
 
     def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
         rows = self.list_transmission_queue()

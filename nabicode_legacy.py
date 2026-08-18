@@ -10278,9 +10278,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
         transmission_status.pack(fill="x", padx=16, pady=(0, 3))
 
-        def transmit_queue(*, retry_selected=False, receipt_selected=False):
+        def transmit_queue(*, retry_selected=False, receipt_selected=False, contingency_batch=False):
             if not self._autorizar("fiscal", "configure"):
                 return
+            queue_ids = None
+            if contingency_batch:
+                batch = self.fiscal_service.retry_contingency_batch(
+                    actor=self._usuario_financeiro()
+                )
+                if not batch["scheduled"]:
+                    messagebox.showinfo(
+                        "Contingência",
+                        "Não há NFC-e de contingência pendente para retransmitir.", parent=janela,
+                    )
+                    return
+                queue_ids = batch["queue_ids"]
             row = selected() if retry_selected or receipt_selected else None
             if receipt_selected:
                 if not row or row.get("_kind") != "VENDA":
@@ -10323,7 +10335,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             task = TASK_MANAGER.submit(
                 "Transmitir documentos fiscais",
                 lambda context: self.fiscal_service.process_transmission_queue(
-                    password=password, limit=20
+                    password=password, limit=max(20, len(queue_ids or ())), queue_ids=queue_ids,
                 ),
             )
 
@@ -10549,6 +10561,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ).pack(side="left", padx=4)
         accounting_actions = ctk.CTkFrame(frame, fg_color="transparent")
         accounting_actions.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            accounting_actions, text="Retransmitir contingências",
+            command=lambda: transmit_queue(contingency_batch=True), fg_color="#8957e5",
+        ).pack(side="left", padx=4)
         ctk.CTkButton(
             accounting_actions, text="Gerar arquivos para contabilidade", command=export_accounting,
             fg_color="#2ea043",

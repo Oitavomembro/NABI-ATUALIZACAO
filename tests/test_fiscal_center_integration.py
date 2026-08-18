@@ -16,6 +16,9 @@ def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
     assert "self.fiscal_sale_service.cancel_authorized" in block
     assert 'text="Consultar recibo"' in block
     assert "self.fiscal_service.force_receipt_check" in block
+    assert 'text="Retransmitir contingências"' in block
+    assert "self.fiscal_service.retry_contingency_batch" in block
+    assert "queue_ids=queue_ids" in block
 
 
 def test_transmissao_fiscal_roda_fora_da_interface_e_nao_persiste_senha():

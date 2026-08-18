@@ -1489,6 +1489,45 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
             self.service.force_receipt_check(item["id"], actor="admin")
 
+    def test_retransmissao_em_lote_seleciona_apenas_nfce_em_contingencia(self):
+        contingency_key = "2" * 34 + "9" + "2" * 9
+        normal_key = "3" * 44
+        contingency = self.service.enqueue_transmission(
+            operation="autorizacao",
+            xml=f'<NFe><infNFe Id="NFe{contingency_key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>',
+            access_key=contingency_key, model="65", actor="caixa",
+        )
+        self.service.enqueue_transmission(
+            operation="autorizacao",
+            xml=f'<NFe><infNFe Id="NFe{normal_key}"><ide><mod>65</mod><tpEmis>1</tpEmis></ide></infNFe></NFe>',
+            access_key=normal_key, model="65", actor="caixa",
+        )
+        result = self.service.retry_contingency_batch(actor="gerente")
+        self.assertEqual(result["scheduled"], 1)
+        self.assertEqual(result["queue_ids"], [contingency["id"]])
+        queued = {row["id"]: row for row in self.service.list_transmission_queue()}
+        self.assertTrue(queued[contingency["id"]]["contingency"])
+        self.assertEqual(queued[contingency["id"]]["contingency_batch_requested_by"], "gerente")
+
+    def test_processamento_por_ids_nao_transmite_outros_pendentes(self):
+        first = self.service.enqueue_transmission(
+            operation="consulta", xml="<consSitNFe/>", actor="admin"
+        )
+        second = self.service.enqueue_transmission(
+            operation="consulta", xml="<consSitNFe><xServ>CONSULTAR</xServ></consSitNFe>", actor="admin"
+        )
+        original = self.service.transmit
+        self.service.transmit = lambda **_: FiscalResponse(True, "100", "Consulta concluída", raw_xml="<ret/>")
+        try:
+            processed = self.service.process_transmission_queue(
+                password=self.password, queue_ids=[second["id"]]
+            )
+        finally:
+            self.service.transmit = original
+        self.assertEqual([row["id"] for row in processed], [second["id"]])
+        queued = {row["id"]: row for row in self.service.list_transmission_queue()}
+        self.assertEqual(queued[first["id"]]["status"], "PENDENTE")
+
     def test_reenvio_manual_reabre_item_falhado(self):
         item = self.service.enqueue_transmission(
             operation="consulta", xml="<consSitNFe/>", actor="admin", max_attempts=1

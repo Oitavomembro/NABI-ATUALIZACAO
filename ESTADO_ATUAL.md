@@ -1019,3 +1019,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 104 testes e 10 subtestes aprovados;
 - suíte completa: 1.228 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.68 — retransmissão em lote das contingências
+
+- a Central Fiscal ganhou `Retransmitir contingências` para não exigir o reenvio nota por nota;
+- o lote identifica a contingência pelo `tpEmis` do próprio XML e considera somente NFC-e modelo 65 ainda não concluídas;
+- notas normais, documentos autorizados, cancelados e outras operações fiscais não entram no lote;
+- documentos que já possuem recibo continuam pela consulta do recibo, sem reenviar a autorização;
+- o processador aceita uma seleção explícita de IDs, garantindo que outros itens pendentes não sejam transmitidos pelo botão de contingência;
+- usuário e instante da solicitação em lote ficam registrados em cada item selecionado;
+- o processamento continua em segundo plano e o botão informa quando não existe contingência pendente;
+- validação focada: 106 testes e 10 subtestes aprovados;
+- suíte completa: 1.230 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
