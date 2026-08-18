@@ -199,6 +199,21 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertIn("nfe.sefaz.ba.gov.br", self.service.endpoint("consulta", model="55"))
         self.assertIn("nfce.svrs.rs.gov.br", self.service.endpoint("consulta", model="65"))
 
+    def test_catalogo_nacional_cobre_27_ufs_sem_liberar_perfis_nao_homologados(self):
+        profiles = self.service.state_catalog()
+        self.assertEqual(len(profiles), 27)
+        self.assertEqual({item["uf"] for item in profiles}, set(self.service.STATE_CODES))
+        self.assertEqual(self.service.state_profile("BA")["status"], "VALIDADO")
+        self.assertEqual(self.service.state_profile("SP")["nfe_authorizer"], "SP")
+        self.assertEqual(self.service.state_profile("RJ")["nfe_authorizer"], "SVRS")
+        self.assertEqual(self.service.state_profile("MA")["nfe_authorizer"], "SVAN")
+
+    def test_uf_preparada_sem_homologacao_e_bloqueada_com_mensagem_clara(self):
+        self.service.save_config({"enabled": True, "state": "SP", "environment": "HOMOLOGACAO"})
+        problems = self.service.validate_ready(operation="autorizacao", model="55")
+        self.assertTrue(any("preparada" in problem and "não homologada" in problem for problem in problems))
+        self.assertEqual(self.service.endpoint("autorizacao", model="55"), "")
+
     def test_endpoint_manual_preserva_prioridade_sobre_catalogo_oficial(self):
         custom = "https://sefaz.invalid/custom"
         self.service.save_config({

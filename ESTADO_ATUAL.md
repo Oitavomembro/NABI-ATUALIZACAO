@@ -1,5 +1,16 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — preparação nacional das 27 UFs
+
+- catálogo fiscal nacional centralizado em `services/fiscal_state_catalog.py`;
+- as 27 UFs possuem código IBGE e autorizador NF-e catalogado (próprio, SVRS ou SVAN);
+- seleção de endpoint, QR Code e consulta NFC-e deixou de depender de constantes da Bahia dentro do motor;
+- Bahia permanece como perfil validado atualmente; as demais UFs ficam preparadas e bloqueadas com mensagem explícita até homologação, evitando transmissão para destino presumido;
+- endpoints personalizados seguros continuam tendo prioridade, preservando integrações existentes;
+- validação focada: 83 testes e 10 subtestes aprovados;
+- suíte completa: 1.144 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Identificação
 
 - **Versão:** 2.5.1 DEV

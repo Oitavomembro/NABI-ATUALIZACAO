@@ -15,6 +15,8 @@ from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
+from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
+
 try:
     import requests
 except ModuleNotFoundError:  # O módulo fiscal é opcional no uso comum.
@@ -83,7 +85,7 @@ class FiscalService:
     VALID_ENVIRONMENTS = {"HOMOLOGACAO", "PRODUCAO"}
     VALID_MODELS = {"55", "65"}
     VALID_EVENTS = {"CANCELAMENTO", "CCE"}
-    STATE_CODES = {"RO":"11","AC":"12","AM":"13","RR":"14","PA":"15","AP":"16","TO":"17","MA":"21","PI":"22","CE":"23","RN":"24","PB":"25","PE":"26","AL":"27","SE":"28","BA":"29","MG":"31","ES":"32","RJ":"33","SP":"35","PR":"41","SC":"42","RS":"43","MS":"50","MT":"51","GO":"52","DF":"53"}
+    STATE_CODES = STATE_CODES
     TAX_REGIME_CODES = {
         "MEI": 4,
         "SIMPLES": 1,
@@ -102,57 +104,16 @@ class FiscalService:
         "LUCRO_REAL": "Lucro Real",
     }
     MODEL_LABELS = {"55": "NF-e — modelo 55", "65": "NFC-e — modelo 65"}
-    BAHIA_ENDPOINTS = {
-        "55": {
-            "HOMOLOGACAO": {
-                "autorizacao": "https://hnfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
-                "recibo": "https://hnfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx",
-                "inutilizacao": "https://hnfe.sefaz.ba.gov.br/webservices/NFeInutilizacao4/NFeInutilizacao4.asmx",
-                "status": "https://hnfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx",
-                "evento": "https://hnfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
-                "consulta": "https://hnfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
-                "cadastro": "https://hnfe.sefaz.ba.gov.br/webservices/CadConsultaCadastro4/CadConsultaCadastro4.asmx",
-            },
-            "PRODUCAO": {
-                "autorizacao": "https://nfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
-                "recibo": "https://nfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx",
-                "inutilizacao": "https://nfe.sefaz.ba.gov.br/webservices/NFeInutilizacao4/NFeInutilizacao4.asmx",
-                "status": "https://nfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx",
-                "evento": "https://nfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
-                "consulta": "https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
-                "cadastro": "https://nfe.sefaz.ba.gov.br/webservices/CadConsultaCadastro4/CadConsultaCadastro4.asmx",
-            },
-        },
-        "65": {
-            "HOMOLOGACAO": {
-                "autorizacao": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
-                "recibo": "https://nfce-homologacao.svrs.rs.gov.br/ws/NFeRetAutorizacao/NFeRetAutorizacao4.asmx",
-                "inutilizacao": "https://nfce-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
-                "status": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
-                "evento": "https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
-                "consulta": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
-                "cadastro": "https://nfce-homologacao.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro2.asmx",
-            },
-            "PRODUCAO": {
-                "autorizacao": "https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
-                "recibo": "https://nfce.svrs.rs.gov.br/ws/NFeRetAutorizacao/NFeRetAutorizacao4.asmx",
-                "inutilizacao": "https://nfce.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
-                "status": "https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
-                "evento": "https://nfce.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
-                "consulta": "https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
-                "cadastro": "https://nfce.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro2.asmx",
-            },
-        },
-    }
-    BAHIA_NFCE_QR_URLS = {
-        "HOMOLOGACAO": "http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx",
-        "PRODUCAO": "https://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx",
-    }
-    BAHIA_NFCE_KEY_URLS = {
-        "HOMOLOGACAO": "http://hinternet.sefaz.ba.gov.br/nfce/consulta",
-        "PRODUCAO": "https://www.sefaz.ba.gov.br/nfce/consulta",
-    }
     DS_NS = "http://www.w3.org/2000/09/xmldsig#"
+
+    @staticmethod
+    def state_profile(uf: str) -> dict[str, Any]:
+        """Retorna o perfil nacional sem liberar UFs ainda não homologadas."""
+        return dict(state_profile(uf))
+
+    @staticmethod
+    def state_catalog() -> list[dict[str, Any]]:
+        return [dict(FISCAL_STATE_PROFILES[uf]) for uf in sorted(FISCAL_STATE_PROFILES)]
 
     def __init__(
         self,
@@ -453,6 +414,11 @@ class FiscalService:
         state = str(config.get("state", "")).upper()
         if state not in self.STATE_CODES:
             problems.append("UF do emitente não configurada ou inválida.")
+        elif state_profile(state)["status"] != "VALIDADO":
+            problems.append(
+                f"UF {state} preparada, mas ainda não homologada no NabiCode. "
+                "Valide o perfil estadual antes de emitir documentos."
+            )
         tax_regime = str(config.get("tax_regime", "")).upper()
         if tax_regime not in self.TAX_REGIME_CODES:
             problems.append("Regime tributário não configurado ou inválido.")
@@ -515,9 +481,12 @@ class FiscalService:
         if custom:
             return self._validate_endpoint_url(str(custom).strip())
         state = str(config.get("state") or "").upper()
-        if state == "BA":
-            return str(self.BAHIA_ENDPOINTS.get(model, {}).get(environment, {}).get(operation, "")).strip()
-        return ""
+        if state not in self.STATE_CODES:
+            return ""
+        profile = state_profile(state)
+        return str(
+            profile.get("endpoints", {}).get(model, {}).get(environment, {}).get(operation, "")
+        ).strip()
 
     @staticmethod
     def _validate_endpoint_url(value: str) -> str:
@@ -1589,7 +1558,13 @@ class FiscalService:
                 "|".join(parts).encode("utf-8"), padding.PKCS1v15(), hashes.SHA1()
             )
             parts.append(base64.b64encode(signature).decode("ascii"))
-        return f"{self.BAHIA_NFCE_QR_URLS[env_name]}?p={'|'.join(parts)}"
+        state_code = key[:2]
+        uf = next((name for name, code in self.STATE_CODES.items() if code == state_code), "")
+        profile = state_profile(uf)
+        base_url = str(profile.get("nfce_urls", {}).get(env_name, {}).get("qr_code", ""))
+        if not base_url:
+            raise ValueError(f"QR Code da NFC-e ainda não homologado para a UF {uf}.")
+        return f"{base_url}?p={'|'.join(parts)}"
 
     def _set_nfce_supplement(self, root: Any, *, qr_code: str, environment: str) -> None:
         ns = "http://www.portalfiscal.inf.br/nfe"
@@ -1599,7 +1574,18 @@ class FiscalService:
         qr_node = etree.SubElement(supplement, etree.QName(ns, "qrCode"))
         qr_node.text = qr_code
         key_node = etree.SubElement(supplement, etree.QName(ns, "urlChave"))
-        key_node.text = self.BAHIA_NFCE_KEY_URLS[str(environment).strip().upper()]
+        key = str(root.xpath("string(./*[local-name()='infNFe'][1]/@Id)")).removeprefix("NFe")
+        state_code = key[:2]
+        uf = next((name for name, code in self.STATE_CODES.items() if code == state_code), "")
+        profile = state_profile(uf)
+        key_url = str(
+            profile.get("nfce_urls", {})
+            .get(str(environment).strip().upper(), {})
+            .get("consulta_chave", "")
+        )
+        if not key_url:
+            raise ValueError(f"Consulta da NFC-e ainda não homologada para a UF {uf}.")
+        key_node.text = key_url
 
     def add_nfce_qr_code_v3(
         self, xml: bytes | str, *, pfx_path: str | Path = "", password: str = ""
