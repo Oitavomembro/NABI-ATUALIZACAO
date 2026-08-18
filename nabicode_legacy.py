@@ -9237,9 +9237,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         enabled = tk.BooleanVar(value=bool(config.get("enabled")))
         ctk.CTkCheckBox(content, text="Habilitar recursos fiscais oficiais", variable=enabled).pack(anchor="w", padx=16, pady=6)
         fields = {}
-        def field(label, value=""):
-            ctk.CTkLabel(content, text=label, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
-            entry = ctk.CTkEntry(content, height=34)
+        def field(label, value="", parent=None):
+            container = parent or content
+            ctk.CTkLabel(container, text=label, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
+            entry = ctk.CTkEntry(container, height=34)
             entry.pack(fill="x", padx=16)
             entry.insert(0, str(value or ""))
             return entry
@@ -9285,14 +9286,98 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         environment = ctk.CTkComboBox(content, values=["HOMOLOGACAO", "PRODUCAO"], state="readonly")
         environment.pack(fill="x", padx=16); environment.set(config.get("environment") or "HOMOLOGACAO")
 
-        certificate = field("Certificado A1 (.pfx/.p12)", config.get("certificate_path"))
-        password = field("Senha do certificado (não será salva)", "")
+        certificado_card = ctk.CTkFrame(content, fg_color="#0d1117", corner_radius=10)
+        certificado_card.pack(fill="x", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            certificado_card,
+            text="Certificado digital A1",
+            font=ctk.CTkFont(size=15, weight="bold"),
+            text_color=self.cor_acento,
+        ).pack(anchor="w", padx=12, pady=(10, 2))
+        ctk.CTkLabel(
+            certificado_card,
+            text=(
+                "Selecione o arquivo recebido da certificadora (.pfx ou .p12). "
+                "A senha é usada somente para validar e nunca é salva pelo NabiCode."
+            ),
+            text_color="#c9d1d9",
+            wraplength=580,
+            justify="left",
+        ).pack(anchor="w", padx=12, pady=(0, 8))
+
+        certificate = field(
+            "Arquivo do certificado A1 (.pfx/.p12)",
+            config.get("certificate_path"),
+            parent=certificado_card,
+        )
+        password = field(
+            "Senha do certificado A1 (não será salva)", "", parent=certificado_card
+        )
         password.configure(show="*")
+        certificate_status = ctk.CTkLabel(
+            certificado_card,
+            text="Selecione o arquivo e informe a senha para verificar.",
+            text_color="#8b949e",
+            wraplength=580,
+            justify="left",
+        )
+        certificate_status.pack(anchor="w", padx=12, pady=(4, 10))
         def choose_certificate():
             path = filedialog.askopenfilename(parent=janela, title="Selecionar certificado A1", filetypes=[("Certificado A1", "*.pfx *.p12"), ("Todos", "*.*")])
             if path:
                 certificate.delete(0, "end"); certificate.insert(0, path)
-        ctk.CTkButton(content, text="Selecionar certificado", command=choose_certificate).pack(anchor="w", padx=16, pady=6)
+                certificate_status.configure(
+                    text="Arquivo selecionado. Informe a senha e clique em Verificar certificado.",
+                    text_color="#d29922",
+                )
+
+        def verify_certificate_now():
+            path = certificate.get().strip()
+            secret = password.get()
+            if not path:
+                certificate_status.configure(
+                    text="Selecione primeiro um arquivo .pfx ou .p12.", text_color="#f85149"
+                )
+                return
+            if not secret:
+                certificate_status.configure(
+                    text="Informe a senha do certificado para fazer a verificação.",
+                    text_color="#f85149",
+                )
+                password.focus_set()
+                return
+            try:
+                info = self.fiscal_service.inspect_certificate(path, secret)
+                if info.expired:
+                    certificate_status.configure(
+                        text=f"Certificado fora da validade. Validade informada: {info.valid_until}.",
+                        text_color="#f85149",
+                    )
+                    return
+                certificate_status.configure(
+                    text=(
+                        f"Certificado válido. Documento: {info.document or 'não identificado'} | "
+                        f"Validade: {info.valid_until}."
+                    ),
+                    text_color="#3fb950",
+                )
+            except Exception as exc:
+                certificate_status.configure(text=str(exc), text_color="#f85149")
+
+        certificate_actions = ctk.CTkFrame(certificado_card, fg_color="transparent")
+        certificate_actions.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            certificate_actions,
+            text="1. Selecionar arquivo A1",
+            command=choose_certificate,
+            fg_color="#1f6feb",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        ctk.CTkButton(
+            certificate_actions,
+            text="2. Verificar certificado",
+            command=verify_certificate_now,
+            fg_color="#8957e5",
+        ).pack(side="left", fill="x", expand=True, padx=(4, 0))
 
         endpoints = config.get("endpoints") or {}
         for ambiente, titulo in (("HOMOLOGACAO", "homologação"), ("PRODUCAO", "produção")):

@@ -654,3 +654,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - configurações inseguras gravadas por versões anteriores também são bloqueadas quando o endpoint é resolvido, antes do uso do certificado A1;
 - domínios reservados `.invalid` permanecem aceitos exclusivamente como destinos inertes dos testes automatizados;
 - 62 testes fiscais e `compileall` aprovados com `NABICODE_PROFILE=TESTE`, sem conexão externa.
+
+## Checkpoint 42.46 — instalação guiada do certificado A1
+
+- a configuração fiscal ganhou um cartão único para arquivo, senha, ações e resultado da validação do certificado A1;
+- fluxo orientado em duas etapas: selecionar `.pfx/.p12` e verificar imediatamente antes de salvar;
+- resultado informa documento identificado e validade, distinguindo senha ausente, arquivo inválido e certificado vencido;
+- senha permanece somente em memória e nunca é persistida;
+- o cartão reutiliza `FiscalService.inspect_certificate()`, sem criar instalador, cópia ou regra paralela de certificado;
+- 72 testes focados e `compileall` aprovados com `NABICODE_PROFILE=TESTE`.

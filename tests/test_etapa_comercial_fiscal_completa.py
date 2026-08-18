@@ -28,5 +28,11 @@ class EtapaComercialFiscalCompletaTests(unittest.TestCase):
         self.assertIn('default_model', SOURCE)
         self.assertNotIn('fields["tax_regime"] = field(', SOURCE)
 
+    def test_certificado_a1_tem_selecao_e_validacao_guiadas(self):
+        self.assertIn("1. Selecionar arquivo A1", SOURCE)
+        self.assertIn("2. Verificar certificado", SOURCE)
+        self.assertIn("self.fiscal_service.inspect_certificate(path, secret)", SOURCE)
+        self.assertIn("A senha é usada somente para validar e nunca é salva", SOURCE)
+
 if __name__ == "__main__":
     unittest.main()
