@@ -443,7 +443,7 @@ class FiscalService:
             problems.append("Modelo fiscal deve ser 55 (NF-e) ou 65 (NFC-e).")
         elif model not in {str(item) for item in config.get("enabled_models", self.VALID_MODELS)}:
             problems.append(f"O modelo fiscal {model} não está habilitado para esta empresa.")
-        if not self._is_valid_cnpj_format(config.get("cnpj")):
+        if not self._is_valid_cnpj(config.get("cnpj")):
             problems.append("CNPJ do emitente não configurado.")
         state = str(config.get("state", "")).upper()
         if state not in self.STATE_CODES:
@@ -659,7 +659,7 @@ class FiscalService:
         model = str(inf.xpath("string(.//*[local-name()='ide']/*[local-name()='mod'])") or "").zfill(2)
         environment_code = str(protocol.xpath("string(./*[local-name()='tpAmb'])") or "").strip()
         environment = "PRODUCAO" if environment_code == "1" else "HOMOLOGACAO"
-        if len(access_key) != 44 or self.calculate_access_key_digit(access_key[:43]) != access_key[-1]:
+        if not self._is_valid_access_key(access_key):
             raise ValueError("Chave de acesso do XML autorizado é inválida.")
         if protocol_key != access_key:
             raise ValueError("O protocolo pertence a outra chave de acesso.")
@@ -848,8 +848,8 @@ class FiscalService:
         if model not in self.VALID_MODELS:
             problems.append("Modelo fiscal deve ser 55 ou 65.")
         cnpj = self._normalize_cnpj(issuer.get("cnpj"))
-        if not self._is_valid_cnpj_format(cnpj):
-            problems.append("CNPJ do emitente deve possuir 14 caracteres válidos.")
+        if not self._is_valid_cnpj(cnpj):
+            problems.append("CNPJ do emitente é inválido.")
         state = str(issuer.get("state", "")).upper()
         if state not in self.STATE_CODES:
             problems.append("UF do emitente é inválida.")
@@ -1164,8 +1164,8 @@ class FiscalService:
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal inválido.")
         normalized_cnpj = self._normalize_cnpj(cnpj)
-        if not self._is_valid_cnpj_format(normalized_cnpj):
-            raise ValueError("CNPJ deve possuir 14 caracteres válidos para gerar a chave de acesso.")
+        if not self._is_valid_cnpj(normalized_cnpj):
+            raise ValueError("CNPJ inválido para gerar a chave de acesso.")
         state = self._digits(state_code).zfill(2)
         if len(state) != 2:
             raise ValueError("Código numérico da UF inválido.")
@@ -1536,7 +1536,7 @@ class FiscalService:
 
     def build_inutilization_xml(self, *, state_code: str, year: int, cnpj: str, model: str, series: int, start_number: int, end_number: int, justification: str, environment: str="HOMOLOGACAO") -> tuple[bytes,str]:
         cnpj=self._normalize_cnpj(cnpj); model=str(model).zfill(2)
-        if len(cnpj)!=14 or model not in self.VALID_MODELS: raise ValueError("Dados da inutilização inválidos.")
+        if not self._is_valid_cnpj(cnpj) or model not in self.VALID_MODELS: raise ValueError("Dados da inutilização inválidos.")
         if int(start_number)>int(end_number): raise ValueError("Faixa de inutilização inválida.")
         if len(str(justification).strip())<15: raise ValueError("Justificativa deve possuir ao menos 15 caracteres.")
         identifier=f"ID{str(state_code).zfill(2)}{int(year)%100:02d}{cnpj}{model}{int(series):03d}{int(start_number):09d}{int(end_number):09d}"
@@ -2262,11 +2262,36 @@ class FiscalService:
         return bool(re.fullmatch(r"[A-Z0-9]{12}[0-9]{2}", normalized))
 
     @staticmethod
+    def _is_valid_cnpj(value: Any) -> bool:
+        if not FiscalService._is_valid_cnpj_format(value):
+            return False
+        normalized = FiscalService._normalize_cnpj(value)
+
+        def digit(text: str, weights: Sequence[int]) -> int:
+            total = sum((ord(char) - 48) * weight for char, weight in zip(text, weights))
+            remainder = total % 11
+            return 0 if remainder < 2 else 11 - remainder
+
+        first = digit(normalized[:12], (5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+        second = digit(normalized[:12] + str(first), (6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2))
+        return normalized[-2:] == f"{first}{second}"
+
+    @staticmethod
     def _normalize_access_key(value: Any) -> str:
         normalized = re.sub(r"[\s.-]+", "", str(value or "").upper())
         if normalized and not re.fullmatch(r"[A-Z0-9]+", normalized):
             raise ValueError("Chave de acesso contém caracteres inválidos.")
         return normalized
+
+    @staticmethod
+    def _is_valid_access_key(value: Any) -> bool:
+        try:
+            normalized = FiscalService._normalize_access_key(value)
+        except ValueError:
+            return False
+        if not re.fullmatch(r"[0-9]{6}[A-Z0-9]{12}[0-9]{26}", normalized):
+            return False
+        return FiscalService.calculate_access_key_digit(normalized[:43]) == normalized[-1]
 
     @staticmethod
     def _normalize_tax_document(value: Any) -> str:

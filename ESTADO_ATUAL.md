@@ -684,3 +684,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o exemplo oficial `12.ABC.345/01DE-35` foi coberto por regressão, incluindo persistência e geração de chave com 44 caracteres;
 - 65 testes do serviço fiscal aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum endpoint, certificado real, banco real, interface ou impressora foi utilizado.
+
+## Checkpoint 42.49 — dígitos oficiais do CNPJ alfanumérico
+
+- validação do CNPJ passou a calcular os dois dígitos verificadores pelo módulo 11 e pelo valor oficial de cada caractere (`ASCII - 48`);
+- o exemplo oficial `12.ABC.345/01DE-35` é aceito e a variante com dígito final incorreto é recusada;
+- chave fiscal ganhou validação estrutural compatível com o schema oficial: seis dígitos, doze posições alfanuméricas e vinte e seis dígitos;
+- perfil do emitente, geração de chave, XML autorizado e inutilização rejeitam identificadores inconsistentes antes da transmissão;
+- 66 testes do serviço fiscal aprovados com `NABICODE_PROFILE=TESTE`.

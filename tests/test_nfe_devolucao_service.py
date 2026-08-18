@@ -87,7 +87,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
                 NFeItem("B1", "Produto B", 2, "CX", 20.0, ncm="22222222", cfop="5102"),
             ),
             destinatario="Cliente Teste",
-            destinatario_documento="98765432000188",
+            destinatario_documento="98765432000198",
             data_emissao="2026-08-02T10:00:00-03:00",
             serie="1",
             modelo="55",
@@ -247,7 +247,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         documento = NFeDocument(
             chave="123", numero="999", fornecedor="Empresa", cnpj="12345678000199",
             itens=(NFeItem("C1", "Produto C", 1, "UN", 10.0, ncm="33333333", cfop="5102"),),
-            destinatario="Cliente", destinatario_documento="98765432000188",
+            destinatario="Cliente", destinatario_documento="98765432000198",
         )
         self.service.registrar_documento(documento)
         _, itens = self.service.localizar_nota("999")
@@ -269,7 +269,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             devolucao_id,
             fiscal_service=fiscal,
             issuer={
-                "cnpj": "98765432000188", "name": "CLIENTE TESTE", "state": "BA",
+                "cnpj": "98765432000198", "name": "CLIENTE TESTE", "state": "BA",
                 "city_code": "2927408", "state_registration": "123456789",
                 "tax_regime_code": 1, "street": "RUA A", "number": "1",
                 "district": "CENTRO", "city": "SALVADOR", "zip_code": "40000000",
@@ -298,7 +298,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         xml, _ = self.service.preparar_documento_fiscal(
             devolucao_id, fiscal_service=fiscal,
             issuer={
-                "cnpj": "98765432000188", "name": "CLIENTE TESTE", "state": "BA",
+                "cnpj": "98765432000198", "name": "CLIENTE TESTE", "state": "BA",
                 "city_code": "2927408", "state_registration": "123456789",
                 "tax_regime_code": 3, "street": "RUA A", "number": "1",
                 "district": "CENTRO", "city": "SALVADOR", "zip_code": "40000000",
@@ -326,7 +326,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         )
         fiscal = FiscalService(lambda: sqlite3.connect(self.db_path), storage_dir=Path(self.tmp.name) / "fiscal")
         issuer = {
-            "cnpj": "98765432000188", "name": "CLIENTE TESTE", "state": "BA",
+            "cnpj": "98765432000198", "name": "CLIENTE TESTE", "state": "BA",
             "city_code": "2927408", "state_registration": "123", "tax_regime_code": 1,
         }
         document = {"state_code": "29", "series": 1, "number": 11, "numeric_code": "12345678"}
@@ -417,7 +417,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         self_dir = self.tmp.name
         state = self.service.emitir_devolucao_oficial(
-            devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000188"},
+            devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
             password="senha", actor="admin",
         )
@@ -440,7 +440,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
                 return response, {}
 
         state = self.service.emitir_devolucao_oficial(
-            devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000188"},
+            devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
             password="senha", actor="admin",
         )
@@ -487,7 +487,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "cancelada"):
             self.service.emitir_devolucao_oficial(
-                devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000188"},
+                devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
                 password="senha", actor="admin",
             )
@@ -507,7 +507,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
                 return response, {}
 
         state = self.service.emitir_devolucao_oficial(
-            devolucao_id, fiscal_service=FiscalRejeita(), issuer={"cnpj": "98765432000188"},
+                devolucao_id, fiscal_service=FiscalRejeita(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
             password="senha", actor="admin",
         )
@@ -523,7 +523,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "indisponível"):
             self.service.emitir_devolucao_oficial(
-                devolucao_id, fiscal_service=FiscalFalha(), issuer={"cnpj": "98765432000188"},
+                devolucao_id, fiscal_service=FiscalFalha(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
                 password="senha", actor="admin",
             )
@@ -552,7 +552,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         fiscal = FiscalAutoriza()
         state = self.service.emitir_devolucao_oficial(
-            devolucao_id, fiscal_service=fiscal, issuer={"cnpj": "98765432000188"},
+            devolucao_id, fiscal_service=fiscal, issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
             password="senha", actor="admin",
         )
@@ -590,7 +590,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         with self.assertRaisesRegex(RuntimeError, "baixa de estoque falhou"):
             self.service.emitir_devolucao_oficial(
-                devolucao_id, fiscal_service=FiscalAutoriza(), issuer={"cnpj": "98765432000188"},
+                devolucao_id, fiscal_service=FiscalAutoriza(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
                 password="senha", actor="admin",
             )

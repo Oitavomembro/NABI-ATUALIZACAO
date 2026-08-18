@@ -93,6 +93,10 @@ class FiscalServiceTests(unittest.TestCase):
         config = self.service.save_config({"cnpj": "12.ABC.345/01DE-35"})
         self.assertEqual(config["cnpj"], "12ABC34501DE35")
         self.assertTrue(self.service._is_valid_cnpj_format(config["cnpj"]))
+        self.assertTrue(self.service._is_valid_cnpj(config["cnpj"]))
+
+    def test_cnpj_alfanumerico_com_digito_incorreto_e_rejeitado(self):
+        self.assertFalse(self.service._is_valid_cnpj("12.ABC.345/01DE-34"))
 
     def test_chave_de_acesso_preserva_cnpj_alfanumerico(self):
         key = self.service.build_access_key(
@@ -107,6 +111,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(len(key), 44)
         self.assertEqual(key[6:20], "12ABC34501DE35")
         self.assertEqual(key[-1], self.service.calculate_access_key_digit(key[:43]))
+        self.assertTrue(self.service._is_valid_access_key(key))
 
     def test_normalizacao_nao_remove_letras_de_chave_fiscal(self):
         key = "29260812ABC34501DE35550010000000011123456789"
