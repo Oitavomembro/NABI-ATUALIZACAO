@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import base64
+import json
 import sqlite3
 import tempfile
 import unittest
+import zipfile
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -334,6 +336,61 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(etree.fromstring(inut_xml).xpath("string(//*[local-name()='nNFFin'])"), "12")
         query = etree.fromstring(self.service.build_query_xml(access_key=key))
         self.assertEqual(query.xpath("string(//*[local-name()='xServ'])"), "CONSULTAR")
+
+    def test_exportacao_contabil_separa_xmls_validos_e_eventos_por_periodo(self):
+        now = datetime.now().astimezone()
+        key = self.service.build_access_key(
+            state_code="29", issued_at=now, cnpj="12345678000195", model="55",
+            series=1, number=77, emission_type=1, numeric_code="76543210",
+        )
+        request = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00"/></NFe>'
+        response_xml = f'<ret><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe><nProt>12345</nProt></infProt></protNFe></ret>'
+        self.service.store_document(
+            access_key=key, model="55", environment="PRODUCAO", request_xml=request,
+            response=FiscalResponse(True, "100", "Autorizado", "12345", access_key=key, raw_xml=response_xml),
+            actor="admin",
+        )
+        event_xml, _ = self.service.build_event_xml(
+            event_type="CCE", access_key=key, sequence=1, actor_document="12345678000195",
+            correction="Corrigir informação complementar para teste.", environment="PRODUCAO",
+        )
+        self.service.register_event(
+            access_key=key, event_type="CCE", request_xml=event_xml, actor="admin",
+            response=FiscalResponse(True, "135", "Evento registrado", "EV123", raw_xml="<ret><cStat>135</cStat><nProt>EV123</nProt></ret>"),
+        )
+        output = Path(self.tmp.name) / "contabilidade.zip"
+        result = self.service.export_accounting_package(
+            start_date=now.date().isoformat(), end_date=now.date().isoformat(), output_path=output,
+        )
+        self.assertEqual((result["documents"], result["events"]), (1, 1))
+        with zipfile.ZipFile(output) as archive:
+            names = archive.namelist()
+            self.assertIn(f"producao/NFe/NFe{key}.xml", names)
+            self.assertTrue(any(name.endswith("_CCE_envio.xml") for name in names))
+            manifest = json.loads(archive.read("manifesto.json"))
+        self.assertEqual(manifest["documents"][0]["access_key"], key)
+        self.assertFalse(manifest["includes_homologation"])
+
+    def test_exportacao_contabil_exclui_homologacao_por_padrao(self):
+        now = datetime.now().astimezone()
+        key = self.service.build_access_key(
+            state_code="29", issued_at=now, cnpj="12345678000195", model="65",
+            series=1, number=78, emission_type=1, numeric_code="76543211",
+        )
+        request = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00"/></NFe>'
+        response_xml = f'<ret><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe><nProt>12346</nProt></infProt></protNFe></ret>'
+        self.service.store_document(
+            access_key=key, model="65", environment="HOMOLOGACAO", request_xml=request,
+            response=FiscalResponse(True, "100", "Autorizado", "12346", access_key=key, raw_xml=response_xml),
+            actor="admin",
+        )
+        output = Path(self.tmp.name) / "somente_producao.zip"
+        result = self.service.export_accounting_package(
+            start_date=now.date().isoformat(), end_date=now.date().isoformat(), output_path=output,
+        )
+        self.assertEqual(result["documents"], 0)
+        with zipfile.ZipFile(output) as archive:
+            self.assertEqual(archive.namelist(), ["manifesto.json"])
 
     def test_registra_evento_e_gera_danfe_apenas_autorizada(self):
         key = "2" * 44

@@ -602,3 +602,19 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - NF-e modelo 55 permanece sem o grupo suplementar exclusivo da NFC-e;
 - 57 testes fiscais e 5 subtestes aprovados, incluindo verificação criptográfica da assinatura com certificado temporário;
 - `compileall` e `git diff --check` aprovados; nenhuma comunicação com SEFAZ, banco real, certificado real ou impressora foi utilizada.
+
+## Checkpoint 42.41 — documentos fiscais, contabilidade e devolução assistida
+
+- confirmada a estrutura fiscal oficial em `AppData/Roaming/NabiCode/fiscal`, separada por ambiente, modelo e chave de acesso;
+- a Central fiscal passou a mostrar a pasta física, buscar por chave, protocolo, status, modelo ou ambiente e abrir os arquivos pelo abridor isolado;
+- `Documentos fiscais` tornou-se uma ação direta da pesquisa global, preservando a permissão fiscal de consulta;
+- exportação por período gera ZIP atômico para a contabilidade com XML processado autorizado, eventos aceitos e manifesto SHA-256;
+- documentos de homologação ficam excluídos por padrão e só entram mediante escolha explícita;
+- arquivos e eventos são revalidados contra os hashes persistidos antes de entrar no pacote;
+- a devolução reutiliza chave, participantes, produtos, quantidades, valores, NCM, CEST e tributação do XML original;
+- CFOP de devolução passa a ser sugerido por item a partir do CFOP e ICMS importados, cobrindo operações internas, interestaduais e substituição tributária;
+- removida a pergunta repetitiva de CFOP produto por produto; o usuário escolhe itens/quantidades e confirma um resumo único antes da transmissão;
+- arquitetura comparada com os projetos abertos NFePHP/SPED-NFe e PyNFe, sem incorporar código ou dependência licenciada de terceiros;
+- 101 testes focados e 5 subtestes aprovados; suíte completa com 1.125 testes e 27 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- somente bancos, certificados e arquivos temporários de teste foram utilizados.

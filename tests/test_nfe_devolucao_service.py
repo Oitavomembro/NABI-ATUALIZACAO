@@ -103,6 +103,24 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         self.assertEqual(nota["chave"], "1" * 44)
         self.assertEqual([item.quantidade_disponivel for item in itens], [10.0, 2.0])
 
+    def test_sugere_cfop_devolucao_pelo_xml_sem_perguntar_item_a_item(self):
+        internal = self.service.sugerir_cfop_devolucao("5102")
+        interstate = self.service.sugerir_cfop_devolucao("6102")
+        substituted = self.service.sugerir_cfop_devolucao("5405", csosn="500")
+        self.assertEqual((internal["suggested"], internal["confidence"]), ("5202", "ALTA"))
+        self.assertEqual(interstate["suggested"], "6202")
+        self.assertEqual(substituted["suggested"], "5411")
+        self.assertIn("5410", substituted["candidates"])
+
+    def test_cfop_desconhecido_oferece_opcoes_e_invalido_exige_revisao(self):
+        analysis = self.service.sugerir_cfop_devolucao("5949")
+        self.assertEqual(analysis["suggested"], "5202")
+        self.assertEqual(analysis["confidence"], "MEDIA")
+        self.assertIn("5553", analysis["candidates"])
+        invalid = self.service.sugerir_cfop_devolucao("")
+        self.assertEqual(invalid["suggested"], "")
+        self.assertEqual(invalid["confidence"], "BAIXA")
+
     def test_cria_devolucao_parcial(self):
         _, itens = self.service.localizar_nota("123")
         devolucao_id = self.service.criar_rascunho(

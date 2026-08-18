@@ -33,10 +33,46 @@ class NFeDevolucaoService:
     """Monta, valida e exporta rascunhos de NF-e de devolução sem transmitir à SEFAZ."""
 
     XML_NAMESPACE = "urn:nabicode:nfe-devolucao:rascunho:v1"
+    _RETURN_CFOP_BY_ORIGINAL = {
+        "5101": "5201", "6101": "6201", "1101": "5201", "2101": "6201",
+        "5102": "5202", "6102": "6202", "1102": "5202", "2102": "6202",
+        "5401": "5410", "6401": "6410", "1401": "5410", "2401": "6410",
+        "5402": "5410", "6402": "6410", "1402": "5410", "2402": "6410",
+        "5403": "5411", "6403": "6411", "1403": "5411", "2403": "6411",
+        "5404": "5411", "6404": "6411", "1404": "5411", "2404": "6411",
+        "5405": "5411", "6405": "6411", "1405": "5411", "2405": "6411",
+    }
 
     def __init__(self, repository: NFeDevolucaoRepository, xml_service: NFeXMLService | None = None) -> None:
         self.repository = repository
         self.xml_service = xml_service or NFeXMLService()
+
+    @classmethod
+    def sugerir_cfop_devolucao(
+        cls, cfop_original: str, *, cst_icms: str = "", csosn: str = ""
+    ) -> dict[str, Any]:
+        """Analisa o CFOP importado e sugere opções; a confirmação continua humana."""
+        original = "".join(ch for ch in str(cfop_original or "") if ch.isdigit())
+        if len(original) != 4:
+            return {"suggested": "", "candidates": [], "confidence": "BAIXA", "reason": "CFOP original ausente ou inválido."}
+        relation_prefix = "6" if original[0] in {"2", "6"} else "5" if original[0] in {"1", "5"} else ""
+        if not relation_prefix:
+            return {"suggested": "", "candidates": [], "confidence": "BAIXA", "reason": "Operação exterior ou relação territorial não suportada automaticamente."}
+        suggested = cls._RETURN_CFOP_BY_ORIGINAL.get(original, "")
+        st = str(csosn or "").zfill(3) == "500" or str(cst_icms or "").zfill(2) in {"10", "30", "60", "70"} or original[1:2] == "4"
+        if suggested:
+            reason = "Mercadoria com substituição tributária identificada no XML." if st else "Natureza da venda original identificada pelo CFOP importado."
+            confidence = "ALTA"
+        else:
+            suggested = f"{relation_prefix}411" if st else f"{relation_prefix}202"
+            reason = "Sugestão conservadora baseada na tributação e na relação interna/interestadual; confirme a finalidade da compra."
+            confidence = "MEDIA"
+        candidates = [suggested]
+        for suffix in (("410", "411") if st else ("201", "202", "553", "556")):
+            option = f"{relation_prefix}{suffix}"
+            if option not in candidates:
+                candidates.append(option)
+        return {"suggested": suggested, "candidates": candidates, "confidence": confidence, "reason": reason}
 
     def registrar_xml_origem(self, caminho: str | Path) -> int:
         documento = self.xml_service.ler(caminho)

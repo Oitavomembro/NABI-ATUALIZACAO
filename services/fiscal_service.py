@@ -5,6 +5,7 @@ import hashlib
 import json
 import os
 import tempfile
+import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -966,6 +967,116 @@ class FiscalService:
             ok = ok and valid
         return {"access_key": key, "environment": record.get("environment"), "valid": ok, "checks": checks}
 
+    def export_accounting_package(
+        self, *, start_date: str | datetime, end_date: str | datetime,
+        output_path: str | Path, include_homologation: bool = False,
+    ) -> dict[str, Any]:
+        """Exporta XMLs autorizados e eventos aceitos para a contabilidade."""
+        def as_date(value: str | datetime):
+            return value.date() if isinstance(value, datetime) else datetime.fromisoformat(str(value).strip()).date()
+
+        start, end = as_date(start_date), as_date(end_date)
+        if start > end:
+            raise ValueError("A data inicial não pode ser posterior à data final.")
+        destination = Path(output_path)
+        if destination.suffix.lower() != ".zip":
+            destination = destination.with_suffix(".zip")
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        documents: list[dict[str, Any]] = []
+        for row in self.list_documents():
+            if str(row.get("status") or "").upper() != "AUTORIZADO":
+                continue
+            environment = str(row.get("environment") or "").upper()
+            if environment != "PRODUCAO" and not include_homologation:
+                continue
+            try:
+                created = datetime.fromisoformat(str(row.get("created_at") or "")).date()
+            except ValueError:
+                continue
+            if not start <= created <= end:
+                continue
+            integrity = self.verify_document_integrity(
+                access_key=str(row.get("access_key") or ""), environment=environment,
+            )
+            if not integrity["valid"] or not str(row.get("processed_path") or ""):
+                raise ValueError(f"XML fiscal {row.get('access_key', '')} falhou na verificação de integridade.")
+            documents.append(dict(row))
+
+        document_environment = {
+            str(row.get("access_key") or ""): str(row.get("environment") or "").upper()
+            for row in self.list_documents()
+            if str(row.get("status") or "").upper() == "AUTORIZADO"
+        }
+        events: list[dict[str, Any]] = []
+        for row in self.list_events():
+            key = str(row.get("access_key") or "")
+            environment = str(row.get("environment") or document_environment.get(key, "")).upper()
+            if str(row.get("status_code") or "") not in self.EVENT_ACCEPTED_STATUS:
+                continue
+            if environment != "PRODUCAO" and not include_homologation:
+                continue
+            try:
+                created = datetime.fromisoformat(str(row.get("created_at") or "")).date()
+            except ValueError:
+                continue
+            if start <= created <= end:
+                events.append(dict(row))
+        manifest: dict[str, Any] = {
+            "product": "NabiCode", "purpose": "Pacote fiscal para contabilidade",
+            "period": {"start": start.isoformat(), "end": end.isoformat()},
+            "includes_homologation": bool(include_homologation),
+            "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+            "documents": [], "events": [],
+        }
+        temp_path: Path | None = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                prefix=f".{destination.stem}_", suffix=".tmp", dir=destination.parent, delete=False
+            ) as temporary:
+                temp_path = Path(temporary.name)
+            with zipfile.ZipFile(temp_path, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for row in documents:
+                    key, model = str(row["access_key"]), str(row["model"])
+                    label = "NFCe" if model == "65" else "NFe"
+                    name = f"{str(row['environment']).lower()}/{label}/{label}{key}.xml"
+                    data = Path(str(row["processed_path"])).read_bytes()
+                    archive.writestr(name, data)
+                    manifest["documents"].append({
+                        "access_key": key, "model": model, "environment": row["environment"],
+                        "protocol": row.get("protocol", ""), "created_at": row.get("created_at", ""),
+                        "file": name, "sha256": hashlib.sha256(data).hexdigest(),
+                    })
+                for index, row in enumerate(events, 1):
+                    key = str(row["access_key"])
+                    kind = str(row.get("event_type") or "EVENTO").upper()
+                    base = f"eventos/{key}/{index:03d}_{kind}"
+                    exported: list[str] = []
+                    for suffix, field in (("envio", "request_path"), ("retorno", "response_path")):
+                        path = Path(str(row.get(field) or ""))
+                        if path.is_file():
+                            data = path.read_bytes()
+                            expected = str(row.get(f"{suffix.replace('envio', 'request').replace('retorno', 'response')}_sha256") or "").lower()
+                            if not expected or hashlib.sha256(data).hexdigest() != expected:
+                                raise ValueError(f"Evento fiscal {kind} da chave {key} falhou na verificação de integridade.")
+                            name = f"{base}_{suffix}.xml"
+                            archive.writestr(name, data)
+                            exported.append(name)
+                    manifest["events"].append({
+                        "access_key": key, "type": kind, "protocol": row.get("protocol", ""),
+                        "status_code": row.get("status_code", ""), "created_at": row.get("created_at", ""),
+                        "files": exported,
+                    })
+                archive.writestr("manifesto.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
+            os.replace(temp_path, destination)
+            temp_path = None
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+        return {
+            "path": str(destination), "documents": len(documents), "events": len(events),
+            "period_start": start.isoformat(), "period_end": end.isoformat(),
+        }
+
     def list_documents(self) -> list[dict[str, Any]]:
         value = self._get_setting(self.DOCUMENT_INDEX_KEY)
         if not value:
@@ -1453,13 +1564,17 @@ class FiscalService:
         try:
             request_root = etree.fromstring(request_xml.encode() if isinstance(request_xml, str) else bytes(request_xml), parser=etree.XMLParser(resolve_entities=False, no_network=True))
             sequence = int(str(request_root.xpath("string(//*[local-name()='nSeqEvento'][1])") or "0"))
+            environment_code = str(request_root.xpath("string(//*[local-name()='tpAmb'][1])") or "")
+            event_environment = "HOMOLOGACAO" if environment_code == "2" else "PRODUCAO" if environment_code == "1" else ""
         except (ValueError, TypeError, etree.XMLSyntaxError):
             sequence = 0
+            event_environment = ""
         request_bytes = request_xml.encode() if isinstance(request_xml, str) else bytes(request_xml)
         response_bytes = response.raw_xml.encode("utf-8")
         record={
             "access_key":key,
             "event_type":str(event_type).upper(),
+            "environment":event_environment,
             "sequence":sequence,
             "status_code":response.status_code,
             "message":response.message,

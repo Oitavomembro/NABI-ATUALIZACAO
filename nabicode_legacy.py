@@ -1598,6 +1598,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             CommandDefinition("caixa", "Abrir Caixa", ("caixa", "gaveta", "sangria", "suprimento", "fechamento")),
             CommandDefinition("relatorios", "Abrir Relatórios", ("relatorio", "dashboard", "grafico", "indicador", "exportar", "pdf", "excel")),
             CommandDefinition("fiscal_config", "Configurar Fiscal Oficial", ("fiscal", "nfe", "nfce", "sefaz", "certificado", "a1")),
+            CommandDefinition("fiscal_documents", "Abrir Documentos Fiscais", ("documentos", "fiscal", "xml", "danfe", "contabilidade", "notas")),
             CommandDefinition("configs", "Abrir Configurações", ("configuracao", "preferencias", "sistema")),
             CommandDefinition("new_product", "Cadastrar novo produto", ("novo", "produto", "cadastro")),
             CommandDefinition("new_client", "Cadastrar novo cliente", ("novo", "cliente", "cadastro")),
@@ -1607,8 +1608,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             CommandDefinition("collections", "Abrir Central de Cobranças", ("cobranca", "promissoria", "inadimplencia")),
             CommandDefinition("product_aux", "Abrir marcas, fornecedores e unidades", ("marca", "fornecedor", "unidade")),
         )
-        mapa = {"fiscal_config": "fiscal", "new_product": "produtos", "new_client": "clientes", "import_xml": "produtos", "nfe_history": "produtos", "nfe_return": "produtos", "collections": "clientes", "product_aux": "produtos"}
-        comandos_fiscais = {"fiscal_config", "import_xml", "nfe_history", "nfe_return"}
+        mapa = {"fiscal_config": "fiscal", "fiscal_documents": "fiscal", "new_product": "produtos", "new_client": "clientes", "import_xml": "produtos", "nfe_history": "produtos", "nfe_return": "produtos", "collections": "clientes", "product_aux": "produtos"}
+        comandos_fiscais = {"fiscal_config", "fiscal_documents", "import_xml", "nfe_history", "nfe_return"}
         return tuple(
             cmd for cmd in comandos
             if (modo_fiscal_ativo() or cmd.action not in comandos_fiscais)
@@ -1647,6 +1648,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showinfo("Modo Comercial", "Ative o modo Fiscal nas configurações para acessar recursos fiscais.", parent=self)
                 return
             self.abrir_configuracao_fiscal()
+            return
+        if acao == "fiscal_documents":
+            self.abrir_central_fiscal()
             return
         if acao == "new_product":
             self.abrir_cadastro_produto()
@@ -3779,17 +3783,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 raise ValueError("Rascunho de devolução não localizado.")
             overrides = {}
             for produto in rascunho.get("itens", []):
-                descricao = str(produto.get("descricao") or "Produto")
-                cfop_padrao = str(produto.get("cfop") or "")
-                cfop = simpledialog.askstring(
-                    "CFOP da devolução",
-                    f"{descricao}\nInforme o CFOP de saída da devolução:",
-                    initialvalue=cfop_padrao,
-                    parent=janela,
+                analysis = NFE_DEVOLUCAO_SERVICE.sugerir_cfop_devolucao(
+                    str(produto.get("cfop") or ""),
+                    cst_icms=str(produto.get("cst_icms") or ""),
+                    csosn=str(produto.get("csosn") or ""),
                 )
-                if cfop is None:
-                    raise RuntimeError("Emissão cancelada pelo usuário.")
-                overrides[int(produto["item_origem_id"])] = {"cfop": cfop}
+                cfop = str(analysis.get("suggested") or "")
+                if not cfop:
+                    raise ValueError(
+                        f"Não foi possível determinar o CFOP de devolução para "
+                        f"'{produto.get('descricao') or 'Produto'}'. Revise o XML original."
+                    )
+                overrides[int(produto["item_origem_id"])] = {
+                    "cfop": cfop, "cfop_analysis": analysis,
+                }
             actor = self._usuario_financeiro()
             series = int(issuer_cfg.get("return_series") or 1)
             reservation = self.fiscal_service.reserve_number(
@@ -3832,11 +3839,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             reservation = None
             try:
                 issuer, document, overrides, reservation, actor = _dados_emissao_oficial(item)
+                rascunho = NFE_DEVOLUCAO_SERVICE.repository.buscar_rascunho(int(item["id"])) or {}
+                analyses = [dict(value.get("cfop_analysis") or {}) for value in overrides.values()]
+                cfops = sorted({str(value.get("cfop") or "") for value in overrides.values()})
+                medium = sum(1 for value in analyses if value.get("confidence") != "ALTA")
                 if not messagebox.askyesno(
                     "Transmitir devolução",
                     f"Transmitir a NF-e de devolução #{item['id']} para a SEFAZ?\n\n"
                     f"Ambiente: {self.fiscal_service.load_config().get('environment')}\n"
-                    f"Série: {document['series']} | Número: {document['number']}",
+                    f"Série: {document['series']} | Número: {document['number']}\n"
+                    f"Itens selecionados: {len(rascunho.get('itens', []))}\n"
+                    f"CFOP analisado automaticamente: {', '.join(cfops)}"
+                    + (f"\nAtenção: {medium} item(ns) exigem conferência contábil posterior." if medium else ""),
                     parent=janela,
                 ):
                     self.fiscal_service.release_number(reservation["reservation_id"], actor=actor, reason="Emissão cancelada antes da transmissão")
@@ -9344,6 +9358,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         frame = ctk.CTkFrame(janela, fg_color="#161b22")
         frame.pack(fill="both", expand=True, padx=12, pady=12)
         ctk.CTkLabel(frame, text="Documentos e eventos fiscais", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=12, pady=(12, 8))
+        ctk.CTkLabel(
+            frame, text=f"Arquivos locais: {self.fiscal_service.storage_dir}",
+            text_color="#8b949e", anchor="w",
+        ).pack(fill="x", padx=12, pady=(0, 6))
+        filters = ctk.CTkFrame(frame, fg_color="transparent")
+        filters.pack(fill="x", padx=12, pady=(0, 8))
+        document_search = ctk.CTkEntry(
+            filters, placeholder_text="Buscar por chave, protocolo, status, modelo ou ambiente...", height=34
+        )
+        document_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         columns = ("tipo", "chave", "status", "protocolo", "data", "ambiente")
         tree = ttk.Treeview(frame, columns=columns, show="headings", height=18)
         for col, title, width in (("tipo","Tipo",100),("chave","Chave / referência",300),("status","Status",120),("protocolo","Protocolo",130),("data","Data",150),("ambiente","Ambiente",110)):
@@ -9356,12 +9380,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def load():
             for item in tree.get_children(): tree.delete(item)
             rows.clear()
+            query = document_search.get().strip().casefold()
             for row in self.fiscal_service.list_documents():
+                searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status", "model", "environment", "created_at")).casefold()
+                if query and query not in searchable:
+                    continue
                 item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
                 rows[item] = row
             for row in self.fiscal_service.list_events():
+                searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
+                if query and query not in searchable:
+                    continue
                 item = tree.insert("", "end", values=(row.get("event_type","EVENTO"), row.get("access_key",""), row.get("status_code",""), row.get("protocol",""), row.get("created_at",""), ""))
                 rows[item] = row
+        document_search.bind("<Return>", lambda _event: load())
+        ctk.CTkButton(filters, text="Buscar", width=90, command=load).pack(side="left")
         def selected():
             selection = tree.selection()
             return rows.get(selection[0]) if selection else None
@@ -9370,7 +9403,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if not row: return
             path = row.get("processed_path") or row.get("response_path") or row.get("request_path")
             if path and os.path.exists(path):
-                webbrowser.open(Path(path).resolve().as_uri())
+                self._abrir_arquivo_sistema(path)
             else: messagebox.showwarning("Fiscal", "Arquivo fiscal não localizado.", parent=janela)
         def danfe():
             row = selected()
@@ -9382,10 +9415,55 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 self.fiscal_service.generate_danfe_pdf(authorized_xml=Path(row["processed_path"]).read_bytes(), output_path=output)
                 self.mostrar_notificacao("DANFE gerado", output, nivel="success")
             except Exception as exc: messagebox.showerror("DANFE", str(exc), parent=janela)
+        today = datetime.now().date()
+        period = ctk.CTkFrame(frame, fg_color="transparent")
+        period.pack(fill="x", padx=12, pady=(2, 4))
+        ctk.CTkLabel(period, text="Período contábil:").pack(side="left", padx=(4, 6))
+        start_entry = ctk.CTkEntry(period, width=115)
+        start_entry.pack(side="left", padx=4); start_entry.insert(0, today.replace(day=1).isoformat())
+        end_entry = ctk.CTkEntry(period, width=115)
+        end_entry.pack(side="left", padx=4); end_entry.insert(0, today.isoformat())
+        include_homologation = tk.BooleanVar(value=False)
+        ctk.CTkCheckBox(
+            period, text="Incluir homologação (teste)", variable=include_homologation
+        ).pack(side="left", padx=12)
+        def export_accounting():
+            output = filedialog.asksaveasfilename(
+                parent=janela, title="Salvar pacote fiscal para a contabilidade",
+                defaultextension=".zip", filetypes=[("Pacote ZIP", "*.zip")],
+                initialfile=f"NabiCode_Fiscal_{start_entry.get()}_{end_entry.get()}.zip",
+            )
+            if not output:
+                return
+            try:
+                result = self.fiscal_service.export_accounting_package(
+                    start_date=start_entry.get(), end_date=end_entry.get(), output_path=output,
+                    include_homologation=include_homologation.get(),
+                )
+                registrar_auditoria(
+                    self._usuario_financeiro(), "EXPORTAR_XML_CONTABILIDADE", "Fiscal",
+                    f"{result['period_start']} a {result['period_end']}", "SUCESSO",
+                )
+                self.mostrar_notificacao(
+                    "Pacote fiscal gerado",
+                    f"{result['documents']} documento(s) e {result['events']} evento(s).\n{result['path']}",
+                    nivel="success", duracao_ms=7000,
+                )
+            except Exception as exc:
+                messagebox.showerror("Exportação fiscal", str(exc), parent=janela)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Gerar DANFE", command=danfe).pack(side="left", padx=4)
+        ctk.CTkButton(
+            actions, text="Abrir pasta fiscal",
+            command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),
+            fg_color="#8957e5",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            actions, text="Gerar arquivos para contabilidade", command=export_accounting,
+            fg_color="#2ea043",
+        ).pack(side="left", padx=4)
         load()
 
     def fazer_backup_config_agora(self):
