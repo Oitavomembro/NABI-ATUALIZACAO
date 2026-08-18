@@ -9863,17 +9863,65 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return
         janela = ctk.CTkToplevel(self)
         janela.title("NabiCode — Painel Administrativo")
-        janela.geometry("920x650")
-        janela.minsize(820, 590)
+        janela.geometry("1000x720")
+        janela.minsize(860, 640)
         janela.configure(fg_color="#0d1117")
         janela.transient(self)
         janela.grab_set()
 
-        ctk.CTkLabel(janela, text="🛠 Painel Administrativo NabiCode", font=ctk.CTkFont(size=22, weight="bold"), text_color="#00FF88").pack(pady=(14, 8))
+        ctk.CTkLabel(janela, text="🛠 Painel Administrativo NabiCode", font=ctk.CTkFont(size=22, weight="bold"), text_color="#00FF88").pack(pady=(14, 4))
+        ctk.CTkLabel(
+            janela, text="Escolha uma área técnica no cardápio abaixo.", text_color="#8b949e"
+        ).pack(pady=(0, 8))
+        menu_cards = ctk.CTkFrame(janela, fg_color="#161b22", corner_radius=10)
+        menu_cards.pack(fill="x", padx=16, pady=(0, 8))
         abas = ctk.CTkTabview(janela, fg_color="#161b22", segmented_button_selected_color="#2ea043")
         abas.pack(fill="both", expand=True, padx=16, pady=(0, 16))
-        for nome in ("Licença", "Banco de Dados", "Backup", "Atualizações", "Padrão de fábrica", "Diagnóstico", "Migração", "Demonstração", "Ferramentas", "Sistema", "Segurança", "Suporte"):
+        admin_sections = (
+            ("Licença", "🔑", "Validade e bloqueio"),
+            ("Banco de Dados", "🗄", "Integridade e reparo"),
+            ("Backup", "💾", "Cópias e restauração"),
+            ("Atualizações", "⬆", "Versões e snapshots"),
+            ("Padrão de fábrica", "🏭", "Restauração protegida"),
+            ("Diagnóstico", "🩺", "Saúde do sistema"),
+            ("Migração", "🔄", "Importar bases"),
+            ("Demonstração", "🧪", "Dados de exemplo"),
+            ("Ferramentas", "🧰", "Utilitários técnicos"),
+            ("Sistema", "🖥", "Informações locais"),
+            ("Segurança", "🛡", "Acessos e auditoria"),
+            ("Suporte", "🆘", "Ajuda e atendimento"),
+        )
+        for nome, _icone, _descricao in admin_sections:
             abas.add(nome)
+        try:
+            abas._segmented_button.grid_remove()
+        except (AttributeError, tk.TclError):
+            pass
+        admin_card_buttons = {}
+        def selecionar_secao_admin(nome):
+            abas.set(nome)
+            for section_name, component in admin_card_buttons.items():
+                selected = section_name == nome
+                component.configure(
+                    fg_color="#2ea043" if selected else "#21262d",
+                    hover_color="#238636" if selected else "#30363d",
+                    border_width=2 if selected else 1,
+                    border_color="#58d68d" if selected else "#30363d",
+                )
+        for index, (nome, icone, descricao) in enumerate(admin_sections):
+            row, column = divmod(index, 4)
+            card = ctk.CTkButton(
+                menu_cards, text=f"{icone}  {nome}\n{descricao}", anchor="w",
+                height=54, corner_radius=8, fg_color="#21262d", hover_color="#30363d",
+                border_width=1, border_color="#30363d",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                command=lambda section=nome: selecionar_secao_admin(section),
+            )
+            card.grid(row=row, column=column, sticky="ew", padx=5, pady=5)
+            admin_card_buttons[nome] = card
+        for column in range(4):
+            menu_cards.grid_columnconfigure(column, weight=1, uniform="admin_cards")
+        selecionar_secao_admin("Licença")
 
         def botao(parent, texto, comando, cor="#1f6feb"):
             componente = ctk.CTkButton(parent, text=texto, command=comando, height=38, fg_color=cor)

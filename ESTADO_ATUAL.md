@@ -618,3 +618,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 101 testes focados e 5 subtestes aprovados; suíte completa com 1.125 testes e 27 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - somente bancos, certificados e arquivos temporários de teste foram utilizados.
+
+## Checkpoint 42.42 — cardápio visual do menu técnico
+
+- o seletor textual estreito do Painel Administrativo foi substituído por 12 cartões visuais;
+- cada cartão apresenta ícone, área e descrição curta para Licença, Banco, Backup, Atualizações, restauração, diagnóstico, migração, demonstração, ferramentas, sistema, segurança e suporte;
+- grade de quatro colunas e três linhas preserva legibilidade em 1280×768;
+- cartão ativo recebe destaque sem recriar telas ou duplicar comandos;
+- todas as rotinas, permissões técnicas e proteções anteriores foram preservadas;
+- 31 testes focados aprovados; `compileall` e `git diff --check` aprovados;
+- nenhuma janela do programa foi aberta durante a validação automática.

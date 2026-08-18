@@ -8,6 +8,13 @@ ADMIN_MANAGER = (ROOT / "managers" / "admin_operations_manager.py").read_text(en
 
 
 class UpdateAndFactoryIntegrationTests(unittest.TestCase):
+    def test_secret_admin_menu_uses_visual_cards_without_plain_tab_selector(self):
+        self.assertIn("admin_sections = (", SOURCE)
+        self.assertIn('text=f"{icone}  {nome}\\n{descricao}"', SOURCE)
+        self.assertIn("def selecionar_secao_admin(nome):", SOURCE)
+        self.assertIn("abas._segmented_button.grid_remove()", SOURCE)
+        self.assertIn('uniform="admin_cards"', SOURCE)
+
     def test_factory_reset_has_own_admin_tab(self):
         self.assertIn('"Padrão de fábrica"', SOURCE)
         self.assertIn('abas.tab("Padrão de fábrica")', SOURCE)
