@@ -371,6 +371,43 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
 
+    def test_prepara_itens_da_venda_com_ficha_fiscal_automatica(self):
+        conn = self.connect()
+        conn.execute(
+            """CREATE TABLE produtos (
+                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cfop TEXT,
+                ibs_cbs_cst TEXT, ibs_cbs_class TEXT,
+                ibs_uf_rate TEXT, ibs_city_rate TEXT, cbs_rate TEXT
+            )"""
+        )
+        conn.execute(
+            "INSERT INTO produtos VALUES(1,'P1','PRODUTO','94036000','5102','000','000001','0.1','0','0.9')"
+        )
+        conn.commit(); conn.close()
+        items = self.service.prepare_sale_items(
+            [{"produto_id": 1, "item": "Produto", "qtd": 2, "preco": 10}], destination=2
+        )
+        self.assertEqual(items[0]["cfop"], "6102")
+        self.assertEqual(items[0]["ncm"], "94036000")
+        self.assertEqual(items[0]["ibs_cbs_class"], "000001")
+        self.assertEqual(items[0]["cbs_rate"], "0.9")
+
+    def test_venda_fiscal_explica_ficha_incompleta_sem_salvar(self):
+        conn = self.connect()
+        conn.execute(
+            """CREATE TABLE produtos (
+                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cfop TEXT,
+                ibs_cbs_cst TEXT, ibs_cbs_class TEXT,
+                ibs_uf_rate TEXT, ibs_city_rate TEXT, cbs_rate TEXT
+            )"""
+        )
+        conn.execute("INSERT INTO produtos VALUES(1,'P1','PRODUTO','','','','','0','0','0')")
+        conn.commit(); conn.close()
+        with self.assertRaisesRegex(ValueError, "ficha fiscal incompleta"):
+            self.service.prepare_sale_items(
+                [{"produto_id": 1, "item": "Produto", "qtd": 1, "preco": 10}]
+            )
+
     def test_nfce_online_inclui_qrcode_v3_sem_csc(self):
         issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         xml, key = self.service.build_document_xml(

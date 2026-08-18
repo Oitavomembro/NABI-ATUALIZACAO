@@ -729,3 +729,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - XML sem IBS/CBS não apaga uma ficha fiscal já existente e XML com códigos estruturalmente inválidos é recusado antes do commit;
 - a automação elimina o preenchimento imposto a imposto nas vendas seguintes sem tentar deduzir tributação somente pelo CNPJ;
 - 25 testes de XML, importação, atomicidade, exclusão e schema aprovados em bancos temporários.
+
+## Checkpoint 42.54 — carrinho convertido automaticamente em itens fiscais
+
+- criado um único preparador fiscal que consulta todos os produtos do carrinho em uma leitura e monta os itens da NF-e/NFC-e;
+- NCM, CFOP, CST, classificação e alíquotas IBS/CBS são obtidos da ficha persistida, sem digitação durante a venda;
+- o prefixo do CFOP é ajustado de forma determinística para operação interna, interestadual ou exterior, preservando a natureza cadastrada;
+- produto inexistente, item avulso ou ficha incompleta interrompe somente a emissão e apresenta uma orientação simples para importar a NF-e ou revisar o cadastro;
+- testes confirmam preenchimento automático e bloqueio preventivo sem qualquer gravação parcial.

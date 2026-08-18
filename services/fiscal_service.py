@@ -1479,6 +1479,72 @@ class FiscalService:
             )
         return etree.tostring(root, xml_declaration=True, encoding="utf-8"), key
 
+    def prepare_sale_items(
+        self, cart_items: Sequence[Mapping[str, Any]], *, destination: int = 1,
+        require_rtc: bool = True,
+    ) -> list[dict[str, Any]]:
+        """Transforma o carrinho em itens fiscais usando uma única ficha por produto."""
+        if destination not in {1, 2, 3}:
+            raise ValueError("Destino fiscal da venda deve ser interno, interestadual ou exterior.")
+        product_ids = [int(item.get("produto_id") or 0) for item in cart_items]
+        if not product_ids or any(product_id <= 0 for product_id in product_ids):
+            raise ValueError("Venda fiscal exige que todos os itens estejam cadastrados.")
+        unique_ids = sorted(set(product_ids))
+        placeholders = ",".join("?" for _ in unique_ids)
+        conn = self.connection_factory()
+        try:
+            cursor = conn.execute(
+                f"""SELECT id,codigo,nome,ncm,cfop,
+                           ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate
+                    FROM produtos WHERE id IN ({placeholders})""",
+                tuple(unique_ids),
+            )
+            columns = [column[0] for column in cursor.description]
+            products = {int(row[0]): dict(zip(columns, row)) for row in cursor.fetchall()}
+        finally:
+            conn.close()
+        result: list[dict[str, Any]] = []
+        for index, cart_item in enumerate(cart_items, 1):
+            product_id = int(cart_item.get("produto_id") or 0)
+            product = products.get(product_id)
+            if not product:
+                raise ValueError(f"Item {index}: produto cadastrado não foi encontrado.")
+            ncm = self._digits(product.get("ncm"))
+            stored_cfop = self._digits(product.get("cfop"))
+            cst = self._digits(product.get("ibs_cbs_cst"))
+            classification = self._digits(product.get("ibs_cbs_class"))
+            missing = []
+            if len(ncm) != 8: missing.append("NCM")
+            if len(stored_cfop) != 4: missing.append("CFOP")
+            if require_rtc and len(cst) != 3: missing.append("CST IBS/CBS")
+            if require_rtc and len(classification) != 6: missing.append("classificação IBS/CBS")
+            if missing:
+                raise ValueError(
+                    f"Item {index} ({product.get('nome') or product.get('codigo')}): "
+                    f"ficha fiscal incompleta — {', '.join(missing)}. Importe a NF-e de compra ou revise o cadastro."
+                )
+            cfop_prefix = {1: "5", 2: "6", 3: "7"}[destination]
+            fiscal_item = {
+                "product_id": product_id,
+                "code": product.get("codigo") or product_id,
+                "description": product.get("nome") or cart_item.get("item") or "PRODUTO",
+                "quantity": cart_item.get("qtd"),
+                "unit_price": cart_item.get("preco"),
+                "unit": "UN",
+                "ncm": ncm,
+                "cfop": cfop_prefix + stored_cfop[1:],
+            }
+            if require_rtc:
+                fiscal_item.update({
+                    "ibs_cbs_cst": cst,
+                    "ibs_cbs_class": classification,
+                    "ibs_uf_rate": product.get("ibs_uf_rate") or "0",
+                    "ibs_city_rate": product.get("ibs_city_rate") or "0",
+                    "cbs_rate": product.get("cbs_rate") or "0",
+                })
+            result.append(fiscal_item)
+        return result
+
     def build_nfce_qr_code_v3(
         self, *, access_key: str, environment: str,
         issued_at: datetime | str | None = None,
