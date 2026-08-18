@@ -127,6 +127,26 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "modelo fiscal padrão"):
             self.service.save_config({"enabled_models": ["55"], "default_model": "65"})
 
+    def test_bahia_separa_endpoints_oficiais_nfe_e_nfce(self):
+        self.service.save_config({"state": "BA", "environment": "HOMOLOGACAO", "endpoints": {}})
+        self.assertIn("hnfe.sefaz.ba.gov.br", self.service.endpoint("autorizacao", model="55"))
+        self.assertIn("nfce-homologacao.svrs.rs.gov.br", self.service.endpoint("autorizacao", model="65"))
+        self.service.save_config({"state": "BA", "environment": "PRODUCAO", "endpoints": {}})
+        self.assertIn("nfe.sefaz.ba.gov.br", self.service.endpoint("consulta", model="55"))
+        self.assertIn("nfce.svrs.rs.gov.br", self.service.endpoint("consulta", model="65"))
+
+    def test_endpoint_manual_preserva_prioridade_sobre_catalogo_oficial(self):
+        custom = "https://sefaz.invalid/custom"
+        self.service.save_config({
+            "state": "BA", "environment": "HOMOLOGACAO",
+            "endpoints": {"HOMOLOGACAO": {"autorizacao": custom}},
+        })
+        self.assertEqual(self.service.endpoint("autorizacao", model="55"), custom)
+
+    def test_validacao_recusa_modelo_desabilitado(self):
+        self.service.save_config({"enabled": True, "enabled_models": ["55"], "default_model": "55"})
+        self.assertTrue(any("não está habilitado" in problem for problem in self.service.validate_ready(operation="autorizacao", model="65")))
+
     def test_regras_fiscais_bloqueiam_ncm_e_cfop_invalidos(self):
         issuer = {
             "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",

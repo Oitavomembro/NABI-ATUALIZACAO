@@ -98,6 +98,48 @@ class FiscalService:
         "LUCRO_REAL": "Lucro Real",
     }
     MODEL_LABELS = {"55": "NF-e — modelo 55", "65": "NFC-e — modelo 65"}
+    BAHIA_ENDPOINTS = {
+        "55": {
+            "HOMOLOGACAO": {
+                "autorizacao": "https://hnfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
+                "recibo": "https://hnfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx",
+                "inutilizacao": "https://hnfe.sefaz.ba.gov.br/webservices/NFeInutilizacao4/NFeInutilizacao4.asmx",
+                "status": "https://hnfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx",
+                "evento": "https://hnfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+                "consulta": "https://hnfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
+                "cadastro": "https://hnfe.sefaz.ba.gov.br/webservices/CadConsultaCadastro4/CadConsultaCadastro4.asmx",
+            },
+            "PRODUCAO": {
+                "autorizacao": "https://nfe.sefaz.ba.gov.br/webservices/NFeAutorizacao4/NFeAutorizacao4.asmx",
+                "recibo": "https://nfe.sefaz.ba.gov.br/webservices/NFeRetAutorizacao4/NFeRetAutorizacao4.asmx",
+                "inutilizacao": "https://nfe.sefaz.ba.gov.br/webservices/NFeInutilizacao4/NFeInutilizacao4.asmx",
+                "status": "https://nfe.sefaz.ba.gov.br/webservices/NFeStatusServico4/NFeStatusServico4.asmx",
+                "evento": "https://nfe.sefaz.ba.gov.br/webservices/NFeRecepcaoEvento4/NFeRecepcaoEvento4.asmx",
+                "consulta": "https://nfe.sefaz.ba.gov.br/webservices/NFeConsultaProtocolo4/NFeConsultaProtocolo4.asmx",
+                "cadastro": "https://nfe.sefaz.ba.gov.br/webservices/CadConsultaCadastro4/CadConsultaCadastro4.asmx",
+            },
+        },
+        "65": {
+            "HOMOLOGACAO": {
+                "autorizacao": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
+                "recibo": "https://nfce-homologacao.svrs.rs.gov.br/ws/NFeRetAutorizacao/NFeRetAutorizacao4.asmx",
+                "inutilizacao": "https://nfce-homologacao.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
+                "status": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
+                "evento": "https://nfce-homologacao.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
+                "consulta": "https://nfce-homologacao.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
+                "cadastro": "https://nfce-homologacao.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro2.asmx",
+            },
+            "PRODUCAO": {
+                "autorizacao": "https://nfce.svrs.rs.gov.br/ws/NfeAutorizacao/NFeAutorizacao4.asmx",
+                "recibo": "https://nfce.svrs.rs.gov.br/ws/NFeRetAutorizacao/NFeRetAutorizacao4.asmx",
+                "inutilizacao": "https://nfce.svrs.rs.gov.br/ws/nfeinutilizacao/nfeinutilizacao4.asmx",
+                "status": "https://nfce.svrs.rs.gov.br/ws/NfeStatusServico/NfeStatusServico4.asmx",
+                "evento": "https://nfce.svrs.rs.gov.br/ws/recepcaoevento/recepcaoevento4.asmx",
+                "consulta": "https://nfce.svrs.rs.gov.br/ws/NfeConsulta/NfeConsulta4.asmx",
+                "cadastro": "https://nfce.svrs.rs.gov.br/ws/cadconsultacadastro/cadconsultacadastro2.asmx",
+            },
+        },
+    }
     DS_NS = "http://www.w3.org/2000/09/xmldsig#"
 
     def __init__(
@@ -377,6 +419,8 @@ class FiscalService:
         problems: list[str] = []
         if model not in self.VALID_MODELS:
             problems.append("Modelo fiscal deve ser 55 (NF-e) ou 65 (NFC-e).")
+        elif model not in {str(item) for item in config.get("enabled_models", self.VALID_MODELS)}:
+            problems.append(f"O modelo fiscal {model} não está habilitado para esta empresa.")
         if len(self._digits(config.get("cnpj"))) != 14:
             problems.append("CNPJ do emitente não configurado.")
         state = str(config.get("state", "")).upper()
@@ -388,7 +432,7 @@ class FiscalService:
         certificate_path = str(config.get("certificate_path", "")).strip()
         if not certificate_path or not Path(certificate_path).is_file():
             problems.append("Certificado A1 não configurado ou arquivo inexistente.")
-        endpoint = self.endpoint(operation)
+        endpoint = self.endpoint(operation, model=model)
         if not endpoint:
             problems.append(f"Endpoint SEFAZ não configurado para {operation}.")
         return problems
@@ -429,14 +473,24 @@ class FiscalService:
         self._set_setting(self.CONFIG_KEY, json.dumps(config, ensure_ascii=False, sort_keys=True))
         return info
 
-    def endpoint(self, operation: str) -> str:
+    def endpoint(self, operation: str, *, model: str | None = None) -> str:
         config = self.load_config()
         environment = str(config.get("environment", "HOMOLOGACAO")).upper()
+        model = str(model or config.get("default_model") or "65")
+        if model not in self.VALID_MODELS:
+            raise ValueError("Modelo fiscal deve ser 55 ou 65 para selecionar o endpoint.")
         endpoints = (config.get("endpoints") or {}).get(environment, {})
         operation = str(operation)
         if operation == "recibo":
-            return str(endpoints.get("recibo") or endpoints.get("consulta_recibo") or "").strip()
-        return str(endpoints.get(operation, "")).strip()
+            custom = endpoints.get("recibo") or endpoints.get("consulta_recibo")
+        else:
+            custom = endpoints.get(operation)
+        if custom:
+            return str(custom).strip()
+        state = str(config.get("state") or "").upper()
+        if state == "BA":
+            return str(self.BAHIA_ENDPOINTS.get(model, {}).get(environment, {}).get(operation, "")).strip()
+        return ""
 
     def sign_xml(self, xml: bytes | str, *, reference_id: str, pfx_path: str | Path, password: str) -> bytes:
         self._require_dependency("cryptography")
@@ -626,6 +680,7 @@ class FiscalService:
         self,
         *,
         operation: str,
+        model: str | None = None,
         xml: bytes | str,
         pfx_path: str | Path,
         password: str,
@@ -634,7 +689,7 @@ class FiscalService:
     ) -> FiscalResponse:
         self._require_dependency("requests")
         self._require_dependency("cryptography")
-        endpoint = self.endpoint(operation)
+        endpoint = self.endpoint(operation, model=model)
         if not endpoint:
             raise ValueError(f"Endpoint SEFAZ não configurado para {operation}.")
         if self.http_post is None:
@@ -1574,6 +1629,7 @@ class FiscalService:
                 xml = base64.b64decode(str(record.get("xml_b64", "")))
                 response = self.transmit(
                     operation=str(record.get("operation")),
+                    model=str(record.get("model") or config.get("default_model") or "65"),
                     xml=xml,
                     pfx_path=config.get("certificate_path", ""),
                     password=password,
@@ -1706,7 +1762,7 @@ class FiscalService:
 
         signed = self.sign_xml(xml, reference_id=f"NFe{key}", pfx_path=config["certificate_path"], password=password)
         envelope = self._authorization_envelope(signed, environment=config["environment"])
-        response = self.transmit(operation="autorizacao", xml=envelope, pfx_path=config["certificate_path"], password=password)
+        response = self.transmit(operation="autorizacao", model=model, xml=envelope, pfx_path=config["certificate_path"], password=password)
         record = self.store_document(
             access_key=key,
             model=model,
@@ -1722,15 +1778,19 @@ class FiscalService:
         return response, record
 
     def consult_document(self, *, access_key: str, password: str) -> FiscalResponse:
-        problems = self.validate_ready(operation="consulta")
+        key = self._digits(access_key)
+        model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
+        problems = self.validate_ready(operation="consulta", model=model)
         if problems:
             raise ValueError("; ".join(problems))
         config = self.load_config()
         xml = self.build_query_xml(access_key=access_key, environment=config["environment"])
-        return self.transmit(operation="consulta", xml=xml, pfx_path=config["certificate_path"], password=password)
+        return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
     def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, actor: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
-        problems = self.validate_ready(operation="evento")
+        key = self._digits(access_key)
+        model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
+        problems = self.validate_ready(operation="evento", model=model)
         if problems:
             raise ValueError("; ".join(problems))
         config = self.load_config()
@@ -1739,7 +1799,7 @@ class FiscalService:
         )
         xml, event_id = self.build_event_xml(event_type=event_type, access_key=access_key, sequence=sequence, actor_document=config["cnpj"], protocol=protocol, justification=justification, correction=correction, environment=config["environment"])
         signed = self.sign_xml(xml, reference_id=event_id, pfx_path=config["certificate_path"], password=password)
-        response = self.transmit(operation="evento", xml=signed, pfx_path=config["certificate_path"], password=password)
+        response = self.transmit(operation="evento", model=model, xml=signed, pfx_path=config["certificate_path"], password=password)
         record = self.register_event(access_key=access_key, event_type=event_type, response=response, request_xml=signed, actor=actor)
         return response, record
 
@@ -1753,7 +1813,7 @@ class FiscalService:
             raise ValueError("UF do emitente não possui código IBGE configurável.")
         xml, identifier = self.build_inutilization_xml(state_code=state_code, year=year, cnpj=config["cnpj"], model=model, series=series, start_number=start_number, end_number=end_number, justification=justification, environment=config["environment"])
         signed = self.sign_xml(xml, reference_id=identifier, pfx_path=config["certificate_path"], password=password)
-        response = self.transmit(operation="inutilizacao", xml=signed, pfx_path=config["certificate_path"], password=password)
+        response = self.transmit(operation="inutilizacao", model=model, xml=signed, pfx_path=config["certificate_path"], password=password)
         record = self.register_event(access_key="0" * 44, event_type="INUTILIZACAO", response=response, request_xml=signed, actor=actor)
         record.update({"model": model, "series": int(series), "start_number": int(start_number), "end_number": int(end_number), "year": int(year)})
         return response, record

@@ -579,3 +579,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - campo livre de regime foi substituído por opções determinísticas, evitando grafias inválidas;
 - nenhuma emissão real, certificado ou endpoint de produção foi utilizado;
 - 55 testes fiscais focados e 5 subtestes aprovados.
+
+## Checkpoint 42.39 — roteamento oficial SEFAZ-BA e SVRS
+
+- NF-e 55 passa a resolver automaticamente os sete serviços oficiais da SEFAZ-BA em homologação e produção;
+- NFC-e 65 passa a usar os sete serviços da SVRS indicados oficialmente pela SEFAZ-BA;
+- autorização, retorno de recibo, consulta, eventos, inutilização, status e cadastro ficam separados por modelo e ambiente;
+- consulta e eventos identificam o modelo diretamente pela chave de acesso;
+- fila de transmissão preserva o modelo de cada documento ao escolher o serviço;
+- endpoint manual existente continua tendo prioridade como substituição administrativa explícita;
+- modelos desabilitados são recusados antes de qualquer comunicação;
+- nenhuma requisição externa, certificado ou emissão real foi utilizada nos testes;
+- 58 testes fiscais focados e 5 subtestes aprovados.
