@@ -140,6 +140,14 @@ class FiscalService:
             },
         },
     }
+    BAHIA_NFCE_QR_URLS = {
+        "HOMOLOGACAO": "http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx",
+        "PRODUCAO": "https://nfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx",
+    }
+    BAHIA_NFCE_KEY_URLS = {
+        "HOMOLOGACAO": "http://hinternet.sefaz.ba.gov.br/nfce/consulta",
+        "PRODUCAO": "https://www.sefaz.ba.gov.br/nfce/consulta",
+    }
     DS_NS = "http://www.w3.org/2000/09/xmldsig#"
 
     def __init__(
@@ -1231,7 +1239,95 @@ class FiscalService:
         pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); el(detpag,"tPag",document.get("payment_code","01")); el(detpag,"vPag",f"{total_products:.2f}")
         if document.get("additional_info"):
             infad=etree.SubElement(inf, etree.QName(ns,"infAdic")); el(infad,"infCpl",document.get("additional_info"))
+        if model == "65" and int(document.get("emission_type", 1)) == 1:
+            self._set_nfce_supplement(
+                root,
+                qr_code=self.build_nfce_qr_code_v3(
+                    access_key=key,
+                    environment=str(document.get("environment", "HOMOLOGACAO")),
+                ),
+                environment=str(document.get("environment", "HOMOLOGACAO")),
+            )
         return etree.tostring(root, xml_declaration=True, encoding="utf-8"), key
+
+    def build_nfce_qr_code_v3(
+        self, *, access_key: str, environment: str,
+        issued_at: datetime | str | None = None,
+        total: Decimal | str | float | None = None,
+        recipient_document: str = "", recipient_foreign_id: str = "",
+        pfx_path: str | Path = "", password: str = "",
+    ) -> str:
+        """Monta o QR Code 3.00 oficial da NFC-e, sem CSC."""
+        key = self._digits(access_key)
+        if len(key) != 44 or key[20:22] != "65":
+            raise ValueError("QR Code NFC-e exige chave válida do modelo 65.")
+        env_name = str(environment or "").strip().upper()
+        if env_name not in self.VALID_ENVIRONMENTS:
+            raise ValueError("Ambiente fiscal inválido para QR Code NFC-e.")
+        parts = [key, "3", "2" if env_name == "HOMOLOGACAO" else "1"]
+        if int(key[34]) != 1:
+            if issued_at is None or total is None:
+                raise ValueError("QR Code offline exige data de emissão e valor total.")
+            when = issued_at if isinstance(issued_at, datetime) else datetime.fromisoformat(str(issued_at))
+            amount = Decimal(str(total)).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            document = self._digits(recipient_document)
+            foreign_id = str(recipient_foreign_id or "").strip()
+            if len(document) == 14:
+                recipient_type, recipient_id = "1", document
+            elif len(document) == 11:
+                recipient_type, recipient_id = "2", document
+            elif foreign_id:
+                recipient_type, recipient_id = "3", ""
+            else:
+                recipient_type = recipient_id = ""
+            parts.extend([f"{when.day:02d}", f"{amount:.2f}", recipient_type, recipient_id])
+            self._require_dependency("cryptography")
+            path = Path(pfx_path)
+            if not path.is_file():
+                raise ValueError("Certificado A1 é obrigatório para assinar o QR Code offline.")
+            private_key, _cert, _chain = pkcs12.load_key_and_certificates(
+                path.read_bytes(), str(password).encode("utf-8")
+            )
+            if private_key is None:
+                raise ValueError("O certificado A1 não contém chave privada.")
+            signature = private_key.sign(
+                "|".join(parts).encode("utf-8"), padding.PKCS1v15(), hashes.SHA1()
+            )
+            parts.append(base64.b64encode(signature).decode("ascii"))
+        return f"{self.BAHIA_NFCE_QR_URLS[env_name]}?p={'|'.join(parts)}"
+
+    def _set_nfce_supplement(self, root: Any, *, qr_code: str, environment: str) -> None:
+        ns = "http://www.portalfiscal.inf.br/nfe"
+        for node in root.xpath("./*[local-name()='infNFeSupl']"):
+            root.remove(node)
+        supplement = etree.SubElement(root, etree.QName(ns, "infNFeSupl"))
+        qr_node = etree.SubElement(supplement, etree.QName(ns, "qrCode"))
+        qr_node.text = qr_code
+        key_node = etree.SubElement(supplement, etree.QName(ns, "urlChave"))
+        key_node.text = self.BAHIA_NFCE_KEY_URLS[str(environment).strip().upper()]
+
+    def add_nfce_qr_code_v3(
+        self, xml: bytes | str, *, pfx_path: str | Path = "", password: str = ""
+    ) -> bytes:
+        self._require_dependency("lxml")
+        root = etree.fromstring(xml.encode("utf-8") if isinstance(xml, str) else bytes(xml))
+        model = str(root.xpath("string(//*[local-name()='ide']/*[local-name()='mod'][1])"))
+        if model != "65":
+            return etree.tostring(root, xml_declaration=True, encoding="utf-8")
+        key = str(root.xpath("string(//*[local-name()='infNFe'][1]/@Id)")).removeprefix("NFe")
+        environment_code = str(root.xpath("string(//*[local-name()='ide']/*[local-name()='tpAmb'][1])"))
+        environment = "HOMOLOGACAO" if environment_code == "2" else "PRODUCAO"
+        issued_at = str(root.xpath("string(//*[local-name()='ide']/*[local-name()='dhEmi'][1])"))
+        total = str(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vNF'][1])"))
+        recipient_document = str(root.xpath("string(//*[local-name()='dest']/*[local-name()='CNPJ' or local-name()='CPF'][1])"))
+        foreign_id = str(root.xpath("string(//*[local-name()='dest']/*[local-name()='idEstrangeiro'][1])"))
+        qr_code = self.build_nfce_qr_code_v3(
+            access_key=key, environment=environment, issued_at=issued_at, total=total,
+            recipient_document=recipient_document, recipient_foreign_id=foreign_id,
+            pfx_path=pfx_path, password=password,
+        )
+        self._set_nfce_supplement(root, qr_code=qr_code, environment=environment)
+        return etree.tostring(root, xml_declaration=True, encoding="utf-8")
 
     def build_event_xml(
         self, *, event_type: str, access_key: str, sequence: int, actor_document: str,
@@ -1760,6 +1856,10 @@ class FiscalService:
             if expected_series != int(reservation.get("series", -1)) or expected_number != int(reservation.get("number", -1)):
                 raise ValueError("A chave de acesso não corresponde à numeração reservada.")
 
+        if str(model) == "65":
+            xml = self.add_nfce_qr_code_v3(
+                xml, pfx_path=config["certificate_path"], password=password
+            )
         signed = self.sign_xml(xml, reference_id=f"NFe{key}", pfx_path=config["certificate_path"], password=password)
         envelope = self._authorization_envelope(signed, environment=config["environment"])
         response = self.transmit(operation="autorizacao", model=model, xml=envelope, pfx_path=config["certificate_path"], password=password)

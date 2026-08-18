@@ -10,7 +10,7 @@ from pathlib import Path
 
 from cryptography import x509
 from cryptography.hazmat.primitives import hashes, serialization
-from cryptography.hazmat.primitives.asymmetric import rsa
+from cryptography.hazmat.primitives.asymmetric import padding, rsa
 from cryptography.hazmat.primitives.serialization import pkcs12
 from cryptography.x509.oid import NameOID
 from lxml import etree
@@ -246,6 +246,71 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='infNFe']/@Id)"), f"NFe{key}")
         self.assertEqual(root.xpath("string(//*[local-name()='xProd'])"), "PRODUTO TESTE")
         self.assertEqual(root.xpath("string(//*[local-name()='vNF'])"), "20.00")
+
+    def test_nfce_online_inclui_qrcode_v3_sem_csc(self):
+        issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
+        xml, key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "10",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={},
+            items=[{"code": "P1", "description": "produto", "quantity": 1, "unit_price": 10,
+                    "ncm": "94036000", "cfop": "5102", "unit": "UN"}],
+            document={"model": "65", "series": 1, "number": 1, "state_code": "29",
+                      "issued_at": issued, "environment": "HOMOLOGACAO", "numeric_code": "12345678",
+                      "final_consumer": 1, "presence": 1},
+        )
+        root = etree.fromstring(xml)
+        qr_code = root.xpath("string(//*[local-name()='infNFeSupl']/*[local-name()='qrCode'])")
+        self.assertEqual(
+            qr_code,
+            f"http://hnfe.sefaz.ba.gov.br/servicos/nfce/qrcode.aspx?p={key}|3|2",
+        )
+        self.assertNotIn("CSC", qr_code.upper())
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='infNFeSupl']/*[local-name()='urlChave'])"),
+            "http://hinternet.sefaz.ba.gov.br/nfce/consulta",
+        )
+
+    def test_nfce_offline_assina_parametros_qrcode_v3_com_certificado(self):
+        issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
+        key = self.service.build_access_key(
+            state_code="29", issued_at=issued, cnpj="12345678000195", model="65",
+            series=1, number=2, emission_type=9, numeric_code="12345679",
+        )
+        qr_code = self.service.build_nfce_qr_code_v3(
+            access_key=key, environment="HOMOLOGACAO", issued_at=issued,
+            total="10.00", recipient_document="12345678901",
+            pfx_path=self.pfx_path, password=self.password,
+        )
+        parameters = qr_code.split("?p=", 1)[1].split("|")
+        self.assertEqual(parameters[:7], [key, "3", "2", "18", "10.00", "2", "12345678901"])
+        signed_payload = "|".join(parameters[:7]).encode("utf-8")
+        signature = base64.b64decode(parameters[7])
+        _private_key, certificate, _chain = pkcs12.load_key_and_certificates(
+            self.pfx_path.read_bytes(), self.password.encode("utf-8")
+        )
+        certificate.public_key().verify(signature, signed_payload, padding.PKCS1v15(), hashes.SHA1())
+
+    def test_qrcode_v3_rejeita_chave_nfe_e_offline_sem_certificado(self):
+        issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
+        nfe_key = self.service.build_access_key(
+            state_code="29", issued_at=issued, cnpj="12345678000195", model="55",
+            series=1, number=1, emission_type=1, numeric_code="12345678",
+        )
+        with self.assertRaisesRegex(ValueError, "modelo 65"):
+            self.service.build_nfce_qr_code_v3(access_key=nfe_key, environment="HOMOLOGACAO")
+        nfce_key = self.service.build_access_key(
+            state_code="29", issued_at=issued, cnpj="12345678000195", model="65",
+            series=1, number=1, emission_type=9, numeric_code="12345678",
+        )
+        with self.assertRaisesRegex(ValueError, "Certificado A1"):
+            self.service.build_nfce_qr_code_v3(
+                access_key=nfce_key, environment="HOMOLOGACAO", issued_at=issued, total="1.00"
+            )
 
     def test_eventos_consulta_e_inutilizacao(self):
         key = "1" * 44

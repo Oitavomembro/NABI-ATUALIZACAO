@@ -591,3 +591,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - modelos desabilitados são recusados antes de qualquer comunicação;
 - nenhuma requisição externa, certificado ou emissão real foi utilizada nos testes;
 - 58 testes fiscais focados e 5 subtestes aprovados.
+
+## Checkpoint 42.40 — QR Code 3.00 da NFC-e Bahia
+
+- NFC-e online passa a gerar automaticamente o grupo `infNFeSupl` com QR Code versão 3 e URL de consulta da Bahia;
+- conforme o Manual DANFE NFC-e/QR Code 6.0, o leiaute v3 não usa CSC, evitando armazenar um segredo fiscal que deixou de ser necessário;
+- contingência offline monta os sete parâmetros fiscais e assina sua concatenação em RSA-SHA1 com o mesmo certificado A1 da NFC-e;
+- chave, modelo, ambiente, data, total e identificação do destinatário são validados antes da geração;
+- autorização da NFC-e atualiza o QR Code imediatamente antes da assinatura XML, preservando a chave privada somente em memória;
+- NF-e modelo 55 permanece sem o grupo suplementar exclusivo da NFC-e;
+- 57 testes fiscais e 5 subtestes aprovados, incluindo verificação criptográfica da assinatura com certificado temporário;
+- `compileall` e `git diff --check` aprovados; nenhuma comunicação com SEFAZ, banco real, certificado real ou impressora foi utilizada.
