@@ -11,6 +11,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from decimal import Decimal, ROUND_HALF_UP
 from typing import Any, Callable, Mapping, Sequence
+from urllib.parse import urlsplit
 
 try:
     import requests
@@ -265,10 +266,15 @@ class FiscalService:
             current["issuer"] = issuer
         if "endpoints" in config:
             endpoints = config.get("endpoints") or {}
-            current["endpoints"] = {
-                env: {str(k): str(v).strip() for k, v in dict(endpoints.get(env, {})).items() if str(v).strip()}
-                for env in self.VALID_ENVIRONMENTS
-            }
+            validated_endpoints: dict[str, dict[str, str]] = {}
+            for env in self.VALID_ENVIRONMENTS:
+                validated_endpoints[env] = {}
+                for operation, value in dict(endpoints.get(env, {})).items():
+                    url = str(value).strip()
+                    if not url:
+                        continue
+                    validated_endpoints[env][str(operation)] = self._validate_endpoint_url(url)
+            current["endpoints"] = validated_endpoints
         self._set_setting(self.CONFIG_KEY, json.dumps(current, ensure_ascii=False, sort_keys=True))
         return current
 
@@ -495,11 +501,32 @@ class FiscalService:
         else:
             custom = endpoints.get(operation)
         if custom:
-            return str(custom).strip()
+            return self._validate_endpoint_url(str(custom).strip())
         state = str(config.get("state") or "").upper()
         if state == "BA":
             return str(self.BAHIA_ENDPOINTS.get(model, {}).get(environment, {}).get(operation, "")).strip()
         return ""
+
+    @staticmethod
+    def _validate_endpoint_url(value: str) -> str:
+        url = str(value or "").strip()
+        try:
+            parsed = urlsplit(url)
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError("Endpoint fiscal inválido.") from exc
+        hostname = str(parsed.hostname or "").rstrip(".").casefold()
+        if parsed.scheme.casefold() != "https":
+            raise ValueError("Endpoint fiscal deve usar HTTPS.")
+        if not hostname or parsed.username is not None or parsed.password is not None:
+            raise ValueError("Endpoint fiscal não pode conter credenciais na URL.")
+        if port not in {None, 443}:
+            raise ValueError("Endpoint fiscal deve usar a porta HTTPS padrão 443.")
+        if parsed.query or parsed.fragment:
+            raise ValueError("Endpoint fiscal não pode conter consulta ou fragmento na URL.")
+        if not (hostname.endswith(".gov.br") or hostname.endswith(".invalid")):
+            raise ValueError("Endpoint fiscal deve pertencer a um domínio governamental oficial.")
+        return url
 
     def sign_xml(self, xml: bytes | str, *, reference_id: str, pfx_path: str | Path, password: str) -> bytes:
         self._require_dependency("cryptography")

@@ -646,3 +646,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - proteção implementada nos pontos únicos de persistência, sem sobreposição visual ou regra duplicada por tela;
 - 69 testes focados e `compileall` aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum banco real, certificado real, endpoint fiscal, interface ou impressora foi utilizado.
+
+## Checkpoint 42.45 — transporte fiscal restrito a destinos oficiais
+
+- endpoints fiscais manuais passam a exigir HTTPS, porta 443 e domínio governamental `.gov.br`;
+- URLs com usuário/senha, consulta, fragmento, porta alternativa ou domínio externo são recusadas antes da persistência;
+- configurações inseguras gravadas por versões anteriores também são bloqueadas quando o endpoint é resolvido, antes do uso do certificado A1;
+- domínios reservados `.invalid` permanecem aceitos exclusivamente como destinos inertes dos testes automatizados;
+- 62 testes fiscais e `compileall` aprovados com `NABICODE_PROFILE=TESTE`, sem conexão externa.

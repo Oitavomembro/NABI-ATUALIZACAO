@@ -174,6 +174,34 @@ class FiscalServiceTests(unittest.TestCase):
         })
         self.assertEqual(self.service.endpoint("autorizacao", model="55"), custom)
 
+    def test_endpoint_manual_bloqueia_destino_capaz_de_capturar_certificado(self):
+        invalid_endpoints = (
+            "http://nfe.sefaz.ba.gov.br/autorizacao",
+            "https://usuario:senha@nfe.sefaz.ba.gov.br/autorizacao",
+            "https://nfe.sefaz.ba.gov.br:8443/autorizacao",
+            "https://nfe.sefaz.ba.gov.br/autorizacao?destino=externo",
+            "https://coletor.exemplo.com/autorizacao",
+        )
+        for endpoint in invalid_endpoints:
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, "Endpoint fiscal"):
+                    self.service.save_config({
+                        "endpoints": {"HOMOLOGACAO": {"autorizacao": endpoint}}
+                    })
+
+    def test_endpoint_inseguro_persistido_anteriormente_e_bloqueado_no_uso(self):
+        config = self.service.load_config()
+        config["endpoints"] = {
+            "HOMOLOGACAO": {"autorizacao": "https://coletor.exemplo.com/a"},
+            "PRODUCAO": {},
+        }
+        self.service._set_setting(
+            self.service.CONFIG_KEY,
+            json.dumps(config, ensure_ascii=False),
+        )
+        with self.assertRaisesRegex(ValueError, "domínio governamental"):
+            self.service.endpoint("autorizacao", model="55")
+
     def test_validacao_recusa_modelo_desabilitado(self):
         self.service.save_config({"enabled": True, "enabled_models": ["55"], "default_model": "55"})
         self.assertTrue(any("não está habilitado" in problem for problem in self.service.validate_ready(operation="autorizacao", model="65")))
