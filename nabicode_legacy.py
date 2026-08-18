@@ -9681,13 +9681,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             result = self.fiscal_preflight_service.run(password=secret)
             if result.success:
+                model_names = {"55": "NF-e 55", "65": "NFC-e 65"}
+                validated = ", ".join(
+                    model_names.get(model, model) for model in result.validated_models
+                )
+                hashes = "\n".join(
+                    f"{model_names.get(model, model)}: {digest}"
+                    for model, digest in result.xml_sha256_by_model
+                )
                 messagebox.showinfo(
                     "Pré-voo fiscal aprovado",
                     (
-                        f"Modelo: {result.model}\n"
+                        f"Modelos aprovados: {validated}\n"
                         f"Catálogo pronto: {result.catalog_ready}/{result.catalog_total}\n"
                         f"Certificado: {result.certificate_document or 'documento não identificado'}\n"
-                        f"XML assinado e validado localmente.\nHash: {result.xml_sha256}\n\n"
+                        f"XMLs assinados e validados localmente.\n{hashes}\n\n"
                         "Nenhum documento foi transmitido e nenhuma numeração foi reservada."
                     ),
                     parent=janela,

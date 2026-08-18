@@ -929,3 +929,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 110 testes e 10 subtestes aprovados;
 - suíte completa: 1.210 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.61 — Fase 7 da homologação local multimodelo
+
+- o pré-voo fiscal passa a validar todos os modelos habilitados, em vez de conferir somente o documento definido como padrão;
+- instalações com NF-e 55 e NFC-e 65 geram, assinam e validam localmente um XML independente para cada modelo;
+- instalações com apenas um modelo habilitado continuam respeitando exatamente essa configuração;
+- se qualquer modelo reprovar a configuração, o conjunto é interrompido antes da geração e a mensagem identifica explicitamente NF-e ou NFC-e;
+- o resultado apresenta os modelos aprovados e uma impressão digital SHA-256 separada para cada XML temporário;
+- o teste de integração com certificado A1 temporário comprova os dois modelos no schema oficial e confirma a fila de transmissão vazia;
+- validação focada: 107 testes e 10 subtestes aprovados;
+- suíte completa: 1.212 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.

@@ -44,6 +44,8 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert "ao_salvar=self.abrir_configuracao_fiscal" in block
     assert "self.fiscal_preflight_service.run" in block
     assert 'text="Executar pré-voo fiscal local"' in block
+    assert "Modelos aprovados:" in block
+    assert "result.xml_sha256_by_model" in block
     assert "Nenhum documento foi transmitido" in block
 
 

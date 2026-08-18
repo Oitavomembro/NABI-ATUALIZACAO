@@ -32,8 +32,10 @@ class FakeFiscalService:
 
     def __init__(self):
         self.transmitted = False
+        self.built_models = []
         self.config = {
             "enabled": True, "default_model": "65", "tax_regime": "SIMPLES_NACIONAL",
+            "enabled_models": ["55", "65"],
             "cnpj": "12345678000195", "state": "BA", "certificate_path": "cert.pfx",
             "issuer": {},
         }
@@ -45,7 +47,9 @@ class FakeFiscalService:
         return Certificate()
     def _normalize_cnpj(self, value): return value
     def prepare_sale_items(self, items, **_kwargs): return [{"code": "P1"}]
-    def build_document_xml(self, **_kwargs): return b"<NFe/>", "1" * 44
+    def build_document_xml(self, **kwargs):
+        self.built_models.append(kwargs["document"]["model"])
+        return b"<NFe/>", "1" * 44
     def sign_xml(self, xml, **_kwargs): return b"<NFe signed='1'/>"
     def official_schema_path(self, _kind): return "nfe.xsd"
     def validate_xml_schema(self, xml, schema):
@@ -60,6 +64,9 @@ def test_pre_voo_assina_e_valida_localmente_sem_transmitir():
     assert result.catalog_ready == 1
     assert result.certificate_document == "12345678000195"
     assert len(result.xml_sha256) == 64
+    assert result.validated_models == ("55", "65")
+    assert len(result.xml_sha256_by_model) == 2
+    assert fiscal.built_models == ["55", "65"]
     assert fiscal.transmitted is False
 
 
@@ -78,3 +85,24 @@ def test_pre_voo_detecta_certificado_de_outro_cnpj():
     result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
     assert result.success is False
     assert any("não corresponde" in problem for problem in result.problems)
+
+
+def test_pre_voo_reprova_conjunto_quando_um_modelo_falha():
+    fiscal = FakeFiscalService()
+    fiscal.validate_ready = lambda **kwargs: (
+        ["modelo indisponível"] if kwargs["model"] == "55" else []
+    )
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert result.validated_models == ()
+    assert any("NF-e 55: modelo indisponível" == problem for problem in result.problems)
+    assert fiscal.built_models == []
+
+
+def test_pre_voo_respeita_somente_modelo_habilitado():
+    fiscal = FakeFiscalService()
+    fiscal.config.update({"enabled_models": ["55"], "default_model": "55"})
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is True
+    assert result.validated_models == ("55",)
+    assert fiscal.built_models == ["55"]

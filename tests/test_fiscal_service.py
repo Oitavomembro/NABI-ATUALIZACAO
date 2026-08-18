@@ -153,6 +153,8 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(result.catalog_ready, 1)
         self.assertEqual(result.certificate_document, "12345678000195")
         self.assertEqual(len(result.xml_sha256), 64)
+        self.assertEqual(result.validated_models, ("55", "65"))
+        self.assertEqual(len(result.xml_sha256_by_model), 2)
         self.assertEqual(self.service.list_transmission_queue(), [])
 
     def test_configuracao_preserva_cnpj_alfanumerico_oficial(self):
