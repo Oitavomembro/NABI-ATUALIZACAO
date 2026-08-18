@@ -63,6 +63,11 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertFalse(self.service.is_enabled())
         self.assertIn("não está habilitado", self.service.validate_ready(operation="autorizacao")[0])
 
+    def test_producao_fica_bloqueada_ate_homologar_ibs_cbs(self):
+        self.service.save_config({"enabled": True, "environment": "PRODUCAO"})
+        problems = self.service.validate_ready(operation="autorizacao", model="55")
+        self.assertTrue(any("IBS/CBS" in problem for problem in problems))
+
     def test_requests_ausente_nao_impede_inicializacao_do_sistema(self):
         with patch("services.fiscal_service.requests", None):
             service = FiscalService(self.connect, storage_dir=Path(self.tmp.name) / "sem_requests")

@@ -439,6 +439,11 @@ class FiscalService:
             return ["O módulo fiscal não está habilitado."]
         model = str(model).strip()
         problems: list[str] = []
+        if str(config.get("environment", "HOMOLOGACAO")).upper() == "PRODUCAO":
+            problems.append(
+                "Emissão em produção bloqueada nesta versão: configure e homologue "
+                "IBS/CBS conforme as Notas Técnicas vigentes antes de liberar documentos reais."
+            )
         if model not in self.VALID_MODELS:
             problems.append("Modelo fiscal deve ser 55 (NF-e) ou 65 (NFC-e).")
         elif model not in {str(item) for item in config.get("enabled_models", self.VALID_MODELS)}:

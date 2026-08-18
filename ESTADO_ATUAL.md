@@ -702,3 +702,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validações fiscais focadas, devolução, schemas oficiais, certificado A1, documentos, exportação contábil e empacotamento permanecem aprovados;
 - nenhum programa foi aberto, nenhuma impressora foi acionada e nenhum banco, certificado ou endpoint real foi utilizado;
 - geração de instalador de produção permanece fora deste checkpoint.
+
+## Checkpoint 42.51 — produção fiscal bloqueada até IBS/CBS
+
+- auditoria final confrontou o emissor com as orientações oficiais de 2026 e com as NT 2025.002/2026.002 publicadas pelo Portal NF-e;
+- o schema vigente contém os grupos IBS/CBS, mas o NabiCode ainda não possui matriz tributária suficiente para calculá-los legalmente por produto e operação;
+- emissão real em `PRODUCAO` passa a falhar de forma explícita antes de certificado ou rede, impedindo documento fiscal incompleto;
+- ambiente `HOMOLOGACAO` permanece disponível para demonstração, configuração, certificado A1 e validação técnica;
+- a liberação futura de produção depende da implementação da matriz IBS/CBS e de homologação fiscal com os dados tributários da empresa;
+- teste de regressão impede remoção acidental deste bloqueio de segurança.
