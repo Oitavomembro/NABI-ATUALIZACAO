@@ -42,6 +42,9 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert "report.issues[:12]" in block
     assert 'aba_inicial="Fiscal"' in block
     assert "ao_salvar=self.abrir_configuracao_fiscal" in block
+    assert "self.fiscal_preflight_service.run" in block
+    assert 'text="Executar pré-voo fiscal local"' in block
+    assert "Nenhum documento foi transmitido" in block
 
 
 def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():

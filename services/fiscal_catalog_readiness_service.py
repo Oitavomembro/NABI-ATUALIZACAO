@@ -21,6 +21,7 @@ class FiscalCatalogReport:
     total: int
     ready: int
     issues: tuple[FiscalCatalogIssue, ...]
+    ready_product_ids: tuple[int, ...] = ()
 
     @property
     def blocked(self) -> int:
@@ -59,6 +60,7 @@ class FiscalCatalogReadinessService:
             connection.close()
 
         issues: list[FiscalCatalogIssue] = []
+        ready_product_ids: list[int] = []
         for product in products:
             try:
                 profile = FiscalProductProfile.validate_for_regime(
@@ -70,6 +72,7 @@ class FiscalCatalogReadinessService:
                         csosn=profile["fiscal_csosn"], icms_cst=profile["fiscal_icms_cst"],
                     )
                     FiscalRtcResolver.resolve(profile, destination=destination)
+                ready_product_ids.append(int(product["id"]))
             except ValueError as exc:
                 issues.append(FiscalCatalogIssue(
                     product_id=int(product["id"]),
@@ -78,5 +81,6 @@ class FiscalCatalogReadinessService:
                     message=str(exc),
                 ))
         return FiscalCatalogReport(
-            total=len(products), ready=len(products) - len(issues), issues=tuple(issues)
+            total=len(products), ready=len(products) - len(issues), issues=tuple(issues),
+            ready_product_ids=tuple(ready_product_ids),
         )

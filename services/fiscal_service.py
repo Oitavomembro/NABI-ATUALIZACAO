@@ -563,7 +563,11 @@ class FiscalService:
         key_info = etree.SubElement(signature, etree.QName(self.DS_NS, "KeyInfo"))
         x509_data = etree.SubElement(key_info, etree.QName(self.DS_NS, "X509Data"))
         etree.SubElement(x509_data, etree.QName(self.DS_NS, "X509Certificate")).text = base64.b64encode(cert.public_bytes(serialization.Encoding.DER)).decode("ascii")
-        target.addnext(signature)
+        next_node = target.getnext()
+        if next_node is not None and etree.QName(next_node).localname == "infNFeSupl":
+            next_node.addnext(signature)
+        else:
+            target.addnext(signature)
         return etree.tostring(root, xml_declaration=True, encoding="utf-8", standalone=False)
 
     def verify_xml_signature(self, xml: bytes | str) -> dict[str, Any]:
@@ -1338,32 +1342,35 @@ class FiscalService:
             value=issuer.get(key_name);
             if value not in (None, ""): el(ender, name, self._digits(value) if name in {"cMun","CEP"} else value)
         el(emit, "IE", self._digits(issuer.get("state_registration"))); el(emit, "CRT", int(issuer.get("tax_regime_code", 1)))
-        dest = etree.SubElement(inf, etree.QName(ns, "dest"))
         doc_rec = self._normalize_tax_document(recipient.get("document"))
-        if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
-        elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
-        elif recipient.get("foreign_id"): el(dest, "idEstrangeiro", str(recipient.get("foreign_id")).strip())
-        if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
-        if any(recipient.get(key) for key in ("street", "city_code", "state", "zip_code")):
-            address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
-            for name, key_name in (("xLgr","street"),("nro","number"),("xBairro","district"),("cMun","city_code"),("xMun","city"),("UF","state"),("CEP","zip_code")):
-                value = recipient.get(key_name)
-                if value not in (None, ""):
-                    el(address, name, self._digits(value) if name in {"cMun", "CEP"} else value)
-        if recipient.get("email"):
-            el(dest, "email", str(recipient.get("email")).strip())
-        recipient_ie = self._digits(recipient.get("state_registration"))
-        taxpayer_indicator = recipient.get("state_taxpayer_indicator")
-        if taxpayer_indicator in (None, ""):
-            taxpayer_indicator = 1 if recipient_ie else 2 if recipient.get("icms_exempt") else 9
-        taxpayer_indicator = int(taxpayer_indicator)
-        if taxpayer_indicator not in {1, 2, 9}:
-            raise ValueError("Indicador de inscrição estadual do destinatário deve ser 1, 2 ou 9.")
-        if taxpayer_indicator == 1 and not recipient_ie:
-            raise ValueError("Destinatário contribuinte de ICMS exige inscrição estadual.")
-        el(dest, "indIEDest", taxpayer_indicator)
-        if recipient_ie:
-            el(dest, "IE", recipient_ie)
+        foreign_id = str(recipient.get("foreign_id") or "").strip()
+        has_recipient = len(doc_rec) in {11, 14} or bool(foreign_id)
+        if has_recipient:
+            dest = etree.SubElement(inf, etree.QName(ns, "dest"))
+            if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
+            elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
+            else: el(dest, "idEstrangeiro", foreign_id)
+            if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
+            if any(recipient.get(key) for key in ("street", "city_code", "state", "zip_code")):
+                address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
+                for name, key_name in (("xLgr","street"),("nro","number"),("xBairro","district"),("cMun","city_code"),("xMun","city"),("UF","state"),("CEP","zip_code")):
+                    value = recipient.get(key_name)
+                    if value not in (None, ""):
+                        el(address, name, self._digits(value) if name in {"cMun", "CEP"} else value)
+            recipient_ie = self._digits(recipient.get("state_registration"))
+            taxpayer_indicator = recipient.get("state_taxpayer_indicator")
+            if taxpayer_indicator in (None, ""):
+                taxpayer_indicator = 1 if recipient_ie else 2 if recipient.get("icms_exempt") else 9
+            taxpayer_indicator = int(taxpayer_indicator)
+            if taxpayer_indicator not in {1, 2, 9}:
+                raise ValueError("Indicador de inscrição estadual do destinatário deve ser 1, 2 ou 9.")
+            if taxpayer_indicator == 1 and not recipient_ie:
+                raise ValueError("Destinatário contribuinte de ICMS exige inscrição estadual.")
+            el(dest, "indIEDest", taxpayer_indicator)
+            if recipient_ie:
+                el(dest, "IE", recipient_ie)
+            if recipient.get("email"):
+                el(dest, "email", str(recipient.get("email")).strip())
         total_products = Decimal("0")
         total_icms_base = Decimal("0")
         total_icms = Decimal("0")

@@ -18,6 +18,7 @@ from cryptography.x509.oid import NameOID
 from lxml import etree
 
 from services.fiscal_service import FiscalResponse, FiscalService
+from services.fiscal_preflight_service import FiscalPreflightService
 
 
 class FiscalServiceTests(unittest.TestCase):
@@ -110,6 +111,49 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.cache_certificate_password("senha-errada")
         self.assertIsNone(self.service.session_certificate_password())
+
+    def test_pre_voo_real_assina_e_valida_sem_transmitir(self):
+        conn = self.connect()
+        conn.execute(
+            """CREATE TABLE produtos (
+                id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, ncm TEXT, cest TEXT, cfop TEXT,
+                fiscal_origin TEXT, fiscal_csosn TEXT, fiscal_icms_cst TEXT, fiscal_icms_rate TEXT,
+                fiscal_pis_cst TEXT, fiscal_pis_rate TEXT, fiscal_cofins_cst TEXT, fiscal_cofins_rate TEXT,
+                fiscal_profile_source TEXT, ibs_cbs_cst TEXT, ibs_cbs_class TEXT,
+                ibs_uf_rate TEXT, ibs_city_rate TEXT, cbs_rate TEXT
+            )"""
+        )
+        conn.execute(
+            """INSERT INTO produtos VALUES(
+                1,'P1','PRODUTO','94036000','','5102','0','102','','0','07','0','07','0','MANUAL',
+                '000','000001','0.1','0','0.9')"""
+        )
+        conn.commit(); conn.close()
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO", "default_model": "65",
+            "enabled_models": ["55", "65"], "cnpj": "12345678000195", "state": "BA",
+            "tax_regime": "SIMPLES_NACIONAL", "certificate_path": str(self.pfx_path),
+            "issuer": {
+                "name": "EMPRESA TESTE", "state_registration": "123", "city_code": "2927408",
+                "city": "SALVADOR", "street": "RUA TESTE", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000",
+            },
+        })
+        self.service.configure_certificate(self.pfx_path, self.password)
+
+        class ReadyCatalog:
+            def audit(_self, *, crt):
+                self.assertEqual(crt, 1)
+                return type("Report", (), {
+                    "total": 1, "ready": 1, "blocked": 0, "ready_product_ids": (1,)
+                })()
+
+        result = FiscalPreflightService(self.service, ReadyCatalog()).run(password=self.password)
+        self.assertTrue(result.success, result.problems)
+        self.assertEqual(result.catalog_ready, 1)
+        self.assertEqual(result.certificate_document, "12345678000195")
+        self.assertEqual(len(result.xml_sha256), 64)
+        self.assertEqual(self.service.list_transmission_queue(), [])
 
     def test_configuracao_preserva_cnpj_alfanumerico_oficial(self):
         config = self.service.save_config({"cnpj": "12.ABC.345/01DE-35"})

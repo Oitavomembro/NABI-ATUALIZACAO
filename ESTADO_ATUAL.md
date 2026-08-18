@@ -916,3 +916,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.206 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.60 — Fase 6 do pré-voo fiscal local
+
+- criada uma verificação única de prontidão que combina configuração, catálogo, certificado, identidade do emitente, geração, assinatura e schema oficial;
+- o pré-voo usa uma mercadoria já aprovada pelo catálogo para montar um XML determinístico de homologação sem gravar documento, reservar numeração ou acessar a SEFAZ;
+- o CNPJ do certificado é comparado ao emitente configurado e certificados expirados, inválidos ou incompatíveis bloqueiam o resultado;
+- o resultado apresenta modelo, quantidade pronta, documento do certificado e impressão digital SHA-256 do XML temporário;
+- corrigida na fonte a NFC-e anônima, que não deve criar um grupo `dest` sem CPF, CNPJ ou identificação estrangeira;
+- corrigida a ordem estrutural da assinatura quando existe `infNFeSupl`, conforme o schema oficial da NFC-e;
+- teste real de integração gera certificado A1 temporário, assina o XML, valida o schema e confirma que a fila de transmissão permanece vazia;
+- validação focada: 110 testes e 10 subtestes aprovados;
+- suíte completa: 1.210 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.

@@ -33,6 +33,7 @@ from services.financeiro_calculator import FinanceiroCalculator
 from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
+from services.fiscal_preflight_service import FiscalPreflightService
 from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -730,6 +731,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
         self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
+        self.fiscal_preflight_service = FiscalPreflightService(
+            self.fiscal_service, self.fiscal_catalog_readiness_service
+        )
         self.pdv_service = PDVService(conectar_banco)
         self.pdv_transaction_service = PDVTransactionService(
             conectar_banco, estoque_service=ESTOQUE_SERVICE,
@@ -9669,6 +9673,31 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     )
             except Exception as exc:
                 messagebox.showerror("Catálogo fiscal", str(exc), parent=janela)
+        def run_fiscal_preflight():
+            secret = self._obter_senha_certificado(
+                parent=janela, title="Pré-voo fiscal local"
+            )
+            if secret is None:
+                return
+            result = self.fiscal_preflight_service.run(password=secret)
+            if result.success:
+                messagebox.showinfo(
+                    "Pré-voo fiscal aprovado",
+                    (
+                        f"Modelo: {result.model}\n"
+                        f"Catálogo pronto: {result.catalog_ready}/{result.catalog_total}\n"
+                        f"Certificado: {result.certificate_document or 'documento não identificado'}\n"
+                        f"XML assinado e validado localmente.\nHash: {result.xml_sha256}\n\n"
+                        "Nenhum documento foi transmitido e nenhuma numeração foi reservada."
+                    ),
+                    parent=janela,
+                )
+                return
+            messagebox.showwarning(
+                "Pré-voo fiscal — revisão necessária",
+                "\n".join(f"• {problem}" for problem in result.problems[:12]),
+                parent=janela,
+            )
         def save():
             try:
                 enabled_changed = bool(config.get("enabled")) != bool(enabled.get())
@@ -9728,6 +9757,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 status.configure(text=str(exc), text_color="#f85149")
         ctk.CTkButton(content, text="Salvar configuração fiscal", fg_color="#2ea043", command=save).pack(fill="x", padx=16, pady=(8, 6))
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
+        ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))
 
     def abrir_central_fiscal(self):
