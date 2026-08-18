@@ -516,6 +516,40 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertEqual(root.xpath("string(//*[local-name()='pag']/*[local-name()='vTroco'])"), "1.00")
 
+    def test_pagamento_fiscal_inferior_ao_total_e_bloqueado(self):
+        issuer = {
+            "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+            "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+            "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+            "tax_regime_code": 1,
+        }
+        items = [{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,
+                  "ncm":"94036000","cfop":"5102","unit":"UN"}]
+        document = {"model":"65","series":1,"number":4,"state_code":"29",
+                    "environment":"HOMOLOGACAO","numeric_code":"12345671",
+                    "payments":[{"code":"17","amount":"9.99"}]}
+        with self.assertRaisesRegex(ValueError, "menor"):
+            self.service.build_document_xml(
+                issuer=issuer, recipient={}, items=items, document=document
+            )
+
+    def test_sem_pagamento_nao_pode_ser_misturado(self):
+        issuer = {
+            "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+            "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+            "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+            "tax_regime_code": 1,
+        }
+        items = [{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,
+                  "ncm":"94036000","cfop":"5102","unit":"UN"}]
+        document = {"model":"55","series":1,"number":5,"state_code":"29",
+                    "environment":"HOMOLOGACAO","numeric_code":"12345672",
+                    "payments":[{"code":"90","amount":"0"},{"code":"01","amount":"10"}]}
+        with self.assertRaisesRegex(ValueError, "combinado"):
+            self.service.build_document_xml(
+                issuer=issuer, recipient={}, items=items, document=document
+            )
+
     def test_nfce_offline_assina_parametros_qrcode_v3_com_certificado(self):
         issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         key = self.service.build_access_key(

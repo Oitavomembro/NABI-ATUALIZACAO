@@ -1452,11 +1452,22 @@ class FiscalService:
                 **dict(document.get("payment_detail") or {}),
             }]
         payment_total = Decimal("0.00")
+        payment_codes: list[str] = []
         for payment_row in payment_rows:
             payment_code = str(payment_row.get("code", "99"))
-            payment_amount = Decimal(str(payment_row.get("amount", 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if len(self._digits(payment_code)) != 2:
+                raise ValueError("Código de pagamento fiscal inválido.")
+            try:
+                payment_amount = Decimal(str(payment_row.get("amount", 0))).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            except Exception as exc:
+                raise ValueError("Valor de pagamento fiscal inválido.") from exc
             if payment_amount < 0 or (payment_amount == 0 and payment_code != "90"):
                 raise ValueError("Cada pagamento fiscal deve possuir valor maior que zero.")
+            if payment_code == "90" and payment_amount != 0:
+                raise ValueError("Pagamento 90 — sem pagamento deve possuir valor zero.")
+            payment_codes.append(payment_code)
             payment_total += payment_amount
             detpag = etree.SubElement(pag, etree.QName(ns, "detPag"))
             el(detpag, "tPag", payment_code); el(detpag, "vPag", f"{payment_amount:.2f}")
@@ -1471,6 +1482,10 @@ class FiscalService:
                     if len(authorization) > 20:
                         raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
                     el(card, "cAut", authorization)
+        if "90" in payment_codes and len(payment_codes) != 1:
+            raise ValueError("Sem pagamento não pode ser combinado com outra forma de pagamento.")
+        if payment_codes != ["90"] and payment_total < total_with_rtc:
+            raise ValueError("A soma dos pagamentos fiscais não pode ser menor que o total do documento.")
         change = (payment_total - total_with_rtc).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
         if change > 0:
             el(pag, "vTroco", f"{change:.2f}")

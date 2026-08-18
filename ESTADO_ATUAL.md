@@ -1,5 +1,16 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — fechamento monetário do documento
+
+- o XML bloqueia soma de pagamentos inferior ao total fiscal;
+- códigos e valores de pagamento inválidos são recusados antes da assinatura e transmissão;
+- `90 — sem pagamento` exige valor zero e não pode ser combinado com dinheiro, PIX ou cartão;
+- devoluções continuam aceitas corretamente como operação única sem pagamento;
+- pagamentos acima do total continuam permitidos somente com o troco explícito gerado no XML;
+- validação focada: 126 testes e 10 subtestes aprovados;
+- suíte completa: 1.170 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — estados determinísticos na Central Fiscal
 
 - documentos cancelados deixam de ser contabilizados como pendentes;
