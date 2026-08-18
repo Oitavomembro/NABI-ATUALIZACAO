@@ -33,3 +33,10 @@ def test_pdv_oferece_autorizacao_opcional_para_cartao_pos():
     assert "Autorização da maquininha (opcional)" in block
     assert '"card_integration": 2' in block
     assert '"card_authorization"' in block
+
+
+def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
+    block = SOURCE.split("def abrir_configuracao_fiscal", 1)[1].split("def abrir_central_fiscal", 1)[0]
+    assert "self.fiscal_catalog_readiness_service.audit" in block
+    assert 'text="Verificar catálogo fiscal"' in block
+    assert "report.issues[:12]" in block

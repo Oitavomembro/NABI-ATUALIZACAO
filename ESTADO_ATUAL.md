@@ -889,3 +889,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.200 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
 - produção permanece bloqueada até homologação contábil e fiscal; nenhum programa, banco real, certificado real, endpoint ou impressora foi utilizado.
+
+## Checkpoint 42.58 — Fase 4 da pré-homologação do catálogo
+
+- criado um serviço único e somente leitura para conferir todas as mercadorias fiscais ativas antes do uso no PDV;
+- cada produto é validado pela mesma ficha, matriz de operação e regra IBS/CBS usadas na emissão real;
+- a auditoria cobre simultaneamente vendas internas e interestaduais e detecta NCM, CFOP, origem, CEST, ICMS, PIS, COFINS e IBS/CBS incompletos ou incompatíveis;
+- serviços, produtos inativos e itens marcados para não participar do XML ficam corretamente fora da conferência;
+- a configuração fiscal ganhou a ação `Verificar catálogo fiscal`, que apresenta quantidade pronta e até doze pendências legíveis, sem criar uma tela ou cadastro paralelo;
+- nenhum dado fiscal é preenchido, substituído ou corrigido automaticamente pela auditoria;
+- MEI e substituição tributária passam pelas mesmas restrições seguras das Fases 1 a 3;
+- validação focada: 128 testes e 10 subtestes aprovados;
+- suíte completa: 1.205 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
