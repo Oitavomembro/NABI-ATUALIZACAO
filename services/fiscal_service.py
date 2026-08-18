@@ -2681,6 +2681,28 @@ class FiscalService:
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
         return dict(target)
 
+    def force_receipt_check(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+        """Agenda consulta imediata de recibo já existente sem reenviar a NF-e/NFC-e."""
+        rows = self.list_transmission_queue()
+        target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
+        if target is None:
+            raise ValueError("Item da fila fiscal não encontrado.")
+        if str(target.get("operation") or "").lower() != "recibo" or not self._digits(target.get("receipt")):
+            raise ValueError("O documento selecionado ainda não possui recibo da SEFAZ para consulta.")
+        if target.get("status") in {"CONCLUIDO", "CANCELADO"}:
+            raise ValueError("Documento concluído ou cancelado não exige consulta de recibo.")
+        now = datetime.now(timezone.utc).isoformat()
+        target.update({
+            "status": "PENDENTE", "next_attempt_at": now,
+            "receipt_check_requested_by": str(actor or "").strip(),
+            "receipt_check_requested_at": now, "last_error": "",
+        })
+        self._set_setting(
+            self.TRANSMISSION_QUEUE_KEY,
+            json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True),
+        )
+        return dict(target)
+
     def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
         rows = self.list_transmission_queue()
         target = next((record for record in rows if str(record.get("id")) == str(queue_id)), None)

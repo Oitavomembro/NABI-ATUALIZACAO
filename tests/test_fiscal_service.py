@@ -1476,6 +1476,18 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(second["operation"], "recibo")
         self.assertEqual(second["last_status_code"], "105")
         self.assertEqual(second["attempts"], 2)
+        forced = self.service.force_receipt_check(second["id"], actor="gerente")
+        self.assertEqual(forced["operation"], "recibo")
+        self.assertEqual(forced["receipt_check_requested_by"], "gerente")
+        self.assertLessEqual(datetime.fromisoformat(forced["next_attempt_at"]), datetime.now(timezone.utc))
+
+    def test_consulta_forcada_nao_reenvia_autorizacao_sem_recibo(self):
+        item = self.service.enqueue_transmission(
+            operation="autorizacao", xml=f'<NFe><infNFe Id="NFe{"7" * 44}"/></NFe>',
+            access_key="7" * 44, actor="admin",
+        )
+        with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
+            self.service.force_receipt_check(item["id"], actor="admin")
 
     def test_reenvio_manual_reabre_item_falhado(self):
         item = self.service.enqueue_transmission(

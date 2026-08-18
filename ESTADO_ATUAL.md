@@ -1008,3 +1008,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 114 testes e 10 subtestes aprovados;
 - suíte completa: 1.227 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.67 — recuperação segura de recibos pendentes
+
+- a Central Fiscal ganhou a ação `Consultar recibo` para vendas já recebidas pela SEFAZ e ainda em processamento;
+- a consulta manual antecipa somente a próxima tentativa do recibo existente e não reenvia o XML de autorização;
+- itens sem recibo, concluídos ou cancelados são bloqueados com mensagem específica;
+- usuário e instante da solicitação manual ficam registrados na fila fiscal;
+- a consulta continua em segundo plano e mantém o NabiCode utilizável;
+- validação focada: 104 testes e 10 subtestes aprovados;
+- suíte completa: 1.228 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

@@ -10278,10 +10278,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
         transmission_status.pack(fill="x", padx=16, pady=(0, 3))
 
-        def transmit_queue(*, retry_selected=False):
+        def transmit_queue(*, retry_selected=False, receipt_selected=False):
             if not self._autorizar("fiscal", "configure"):
                 return
-            row = selected() if retry_selected else None
+            row = selected() if retry_selected or receipt_selected else None
+            if receipt_selected:
+                if not row or row.get("_kind") != "VENDA":
+                    messagebox.showwarning("Central fiscal", "Selecione uma venda que aguarda recibo.", parent=janela)
+                    return
+                queue = dict(row.get("_queue") or {})
+                try:
+                    self.fiscal_service.force_receipt_check(
+                        str(queue.get("id") or ""), actor=self._usuario_financeiro()
+                    )
+                except ValueError as exc:
+                    messagebox.showwarning("Consultar recibo", str(exc), parent=janela)
+                    return
             if retry_selected:
                 if not row or row.get("_kind") != "VENDA":
                     messagebox.showwarning("Central fiscal", "Selecione uma venda fiscal pendente.", parent=janela)
@@ -10307,6 +10319,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             transmission_status.configure(text="Transmitindo em segundo plano. Você pode continuar usando o NabiCode.")
             transmit_button.configure(state="disabled")
             retry_button.configure(state="disabled")
+            receipt_button.configure(state="disabled")
             task = TASK_MANAGER.submit(
                 "Transmitir documentos fiscais",
                 lambda context: self.fiscal_service.process_transmission_queue(
@@ -10327,6 +10340,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     )
                     transmit_button.configure(state="normal")
                     retry_button.configure(state="normal")
+                    receipt_button.configure(state="normal")
                     password = ""
                     load()
                     return
@@ -10334,6 +10348,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     transmission_status.configure(text=current.error or "Transmissão cancelada.", text_color="#da3633")
                     transmit_button.configure(state="normal")
                     retry_button.configure(state="normal")
+                    receipt_button.configure(state="normal")
                     password = ""
                     load()
                     return
@@ -10518,6 +10533,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         retry_button.pack(side="left", padx=4)
         export_actions = ctk.CTkFrame(frame, fg_color="transparent")
         export_actions.pack(fill="x", padx=12, pady=(0, 10))
+        receipt_button = ctk.CTkButton(
+            export_actions, text="Consultar recibo", command=lambda: transmit_queue(receipt_selected=True),
+            fg_color="#1f6feb",
+        )
+        receipt_button.pack(side="left", padx=4)
         cancel_button = ctk.CTkButton(export_actions, text="Cancelar autorizado", command=cancel_authorized_sale, fg_color="#da3633")
         cancel_button.pack(side="left", padx=4)
         ctk.CTkButton(export_actions, text="Enviar CC-e", command=send_correction_letter, fg_color="#d29922").pack(side="left", padx=4)
