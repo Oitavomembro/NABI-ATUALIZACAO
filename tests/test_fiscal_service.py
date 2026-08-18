@@ -289,6 +289,41 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "entre 0 e 999"):
             self.service.save_config({"sale_series_65": 1000})
 
+    def test_numeração_inicial_define_proximo_numero_uma_unica_vez(self):
+        initialized = self.service.initialize_numbering(
+            model="55", series=4, next_number=321, environment="HOMOLOGACAO",
+            actor="admin",
+        )
+        self.assertEqual(initialized["next_number"], 321)
+        scope = self.service.numbering_scope(
+            model="55", series=4, environment="HOMOLOGACAO"
+        )
+        self.assertTrue(scope["initialized"])
+        self.assertEqual(scope["next_number"], 321)
+        reserved = self.service.reserve_number(
+            model="55", series=4, environment="HOMOLOGACAO", actor="admin"
+        )
+        self.assertEqual(reserved["number"], 321)
+        with self.assertRaisesRegex(ValueError, "já foi iniciada"):
+            self.service.initialize_numbering(
+                model="55", series=4, next_number=500,
+                environment="HOMOLOGACAO", actor="admin",
+            )
+
+    def test_numeração_inicial_isola_ambiente_modelo_e_serie(self):
+        self.service.initialize_numbering(
+            model="65", series=2, next_number=90,
+            environment="HOMOLOGACAO", actor="admin",
+        )
+        production = self.service.numbering_scope(
+            model="65", series=2, environment="PRODUCAO"
+        )
+        other_model = self.service.numbering_scope(
+            model="55", series=2, environment="HOMOLOGACAO"
+        )
+        self.assertFalse(production["initialized"])
+        self.assertFalse(other_model["initialized"])
+
     def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
         expected_regimes = {
             "MEI": 4,

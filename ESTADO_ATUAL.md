@@ -970,3 +970,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 100 testes e 10 subtestes aprovados, incluindo round-trip real da DPAPI com segredo temporário;
 - suíte completa: 1.222 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado da Área de Trabalho, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.64 — numeração fiscal inicial auditada
+
+- empresas vindas de outro emissor podem definir o próximo número por ambiente, modelo e série sem gerar documento;
+- a operação exige senha mestra e registra usuário, data, escopo e número inicial na própria estrutura transacional de numeração;
+- cada escopo só pode ser inicializado uma vez e qualquer tentativa posterior é bloqueada;
+- séries ficam limitadas a 0–999 e números ao intervalo oficial de 1–999999999;
+- NF-e, NFC-e, homologação e produção mantêm sequências totalmente independentes;
+- a primeira reserva após a inicialização usa exatamente o número informado;
+- lacunas posteriores não podem ser criadas pela configuração e devem passar pela inutilização oficial;
+- validação focada: 101 testes e 10 subtestes aprovados;
+- suíte completa: 1.224 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

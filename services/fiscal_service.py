@@ -381,6 +381,71 @@ class FiscalService:
             result.append(dict(record))
         return sorted(result, key=lambda item: (str(item.get("environment")), str(item.get("model")), int(item.get("series", 0)), int(item.get("number", 0))))
 
+    def numbering_scope(
+        self, *, model: str, series: int, environment: str | None = None
+    ) -> dict[str, Any]:
+        model = str(model)
+        series = int(series)
+        environment = str(
+            environment or self.load_config().get("environment") or "HOMOLOGACAO"
+        ).upper()
+        scope = f"{environment}:{model}:{series}"
+        data = self._load_numbering()
+        initialized = scope in data.get("scopes", {})
+        last_number = int(data.get("scopes", {}).get(scope, 0))
+        return {
+            "scope": scope, "model": model, "series": series,
+            "environment": environment, "initialized": initialized,
+            "last_number": last_number, "next_number": last_number + 1,
+        }
+
+    def initialize_numbering(
+        self, *, model: str, series: int, next_number: int,
+        actor: str, environment: str | None = None,
+    ) -> dict[str, Any]:
+        model = str(model)
+        if model not in self.VALID_MODELS:
+            raise ValueError("Modelo fiscal deve ser 55 ou 65.")
+        series = int(series)
+        if not 0 <= series <= 999:
+            raise ValueError("Série fiscal deve estar entre 0 e 999.")
+        next_number = int(next_number)
+        if not 1 <= next_number <= 999_999_999:
+            raise ValueError("Próximo número fiscal deve estar entre 1 e 999999999.")
+        environment = str(
+            environment or self.load_config().get("environment") or "HOMOLOGACAO"
+        ).upper()
+        if environment not in self.VALID_ENVIRONMENTS:
+            raise ValueError("Ambiente fiscal inválido.")
+        now = datetime.now(timezone.utc)
+        scope = f"{environment}:{model}:{series}"
+        conn = self.connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            data = self._load_numbering_conn(conn)
+            if scope in data.setdefault("scopes", {}):
+                raise ValueError(
+                    "A numeração deste modelo/série já foi iniciada. Use inutilização para tratar lacunas."
+                )
+            if any(record.get("scope") == scope for record in data.get("records", {}).values()):
+                raise ValueError("Já existem registros para esta numeração fiscal.")
+            data["scopes"][scope] = next_number - 1
+            audit = {
+                "scope": scope, "model": model, "series": series,
+                "environment": environment, "next_number": next_number,
+                "actor": str(actor or "").strip() or "Sistema",
+                "created_at": now.isoformat(),
+            }
+            data.setdefault("initializations", []).append(audit)
+            self._save_numbering_conn(conn, data)
+            conn.commit()
+            return dict(audit)
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
     def reserve_number(
         self,
         *,
@@ -2848,15 +2913,16 @@ class FiscalService:
     def _load_numbering_conn(self, conn: Any) -> dict[str, Any]:
         row = conn.execute("SELECT valor FROM configuracoes WHERE chave = ?", (self.NUMBERING_KEY,)).fetchone()
         if row is None:
-            return {"scopes": {}, "records": {}}
+            return {"scopes": {}, "records": {}, "initializations": []}
         try:
             data = json.loads(str(row[0]))
         except (TypeError, ValueError):
-            return {"scopes": {}, "records": {}}
+            return {"scopes": {}, "records": {}, "initializations": []}
         if not isinstance(data, dict):
-            return {"scopes": {}, "records": {}}
+            return {"scopes": {}, "records": {}, "initializations": []}
         data.setdefault("scopes", {})
         data.setdefault("records", {})
+        data.setdefault("initializations", [])
         return data
 
     def _save_numbering_conn(self, conn: Any, data: Mapping[str, Any]) -> None:

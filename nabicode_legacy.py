@@ -9789,6 +9789,98 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 janela.after(150, follow_status)
             janela.after(100, follow_status)
+
+        def configure_initial_numbering():
+            modal = ctk.CTkToplevel(janela)
+            modal.title("Numeração fiscal inicial")
+            modal.geometry("500x390")
+            modal.transient(janela)
+            modal.grab_set()
+            ctk.CTkLabel(
+                modal,
+                text="Use apenas para continuar a sequência de outro emissor.",
+                font=ctk.CTkFont(size=15, weight="bold"),
+                text_color="#d29922",
+            ).pack(anchor="w", padx=20, pady=(18, 10))
+            model_choice = ctk.CTkComboBox(
+                modal, values=list(self.fiscal_service.MODEL_LABELS.values()), state="readonly"
+            )
+            model_choice.set(default_model.get())
+            model_choice.pack(fill="x", padx=20, pady=5)
+            series_entry = ctk.CTkEntry(modal, placeholder_text="Série")
+            series_entry.pack(fill="x", padx=20, pady=5)
+            selected_code = next(
+                code for code, label in self.fiscal_service.MODEL_LABELS.items()
+                if label == default_model.get()
+            )
+            series_entry.insert(0, fields[f"sale_series_{selected_code}"].get())
+            next_entry = ctk.CTkEntry(modal, placeholder_text="Próximo número a emitir")
+            next_entry.pack(fill="x", padx=20, pady=5)
+            next_entry.insert(0, "1")
+            number_status = ctk.CTkLabel(modal, text="", wraplength=450, justify="left")
+            number_status.pack(anchor="w", padx=20, pady=8)
+
+            def refresh_numbering(_choice=None):
+                code = next(
+                    item for item, label in self.fiscal_service.MODEL_LABELS.items()
+                    if label == model_choice.get()
+                )
+                if _choice is not None:
+                    series_entry.delete(0, "end")
+                    series_entry.insert(0, fields[f"sale_series_{code}"].get())
+                try:
+                    scope = self.fiscal_service.numbering_scope(
+                        model=code, series=int(series_entry.get()), environment=environment.get()
+                    )
+                    number_status.configure(
+                        text=(
+                            f"Sequência já iniciada. Próximo número interno: {scope['next_number']}."
+                            if scope["initialized"] else
+                            "Sequência ainda não iniciada neste ambiente/modelo/série."
+                        ),
+                        text_color="#d29922" if scope["initialized"] else "#8b949e",
+                    )
+                except ValueError as exc:
+                    number_status.configure(text=str(exc), text_color="#da3633")
+
+            model_choice.configure(command=refresh_numbering)
+            series_entry.bind("<FocusOut>", refresh_numbering)
+            refresh_numbering()
+
+            def confirm_numbering():
+                if not self._confirmar_senha_mestra(
+                    title="Configurar numeração fiscal",
+                    prompt="Digite a senha mestra para definir a sequência fiscal inicial.",
+                    parent=modal,
+                ):
+                    return
+                code = next(
+                    item for item, label in self.fiscal_service.MODEL_LABELS.items()
+                    if label == model_choice.get()
+                )
+                try:
+                    record = self.fiscal_service.initialize_numbering(
+                        model=code, series=int(series_entry.get()),
+                        next_number=int(next_entry.get()), environment=environment.get(),
+                        actor=self._usuario_financeiro(),
+                    )
+                    registrar_auditoria(
+                        self._usuario_financeiro(), "INICIAR_NUMERACAO_FISCAL", "Fiscal",
+                        f"{record['scope']} próximo {record['next_number']}", "SUCESSO",
+                    )
+                    modal.destroy()
+                    self.mostrar_notificacao(
+                        "Numeração fiscal configurada",
+                        f"A próxima emissão usará o número {record['next_number']}.",
+                        nivel="success",
+                    )
+                except Exception as exc:
+                    messagebox.showerror("Numeração fiscal", str(exc), parent=modal)
+
+            ctk.CTkButton(
+                modal, text="Confirmar sequência inicial", command=confirm_numbering,
+                fg_color="#da3633",
+            ).pack(fill="x", padx=20, pady=14)
         def verify_fiscal_catalog():
             try:
                 regime = regime_by_label[tax_regime.get()]
@@ -9945,6 +10037,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=test_sefaz_connection,
         )
         sefaz_test_button.pack(fill="x", padx=16, pady=(0, 6))
+        ctk.CTkButton(
+            content, text="Configurar próximo número fiscal", fg_color="#d29922",
+            command=configure_initial_numbering,
+        ).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))

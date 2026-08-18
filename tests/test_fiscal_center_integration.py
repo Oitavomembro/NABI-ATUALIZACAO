@@ -58,6 +58,9 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert 'text="Testar conexão com a SEFAZ"' in block
     assert "check_service_status" in block
     assert "TASK_MANAGER.submit" in block
+    assert 'text="Configurar próximo número fiscal"' in block
+    assert "initialize_numbering" in block
+    assert "INICIAR_NUMERACAO_FISCAL" in block
 
 
 def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
