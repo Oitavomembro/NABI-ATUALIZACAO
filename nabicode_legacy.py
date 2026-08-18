@@ -3183,7 +3183,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         entrada.bind("<Return>", lambda _event: salvar(), add="+")
         entrada.focus_set()
 
-    def abrir_cadastro_produto(self, produto_id=None, dados_precarregados=None):
+    def abrir_cadastro_produto(
+        self, produto_id=None, dados_precarregados=None, *, aba_inicial=None, ao_salvar=None
+    ):
         catalogo = PRODUCT_APPLICATION_SERVICE.carregar_catalogo_auxiliar()
         categorias = [(item.item_id, item.nome) for item in catalogo.categorias]
         mapa = catalogo.mapa_categorias
@@ -3231,6 +3233,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         aba_precos = abas_produto.add("Preços")
         aba_estoque = abas_produto.add("Estoque")
         aba_fiscal = abas_produto.add("Fiscal")
+        if aba_inicial in {"Geral", "Preços", "Estoque", "Fiscal"}:
+            abas_produto.set(aba_inicial)
 
         formularios = {}
         for nome, aba in (("geral", aba_geral), ("precos", aba_precos), ("estoque", aba_estoque), ("fiscal", aba_fiscal)):
@@ -3417,6 +3421,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             win.destroy()
             self.carregar_produtos()
+            if callable(ao_salvar):
+                ao_salvar()
             return True
 
         rodape = ctk.CTkFrame(win, fg_color="#0d1117")
@@ -3473,6 +3479,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 combo_marca.get(), combo_fornecedor.get(), combo_unidade.get(),
                 combo_unidade_compra.get(), e_fator.get(), combo_tipo.get(),
                 bool(permite_negativo_var.get()),
+                e_ncm.get(), e_cest.get(), e_cfop.get(), e_origem.get(), e_csosn.get(),
+                e_icms_cst.get(), e_icms_rate.get(), e_pis_cst.get(), e_pis_rate.get(),
+                e_cofins_cst.get(), e_cofins_rate.get(), e_ibs_cst.get(), e_ibs_class.get(),
+                e_ibs_uf_rate.get(), e_ibs_city_rate.get(), e_cbs_rate.get(),
             )
 
         estado_inicial_produto = estado_produto()
@@ -9640,11 +9650,23 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 remaining = report.blocked - min(report.blocked, 12)
                 if remaining:
                     details += f"\n• ... e mais {remaining} produto(s)."
-                messagebox.showwarning(
+                should_open = messagebox.askyesno(
                     "Catálogo fiscal — revisão necessária",
-                    f"Prontos: {report.ready} de {report.total}\n\n{details}",
+                    (
+                        f"Prontos: {report.ready} de {report.total}\n\n{details}\n\n"
+                        "Deseja abrir o primeiro produto pendente diretamente na aba Fiscal?"
+                    ),
                     parent=janela,
                 )
+                if should_open:
+                    first_issue = report.issues[0]
+                    janela.grab_release()
+                    janela.destroy()
+                    self.abrir_cadastro_produto(
+                        first_issue.product_id,
+                        aba_inicial="Fiscal",
+                        ao_salvar=self.abrir_configuracao_fiscal,
+                    )
             except Exception as exc:
                 messagebox.showerror("Catálogo fiscal", str(exc), parent=janela)
         def save():

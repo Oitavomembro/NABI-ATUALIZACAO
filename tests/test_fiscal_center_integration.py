@@ -40,3 +40,13 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert "self.fiscal_catalog_readiness_service.audit" in block
     assert 'text="Verificar catálogo fiscal"' in block
     assert "report.issues[:12]" in block
+    assert 'aba_inicial="Fiscal"' in block
+    assert "ao_salvar=self.abrir_configuracao_fiscal" in block
+
+
+def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():
+    block = SOURCE.split("def abrir_cadastro_produto", 1)[1].split("def editar_produto_selecionado", 1)[0]
+    assert "aba_inicial=None" in block
+    assert "abas_produto.set(aba_inicial)" in block
+    assert "if callable(ao_salvar)" in block
+    assert "e_ibs_class.get()" in block

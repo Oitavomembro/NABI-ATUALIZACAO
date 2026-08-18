@@ -903,3 +903,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.205 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.59 — Fase 5 da correção fiscal assistida
+
+- a lista de pendências da pré-homologação oferece abrir diretamente o primeiro produto bloqueado;
+- a correção usa exclusivamente o cadastro oficial de produtos e abre a aba `Fiscal`, sem segundo formulário, tabela ou regra de gravação;
+- após salvar o produto, o fluxo retorna à configuração fiscal para permitir nova conferência do catálogo;
+- o usuário corrige um produto por vez, preservando decisão humana e rastreabilidade em vez de alterações tributárias em massa;
+- o estado de edição do produto passa a incluir NCM, CEST, CFOP, origem, ICMS, PIS, COFINS e IBS/CBS;
+- fechar um cadastro com alteração fiscal não salva agora aciona a mesma proteção contra perda de dados dos demais campos;
+- validação focada: 63 testes aprovados;
+- suíte completa: 1.206 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
