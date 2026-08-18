@@ -522,6 +522,43 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(items[0]["ncm"], "94036000")
         self.assertEqual(items[0]["ibs_cbs_class"], "000001")
         self.assertEqual(items[0]["cbs_rate"], "0.9")
+        export_items = self.service.prepare_sale_items(
+            [{"produto_id": 1, "item": "Produto", "qtd": 2, "preco": 10}], destination=3
+        )
+        self.assertEqual(export_items[0]["cfop"], "7102")
+        self.assertEqual(export_items[0]["ibs_cbs_cst"], "410")
+        self.assertEqual(export_items[0]["ibs_cbs_class"], "410004")
+        self.assertEqual(export_items[0]["cbs_rate"], "0")
+
+    def test_exportacao_gera_ibs_cbs_sem_incidencia_e_valida_no_xsd(self):
+        xml, key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={"foreign_id": "EX123", "name": "CLIENTE EXTERIOR"},
+            items=[{
+                "code": "P1", "description": "produto exportado", "quantity": 1, "unit_price": 100,
+                "ncm": "94036000", "cfop": "7102", "unit": "UN", "origin": "0",
+                "csosn": "102", "pis_cst": "07", "cofins_cst": "07",
+                "ibs_cbs_cst": "410", "ibs_cbs_class": "410004",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 17, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "12345674",
+                "destination": 3, "strict_tax_profile": True,
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='IBSCBS']/*[local-name()='CST'])"), "410")
+        self.assertEqual(root.xpath("string(//*[local-name()='IBSCBS']/*[local-name()='cClassTrib'])"), "410004")
+        self.assertEqual(root.xpath("count(//*[local-name()='IBSCBS']/*[local-name()='gIBSCBS'])"), 0.0)
+        signed = self.service.sign_xml(
+            xml, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password
+        )
+        self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
 
     def test_venda_fiscal_explica_ficha_incompleta_sem_salvar(self):
         conn = self.connect()

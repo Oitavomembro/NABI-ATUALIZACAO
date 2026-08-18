@@ -18,6 +18,7 @@ from urllib.parse import urlsplit
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
+from services.fiscal_rtc_resolver import FiscalRtcResolver
 
 try:
     import requests
@@ -1192,6 +1193,8 @@ class FiscalService:
             problems.append("Tipo de operação deve ser 0 (entrada) ou 1 (saída).")
         if destination not in {1, 2, 3}:
             problems.append("Destino da operação deve ser 1, 2 ou 3.")
+        if destination == 3 and not str(recipient.get("foreign_id") or "").strip():
+            problems.append("Operação com exterior exige identificação estrangeira do destinatário.")
         if model == "65":
             if int(document.get("final_consumer", 1)) != 1:
                 problems.append("NFC-e exige consumidor final.")
@@ -1339,6 +1342,7 @@ class FiscalService:
         doc_rec = self._normalize_tax_document(recipient.get("document"))
         if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
         elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
+        elif recipient.get("foreign_id"): el(dest, "idEstrangeiro", str(recipient.get("foreign_id")).strip())
         if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
         if any(recipient.get(key) for key in ("street", "city_code", "state", "zip_code")):
             address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
@@ -1442,30 +1446,42 @@ class FiscalService:
             rtc_cst = self._digits(item.get("ibs_cbs_cst"))
             if rtc_cst:
                 rtc_class = self._digits(item.get("ibs_cbs_class"))
-                if rtc_cst != "000" or len(rtc_class) != 6:
+                if rtc_cst not in {"000", "410"} or len(rtc_class) != 6:
                     raise ValueError(
-                        f"Item {index}: esta etapa suporta CST IBS/CBS 000 com classificação de 6 dígitos."
+                        f"Item {index}: CST ou classificação IBS/CBS não pertence à matriz suportada."
                     )
-                rtc_base = Decimal(str(item.get("ibs_cbs_base", value))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                ibs_uf_rate = Decimal(str(item.get("ibs_uf_rate", 0))).quantize(Decimal("0.0001"))
-                ibs_city_rate = Decimal(str(item.get("ibs_city_rate", 0))).quantize(Decimal("0.0001"))
-                cbs_rate = Decimal(str(item.get("cbs_rate", 0))).quantize(Decimal("0.0001"))
-                if rtc_base < 0 or any(rate < 0 or rate > 100 for rate in (ibs_uf_rate, ibs_city_rate, cbs_rate)):
-                    raise ValueError(f"Item {index}: base ou alíquota IBS/CBS inválida.")
-                ibs_uf_value = (rtc_base * ibs_uf_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                ibs_city_value = (rtc_base * ibs_city_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                cbs_value = (rtc_base * cbs_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
-                rtc = etree.SubElement(imposto, etree.QName(ns, "IBSCBS"))
-                el(rtc, "CST", rtc_cst); el(rtc, "cClassTrib", rtc_class)
-                group = etree.SubElement(rtc, etree.QName(ns, "gIBSCBS")); el(group, "vBC", f"{rtc_base:.2f}")
-                ibs_uf = etree.SubElement(group, etree.QName(ns, "gIBSUF")); el(ibs_uf, "pIBSUF", f"{ibs_uf_rate:.4f}"); el(ibs_uf, "vIBSUF", f"{ibs_uf_value:.2f}")
-                ibs_city = etree.SubElement(group, etree.QName(ns, "gIBSMun")); el(ibs_city, "pIBSMun", f"{ibs_city_rate:.4f}"); el(ibs_city, "vIBSMun", f"{ibs_city_value:.2f}")
-                el(group, "vIBS", f"{ibs_uf_value + ibs_city_value:.2f}")
-                cbs = etree.SubElement(group, etree.QName(ns, "gCBS")); el(cbs, "pCBS", f"{cbs_rate:.4f}"); el(cbs, "vCBS", f"{cbs_value:.2f}")
-                total_ibs_cbs_base += rtc_base
-                total_ibs_uf += ibs_uf_value
-                total_ibs_city += ibs_city_value
-                total_cbs += cbs_value
+                if rtc_cst == "410":
+                    if rtc_class != FiscalRtcResolver.EXPORT_CLASSIFICATION:
+                        raise ValueError(
+                            f"Item {index}: CST 410 de exportação exige classificação 410004."
+                        )
+                    rtc = etree.SubElement(imposto, etree.QName(ns, "IBSCBS"))
+                    el(rtc, "CST", rtc_cst); el(rtc, "cClassTrib", rtc_class)
+                else:
+                    if rtc_class != FiscalRtcResolver.REGULAR_CLASSIFICATION:
+                        raise ValueError(
+                            f"Item {index}: CST 000 de venda regular exige classificação 000001."
+                        )
+                    rtc_base = Decimal(str(item.get("ibs_cbs_base", value))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    ibs_uf_rate = Decimal(str(item.get("ibs_uf_rate", 0))).quantize(Decimal("0.0001"))
+                    ibs_city_rate = Decimal(str(item.get("ibs_city_rate", 0))).quantize(Decimal("0.0001"))
+                    cbs_rate = Decimal(str(item.get("cbs_rate", 0))).quantize(Decimal("0.0001"))
+                    if rtc_base < 0 or any(rate < 0 or rate > 100 for rate in (ibs_uf_rate, ibs_city_rate, cbs_rate)):
+                        raise ValueError(f"Item {index}: base ou alíquota IBS/CBS inválida.")
+                    ibs_uf_value = (rtc_base * ibs_uf_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    ibs_city_value = (rtc_base * ibs_city_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    cbs_value = (rtc_base * cbs_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    rtc = etree.SubElement(imposto, etree.QName(ns, "IBSCBS"))
+                    el(rtc, "CST", rtc_cst); el(rtc, "cClassTrib", rtc_class)
+                    group = etree.SubElement(rtc, etree.QName(ns, "gIBSCBS")); el(group, "vBC", f"{rtc_base:.2f}")
+                    ibs_uf = etree.SubElement(group, etree.QName(ns, "gIBSUF")); el(ibs_uf, "pIBSUF", f"{ibs_uf_rate:.4f}"); el(ibs_uf, "vIBSUF", f"{ibs_uf_value:.2f}")
+                    ibs_city = etree.SubElement(group, etree.QName(ns, "gIBSMun")); el(ibs_city, "pIBSMun", f"{ibs_city_rate:.4f}"); el(ibs_city, "vIBSMun", f"{ibs_city_value:.2f}")
+                    el(group, "vIBS", f"{ibs_uf_value + ibs_city_value:.2f}")
+                    cbs = etree.SubElement(group, etree.QName(ns, "gCBS")); el(cbs, "pCBS", f"{cbs_rate:.4f}"); el(cbs, "vCBS", f"{cbs_value:.2f}")
+                    total_ibs_cbs_base += rtc_base
+                    total_ibs_uf += ibs_uf_value
+                    total_ibs_city += ibs_city_value
+                    total_cbs += cbs_value
 
             ipi_return = Decimal(str(item.get("ipi_return_value", 0))).quantize(Decimal("0.01"))
             if ipi_return > 0:
@@ -1587,7 +1603,7 @@ class FiscalService:
                 raise ValueError(f"Item {index}: produto cadastrado não foi encontrado.")
             try:
                 profile = FiscalProductProfile.validate_for_regime(
-                    product, crt=int(crt), require_rtc=require_rtc
+                    product, crt=int(crt), require_rtc=False
                 )
             except ValueError as exc:
                 raise ValueError(
@@ -1599,6 +1615,7 @@ class FiscalService:
                 profile["cfop"], destination=destination, crt=int(crt),
                 csosn=profile["fiscal_csosn"], icms_cst=profile["fiscal_icms_cst"],
             )
+            rtc_rule = FiscalRtcResolver.resolve(profile, destination=destination) if require_rtc else None
             fiscal_item = {
                 "product_id": product_id,
                 "code": product.get("codigo") or product_id,
@@ -1620,11 +1637,11 @@ class FiscalService:
             }
             if require_rtc:
                 fiscal_item.update({
-                    "ibs_cbs_cst": profile["ibs_cbs_cst"],
-                    "ibs_cbs_class": profile["ibs_cbs_class"],
-                    "ibs_uf_rate": profile["ibs_uf_rate"],
-                    "ibs_city_rate": profile["ibs_city_rate"],
-                    "cbs_rate": profile["cbs_rate"],
+                    "ibs_cbs_cst": rtc_rule.cst,
+                    "ibs_cbs_class": rtc_rule.classification,
+                    "ibs_uf_rate": rtc_rule.ibs_uf_rate,
+                    "ibs_city_rate": rtc_rule.ibs_city_rate,
+                    "cbs_rate": rtc_rule.cbs_rate,
                 })
             result.append(fiscal_item)
         return result

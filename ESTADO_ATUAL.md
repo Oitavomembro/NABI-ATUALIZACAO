@@ -875,3 +875,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - integração fiscal/produtos/schema: 314 testes e 13 subtestes aprovados;
 - suíte completa: 1.194 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.57 — Fase 3 da matriz comercial IBS/CBS
+
+- criado um resolvedor central de IBS/CBS separado do gerador XML e da interface;
+- venda nacional regular aceita somente CST `000` com classificação `000001` e alíquotas rastreáveis da ficha do produto;
+- exportação de venda passa automaticamente para CST `410`, classificação `410004` e alíquotas zeradas, sem exigir que o operador conheça a classificação;
+- o XML de exportação gera o grupo IBS/CBS sem incidência sem `gIBSCBS` e foi aprovado pelo schema oficial local;
+- destinatário no exterior passa a exigir e gerar `idEstrangeiro` na ordem prevista pelo leiaute oficial;
+- classificações de redução, bonificação, doação, monofasia, crédito presumido e outros regimes especiais continuam bloqueadas até possuírem fluxo e dados próprios;
+- a matriz foi confrontada com o Informe Técnico 2025.002 v1.60 e com as tabelas vigentes publicadas no Portal Nacional da NF-e em 23/06/2026;
+- validação focada: 121 testes e 10 subtestes aprovados;
+- suíte completa: 1.200 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados com `NABICODE_PROFILE=TESTE`;
+- produção permanece bloqueada até homologação contábil e fiscal; nenhum programa, banco real, certificado real, endpoint ou impressora foi utilizado.
