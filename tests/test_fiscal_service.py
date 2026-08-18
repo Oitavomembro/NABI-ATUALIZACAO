@@ -487,6 +487,35 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='card']/*[local-name()='tpIntegra'])"), "2")
         self.assertEqual(root.xpath("string(//*[local-name()='card']/*[local-name()='cAut'])"), "")
 
+    def test_pagamentos_mistos_e_troco_sao_gerados_no_xml(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA", "number": "1",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={},
+            items=[{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,
+                    "ncm":"94036000","cfop":"5102","unit":"UN"}],
+            document={"model":"65","series":1,"number":3,"state_code":"29",
+                      "environment":"HOMOLOGACAO","numeric_code":"12345670",
+                      "payments":[
+                          {"code":"17","amount":"4.00"},
+                          {"code":"01","amount":"7.00"},
+                      ]},
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(
+            root.xpath("//*[local-name()='detPag']/*[local-name()='tPag']/text()"),
+            ["17", "01"],
+        )
+        self.assertEqual(
+            root.xpath("//*[local-name()='detPag']/*[local-name()='vPag']/text()"),
+            ["4.00", "7.00"],
+        )
+        self.assertEqual(root.xpath("string(//*[local-name()='pag']/*[local-name()='vTroco'])"), "1.00")
+
     def test_nfce_offline_assina_parametros_qrcode_v3_com_certificado(self):
         issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         key = self.service.build_access_key(

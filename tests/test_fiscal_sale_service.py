@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from decimal import Decimal
 from types import SimpleNamespace
 from pathlib import Path
 
@@ -119,10 +120,29 @@ class FiscalSaleServiceTests(unittest.TestCase):
             {"integration": 2, "authorization": "NSU123"},
         )
 
+    def test_pagamentos_mistos_sao_preservados_individualmente(self):
+        self.service.prepare(
+            items=[{"produto_id": 1}],
+            payments=[
+                {"forma": "PIX", "valor": "4.00"},
+                {"forma": "CREDIARIO", "valor": "6.00"},
+            ],
+            actor="caixa",
+        )
+        self.assertEqual(
+            self.fiscal.document["payments"],
+            [
+                {"code": "17", "amount": Decimal("4.00")},
+                {"code": "05", "amount": Decimal("6.00")},
+            ],
+        )
+
     def test_falha_na_geracao_libera_numero_reservado(self):
         self.fiscal.build_document_xml = lambda **_kwargs: (_ for _ in ()).throw(ValueError("xml inválido"))
         with self.assertRaisesRegex(ValueError, "xml inválido"):
-            self.service.prepare(items=[{"produto_id": 1}], payments=[], actor="caixa")
+            self.service.prepare(
+                items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}], actor="caixa"
+            )
         self.assertEqual(self.fiscal.released, ["RES-1"])
 
     def test_rascunho_persistido_e_enfileiramento_repetido_nao_duplica(self):

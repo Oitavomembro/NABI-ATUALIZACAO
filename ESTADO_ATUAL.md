@@ -1,5 +1,16 @@
 # NabiCode — Estado Atual
 
+## Checkpoint fiscal — pagamentos completos no XML
+
+- cada forma recebida pelo PDV gera seu próprio grupo `detPag`, sem transformar pagamentos mistos em “Outros”;
+- entrada por PIX/dinheiro/cartão e saldo em crediário permanecem discriminados no documento;
+- cartão preserva por parcela de pagamento o tipo POS/TEF e a autorização opcional;
+- pagamento em dinheiro acima do total gera `vTroco` automaticamente;
+- valores ausentes, inválidos ou não positivos são bloqueados antes de reservar definitivamente o documento;
+- validação focada: 89 testes e 10 subtestes aprovados;
+- suíte completa: 1.168 testes, 1 ignorado e 32 subtestes aprovados;
+- `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint fiscal — cancelamento consistente da venda
 
 - venda fiscal pendente pode ser cancelada localmente sem deixar fila, numeração, estoque ou financeiro em estado divergente;

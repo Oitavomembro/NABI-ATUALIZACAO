@@ -1442,19 +1442,37 @@ class FiscalService:
             total_with_rtc += total_ibs_uf + total_ibs_city + total_cbs
             el(total, "vNFTot", f"{total_with_rtc:.2f}")
         transp=etree.SubElement(inf, etree.QName(ns,"transp")); el(transp,"modFrete",9)
-        pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); payment_code=str(document.get("payment_code","01")); el(detpag,"tPag",payment_code); el(detpag,"vPag",f"{total_with_rtc:.2f}")
-        payment_detail = dict(document.get("payment_detail") or {})
-        if payment_code in {"03", "04"}:
-            card = etree.SubElement(detpag, etree.QName(ns, "card"))
-            integration = int(payment_detail.get("integration", 2) or 2)
-            if integration not in {1, 2}:
-                raise ValueError("Tipo de integração do cartão inválido.")
-            el(card, "tpIntegra", integration)
-            authorization = str(payment_detail.get("authorization") or "").strip()
-            if authorization:
-                if len(authorization) > 20:
-                    raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
-                el(card, "cAut", authorization)
+        pag = etree.SubElement(inf, etree.QName(ns, "pag"))
+        payment_rows = list(document.get("payments") or [])
+        if not payment_rows:
+            payment_rows = [{
+                "code": str(document.get("payment_code", "01")),
+                "amount": total_with_rtc,
+                **dict(document.get("payment_detail") or {}),
+            }]
+        payment_total = Decimal("0.00")
+        for payment_row in payment_rows:
+            payment_code = str(payment_row.get("code", "99"))
+            payment_amount = Decimal(str(payment_row.get("amount", 0))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+            if payment_amount <= 0:
+                raise ValueError("Cada pagamento fiscal deve possuir valor maior que zero.")
+            payment_total += payment_amount
+            detpag = etree.SubElement(pag, etree.QName(ns, "detPag"))
+            el(detpag, "tPag", payment_code); el(detpag, "vPag", f"{payment_amount:.2f}")
+            if payment_code in {"03", "04"}:
+                card = etree.SubElement(detpag, etree.QName(ns, "card"))
+                integration = int(payment_row.get("integration", 2) or 2)
+                if integration not in {1, 2}:
+                    raise ValueError("Tipo de integração do cartão inválido.")
+                el(card, "tpIntegra", integration)
+                authorization = str(payment_row.get("authorization") or "").strip()
+                if authorization:
+                    if len(authorization) > 20:
+                        raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
+                    el(card, "cAut", authorization)
+        change = (payment_total - total_with_rtc).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        if change > 0:
+            el(pag, "vTroco", f"{change:.2f}")
         if document.get("additional_info"):
             infad=etree.SubElement(inf, etree.QName(ns,"infAdic")); el(infad,"infCpl",document.get("additional_info"))
         if model == "65" and int(document.get("emission_type", 1)) == 1:

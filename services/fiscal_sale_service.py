@@ -4,6 +4,7 @@ import base64
 import hashlib
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
 
 
@@ -65,6 +66,7 @@ class FiscalSaleService:
                     "issued_at": when, "environment": environment, "numeric_code": numeric_code,
                     "destination": int(destination), "payment_code": self._payment_code(payments),
                     "payment_detail": self._payment_detail(payments),
+                    "payments": self._payment_details(payments),
                     "final_consumer": 1, "presence": 1,
                 },
             )
@@ -150,6 +152,34 @@ class FiscalSaleService:
         if len(authorization) > 20:
             raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
         return {"integration": integration, "authorization": authorization}
+
+    @classmethod
+    def _payment_details(cls, payments: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+        details: list[dict[str, Any]] = []
+        for payment in payments:
+            name = str(payment.get("forma") or "").strip().upper().replace(" ", "_")
+            try:
+                amount = Decimal(str(payment.get("valor", 0))).quantize(
+                    Decimal("0.01"), rounding=ROUND_HALF_UP
+                )
+            except (InvalidOperation, ValueError) as exc:
+                raise ValueError("Valor de pagamento fiscal inválido.") from exc
+            if amount <= 0:
+                raise ValueError("Cada pagamento fiscal deve possuir valor maior que zero.")
+            code = cls.PAYMENT_CODES.get(name, "99")
+            detail: dict[str, Any] = {"code": code, "amount": amount}
+            if code in {"03", "04"}:
+                integration = int(payment.get("card_integration", 2) or 2)
+                if integration not in {1, 2}:
+                    raise ValueError("Tipo de integração do cartão deve ser TEF (1) ou POS (2).")
+                authorization = str(payment.get("card_authorization") or "").strip()
+                if len(authorization) > 20:
+                    raise ValueError("Autorização do cartão deve possuir no máximo 20 caracteres.")
+                detail.update({"integration": integration, "authorization": authorization})
+            details.append(detail)
+        if not details:
+            raise ValueError("Informe ao menos uma forma de pagamento para o documento fiscal.")
+        return details
 
     @staticmethod
     def persist_draft(connection: Any, sale_id: int, draft: FiscalSaleDraft) -> None:
