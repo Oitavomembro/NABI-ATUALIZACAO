@@ -1359,6 +1359,10 @@ class FiscalService:
         total_pis = Decimal("0")
         total_cofins = Decimal("0")
         total_ipi_return = Decimal("0")
+        total_ibs_cbs_base = Decimal("0")
+        total_ibs_uf = Decimal("0")
+        total_ibs_city = Decimal("0")
+        total_cbs = Decimal("0")
         for index, item in enumerate(items, 1):
             qty=Decimal(str(item.get("quantity", 0))); unit=Decimal(str(item.get("unit_price", 0)))
             if qty <= 0 or unit < 0: raise ValueError(f"Item {index}: quantidade/preço inválidos.")
@@ -1408,6 +1412,34 @@ class FiscalService:
             else:
                 cofnt=etree.SubElement(cof, etree.QName(ns,"COFINSNT")); el(cofnt,"CST","07")
 
+            rtc_cst = self._digits(item.get("ibs_cbs_cst"))
+            if rtc_cst:
+                rtc_class = self._digits(item.get("ibs_cbs_class"))
+                if rtc_cst != "000" or len(rtc_class) != 6:
+                    raise ValueError(
+                        f"Item {index}: esta etapa suporta CST IBS/CBS 000 com classificação de 6 dígitos."
+                    )
+                rtc_base = Decimal(str(item.get("ibs_cbs_base", value))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                ibs_uf_rate = Decimal(str(item.get("ibs_uf_rate", 0))).quantize(Decimal("0.0001"))
+                ibs_city_rate = Decimal(str(item.get("ibs_city_rate", 0))).quantize(Decimal("0.0001"))
+                cbs_rate = Decimal(str(item.get("cbs_rate", 0))).quantize(Decimal("0.0001"))
+                if rtc_base < 0 or any(rate < 0 or rate > 100 for rate in (ibs_uf_rate, ibs_city_rate, cbs_rate)):
+                    raise ValueError(f"Item {index}: base ou alíquota IBS/CBS inválida.")
+                ibs_uf_value = (rtc_base * ibs_uf_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                ibs_city_value = (rtc_base * ibs_city_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                cbs_value = (rtc_base * cbs_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                rtc = etree.SubElement(imposto, etree.QName(ns, "IBSCBS"))
+                el(rtc, "CST", rtc_cst); el(rtc, "cClassTrib", rtc_class)
+                group = etree.SubElement(rtc, etree.QName(ns, "gIBSCBS")); el(group, "vBC", f"{rtc_base:.2f}")
+                ibs_uf = etree.SubElement(group, etree.QName(ns, "gIBSUF")); el(ibs_uf, "pIBSUF", f"{ibs_uf_rate:.4f}"); el(ibs_uf, "vIBSUF", f"{ibs_uf_value:.2f}")
+                ibs_city = etree.SubElement(group, etree.QName(ns, "gIBSMun")); el(ibs_city, "pIBSMun", f"{ibs_city_rate:.4f}"); el(ibs_city, "vIBSMun", f"{ibs_city_value:.2f}")
+                el(group, "vIBS", f"{ibs_uf_value + ibs_city_value:.2f}")
+                cbs = etree.SubElement(group, etree.QName(ns, "gCBS")); el(cbs, "pCBS", f"{cbs_rate:.4f}"); el(cbs, "vCBS", f"{cbs_value:.2f}")
+                total_ibs_cbs_base += rtc_base
+                total_ibs_uf += ibs_uf_value
+                total_ibs_city += ibs_city_value
+                total_cbs += cbs_value
+
             ipi_return = Decimal(str(item.get("ipi_return_value", 0))).quantize(Decimal("0.01"))
             if ipi_return > 0:
                 percent = Decimal(str(item.get("devolution_percent", 100))).quantize(Decimal("0.01"))
@@ -1420,8 +1452,20 @@ class FiscalService:
         total_nf = total_products + total_ipi_return
         for name,val in (("vBC",total_icms_base),("vICMS",total_icms),("vICMSDeson",0),("vFCP",0),("vBCST",0),("vST",0),("vFCPST",0),("vFCPSTRet",0),("vProd",total_products),("vFrete",0),("vSeg",0),("vDesc",0),("vII",0),("vIPI",0),("vIPIDevol",total_ipi_return),("vPIS",total_pis),("vCOFINS",total_cofins),("vOutro",0),("vNF",total_nf)):
             el(icmstot,name,f"{Decimal(str(val)):.2f}")
+        total_with_rtc = total_nf
+        if total_ibs_cbs_base > 0:
+            rtc_tot = etree.SubElement(total, etree.QName(ns, "IBSCBSTot")); el(rtc_tot, "vBCIBSCBS", f"{total_ibs_cbs_base:.2f}")
+            ibs_tot = etree.SubElement(rtc_tot, etree.QName(ns, "gIBS"))
+            ibs_uf_tot = etree.SubElement(ibs_tot, etree.QName(ns, "gIBSUF")); el(ibs_uf_tot, "vDif", "0.00"); el(ibs_uf_tot, "vDevTrib", "0.00"); el(ibs_uf_tot, "vIBSUF", f"{total_ibs_uf:.2f}")
+            ibs_city_tot = etree.SubElement(ibs_tot, etree.QName(ns, "gIBSMun")); el(ibs_city_tot, "vDif", "0.00"); el(ibs_city_tot, "vDevTrib", "0.00"); el(ibs_city_tot, "vIBSMun", f"{total_ibs_city:.2f}")
+            el(ibs_tot, "vIBS", f"{total_ibs_uf + total_ibs_city:.2f}")
+            el(ibs_tot, "vCredPres", "0.00"); el(ibs_tot, "vCredPresCondSus", "0.00")
+            cbs_tot = etree.SubElement(rtc_tot, etree.QName(ns, "gCBS")); el(cbs_tot, "vDif", "0.00"); el(cbs_tot, "vDevTrib", "0.00"); el(cbs_tot, "vCBS", f"{total_cbs:.2f}")
+            el(cbs_tot, "vCredPres", "0.00"); el(cbs_tot, "vCredPresCondSus", "0.00")
+            total_with_rtc += total_ibs_uf + total_ibs_city + total_cbs
+            el(total, "vNFTot", f"{total_with_rtc:.2f}")
         transp=etree.SubElement(inf, etree.QName(ns,"transp")); el(transp,"modFrete",9)
-        pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); el(detpag,"tPag",document.get("payment_code","01")); el(detpag,"vPag",f"{total_products:.2f}")
+        pag=etree.SubElement(inf, etree.QName(ns,"pag")); detpag=etree.SubElement(pag, etree.QName(ns,"detPag")); el(detpag,"tPag",document.get("payment_code","01")); el(detpag,"vPag",f"{total_with_rtc:.2f}")
         if document.get("additional_info"):
             infad=etree.SubElement(inf, etree.QName(ns,"infAdic")); el(infad,"infCpl",document.get("additional_info"))
         if model == "65" and int(document.get("emission_type", 1)) == 1:

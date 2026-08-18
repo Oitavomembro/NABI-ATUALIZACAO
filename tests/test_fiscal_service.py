@@ -340,6 +340,37 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='xProd'])"), "PRODUTO TESTE")
         self.assertEqual(root.xpath("string(//*[local-name()='vNF'])"), "20.00")
 
+    def test_gera_ibs_cbs_normal_e_totais_conforme_schema_oficial(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "10",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto rtc", "quantity": 2, "unit_price": 50,
+                "ncm": "94036000", "cfop": "5102", "unit": "UN",
+                "ibs_cbs_cst": "000", "ibs_cbs_class": "000001",
+                "ibs_uf_rate": "0.1000", "ibs_city_rate": "0.0000", "cbs_rate": "0.9000",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 13, "state_code": "29",
+                "issued_at": datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc),
+                "environment": "HOMOLOGACAO", "numeric_code": "12345679",
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='IBSCBS']/*[local-name()='CST'])"), "000")
+        self.assertEqual(root.xpath("string(//*[local-name()='gIBSUF']/*[local-name()='vIBSUF'])"), "0.10")
+        self.assertEqual(root.xpath("string(//*[local-name()='gCBS']/*[local-name()='vCBS'])"), "0.90")
+        self.assertEqual(root.xpath("string(//*[local-name()='vNFTot'])"), "101.00")
+        signed = self.service.sign_xml(
+            xml, reference_id=f"NFe{_key}", pfx_path=self.pfx_path, password=self.password
+        )
+        self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
+
     def test_nfce_online_inclui_qrcode_v3_sem_csc(self):
         issued = datetime(2026, 8, 18, 12, 0, tzinfo=timezone.utc)
         xml, key = self.service.build_document_xml(

@@ -711,3 +711,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - ambiente `HOMOLOGACAO` permanece disponível para demonstração, configuração, certificado A1 e validação técnica;
 - a liberação futura de produção depende da implementação da matriz IBS/CBS e de homologação fiscal com os dados tributários da empresa;
 - teste de regressão impede remoção acidental deste bloqueio de segurança.
+
+## Checkpoint 42.52 — tributação regular IBS/CBS
+
+- implementado o primeiro grupo RTC completo para tributação regular, CST `000`, com classificação tributária, base, IBS estadual, IBS municipal e CBS por item;
+- valores são calculados com `Decimal`, arredondamento monetário explícito e rejeição de bases ou alíquotas fora do intervalo válido;
+- totais `IBSCBSTot` e `vNFTot` são derivados dos itens, incluindo os campos zerados obrigatórios de diferimento, devolução e crédito presumido;
+- estrutura comparada com o schema `010e v1.02` e com a implementação aberta NFePHP/SPED-NFe, sem incorporar código PHP ao NabiCode;
+- XML de regressão foi assinado com certificado temporário e aprovado integralmente pelo schema oficial local;
+- nenhuma alíquota ou classificação é inventada: os valores precisam vir da ficha fiscal rastreável do produto ou do XML de origem.
