@@ -9231,7 +9231,32 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return entry
         fields["cnpj"] = field("CNPJ do emitente", config.get("cnpj"))
         fields["state"] = field("UF", config.get("state"))
-        fields["tax_regime"] = field("Regime tributário", config.get("tax_regime"))
+        ctk.CTkLabel(content, text="Regime tributário", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
+        regime_labels = dict(self.fiscal_service.TAX_REGIME_LABELS)
+        regime_by_label = {label: code for code, label in regime_labels.items()}
+        tax_regime = ctk.CTkComboBox(content, values=list(regime_by_label), state="readonly")
+        tax_regime.pack(fill="x", padx=16)
+        current_regime = str(config.get("tax_regime") or "SIMPLES_NACIONAL").upper()
+        tax_regime.set(regime_labels.get(current_regime, regime_labels["SIMPLES_NACIONAL"]))
+
+        ctk.CTkLabel(content, text="Documentos fiscais habilitados", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(10, 2))
+        enabled_models = {str(model) for model in config.get("enabled_models", ["55", "65"])}
+        model_vars = {
+            model: tk.BooleanVar(value=model in enabled_models)
+            for model in ("55", "65")
+        }
+        model_row = ctk.CTkFrame(content, fg_color="transparent")
+        model_row.pack(fill="x", padx=16)
+        for model in ("55", "65"):
+            ctk.CTkCheckBox(
+                model_row, text=self.fiscal_service.MODEL_LABELS[model], variable=model_vars[model]
+            ).pack(side="left", padx=(0, 18))
+        ctk.CTkLabel(content, text="Documento padrão", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
+        default_model = ctk.CTkComboBox(
+            content, values=[self.fiscal_service.MODEL_LABELS["55"], self.fiscal_service.MODEL_LABELS["65"]], state="readonly"
+        )
+        default_model.pack(fill="x", padx=16)
+        default_model.set(self.fiscal_service.MODEL_LABELS.get(str(config.get("default_model") or "65"), self.fiscal_service.MODEL_LABELS["65"]))
         issuer_config = config.get("issuer") or {}
         fields["issuer_name"] = field("Razão social do emitente", issuer_config.get("name"))
         fields["issuer_ie"] = field("Inscrição estadual", issuer_config.get("state_registration"))
@@ -9267,10 +9292,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         status.pack(anchor="w", padx=16, pady=8)
         def save():
             try:
+                selected_models = [model for model, variable in model_vars.items() if variable.get()]
+                selected_default = next(
+                    model for model, label in self.fiscal_service.MODEL_LABELS.items()
+                    if label == default_model.get()
+                )
                 saved = self.fiscal_service.save_config({
                     "enabled": enabled.get(), "environment": environment.get(),
                     "cnpj": fields["cnpj"].get(), "state": fields["state"].get(),
-                    "tax_regime": fields["tax_regime"].get(), "certificate_path": certificate.get(),
+                    "tax_regime": regime_by_label[tax_regime.get()],
+                    "enabled_models": selected_models, "default_model": selected_default,
+                    "certificate_path": certificate.get(),
                     "issuer": {
                         "name": fields["issuer_name"].get(),
                         "state_registration": fields["issuer_ie"].get(),

@@ -103,6 +103,30 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(issuer["return_series"], 7)
         self.assertEqual(self.service.load_config()["issuer"]["name"], "EMPRESA TESTE")
 
+    def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
+        expected_regimes = {
+            "MEI": 1,
+            "SIMPLES_NACIONAL": 1,
+            "EXCESSO_SUBLIMITE": 2,
+            "LUCRO_PRESUMIDO": 3,
+            "LUCRO_REAL": 3,
+        }
+        for regime, crt in expected_regimes.items():
+            with self.subTest(regime=regime):
+                config = self.service.save_config({
+                    "state": "BA",
+                    "tax_regime": regime,
+                    "enabled_models": ["55", "65"],
+                    "default_model": "65",
+                })
+                self.assertEqual(self.service.TAX_REGIME_CODES[config["tax_regime"]], crt)
+                self.assertEqual(config["enabled_models"], ["55", "65"])
+                self.assertEqual(config["default_model"], "65")
+
+    def test_modelo_padrao_precisa_estar_habilitado(self):
+        with self.assertRaisesRegex(ValueError, "modelo fiscal padrão"):
+            self.service.save_config({"enabled_models": ["55"], "default_model": "65"})
+
     def test_regras_fiscais_bloqueiam_ncm_e_cfop_invalidos(self):
         issuer = {
             "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",

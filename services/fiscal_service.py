@@ -80,7 +80,24 @@ class FiscalService:
     VALID_MODELS = {"55", "65"}
     VALID_EVENTS = {"CANCELAMENTO", "CCE"}
     STATE_CODES = {"RO":"11","AC":"12","AM":"13","RR":"14","PA":"15","AP":"16","TO":"17","MA":"21","PI":"22","CE":"23","RN":"24","PB":"25","PE":"26","AL":"27","SE":"28","BA":"29","MG":"31","ES":"32","RJ":"33","SP":"35","PR":"41","SC":"42","RS":"43","MS":"50","MT":"51","GO":"52","DF":"53"}
-    TAX_REGIME_CODES = {"SIMPLES": 1, "SIMPLES_NACIONAL": 1, "EXCESSO_SUBLIMITE": 2, "REGIME_NORMAL": 3, "NORMAL": 3}
+    TAX_REGIME_CODES = {
+        "MEI": 1,
+        "SIMPLES": 1,
+        "SIMPLES_NACIONAL": 1,
+        "EXCESSO_SUBLIMITE": 2,
+        "LUCRO_PRESUMIDO": 3,
+        "LUCRO_REAL": 3,
+        "REGIME_NORMAL": 3,
+        "NORMAL": 3,
+    }
+    TAX_REGIME_LABELS = {
+        "MEI": "MEI",
+        "SIMPLES_NACIONAL": "Simples Nacional",
+        "EXCESSO_SUBLIMITE": "Simples Nacional — excesso de sublimite",
+        "LUCRO_PRESUMIDO": "Lucro Presumido",
+        "LUCRO_REAL": "Lucro Real",
+    }
+    MODEL_LABELS = {"55": "NF-e — modelo 55", "65": "NFC-e — modelo 65"}
     DS_NS = "http://www.w3.org/2000/09/xmldsig#"
 
     def __init__(
@@ -119,8 +136,10 @@ class FiscalService:
             "enabled": False,
             "environment": "HOMOLOGACAO",
             "cnpj": "",
-            "state": "",
-            "tax_regime": "",
+            "state": "BA",
+            "tax_regime": "SIMPLES_NACIONAL",
+            "enabled_models": ["55", "65"],
+            "default_model": "65",
             "certificate_path": "",
             "certificate_info": {},
             "issuer": {
@@ -143,6 +162,10 @@ class FiscalService:
         result.update(loaded)
         result["endpoints"] = dict(default["endpoints"]) | dict(loaded.get("endpoints") or {})
         result["issuer"] = dict(default["issuer"]) | dict(loaded.get("issuer") or {})
+        models = [str(model) for model in loaded.get("enabled_models", default["enabled_models"]) if str(model) in self.VALID_MODELS]
+        result["enabled_models"] = models or list(default["enabled_models"])
+        default_model = str(loaded.get("default_model", default["default_model"]))
+        result["default_model"] = default_model if default_model in result["enabled_models"] else result["enabled_models"][0]
         return result
 
     def save_config(self, config: Mapping[str, Any]) -> dict[str, Any]:
@@ -156,12 +179,21 @@ class FiscalService:
             raise ValueError("UF fiscal inválida.")
         if tax_regime and tax_regime not in self.TAX_REGIME_CODES:
             raise ValueError("Regime tributário fiscal inválido.")
+        enabled_models = [str(model) for model in config.get("enabled_models", current.get("enabled_models", ["55", "65"]))]
+        enabled_models = list(dict.fromkeys(model for model in enabled_models if model in self.VALID_MODELS))
+        if not enabled_models:
+            raise ValueError("Selecione NF-e 55, NFC-e 65 ou ambas.")
+        default_model = str(config.get("default_model", current.get("default_model", "65")))
+        if default_model not in enabled_models:
+            raise ValueError("O modelo fiscal padrão precisa estar entre os modelos habilitados.")
         current.update({
             "enabled": bool(config.get("enabled", current["enabled"])),
             "environment": environment,
             "cnpj": self._digits(config.get("cnpj", current["cnpj"])),
             "state": state,
             "tax_regime": tax_regime,
+            "enabled_models": enabled_models,
+            "default_model": default_model,
             "certificate_path": str(config.get("certificate_path", current["certificate_path"])).strip(),
         })
         if "issuer" in config:

@@ -568,3 +568,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - a entrada de desinstalação usa o mesmo ícone oficial;
 - validação da distribuição reprova pacotes sem o arquivo independente;
 - 32 testes focados de build e instalador aprovados.
+
+## Checkpoint 42.38 — perfis fiscais completos para a Bahia
+
+- configuração fiscal passa a oferecer MEI, Simples Nacional, Simples com excesso de sublimite, Lucro Presumido e Lucro Real;
+- o CRT correspondente permanece centralizado no serviço fiscal: 1, 2 ou 3 conforme o regime selecionado;
+- NF-e modelo 55 e NFC-e modelo 65 podem ser habilitadas juntas ou separadamente;
+- o usuário escolhe o documento padrão e o serviço impede selecionar como padrão um modelo desabilitado;
+- instalações novas iniciam com UF Bahia, ambos os modelos habilitados e NFC-e 65 como padrão;
+- campo livre de regime foi substituído por opções determinísticas, evitando grafias inválidas;
+- nenhuma emissão real, certificado ou endpoint de produção foi utilizado;
+- 55 testes fiscais focados e 5 subtestes aprovados.

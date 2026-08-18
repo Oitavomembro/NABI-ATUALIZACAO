@@ -21,5 +21,12 @@ class EtapaComercialFiscalCompletaTests(unittest.TestCase):
         test_source = (ROOT / "tests/test_global_search_integration.py").read_text(encoding="utf-8")
         self.assertNotIn('"2.4.32"', test_source)
 
+    def test_configuracao_fiscal_expoe_regimes_e_modelos_sem_campo_livre(self):
+        self.assertIn("TAX_REGIME_LABELS", SOURCE)
+        self.assertIn("MODEL_LABELS", SOURCE)
+        self.assertIn('enabled_models', SOURCE)
+        self.assertIn('default_model', SOURCE)
+        self.assertNotIn('fields["tax_regime"] = field(', SOURCE)
+
 if __name__ == "__main__":
     unittest.main()
