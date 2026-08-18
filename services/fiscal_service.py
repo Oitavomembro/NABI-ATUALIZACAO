@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import os
+import sys
 import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
@@ -157,11 +158,16 @@ class FiscalService:
         connection_factory: Callable[[], Any],
         *,
         storage_dir: str | Path | None = None,
+        schema_dir: str | Path | None = None,
         http_post: Callable[..., Any] | None = None,
     ) -> None:
         self.connection_factory = connection_factory
         self.storage_dir = Path(storage_dir or (Path.home() / ".nabicode" / "fiscal"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+        runtime_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        self.schema_dir = Path(
+            schema_dir or runtime_root / "resources" / "fiscal" / "schemas"
+        )
         if http_post is not None:
             self.http_post = http_post
         elif requests is not None:
@@ -793,11 +799,8 @@ class FiscalService:
 
 
     def validate_xml_schema(self, xml: bytes | str, xsd_path: str | Path) -> list[str]:
-        """Valida XML contra um XSD oficial fornecido pelo usuário.
-
-        O sistema não embute schemas possivelmente desatualizados. O pacote XSD deve
-        ser obtido do Portal Nacional da NF-e e configurado externamente.
-        """
+        """Valida um XML usando parser local, sem rede ou entidades externas."""
+        self._require_dependency("lxml")
         path = Path(xsd_path)
         if not path.is_file():
             raise ValueError("Arquivo XSD não encontrado.")
@@ -811,6 +814,32 @@ class FiscalService:
         if schema.validate(document):
             return []
         return [str(error) for error in schema.error_log]
+
+    def official_schema_path(self, document_type: str) -> Path:
+        paths = {
+            "nfe": self.schema_dir / "nfe_010e_v1.02" / "nfe_v4.00.xsd",
+            "evento": self.schema_dir / "eventos_010d_v1.03" / "envEvento_v1.00.xsd",
+            "inutilizacao": self.schema_dir / "servicos_010d_v1.03" / "nabicode_inutNFe_v4.00.xsd",
+            "consulta": self.schema_dir / "servicos_010d_v1.03" / "consSitNFe_v4.00.xsd",
+        }
+        kind = str(document_type or "").strip().casefold()
+        if kind not in paths:
+            raise ValueError("Tipo de schema fiscal oficial desconhecido.")
+        path = paths[kind]
+        if not path.is_file():
+            raise RuntimeError(
+                f"Schema fiscal oficial ausente: {path.name}. Repare a instalação do NabiCode."
+            )
+        return path
+
+    def validate_official_xml(self, xml: bytes | str, *, document_type: str) -> None:
+        errors = self.validate_xml_schema(xml, self.official_schema_path(document_type))
+        if errors:
+            summary = "; ".join(errors[:5])
+            extra = len(errors) - 5
+            if extra > 0:
+                summary += f"; e mais {extra} erro(s)"
+            raise ValueError(f"XML fiscal reprovado pelo schema oficial: {summary}")
 
     def validate_fiscal_profile(self, *, issuer: Mapping[str, Any], model: str) -> list[str]:
         problems: list[str] = []
@@ -1306,6 +1335,18 @@ class FiscalService:
         if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
         elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
         if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
+        recipient_ie = self._digits(recipient.get("state_registration"))
+        taxpayer_indicator = recipient.get("state_taxpayer_indicator")
+        if taxpayer_indicator in (None, ""):
+            taxpayer_indicator = 1 if recipient_ie else 2 if recipient.get("icms_exempt") else 9
+        taxpayer_indicator = int(taxpayer_indicator)
+        if taxpayer_indicator not in {1, 2, 9}:
+            raise ValueError("Indicador de inscrição estadual do destinatário deve ser 1, 2 ou 9.")
+        if taxpayer_indicator == 1 and not recipient_ie:
+            raise ValueError("Destinatário contribuinte de ICMS exige inscrição estadual.")
+        el(dest, "indIEDest", taxpayer_indicator)
+        if recipient_ie:
+            el(dest, "IE", recipient_ie)
         total_products = Decimal("0")
         total_icms_base = Decimal("0")
         total_icms = Decimal("0")
@@ -2003,6 +2044,7 @@ class FiscalService:
                 xml, pfx_path=config["certificate_path"], password=password
             )
         signed = self.sign_xml(xml, reference_id=f"NFe{key}", pfx_path=config["certificate_path"], password=password)
+        self.validate_official_xml(signed, document_type="nfe")
         envelope = self._authorization_envelope(signed, environment=config["environment"])
         response = self.transmit(operation="autorizacao", model=model, xml=envelope, pfx_path=config["certificate_path"], password=password)
         record = self.store_document(
@@ -2027,6 +2069,7 @@ class FiscalService:
             raise ValueError("; ".join(problems))
         config = self.load_config()
         xml = self.build_query_xml(access_key=access_key, environment=config["environment"])
+        self.validate_official_xml(xml, document_type="consulta")
         return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
     def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, actor: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
@@ -2041,8 +2084,10 @@ class FiscalService:
         )
         xml, event_id = self.build_event_xml(event_type=event_type, access_key=access_key, sequence=sequence, actor_document=config["cnpj"], protocol=protocol, justification=justification, correction=correction, environment=config["environment"])
         signed = self.sign_xml(xml, reference_id=event_id, pfx_path=config["certificate_path"], password=password)
-        response = self.transmit(operation="evento", model=model, xml=signed, pfx_path=config["certificate_path"], password=password)
-        record = self.register_event(access_key=access_key, event_type=event_type, response=response, request_xml=signed, actor=actor)
+        envelope = self._event_envelope(signed)
+        self.validate_official_xml(envelope, document_type="evento")
+        response = self.transmit(operation="evento", model=model, xml=envelope, pfx_path=config["certificate_path"], password=password)
+        record = self.register_event(access_key=access_key, event_type=event_type, response=response, request_xml=envelope, actor=actor)
         return response, record
 
     def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str, actor: str) -> tuple[FiscalResponse, dict[str, Any]]:
@@ -2055,6 +2100,7 @@ class FiscalService:
             raise ValueError("UF do emitente não possui código IBGE configurável.")
         xml, identifier = self.build_inutilization_xml(state_code=state_code, year=year, cnpj=config["cnpj"], model=model, series=series, start_number=start_number, end_number=end_number, justification=justification, environment=config["environment"])
         signed = self.sign_xml(xml, reference_id=identifier, pfx_path=config["certificate_path"], password=password)
+        self.validate_official_xml(signed, document_type="inutilizacao")
         response = self.transmit(operation="inutilizacao", model=model, xml=signed, pfx_path=config["certificate_path"], password=password)
         record = self.register_event(access_key="0" * 44, event_type="INUTILIZACAO", response=response, request_xml=signed, actor=actor)
         record.update({"model": model, "series": int(series), "start_number": int(start_number), "end_number": int(end_number), "year": int(year)})
@@ -2093,6 +2139,19 @@ class FiscalService:
         ind = etree.SubElement(root, etree.QName(ns, "indSinc")); ind.text = "1"
         nfe = etree.fromstring(signed_xml, parser=etree.XMLParser(resolve_entities=False, no_network=True))
         root.append(nfe)
+        return etree.tostring(root, xml_declaration=True, encoding="utf-8")
+
+    @staticmethod
+    def _event_envelope(signed_xml: bytes) -> bytes:
+        ns = "http://www.portalfiscal.inf.br/nfe"
+        root = etree.Element(etree.QName(ns, "envEvento"), nsmap={None: ns}, versao="1.00")
+        lot = etree.SubElement(root, etree.QName(ns, "idLote"))
+        lot.text = datetime.now().strftime("%y%m%d%H%M%S%f")[-15:]
+        event = etree.fromstring(
+            signed_xml,
+            parser=etree.XMLParser(resolve_entities=False, no_network=True),
+        )
+        root.append(event)
         return etree.tostring(root, xml_declaration=True, encoding="utf-8")
 
     def _temporary_pem_files(self, pfx_path: str | Path, password: str) -> tuple[str, str]:

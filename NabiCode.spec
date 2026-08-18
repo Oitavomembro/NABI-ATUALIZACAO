@@ -57,6 +57,10 @@ for folder in ('assets', 'config', 'docs'):
     if os.path.isdir(folder):
         datas.append((folder, folder))
 
+schema_folder = os.path.join(project_root, 'resources', 'fiscal', 'schemas')
+if os.path.isdir(schema_folder):
+    datas.append((schema_folder, os.path.join('resources', 'fiscal', 'schemas')))
+
 a = Analysis(
     ['main.py'],
     pathex=[os.path.abspath('.')],

@@ -14,6 +14,7 @@ datas = [
     (str(version_file), "."),
     (str(revision_file), "."),
     (str(production_profile), "."),
+    (str(project_root / "resources" / "fiscal" / "schemas"), "resources/fiscal/schemas"),
 ]
 binaries = []
 hiddenimports = [

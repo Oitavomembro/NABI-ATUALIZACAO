@@ -663,3 +663,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - senha permanece somente em memória e nunca é persistida;
 - o cartão reutiliza `FiscalService.inspect_certificate()`, sem criar instalador, cópia ou regra paralela de certificado;
 - 72 testes focados e `compileall` aprovados com `NABICODE_PROFILE=TESTE`.
+
+## Checkpoint 42.47 — schemas oficiais e validação obrigatória
+
+- incorporados do Portal Nacional os schemas NF-e/NFC-e `010e v1.02` e eventos/serviços `010d v1.03`, publicados em 10/07/2026;
+- origem, URLs e hashes SHA-256 dos ZIP oficiais registrados junto aos recursos, sem alterar os tipos publicados pela Fazenda;
+- executável de desenvolvimento e build Windows passam a carregar os mesmos schemas versionados;
+- NF-e/NFC-e assinada, consulta, lote de eventos e inutilização são validados localmente antes de qualquer transmissão;
+- corrigida na fonte a ausência de `indIEDest`, detectada pelo schema oficial no destinatário;
+- eventos deixam de transmitir o elemento isolado e passam a usar o lote oficial `envEvento`;
+- validação usa parser sem rede e sem resolução de entidades externas;
+- 100 testes fiscais, de devolução e empacotamento aprovados; `compileall` e `git diff --check` aprovados;
+- nenhum endpoint, certificado real, banco real, interface ou impressora foi utilizado.

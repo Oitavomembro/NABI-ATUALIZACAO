@@ -21,6 +21,13 @@ class PyInstallerFiscalDependenciesTests(unittest.TestCase):
         self.assertIn("except ModuleNotFoundError:  # Não deve impedir o uso não fiscal", source)
         self.assertIn('self._require_dependency("cryptography")', source)
 
+    def test_build_oficial_inclui_schemas_fiscais(self):
+        root = Path(__file__).resolve().parents[1]
+        spec = (root / "build_tools" / "pyinstaller" / "nabicode.spec").read_text(encoding="utf-8")
+        self.assertIn('"resources" / "fiscal" / "schemas"', spec)
+        self.assertTrue((root / "resources/fiscal/schemas/nfe_010e_v1.02/nfe_v4.00.xsd").is_file())
+        self.assertTrue((root / "resources/fiscal/schemas/eventos_010d_v1.03/envEvento_v1.00.xsd").is_file())
+
 
 if __name__ == "__main__":
     unittest.main()
