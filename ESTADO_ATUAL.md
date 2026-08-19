@@ -1106,3 +1106,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - um teste antigo de recuperação de lock oscilou sob carga, passou isoladamente e a suíte completa repetida foi aprovada;
 - `compileall` e `git diff --check` aprovados;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.74 — referência CEST oficial consolidada
+
+- integrada a publicação consolidada do Convênio ICMS 142/18 diretamente do CONFAZ, sem provedor pago;
+- incluído snapshot oficial com 1.049 códigos consolidados a partir de 1.591 ocorrências e redações históricas;
+- quando um CEST aparece mais de uma vez, o catálogo preserva a última redação na ordem da publicação oficial;
+- pesquisa disponível por CEST, descrição ou compatibilidade textual com o NCM informado;
+- selecionar um resultado exige confirmação explícita da descrição e da regra fiscal da empresa;
+- coincidência de NCM nunca ativa substituição tributária automaticamente, pois segmento, descrição e legislação da UF também são determinantes;
+- atualização roda em segundo plano, valida integralidade e substitui o cache atomicamente;
+- cache inválido recua para o snapshot incluído no instalador;
+- validação focada: 25 testes aprovados;
+- suíte completa: 1.247 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

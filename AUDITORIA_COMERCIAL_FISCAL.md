@@ -25,6 +25,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - DANFE oficial da NF-e modelo 55 e DANFE NFC-e térmico de 80 mm para documentos autorizados;
 - contingência offline da NFC-e ativada explicitamente no PDV, com assinatura, QR Code, DANFE, fila e prazo controlado;
 - catálogo NCM vigente da Receita Federal, com pesquisa offline e atualização gratuita pela fonte oficial;
+- referência CEST consolidada do Convênio ICMS 142/18, com conferência obrigatória de descrição e UF;
 - preparação estrutural das 27 UFs, com Bahia como perfil atualmente validado;
 - controles básicos de ICMS, PIS, COFINS e primeira matriz regular de IBS/CBS.
 
@@ -32,7 +33,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 
 1. Homologação fiscal real do contribuinte e retirada controlada do bloqueio de produção.
 2. Motor tributário completo para situações especiais: ST integral, DIFAL, IPI, benefícios, reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
-3. Catálogo CEST versionado e integração licenciada da tabela IBPT. A NCM já usa a fonte pública oficial da Receita Federal.
+3. Integração licenciada da tabela IBPT. NCM e referência CEST já usam publicações oficiais gratuitas; a incidência de ST continua submetida à matriz tributária e à legislação da UF.
 4. Validação da cadeia ICP-Brasil contra repositório de confiança atualizado. A assinatura e o certificado incorporado são validados, mas isso não substitui a cadeia oficial.
 5. Distribuição DF-e e manifestação do destinatário.
 6. Envio de XML e documento auxiliar por e-mail com fila, consentimento e configuração segura.
@@ -43,7 +44,6 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 
 ## Funções solicitadas que ainda não existem
 
-- busca visual de CEST em catálogo oficial atualizado;
 - atualização IBPT;
 - consulta Receita/Sintegra e validação online de IE;
 - duplicação controlada de nota para novo rascunho;

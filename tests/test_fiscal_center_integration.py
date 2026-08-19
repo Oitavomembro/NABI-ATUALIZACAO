@@ -110,3 +110,8 @@ def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():
     assert 'text="ATUALIZAR TABELA NCM OFICIAL"' in block
     assert "self.fiscal_ncm_catalog_service.search" in block
     assert "self.fiscal_ncm_catalog_service.update" in block
+    assert 'text="BUSCAR CEST OFICIAL"' in block
+    assert 'text="ATUALIZAR CEST OFICIAL"' in block
+    assert "self.fiscal_cest_catalog_service.search" in block
+    assert "self.fiscal_cest_catalog_service.update" in block
+    assert "Confirma que a mercadoria corresponde exatamente" in block

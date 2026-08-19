@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalNCMCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalNCMCatalogService, FiscalCESTCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -733,6 +733,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
             cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "ncm_oficial.json",
+        )
+        self.fiscal_cest_catalog_service = FiscalCESTCatalogService(
+            bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
+            cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
         )
         self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
@@ -3374,12 +3378,87 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             fg_color="#8957e5",
         )
         button_update_ncm.pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+        def buscar_cest_oficial():
+            query = simpledialog.askstring(
+                "Buscar CEST oficial",
+                "Digite parte do CEST ou da descrição. O NCM atual também será considerado:",
+                parent=win, initialvalue=e_cest.get().strip(),
+            )
+            if query is None:
+                return
+            try:
+                results = self.fiscal_cest_catalog_service.search(
+                    query, ncm=e_ncm.get().strip(), limit=30,
+                )
+            except (OSError, ValueError, RuntimeError) as exc:
+                messagebox.showerror("Catálogo CEST oficial", str(exc), parent=win)
+                return
+            if not results:
+                messagebox.showinfo("Catálogo CEST oficial", "Nenhum CEST correspondente foi encontrado.", parent=win)
+                return
+            lines = [
+                f"{index}. {item.code} — NCM {item.ncm_text} — {item.description}"
+                for index, item in enumerate(results, 1)
+            ]
+            selected = simpledialog.askinteger(
+                "Conferir e selecionar CEST",
+                "O CEST depende também da descrição e da legislação da UF. Confira antes de escolher:\n\n"
+                + "\n".join(lines), minvalue=1, maxvalue=len(results), parent=win,
+            )
+            if selected is None:
+                return
+            chosen = results[selected - 1]
+            if not messagebox.askyesno(
+                "Confirmar CEST",
+                f"CEST: {chosen.code}\nNCM/SH: {chosen.ncm_text}\n{chosen.description}\n\n"
+                "Confirma que a mercadoria corresponde exatamente à descrição e à regra fiscal da empresa?",
+                parent=win,
+            ):
+                return
+            e_cest.delete(0, "end")
+            e_cest.insert(0, chosen.code)
+
+        def atualizar_cest_oficial():
+            button_update_cest.configure(state="disabled", text="ATUALIZANDO CEST...")
+            task = TASK_MANAGER.submit(
+                "Atualizar catálogo CEST oficial",
+                lambda context: self.fiscal_cest_catalog_service.update(),
+            )
+            def monitor():
+                current = TASK_MANAGER.get(task.id)
+                if current is None or current.status in {TaskStatus.PENDING, TaskStatus.RUNNING}:
+                    win.after(200, monitor)
+                    return
+                button_update_cest.configure(state="normal", text="ATUALIZAR CEST OFICIAL")
+                if current.status == TaskStatus.COMPLETED:
+                    metadata = current.result or {}
+                    messagebox.showinfo(
+                        "Catálogo CEST atualizado",
+                        f"{metadata.get('source', '')}\n{metadata.get('entries', '0')} códigos consolidados.",
+                        parent=win,
+                    )
+                else:
+                    messagebox.showerror("Catálogo CEST", current.error or "Não foi possível atualizar.", parent=win)
+            win.after(200, monitor)
+
+        cest_actions = ctk.CTkFrame(fiscal, fg_color="transparent")
+        cest_actions.grid(row=7, column=0, columnspan=3, sticky="ew", padx=8, pady=(2, 4))
+        ctk.CTkButton(
+            cest_actions, text="BUSCAR CEST OFICIAL", command=buscar_cest_oficial,
+            fg_color="#1f6feb",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        button_update_cest = ctk.CTkButton(
+            cest_actions, text="ATUALIZAR CEST OFICIAL", command=atualizar_cest_oficial,
+            fg_color="#8957e5",
+        )
+        button_update_cest.pack(side="left", fill="x", expand=True, padx=(4, 0))
         ctk.CTkLabel(
             fiscal,
             text=("A NF-e de compra atualiza NCM, CEST, origem e IBS/CBS quando presentes. "
                   "CSOSN/CST de venda devem refletir a tributação da sua empresa e não são copiados cegamente do fornecedor."),
             anchor="w", justify="left", text_color="#8b949e", wraplength=780,
-        ).grid(row=7, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
+        ).grid(row=8, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
 
         opcoes = ctk.CTkFrame(estoque, fg_color="transparent")
         opcoes.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=6)
