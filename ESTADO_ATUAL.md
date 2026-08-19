@@ -1207,3 +1207,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 116 testes e 10 subtestes aprovados;
 - suíte completa: 1.273 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados.
+
+## Checkpoint 42.81 / R17 TESTE — prévia consolidada do instalador
+
+- revisão interna elevada para 17 e conferida dentro da distribuição reconstruída;
+- instalador de teste consolidado com todas as alterações até o Checkpoint 42.80;
+- reconstrução completa feita com Python 3.14.7, PyInstaller 6.21.0 e Inno Setup 6.7.3;
+- dependências fiscais empacotadas incluem BrazilFiscalReport 1.0.1 e pygame-ce 2.5.7;
+- 31 testes focados de build, dependências fiscais e atualização aprovados;
+- `compileall` e `git diff --check` aprovados;
+- instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R17_Setup.exe`;
+- SHA-256: `2C411E936EC2DAFC643D2F4E226E6BA881457E4C781428C4A54CEF2610AAC6C6`;
+- o instalador não foi executado e nenhum banco, certificado, endpoint fiscal ou impressora real foi utilizado.

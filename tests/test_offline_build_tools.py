@@ -26,7 +26,7 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.1"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "16"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "17"
 
 
 def test_installer_removes_only_the_known_legacy_r6_identity():
