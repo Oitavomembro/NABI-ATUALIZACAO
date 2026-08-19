@@ -900,6 +900,17 @@ class FiscalService:
             "signature": signature,
         }
 
+    def authorized_recipient_email(self, xml: bytes | str) -> str:
+        """Lê o e-mail do destinatário somente após validar o XML autorizado."""
+        raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
+        self.validate_authorized_xml(raw, require_signature=True)
+        root = etree.fromstring(
+            raw, parser=etree.XMLParser(resolve_entities=False, no_network=True)
+        )
+        return str(
+            root.xpath("string(//*[local-name()='dest']/*[local-name()='email'][1])") or ""
+        ).strip()
+
     def import_authorized_xml(self, xml: bytes | str, *, actor: str, require_signature: bool = True) -> dict[str, Any]:
         """Importa um XML autorizado externo após validações de integridade fiscal."""
         raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)

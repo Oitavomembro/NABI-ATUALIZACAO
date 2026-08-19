@@ -101,6 +101,11 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert "self.fiscal_service.generate_official_danfe_pdf" in block
     assert "self.fiscal_service.generate_nfce_auxiliary_pdf" in block
     assert 'row.get("model")' in block
+    assert 'text="Configurar e-mail fiscal"' in block
+    assert 'text="Enviar XML + DANFE por e-mail"' in block
+    assert "self.fiscal_email_service.enqueue" in block
+    assert "self.fiscal_email_service.process_pending" in block
+    assert "TASK_MANAGER.submit(\"Enviar documento fiscal por e-mail\"" in block
 
 
 def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():

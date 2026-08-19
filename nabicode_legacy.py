@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalNCMCatalogService, FiscalCESTCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -730,6 +730,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
+        self.fiscal_email_service = FiscalEmailService(
+            Path(APP_DIR) / "fiscal" / "email"
+        )
         self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
             cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "ncm_oficial.json",
@@ -10829,6 +10832,183 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     messagebox.showerror("Inutilização", str(exc), parent=modal)
 
             ctk.CTkButton(modal, text="Confirmar inutilização", command=confirm, fg_color="#da3633").pack(fill="x", padx=20, pady=18)
+
+        def configure_fiscal_email():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            current = self.fiscal_email_service.public_config()
+            modal = ctk.CTkToplevel(janela)
+            modal.title("Configurar e-mail fiscal")
+            modal.geometry("560x570")
+            modal.transient(janela)
+            modal.grab_set()
+            ctk.CTkLabel(
+                modal, text="Servidor de e-mail fiscal",
+                font=ctk.CTkFont(size=18, weight="bold"), text_color=self.cor_acento,
+            ).pack(anchor="w", padx=20, pady=(18, 4))
+            ctk.CTkLabel(
+                modal,
+                text=(
+                    "Use a senha de aplicativo fornecida pelo seu serviço de e-mail. "
+                    "Ela será protegida pelo Windows e não aparecerá na configuração nem na fila."
+                ),
+                wraplength=510, justify="left", text_color="#c9d1d9",
+            ).pack(anchor="w", padx=20, pady=(0, 10))
+            entries = {}
+            defaults = {
+                "host": current.get("host", ""), "port": current.get("port", 587),
+                "username": current.get("username", ""), "sender": current.get("sender", ""),
+                "password": "",
+            }
+            labels = {
+                "host": "Servidor SMTP", "port": "Porta", "username": "Usuário",
+                "sender": "E-mail remetente", "password": "Senha de aplicativo",
+            }
+            for name in ("host", "port", "username", "sender", "password"):
+                ctk.CTkLabel(modal, text=labels[name]).pack(anchor="w", padx=20, pady=(7, 2))
+                entry = ctk.CTkEntry(modal, show="*" if name == "password" else "")
+                entry.pack(fill="x", padx=20)
+                entry.insert(0, str(defaults[name]))
+                entries[name] = entry
+            security = ctk.CTkComboBox(modal, values=["TLS", "SSL"], state="readonly")
+            security.set(str(current.get("security") or "TLS"))
+            ctk.CTkLabel(modal, text="Segurança").pack(anchor="w", padx=20, pady=(7, 2))
+            security.pack(fill="x", padx=20)
+
+            def save_email_config():
+                if not self._confirmar_senha_mestra(
+                    title="Configurar e-mail fiscal",
+                    prompt="Digite a senha mestra para proteger a credencial de e-mail.",
+                    parent=modal,
+                ):
+                    return
+                try:
+                    self.fiscal_email_service.configure(
+                        host=entries["host"].get(), port=int(entries["port"].get()),
+                        username=entries["username"].get(), password=entries["password"].get(),
+                        sender=entries["sender"].get(), security=security.get(),
+                    )
+                    registrar_auditoria(
+                        self._usuario_financeiro(), "CONFIGURAR_EMAIL_FISCAL", "Fiscal",
+                        entries["sender"].get(), "SUCESSO",
+                    )
+                    modal.destroy()
+                    self.mostrar_notificacao(
+                        "E-mail fiscal configurado",
+                        "A senha de aplicativo foi protegida pelo Windows.", nivel="success",
+                    )
+                except Exception as exc:
+                    messagebox.showerror("E-mail fiscal", str(exc), parent=modal)
+
+            buttons = ctk.CTkFrame(modal, fg_color="transparent")
+            buttons.pack(fill="x", padx=20, pady=16)
+            ctk.CTkButton(
+                buttons, text="Salvar configuração", command=save_email_config,
+                fg_color="#2ea043",
+            ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+            ctk.CTkButton(
+                buttons, text="Remover configuração", fg_color="#da3633",
+                command=lambda: (
+                    self.fiscal_email_service.remove_config(), modal.destroy()
+                ) if self._confirmar_senha_mestra(
+                    title="Remover e-mail fiscal",
+                    prompt="Digite a senha mestra para remover a credencial de e-mail.",
+                    parent=modal,
+                ) else None,
+            ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+
+        def send_fiscal_email():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            if not self.fiscal_email_service.public_config():
+                messagebox.showinfo(
+                    "E-mail fiscal",
+                    "Configure primeiro o servidor e a senha de aplicativo.", parent=janela,
+                )
+                configure_fiscal_email()
+                return
+            row = selected()
+            source = Path(str((row or {}).get("processed_path") or ""))
+            if not source.is_file():
+                messagebox.showwarning(
+                    "Enviar por e-mail",
+                    "Selecione um documento autorizado com XML processado.", parent=janela,
+                )
+                return
+            try:
+                raw = source.read_bytes()
+                validation = self.fiscal_service.validate_authorized_xml(raw)
+                suggested = self.fiscal_service.authorized_recipient_email(raw)
+            except Exception as exc:
+                messagebox.showerror("Enviar por e-mail", str(exc), parent=janela)
+                return
+            recipient = simpledialog.askstring(
+                "Enviar documentos fiscais",
+                "Confirme o e-mail do destinatário:", initialvalue=suggested, parent=janela,
+            )
+            if recipient is None:
+                return
+            if not messagebox.askyesno(
+                "Confirmar envio fiscal",
+                f"Enviar XML autorizado e DANFE para {recipient.strip()}?",
+                parent=janela,
+            ):
+                return
+            transmission_status.configure(
+                text="Preparando XML e DANFE para envio em segundo plano...", text_color="#d29922"
+            )
+            actor = self._usuario_financeiro()
+
+            def work_email(_context):
+                key = validation["access_key"]
+                output_dir = Path(APP_DIR) / "fiscal" / "email" / "attachments"
+                output_dir.mkdir(parents=True, exist_ok=True)
+                pdf = output_dir / f"DANFE_{key}.pdf"
+                if validation["model"] == "65":
+                    self.fiscal_service.generate_nfce_auxiliary_pdf(
+                        fiscal_xml=raw, output_path=pdf
+                    )
+                else:
+                    self.fiscal_service.generate_official_danfe_pdf(
+                        authorized_xml=raw, output_path=pdf
+                    )
+                self.fiscal_email_service.enqueue(
+                    recipient=recipient.strip(),
+                    subject=f"Documento fiscal NabiCode — {key}",
+                    body=(
+                        "Olá,\n\nSeguem anexos o XML autorizado e o documento auxiliar "
+                        "do documento fiscal.\n\nMensagem enviada pelo NabiCode."
+                    ),
+                    attachments=[source, pdf], access_key=key,
+                )
+                result = self.fiscal_email_service.process_pending(limit=20)
+                sent = next((item for item in result if item.get("access_key") == key), None)
+                if not sent or sent.get("status") != "ENVIADO":
+                    raise ValueError((sent or {}).get("last_error") or "O envio permaneceu pendente.")
+                return key
+
+            task = TASK_MANAGER.submit("Enviar documento fiscal por e-mail", work_email)
+
+            def follow_email():
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    registrar_auditoria(
+                        actor, "ENVIAR_EMAIL_FISCAL", "Fiscal", current.result, "SUCESSO"
+                    )
+                    transmission_status.configure(
+                        text=f"Documentos enviados para {recipient.strip()}.", text_color="#2ea043"
+                    )
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    transmission_status.configure(
+                        text=current.error or "Envio fiscal não concluído.", text_color="#da3633"
+                    )
+                    return
+                janela.after(150, follow_email)
+
+            janela.after(100, follow_email)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
@@ -10868,6 +11048,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             accounting_actions, text="Exportar relatório CSV", command=export_fiscal_report,
             fg_color="#1f6feb",
+        ).pack(side="left", padx=4)
+        email_actions = ctk.CTkFrame(frame, fg_color="transparent")
+        email_actions.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            email_actions, text="Configurar e-mail fiscal", command=configure_fiscal_email,
+            fg_color="#8957e5",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            email_actions, text="Enviar XML + DANFE por e-mail", command=send_fiscal_email,
+            fg_color="#2ea043",
         ).pack(side="left", padx=4)
         load()
 

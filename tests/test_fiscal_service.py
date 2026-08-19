@@ -1709,7 +1709,7 @@ class FiscalServiceTests(unittest.TestCase):
             cnpj="12345678000195", model="55", series=1, number=321,
             emission_type=1, numeric_code="12345678",
         )
-        unsigned = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00"><ide><mod>55</mod></ide></infNFe></NFe>'
+        unsigned = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00"><ide><mod>55</mod></ide><dest><email>cliente@example.com</email></dest></infNFe></NFe>'
         signed = self.service.sign_xml(
             unsigned, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password,
         )
@@ -1726,6 +1726,12 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(record["source"], "IMPORTADO")
         self.assertTrue(Path(record["processed_path"]).is_file())
         self.assertEqual(len(record["processed_sha256"]), 64)
+
+    def test_email_do_destinatario_so_e_lido_de_xml_autorizado_valido(self):
+        _key, processed = self._authorized_signed_xml()
+        self.assertEqual(
+            self.service.authorized_recipient_email(processed), "cliente@example.com"
+        )
 
     def test_xml_autorizado_adulterado_e_bloqueado(self):
         _key, processed = self._authorized_signed_xml()

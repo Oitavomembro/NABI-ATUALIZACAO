@@ -1,7 +1,7 @@
 # Auditoria comercial e fiscal — NabiCode 2.5.1
 
-Data técnica: 18/08/2026  
-Base auditada: `dev/nabicode-2.5.1` após o Checkpoint 42.68.
+Data técnica: 19/08/2026
+Base auditada: `dev/nabicode-2.5.1` após o Checkpoint 42.76.
 
 ## Resultado executivo
 
@@ -28,26 +28,25 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - referência CEST consolidada do Convênio ICMS 142/18, com conferência obrigatória de descrição e UF;
 - preparação estrutural das 27 UFs, com Bahia como perfil atualmente validado;
 - controles básicos de ICMS, PIS, COFINS e primeira matriz regular de IBS/CBS.
+- cadeia ICP-Brasil conferida contra o pacote público oficial do ITI e revogação por CRL com falha fechada;
+- envio de XML autorizado e DANFE por e-mail, com credencial DPAPI, consentimento e fila persistente.
 
 ## Bloqueadores para comercialização fiscal em produção
 
 1. Homologação fiscal real do contribuinte e retirada controlada do bloqueio de produção.
 2. Motor tributário completo para situações especiais: ST integral, DIFAL, IPI, benefícios, reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
 3. Integração licenciada da tabela IBPT. NCM e referência CEST já usam publicações oficiais gratuitas; a incidência de ST continua submetida à matriz tributária e à legislação da UF.
-4. Validação da cadeia ICP-Brasil contra repositório de confiança atualizado. A assinatura e o certificado incorporado são validados, mas isso não substitui a cadeia oficial.
-5. Distribuição DF-e e manifestação do destinatário.
-6. Envio de XML e documento auxiliar por e-mail com fila, consentimento e configuração segura.
-7. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
-8. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.
-9. Política automatizada de retenção, cópia externa e restauração dos documentos fiscais pelo prazo legal aplicável.
-10. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
+4. Distribuição DF-e e manifestação do destinatário.
+5. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
+6. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.
+7. Política automatizada de retenção, cópia externa e restauração dos documentos fiscais pelo prazo legal aplicável.
+8. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
 
 ## Funções solicitadas que ainda não existem
 
 - atualização IBPT;
 - consulta Receita/Sintegra e validação online de IE;
 - duplicação controlada de nota para novo rascunho;
-- envio fiscal por e-mail;
 - distribuição/manifestação DF-e;
 - emissão NFS-e;
 

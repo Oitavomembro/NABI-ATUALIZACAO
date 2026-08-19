@@ -1149,3 +1149,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 121 testes e 10 subtestes aprovados;
 - suíte completa: 1.256 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.77 — envio seguro de documentos fiscais por e-mail
+
+- criada fila persistente para envio do XML autorizado junto ao DANFE correspondente ao modelo 55 ou 65;
+- o destinatário é sugerido pelo próprio XML validado e o usuário confirma explicitamente antes do envio;
+- credencial SMTP usa DPAPI e nunca é gravada na configuração pública, fila, Git ou anexos;
+- configuração e remoção da credencial exigem senha mestra;
+- TLS e SSL são suportados, com senha de aplicativo e limite total de 15 MB por mensagem;
+- falhas ficam registradas na fila para nova tentativa sem marcar o documento como enviado;
+- geração do DANFE e comunicação SMTP rodam fora da interface gráfica;
+- a Central Fiscal ganhou configuração e envio direto sem acionar impressora física;
+- validação focada: 120 testes e 10 subtestes aprovados;
+- suíte completa: 1.262 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum servidor SMTP, e-mail, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
