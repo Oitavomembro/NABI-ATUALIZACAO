@@ -1193,3 +1193,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.272 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum DF-e, certificado, CNPJ, endpoint ou banco real foi utilizado nos testes.
+
+## Checkpoint 42.80 — duplicação controlada de nota para pré-venda
+
+- documento autorizado pode gerar uma nova pré-venda editável no fluxo oficial do PDV;
+- somente código e quantidade são reaproveitados da nota original;
+- produto, nome, preço, estoque e perfil fiscal são relidos do cadastro atual;
+- número, série, chave, protocolo, pagamentos e tributos antigos nunca são copiados;
+- produto removido/inativo bloqueia a duplicação e exige correção consciente;
+- cliente é reaproveitado somente quando CPF/CNPJ corresponde ao cadastro atual;
+- uma segunda pré-venda aberta para a mesma nota é bloqueada;
+- o usuário recebe aviso explícito antes da criação e revisa a pré-venda no PDV.
+- validação focada: 116 testes e 10 subtestes aprovados;
+- suíte completa: 1.273 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados.

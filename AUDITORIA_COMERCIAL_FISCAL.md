@@ -32,6 +32,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - envio de XML autorizado e DANFE por e-mail, com credencial DPAPI, consentimento e fila persistente.
 - guarda fiscal externa junto ao backup diário/manual, com manifesto, SHA-256, retenção mínima indicada e restauração sem sobrescrita destrutiva.
 - Distribuição DF-e nacional incremental por NSU e manifestações de Ciência, Confirmação, Desconhecimento e Operação não Realizada.
+- duplicação controlada de nota autorizada para nova pré-venda, relendo produtos, preços, estoque e regras atuais.
 
 ## Bloqueadores para comercialização fiscal em produção
 
@@ -46,7 +47,6 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 
 - atualização IBPT;
 - consulta Receita/Sintegra e validação online de IE;
-- duplicação controlada de nota para novo rascunho;
 - emissão NFS-e;
 
 ## Regra de liberação

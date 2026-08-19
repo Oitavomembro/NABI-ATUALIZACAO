@@ -9,6 +9,7 @@ import unittest
 import zipfile
 from unittest.mock import patch
 from datetime import datetime, timedelta, timezone
+from decimal import Decimal
 from pathlib import Path
 
 from cryptography import x509
@@ -24,6 +25,7 @@ from services.fiscal_service import (
     InvalidCertificatePasswordError,
 )
 from services.fiscal_preflight_service import FiscalPreflightService
+from services.pdv_service import PDVService
 
 
 class FiscalServiceTests(unittest.TestCase):
@@ -1732,6 +1734,47 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(
             self.service.authorized_recipient_email(processed), "cliente@example.com"
         )
+
+    def test_duplica_autorizada_para_pre_venda_com_cadastro_atual_sem_identidade_fiscal(self):
+        conn = self.connect()
+        conn.execute(
+            "CREATE TABLE produtos(id INTEGER PRIMARY KEY,codigo TEXT,nome TEXT,preco_venda REAL,ativo INTEGER,controla_estoque INTEGER)"
+        )
+        conn.execute("CREATE TABLE clientes(id INTEGER PRIMARY KEY,nome TEXT,cpf TEXT)")
+        conn.execute("INSERT INTO produtos VALUES(7,'P1','PRODUTO ATUAL',25.50,1,1)")
+        conn.execute("INSERT INTO clientes VALUES(9,'CLIENTE ATUAL','98765432000198')")
+        conn.commit(); conn.close()
+        key = self.service.build_access_key(
+            state_code="29", issued_at=datetime(2026, 8, 19, tzinfo=timezone.utc),
+            cnpj="12345678000195", model="55", series=1, number=400,
+            emission_type=1, numeric_code="12344321",
+        )
+        unsigned = (
+            f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00">'
+            '<ide><mod>55</mod></ide><dest><CNPJ>98765432000198</CNPJ><xNome>CLIENTE ANTIGO</xNome></dest>'
+            '<det nItem="1"><prod><cProd>P1</cProd><qCom>2.0000</qCom><vUnCom>10.00</vUnCom></prod></det>'
+            '</infNFe></NFe>'
+        )
+        signed = self.service.sign_xml(
+            unsigned, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password
+        )
+        response = (
+            '<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><protNFe versao="4.00"><infProt>'
+            f'<tpAmb>2</tpAmb><cStat>100</cStat><chNFe>{key}</chNFe><nProt>123456789012345</nProt>'
+            '</infProt></protNFe></retEnviNFe>'
+        )
+        processed = self.service.merge_authorization_protocol(signed, response)
+        self.service.import_authorized_xml(processed, actor="admin")
+        pdv = PDVService(self.connect)
+        draft = self.service.duplicate_authorized_to_pdv_draft(
+            access_key=key, pdv_service=pdv
+        )
+        self.assertEqual(draft.cliente_id, 9)
+        self.assertEqual(draft.itens[0]["produto_id"], 7)
+        self.assertEqual(draft.itens[0]["preco"], Decimal("25.50"))
+        self.assertNotIn("protocol", draft.itens[0])
+        with self.assertRaisesRegex(ValueError, "já possui uma pré-venda"):
+            self.service.duplicate_authorized_to_pdv_draft(access_key=key, pdv_service=pdv)
 
     def test_xml_autorizado_adulterado_e_bloqueado(self):
         _key, processed = self._authorized_signed_xml()

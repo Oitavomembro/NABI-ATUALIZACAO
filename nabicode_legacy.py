@@ -11154,6 +11154,40 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 janela.after(150, follow_manifestation)
 
             janela.after(100, follow_manifestation)
+
+        def duplicate_fiscal_document():
+            row = selected()
+            if not row or row.get("_kind") != "DOCUMENTO" or row.get("status") != "AUTORIZADO":
+                messagebox.showwarning(
+                    "Duplicar nota",
+                    "Selecione um documento fiscal autorizado.", parent=janela,
+                )
+                return
+            if not messagebox.askyesno(
+                "Duplicar para nova pré-venda",
+                (
+                    "Será criada uma pré-venda editável com as quantidades da nota original. "
+                    "Preços, estoque e regras fiscais serão relidos do cadastro atual; número, "
+                    "chave, protocolo e tributos antigos não serão copiados. Continuar?"
+                ),
+                parent=janela,
+            ):
+                return
+            try:
+                draft = self.fiscal_service.duplicate_authorized_to_pdv_draft(
+                    access_key=row.get("access_key", ""), pdv_service=self.pdv_service
+                )
+                registrar_auditoria(
+                    self._usuario_financeiro(), "DUPLICAR_NOTA_PARA_PRE_VENDA", "Fiscal",
+                    str(row.get("access_key") or ""), "SUCESSO",
+                )
+                self.mostrar_notificacao(
+                    "Pré-venda criada",
+                    f"Documento {draft.id} salvo no PDV para revisão. Total atual R$ {draft.total:.2f}.",
+                    nivel="success", duracao_ms=7000,
+                )
+            except Exception as exc:
+                messagebox.showerror("Duplicar nota", str(exc), parent=janela)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
@@ -11213,6 +11247,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             dfe_actions, text="Manifestar NF-e recebida", command=manifest_dfe_document,
             fg_color="#d29922",
+        ).pack(side="left", padx=4)
+        draft_actions = ctk.CTkFrame(frame, fg_color="transparent")
+        draft_actions.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            draft_actions, text="Duplicar nota para nova pré-venda",
+            command=duplicate_fiscal_document, fg_color="#8957e5",
         ).pack(side="left", padx=4)
         load()
 

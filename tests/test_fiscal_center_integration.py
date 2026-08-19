@@ -111,6 +111,9 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert 'text="Manifestar NF-e recebida"' in block
     assert "self.fiscal_dfe_service.send_manifestation" in block
     assert "A manifestação conclusiva deve ser feita em até 90 dias" in block
+    assert 'text="Duplicar nota para nova pré-venda"' in block
+    assert "duplicate_authorized_to_pdv_draft" in block
+    assert "chave, protocolo e tributos antigos não serão copiados" in block
 
 
 def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():

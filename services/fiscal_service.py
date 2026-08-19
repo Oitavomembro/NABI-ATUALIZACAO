@@ -911,6 +911,78 @@ class FiscalService:
             root.xpath("string(//*[local-name()='dest']/*[local-name()='email'][1])") or ""
         ).strip()
 
+    def duplicate_authorized_to_pdv_draft(
+        self, *, access_key: str, pdv_service: Any
+    ) -> Any:
+        """Cria pré-venda editável usando produtos atuais, sem copiar identidade fiscal."""
+        key = self._normalize_access_key(access_key)
+        document = next(
+            (
+                row for row in reversed(self.list_documents())
+                if row.get("access_key") == key and row.get("status") == "AUTORIZADO"
+            ),
+            None,
+        )
+        if not document:
+            raise ValueError("Documento fiscal autorizado não encontrado.")
+        source = Path(str(document.get("processed_path") or ""))
+        if not source.is_file():
+            raise ValueError("XML processado do documento autorizado não foi localizado.")
+        raw = source.read_bytes()
+        self.validate_authorized_xml(raw, require_signature=True)
+        if any(
+            any(item.get("origem_nfe") == key for item in draft.itens)
+            for draft in pdv_service.listar_documentos("PRE_VENDA")
+        ):
+            raise ValueError("Esta nota já possui uma pré-venda duplicada em aberto.")
+        root = etree.fromstring(raw, parser=etree.XMLParser(resolve_entities=False, no_network=True))
+        extracted = []
+        for detail in root.xpath("//*[local-name()='infNFe']/*[local-name()='det']"):
+            code = str(detail.xpath("string(./*[local-name()='prod']/*[local-name()='cProd'])") or "").strip()
+            quantity = str(detail.xpath("string(./*[local-name()='prod']/*[local-name()='qCom'])") or "").strip()
+            if not code or not quantity:
+                raise ValueError("A nota original possui item sem código ou quantidade comercial.")
+            extracted.append((code, Decimal(quantity)))
+        if not extracted:
+            raise ValueError("A nota original não possui itens para duplicar.")
+        connection = self.connection_factory()
+        try:
+            products = {}
+            for code, _quantity in extracted:
+                row = connection.execute(
+                    "SELECT id,codigo,nome,preco_venda,ativo,controla_estoque FROM produtos "
+                    "WHERE codigo=? COLLATE NOCASE",
+                    (code,),
+                ).fetchone()
+                if not row or not int(row[4] or 0):
+                    raise ValueError(f"Produto {code} não existe ou está inativo no cadastro atual.")
+                products[code.casefold()] = row
+            recipient = self._normalize_tax_document(str(
+                root.xpath("string(//*[local-name()='dest']/*[local-name()='CNPJ' or local-name()='CPF'][1])") or ""
+            ))
+            customer_id = None
+            customer_name = str(root.xpath("string(//*[local-name()='dest']/*[local-name()='xNome'][1])") or "").strip()
+            if recipient:
+                for row in connection.execute("SELECT id,nome,cpf FROM clientes"):
+                    if self._normalize_tax_document(row[2]) == recipient:
+                        customer_id, customer_name = int(row[0]), str(row[1] or customer_name)
+                        break
+        finally:
+            connection.close()
+        items = []
+        for code, quantity in extracted:
+            product = products[code.casefold()]
+            price = Decimal(str(product[3] or 0)).quantize(Decimal("0.01"))
+            items.append({
+                "produto_id": int(product[0]), "item": str(product[2]),
+                "qtd": quantity, "preco": price, "subtotal": quantity * price,
+                "item_avulso": False, "controla_estoque": bool(product[5]),
+                "estoque_override": False, "origem_nfe": key,
+            })
+        return pdv_service.salvar_documento(
+            "PRE_VENDA", items, cliente_id=customer_id, cliente_nome=customer_name
+        )
+
     def import_authorized_xml(self, xml: bytes | str, *, actor: str, require_signature: bool = True) -> dict[str, Any]:
         """Importa um XML autorizado externo após validações de integridade fiscal."""
         raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
