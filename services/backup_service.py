@@ -1,9 +1,13 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 import threading
+import uuid
+import zipfile
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Callable
 
@@ -15,6 +19,7 @@ class BackupResult:
     created: tuple[str, ...]
     errors: tuple[str, ...]
     skipped: bool = False
+    fiscal_archives: tuple[str, ...] = ()
 
 
 class BackupService:
@@ -29,12 +34,14 @@ class BackupService:
         default_directory: str | os.PathLike[str],
         get_config: Callable[[str], str | None],
         set_config: Callable[[str, str], None],
+        fiscal_directory: str | os.PathLike[str] | None = None,
         now: Callable[[], datetime] = datetime.now,
     ) -> None:
         self.database_path = Path(database_path)
         self.default_directory = Path(default_directory)
         self.get_config = get_config
         self.set_config = set_config
+        self.fiscal_directory = Path(fiscal_directory).resolve() if fiscal_directory else None
         self.now = now
 
     def configured_directories(self) -> list[str]:
@@ -81,13 +88,124 @@ class BackupService:
 
     def create_all(self, prefix: str) -> BackupResult:
         created: list[str] = []
+        fiscal_archives: list[str] = []
         errors: list[str] = []
         for directory in self.configured_directories():
             try:
-                created.append(self.create(directory, prefix))
+                database_backup = self.create(directory, prefix)
+                created.append(database_backup)
+                archive = self.create_fiscal_archive(
+                    directory, prefix=Path(database_backup).stem
+                )
+                if archive:
+                    fiscal_archives.append(archive)
             except Exception as exc:  # erro por destino deve ser reportado sem abortar os demais
                 errors.append(f"{directory}: {exc}")
-        return BackupResult(tuple(created), tuple(errors))
+        return BackupResult(tuple(created), tuple(errors), fiscal_archives=tuple(fiscal_archives))
+
+    def create_fiscal_archive(
+        self, directory: str | os.PathLike[str], *, prefix: str
+    ) -> str:
+        if self.fiscal_directory is None or not self.fiscal_directory.is_dir():
+            return ""
+        files = [
+            path for path in self.fiscal_directory.rglob("*")
+            if path.is_file()
+            and path.suffix.lower() in {".xml", ".pdf"}
+            and not set(
+                part.casefold() for part in path.relative_to(self.fiscal_directory).parts
+            ).intersection({"certificate", "email"})
+        ]
+        if not files:
+            return ""
+        target_dir = Path(directory).expanduser().resolve()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{self._safe_prefix(prefix)}_fiscal.zip"
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        manifest: list[dict[str, object]] = []
+        try:
+            with zipfile.ZipFile(temporary, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+                for path in sorted(files):
+                    relative = path.relative_to(self.fiscal_directory).as_posix()
+                    data = path.read_bytes()
+                    manifest.append({
+                        "path": relative, "size": len(data),
+                        "sha256": hashlib.sha256(data).hexdigest(),
+                    })
+                    archive.writestr(f"documents/{relative}", data)
+                archive.writestr(
+                    "manifest.json",
+                    json.dumps({
+                        "version": 1,
+                        "created_at": self.now().isoformat(timespec="seconds"),
+                        "retain_until": (self.now() + timedelta(days=1827)).date().isoformat(),
+                        "documents": manifest,
+                    }, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+                )
+            self._validate_fiscal_archive(temporary)
+            temporary.replace(target)
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+        return str(target)
+
+    def restore_fiscal_archive(
+        self, archive_path: str | os.PathLike[str],
+        target_directory: str | os.PathLike[str] | None = None,
+    ) -> tuple[str, ...]:
+        archive_path = Path(archive_path).resolve()
+        manifest = self._validate_fiscal_archive(archive_path)
+        target = Path(target_directory).resolve() if target_directory else self.fiscal_directory
+        if target is None:
+            raise ValueError("A pasta fiscal de restauração não foi configurada.")
+        planned: list[tuple[Path, bytes]] = []
+        with zipfile.ZipFile(archive_path) as archive:
+            for item in manifest["documents"]:
+                relative = Path(str(item["path"]))
+                destination = (target / relative).resolve()
+                if target != destination and target not in destination.parents:
+                    raise ValueError("O pacote fiscal contém caminho inseguro.")
+                data = archive.read(f"documents/{relative.as_posix()}")
+                if destination.exists():
+                    if hashlib.sha256(destination.read_bytes()).hexdigest() != item["sha256"]:
+                        raise FileExistsError(
+                            f"Já existe documento fiscal diferente em {relative.as_posix()}."
+                        )
+                    continue
+                planned.append((destination, data))
+        restored: list[str] = []
+        for destination, data in planned:
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            temporary = destination.with_name(f".{destination.name}.{uuid.uuid4().hex}.tmp")
+            temporary.write_bytes(data)
+            temporary.replace(destination)
+            restored.append(str(destination))
+        return tuple(restored)
+
+    @staticmethod
+    def _validate_fiscal_archive(path: Path) -> dict:
+        if not path.is_file() or path.stat().st_size <= 0:
+            raise RuntimeError("Arquivo de guarda fiscal ausente ou vazio.")
+        with zipfile.ZipFile(path) as archive:
+            names = set(archive.namelist())
+            if "manifest.json" not in names:
+                raise ValueError("Pacote fiscal sem manifesto.")
+            manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            if manifest.get("version") != 1 or not isinstance(manifest.get("documents"), list):
+                raise ValueError("Manifesto do pacote fiscal é inválido.")
+            for item in manifest["documents"]:
+                relative = Path(str(item.get("path") or ""))
+                if relative.is_absolute() or ".." in relative.parts:
+                    raise ValueError("Pacote fiscal contém caminho inseguro.")
+                name = f"documents/{relative.as_posix()}"
+                if name not in names:
+                    raise ValueError(f"Documento ausente no pacote fiscal: {relative}.")
+                data = archive.read(name)
+                if len(data) != int(item.get("size") or -1):
+                    raise ValueError(f"Tamanho divergente no pacote fiscal: {relative}.")
+                if hashlib.sha256(data).hexdigest() != item.get("sha256"):
+                    raise ValueError(f"Hash divergente no pacote fiscal: {relative}.")
+        return manifest
 
     def run_daily(self) -> BackupResult:
         with self._daily_lock:

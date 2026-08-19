@@ -1163,3 +1163,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 120 testes e 10 subtestes aprovados;
 - suíte completa: 1.262 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum servidor SMTP, e-mail, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.78 — guarda e restauração de documentos fiscais
+
+- o backup diário e manual passa a criar, em cada destino configurado, um pacote fiscal ao lado do banco;
+- XMLs autorizados e DANFEs são preservados com manifesto, tamanho e SHA-256 individual;
+- certificado A1, senha protegida, fila de e-mail e outros segredos são excluídos do pacote;
+- o manifesto registra a data mínima de retenção de cinco anos sem apagar automaticamente arquivos antigos;
+- a restauração valida integralmente o pacote antes de gravar qualquer documento;
+- arquivo existente idêntico é preservado e conflito com conteúdo diferente bloqueia toda a restauração;
+- o Menu Técnico ganhou restauração específica de XMLs e DANFEs sem misturar a restauração do banco;
+- testes utilizam somente banco e documentos fiscais temporários.
+- validação focada: 15 testes aprovados;
+- suíte completa: 1.263 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados.

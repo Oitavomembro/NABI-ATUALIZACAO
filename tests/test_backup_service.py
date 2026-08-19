@@ -28,11 +28,22 @@ class BackupServiceTests(unittest.TestCase):
             "pasta_backup_nuvem": str(self.root / "cloud"),
             "backup_diario_ativo": "1",
         }
+        self.fiscal = self.root / "fiscal"
+        (self.fiscal / "homologacao" / "55" / "chave").mkdir(parents=True)
+        (self.fiscal / "homologacao" / "55" / "chave" / "processado.xml").write_bytes(
+            b"<nfeProc/>"
+        )
+        (self.fiscal / "homologacao" / "55" / "chave" / "danfe.pdf").write_bytes(
+            b"%PDF-1.4 teste"
+        )
+        (self.fiscal / "certificate").mkdir()
+        (self.fiscal / "certificate" / "active.pfx").write_bytes(b"segredo")
         self.service = BackupService(
             database_path=self.db,
             default_directory=self.root / "default",
             get_config=self.config.get,
             set_config=lambda key, value: self.config.__setitem__(key, value),
+            fiscal_directory=self.fiscal,
             now=lambda: datetime(2026, 8, 2, 20, 30, 0),
         )
 
@@ -42,6 +53,7 @@ class BackupServiceTests(unittest.TestCase):
     def test_create_all_gera_e_valida_todos_os_destinos(self) -> None:
         result = self.service.create_all("backup_manual")
         self.assertEqual(2, len(result.created))
+        self.assertEqual(2, len(result.fiscal_archives))
         self.assertEqual((), result.errors)
         for path in result.created:
             conn = sqlite3.connect(path)
@@ -49,6 +61,22 @@ class BackupServiceTests(unittest.TestCase):
                 self.assertEqual("NabiCode", conn.execute("SELECT nome FROM dados").fetchone()[0])
             finally:
                 conn.close()
+        for path in result.fiscal_archives:
+            manifest = self.service._validate_fiscal_archive(Path(path))
+            self.assertEqual(2, len(manifest["documents"]))
+            self.assertEqual("2031-08-03", manifest["retain_until"])
+            self.assertFalse(any("active.pfx" in item["path"] for item in manifest["documents"]))
+
+    def test_restaura_documentos_fiscais_sem_sobrescrever_conflito(self) -> None:
+        archive = self.service.create_all("restauracao").fiscal_archives[0]
+        restored_dir = self.root / "fiscal_restaurado"
+        restored = self.service.restore_fiscal_archive(archive, restored_dir)
+        self.assertEqual(2, len(restored))
+        xml = restored_dir / "homologacao" / "55" / "chave" / "processado.xml"
+        self.assertEqual(b"<nfeProc/>", xml.read_bytes())
+        xml.write_bytes(b"conteudo diferente")
+        with self.assertRaisesRegex(FileExistsError, "documento fiscal diferente"):
+            self.service.restore_fiscal_archive(archive, restored_dir)
 
     def test_run_daily_e_idempotente_por_dia(self) -> None:
         first = self.service.run_daily()

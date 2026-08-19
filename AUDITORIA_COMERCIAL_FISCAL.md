@@ -30,6 +30,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - controles básicos de ICMS, PIS, COFINS e primeira matriz regular de IBS/CBS.
 - cadeia ICP-Brasil conferida contra o pacote público oficial do ITI e revogação por CRL com falha fechada;
 - envio de XML autorizado e DANFE por e-mail, com credencial DPAPI, consentimento e fila persistente.
+- guarda fiscal externa junto ao backup diário/manual, com manifesto, SHA-256, retenção mínima indicada e restauração sem sobrescrita destrutiva.
 
 ## Bloqueadores para comercialização fiscal em produção
 
@@ -39,8 +40,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 4. Distribuição DF-e e manifestação do destinatário.
 5. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
 6. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.
-7. Política automatizada de retenção, cópia externa e restauração dos documentos fiscais pelo prazo legal aplicável.
-8. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
+7. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
 
 ## Funções solicitadas que ainda não existem
 

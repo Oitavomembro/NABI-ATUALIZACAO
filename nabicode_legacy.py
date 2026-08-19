@@ -11066,6 +11066,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         resultado = _servico_backups().create_all("backup_manual")
         if resultado.created:
             texto = "Backup criado em:\n\n" + "\n".join(resultado.created)
+            if resultado.fiscal_archives:
+                texto += (
+                    "\n\nGuarda fiscal (XML/PDF):\n"
+                    + "\n".join(resultado.fiscal_archives)
+                )
             if resultado.errors:
                 texto += "\n\nAlguns destinos falharam:\n" + "\n".join(resultado.errors)
             self.mostrar_notificacao("Backup realizado", texto, nivel="success", duracao_ms=7000)
@@ -11629,8 +11634,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkLabel(aba, text="Ferramentas administrativas de segurança do banco", font=ctk.CTkFont(size=15, weight="bold")).pack(pady=(20, 12))
         def criar_backup_admin():
             try:
-                destino, relatorio = _ADMIN_OPERATIONS.create_backup()
-                messagebox.showinfo("Backup", f"Backup criado e validado em:\n{destino}\n\nSchema: {relatorio.schema_version}", parent=janela)
+                resultado = _servico_backups().create_all("backup_tecnico")
+                if not resultado.created:
+                    raise RuntimeError("Nenhum backup pôde ser criado. " + " | ".join(resultado.errors))
+                detalhes = "Banco:\n" + "\n".join(resultado.created)
+                if resultado.fiscal_archives:
+                    detalhes += "\n\nGuarda fiscal (XML/PDF):\n" + "\n".join(resultado.fiscal_archives)
+                if resultado.errors:
+                    detalhes += "\n\nFalhas:\n" + "\n".join(resultado.errors)
+                messagebox.showinfo("Backup", f"Backup criado e validado.\n\n{detalhes}", parent=janela)
             except Exception as exc:
                 messagebox.showerror("Backup", str(exc), parent=janela)
 
@@ -11651,11 +11663,36 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showerror("Restauração", str(exc), parent=janela)
         def abrir_pasta_backup():
             self._abrir_diretorio_sistema(BACKUP_DIR)
+        def restaurar_documentos_fiscais():
+            origem = filedialog.askopenfilename(
+                parent=janela, title="Selecionar pacote de guarda fiscal",
+                filetypes=[("Guarda fiscal NabiCode", "*_fiscal.zip"), ("Pacote ZIP", "*.zip")],
+            )
+            if not origem:
+                return
+            if not messagebox.askyesno(
+                "Restaurar documentos fiscais",
+                "O pacote será validado por manifesto e SHA-256. Arquivos existentes diferentes não serão sobrescritos. Continuar?",
+                parent=janela,
+            ):
+                return
+            try:
+                restored = _servico_backups().restore_fiscal_archive(
+                    origem, Path(APP_DIR) / "fiscal"
+                )
+                messagebox.showinfo(
+                    "Guarda fiscal",
+                    f"Restauração validada: {len(restored)} arquivo(s) recuperado(s).",
+                    parent=janela,
+                )
+            except Exception as exc:
+                messagebox.showerror("Guarda fiscal", str(exc), parent=janela)
         def limpar_backups():
             mantidos = _ADMIN_OPERATIONS.cleanup_backups(10)
             messagebox.showinfo("Backup", f"Limpeza concluída. Mantidos {mantidos} backups recentes.", parent=janela)
         botao(aba, "💾 Criar backup agora", criar_backup_admin, "#2ea043")
         botao(aba, "♻ Restaurar backup", restaurar_backup_admin, "#8957e5")
+        botao(aba, "📄 Restaurar XMLs e DANFEs", restaurar_documentos_fiscais, "#1f6feb")
         botao(aba, "📂 Abrir pasta de backups", abrir_pasta_backup)
         botao(aba, "🧹 Limpar backups antigos", limpar_backups, "#da3633")
 

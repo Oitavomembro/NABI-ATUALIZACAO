@@ -113,6 +113,7 @@ class SystemInfrastructureManager:
             default_directory=self.backup_dir,
             get_config=self.get_config,
             set_config=self.set_config,
+            fiscal_directory=Path(self.app_dir) / "fiscal",
         )
 
     def diagnostics(self):
