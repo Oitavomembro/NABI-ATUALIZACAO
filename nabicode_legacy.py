@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalNCMCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -730,6 +730,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
+        self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
+            bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
+            cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "ncm_oficial.json",
+        )
         self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
         self.fiscal_preflight_service = FiscalPreflightService(
@@ -3308,12 +3312,74 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         e_ibs_uf_rate = campo(fiscal, "IBS estadual (%)", 5, 0)
         e_ibs_city_rate = campo(fiscal, "IBS municipal (%)", 5, 1)
         e_cbs_rate = campo(fiscal, "CBS (%)", 5, 2)
+
+        def buscar_ncm_oficial():
+            query = simpledialog.askstring(
+                "Buscar NCM oficial", "Digite parte do código ou palavras da descrição:", parent=win,
+                initialvalue=e_ncm.get().strip(),
+            )
+            if query is None:
+                return
+            try:
+                results = self.fiscal_ncm_catalog_service.search(query, limit=30)
+            except (OSError, ValueError) as exc:
+                messagebox.showerror("Tabela NCM oficial", str(exc), parent=win)
+                return
+            if not results:
+                messagebox.showinfo("Tabela NCM oficial", "Nenhuma NCM vigente foi encontrada.", parent=win)
+                return
+            lines = [f"{index}. {item.code} — {item.description}" for index, item in enumerate(results, 1)]
+            selected = simpledialog.askinteger(
+                "Selecionar NCM oficial", "Informe o número da NCM desejada:\n\n" + "\n".join(lines),
+                minvalue=1, maxvalue=len(results), parent=win,
+            )
+            if selected is None:
+                return
+            chosen = results[selected - 1]
+            e_ncm.delete(0, "end")
+            e_ncm.insert(0, chosen.code)
+            self.mostrar_notificacao("NCM selecionada", f"{chosen.code} — {chosen.description}", nivel="success")
+
+        def atualizar_ncm_oficial():
+            button_update_ncm.configure(state="disabled", text="ATUALIZANDO NCM...")
+            task = TASK_MANAGER.submit(
+                "Atualizar tabela NCM oficial",
+                lambda context: self.fiscal_ncm_catalog_service.update(),
+            )
+            def monitor():
+                current = TASK_MANAGER.get(task.id)
+                if current is None or current.status in {TaskStatus.PENDING, TaskStatus.RUNNING}:
+                    win.after(200, monitor)
+                    return
+                button_update_ncm.configure(state="normal", text="ATUALIZAR TABELA NCM OFICIAL")
+                if current.status == TaskStatus.COMPLETED:
+                    metadata = current.result or {}
+                    messagebox.showinfo(
+                        "Tabela NCM atualizada",
+                        f"{metadata.get('updated', '')}\n{metadata.get('legal_act', '')}\n"
+                        f"{metadata.get('entries', '0')} códigos vigentes.", parent=win,
+                    )
+                else:
+                    messagebox.showerror("Tabela NCM", current.error or "Não foi possível atualizar.", parent=win)
+            win.after(200, monitor)
+
+        ncm_actions = ctk.CTkFrame(fiscal, fg_color="transparent")
+        ncm_actions.grid(row=6, column=0, columnspan=3, sticky="ew", padx=8, pady=(4, 2))
+        ctk.CTkButton(
+            ncm_actions, text="BUSCAR NCM OFICIAL", command=buscar_ncm_oficial,
+            fg_color="#1f6feb",
+        ).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        button_update_ncm = ctk.CTkButton(
+            ncm_actions, text="ATUALIZAR TABELA NCM OFICIAL", command=atualizar_ncm_oficial,
+            fg_color="#8957e5",
+        )
+        button_update_ncm.pack(side="left", fill="x", expand=True, padx=(4, 0))
         ctk.CTkLabel(
             fiscal,
             text=("A NF-e de compra atualiza NCM, CEST, origem e IBS/CBS quando presentes. "
                   "CSOSN/CST de venda devem refletir a tributação da sua empresa e não são copiados cegamente do fornecedor."),
             anchor="w", justify="left", text_color="#8b949e", wraplength=780,
-        ).grid(row=6, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
+        ).grid(row=7, column=0, columnspan=3, sticky="ew", padx=8, pady=12)
 
         opcoes = ctk.CTkFrame(estoque, fg_color="transparent")
         opcoes.grid(row=2, column=0, columnspan=3, sticky="ew", padx=8, pady=6)

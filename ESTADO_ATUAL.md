@@ -1090,3 +1090,19 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.239 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.73 — catálogo NCM oficial e gratuito
+
+- integrada a fonte pública JSON do Sistema Classif da Receita Federal, sem provedor comercial;
+- incluído snapshot oficial vigente em 18/08/2026, Resolução Gecex nº 926/2026, com 10.515 códigos finais;
+- a tela fiscal do produto pesquisa por código ou descrição, inclusive sem depender de acentos;
+- a atualização ocorre em segundo plano, valida tamanho, JSON, estrutura e quantidade mínima antes de substituir o cache;
+- gravação da atualização é atômica e uma resposta incompleta não destrói a última tabela válida;
+- cache corrompido recua automaticamente para o snapshot oficial incluído no instalador;
+- o instalador passa a transportar o catálogo e sua declaração de origem;
+- consulta comercial de CNPJ/IE permanece fora desta fase; a configuração gratuita usa XML autorizado próprio e certificado A1;
+- validação focada: 21 testes aprovados;
+- suíte completa: 1.243 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- um teste antigo de recuperação de lock oscilou sob carga, passou isoladamente e a suíte completa repetida foi aprovada;
+- `compileall` e `git diff --check` aprovados;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

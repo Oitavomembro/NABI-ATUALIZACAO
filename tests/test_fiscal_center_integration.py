@@ -106,3 +106,7 @@ def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():
     assert "abas_produto.set(aba_inicial)" in block
     assert "if callable(ao_salvar)" in block
     assert "e_ibs_class.get()" in block
+    assert 'text="BUSCAR NCM OFICIAL"' in block
+    assert 'text="ATUALIZAR TABELA NCM OFICIAL"' in block
+    assert "self.fiscal_ncm_catalog_service.search" in block
+    assert "self.fiscal_ncm_catalog_service.update" in block
