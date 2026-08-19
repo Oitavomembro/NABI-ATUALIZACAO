@@ -31,23 +31,22 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - cadeia ICP-Brasil conferida contra o pacote público oficial do ITI e revogação por CRL com falha fechada;
 - envio de XML autorizado e DANFE por e-mail, com credencial DPAPI, consentimento e fila persistente.
 - guarda fiscal externa junto ao backup diário/manual, com manifesto, SHA-256, retenção mínima indicada e restauração sem sobrescrita destrutiva.
+- Distribuição DF-e nacional incremental por NSU e manifestações de Ciência, Confirmação, Desconhecimento e Operação não Realizada.
 
 ## Bloqueadores para comercialização fiscal em produção
 
 1. Homologação fiscal real do contribuinte e retirada controlada do bloqueio de produção.
 2. Motor tributário completo para situações especiais: ST integral, DIFAL, IPI, benefícios, reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
 3. Integração licenciada da tabela IBPT. NCM e referência CEST já usam publicações oficiais gratuitas; a incidência de ST continua submetida à matriz tributária e à legislação da UF.
-4. Distribuição DF-e e manifestação do destinatário.
-5. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
-6. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.
-7. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
+4. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
+5. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.
+6. Homologação estadual além da Bahia, incluindo endpoints, QR Code, regras e testes por UF.
 
 ## Funções solicitadas que ainda não existem
 
 - atualização IBPT;
 - consulta Receita/Sintegra e validação online de IE;
 - duplicação controlada de nota para novo rascunho;
-- distribuição/manifestação DF-e;
 - emissão NFS-e;
 
 ## Regra de liberação

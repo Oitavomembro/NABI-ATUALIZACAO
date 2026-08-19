@@ -81,6 +81,7 @@ from .fiscal_service import FiscalCertificateInfo, FiscalResponse, FiscalService
 from .fiscal_ncm_catalog_service import FiscalNCMCatalogService, NCMEntry
 from .fiscal_cest_catalog_service import CESTEntry, FiscalCESTCatalogService
 from .fiscal_email_service import FiscalEmailService
+from .fiscal_dfe_service import DFeDistributionResult, FiscalDFeService
 from .fiscal_onboarding_service import FiscalOnboardingDraft, FiscalOnboardingService
 
 from .system_snapshot_service import SystemSnapshotService

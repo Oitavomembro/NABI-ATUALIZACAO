@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalDFeService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -732,6 +732,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
         self.fiscal_email_service = FiscalEmailService(
             Path(APP_DIR) / "fiscal" / "email"
+        )
+        self.fiscal_dfe_service = FiscalDFeService(
+            self.fiscal_service, storage_dir=Path(APP_DIR) / "fiscal" / "dfe"
         )
         self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
@@ -10444,6 +10447,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     continue
                 item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
                 rows[item] = dict(row, _kind="DOCUMENTO")
+            for row in self.fiscal_dfe_service.list_documents():
+                searchable = " ".join(
+                    str(row.get(field, ""))
+                    for field in ("access_key", "issuer", "document", "nsu", "issued_at")
+                ).casefold()
+                if query and query not in searchable:
+                    continue
+                item = tree.insert("", "end", values=(
+                    "DF-e RECEBIDO", row.get("access_key", ""), "RECEBIDO",
+                    f"NSU {row.get('nsu', '')}", row.get("issued_at", ""), "NACIONAL",
+                ))
+                rows[item] = dict(row, _kind="DFE", processed_path=row.get("path", ""))
             for row in self.fiscal_service.list_events():
                 searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
                 if query and query not in searchable:
@@ -11009,6 +11024,136 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 janela.after(150, follow_email)
 
             janela.after(100, follow_email)
+
+        def fetch_dfe_documents():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            password = self._obter_senha_certificado(
+                parent=janela, title="Buscar documentos recebidos (DF-e)"
+            )
+            if password is None:
+                return
+            transmission_status.configure(
+                text="Consultando o Ambiente Nacional em segundo plano...", text_color="#d29922"
+            )
+            task = TASK_MANAGER.submit(
+                "Distribuição de DF-e",
+                lambda _context: self.fiscal_dfe_service.fetch_next(password=password),
+            )
+
+            def follow_dfe():
+                nonlocal password
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    result = current.result
+                    password = ""
+                    transmission_status.configure(
+                        text=(
+                            f"DF-e: {len(result.documents)} documento(s). "
+                            f"NSU {result.last_nsu} de {result.max_nsu}."
+                        ),
+                        text_color="#2ea043",
+                    )
+                    registrar_auditoria(
+                        self._usuario_financeiro(), "CONSULTAR_DFE", "Fiscal",
+                        f"NSU {result.last_nsu}; documentos={len(result.documents)}", "SUCESSO",
+                    )
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    password = ""
+                    transmission_status.configure(
+                        text=current.error or "Consulta DF-e não concluída.", text_color="#da3633"
+                    )
+                    return
+                janela.after(150, follow_dfe)
+
+            janela.after(100, follow_dfe)
+
+        def manifest_dfe_document():
+            if not self._autorizar("fiscal", "configure"):
+                return
+            row = selected()
+            if not row or row.get("_kind") != "DFE" or len(str(row.get("access_key") or "")) != 44:
+                messagebox.showwarning(
+                    "Manifestação do destinatário",
+                    "Selecione uma NF-e recebida pela Distribuição DF-e.", parent=janela,
+                )
+                return
+            option = simpledialog.askinteger(
+                "Manifestação do destinatário",
+                (
+                    "Escolha a manifestação:\n\n"
+                    "1 — Ciência da Operação\n"
+                    "2 — Confirmação da Operação\n"
+                    "3 — Desconhecimento da Operação\n"
+                    "4 — Operação não Realizada\n\n"
+                    "A manifestação conclusiva deve ser feita em até 90 dias."
+                ),
+                minvalue=1, maxvalue=4, parent=janela,
+            )
+            if option is None:
+                return
+            kind = {1: "CIENCIA", 2: "CONFIRMACAO", 3: "DESCONHECIMENTO", 4: "NAO_REALIZADA"}[option]
+            justification = ""
+            if kind == "NAO_REALIZADA":
+                justification = simpledialog.askstring(
+                    "Operação não Realizada",
+                    "Informe a justificativa (mínimo 15 caracteres):", parent=janela,
+                ) or ""
+                if len(justification.strip()) < 15:
+                    messagebox.showwarning(
+                        "Manifestação", "Informe ao menos 15 caracteres.", parent=janela
+                    )
+                    return
+            if not messagebox.askyesno(
+                "Confirmar manifestação",
+                "A manifestação será transmitida ao Ambiente Nacional e não poderá ser tratada como simples anotação local. Continuar?",
+                parent=janela,
+            ):
+                return
+            password = self._obter_senha_certificado(
+                parent=janela, title="Manifestar NF-e recebida"
+            )
+            if password is None:
+                return
+            actor = self._usuario_financeiro()
+            key = str(row["access_key"])
+            transmission_status.configure(
+                text="Enviando manifestação em segundo plano...", text_color="#d29922"
+            )
+            task = TASK_MANAGER.submit(
+                "Manifestação do destinatário",
+                lambda _context: self.fiscal_dfe_service.send_manifestation(
+                    access_key=key, kind=kind, password=password,
+                    actor=actor, justification=justification,
+                ),
+            )
+
+            def follow_manifestation():
+                nonlocal password
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    password = ""
+                    response, _record = current.result
+                    transmission_status.configure(
+                        text=f"Manifestação processada: {response.status_code} — {response.message}",
+                        text_color="#2ea043" if response.success else "#da3633",
+                    )
+                    load()
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    password = ""
+                    transmission_status.configure(
+                        text=current.error or "Manifestação não concluída.", text_color="#da3633"
+                    )
+                    return
+                janela.after(150, follow_manifestation)
+
+            janela.after(100, follow_manifestation)
         actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
@@ -11058,6 +11203,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             email_actions, text="Enviar XML + DANFE por e-mail", command=send_fiscal_email,
             fg_color="#2ea043",
+        ).pack(side="left", padx=4)
+        dfe_actions = ctk.CTkFrame(frame, fg_color="transparent")
+        dfe_actions.pack(fill="x", padx=12, pady=(0, 10))
+        ctk.CTkButton(
+            dfe_actions, text="Buscar documentos recebidos (DF-e)", command=fetch_dfe_documents,
+            fg_color="#1f6feb",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            dfe_actions, text="Manifestar NF-e recebida", command=manifest_dfe_document,
+            fg_color="#d29922",
         ).pack(side="left", padx=4)
         load()
 

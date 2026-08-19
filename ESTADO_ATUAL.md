@@ -1177,3 +1177,19 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 15 testes aprovados;
 - suíte completa: 1.263 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados.
+
+## Checkpoint 42.79 — Distribuição DF-e e manifestação do destinatário
+
+- implementado o serviço nacional `NFeDistribuicaoDFe` no leiaute 1.01 e pacote oficial v1.04;
+- consumo incremental guarda o último NSU e nunca o regride após respostas antigas;
+- documentos Base64/GZip têm quantidade e tamanho limitados, XML seguro e schemas conhecidos;
+- cada XML recebido é persistido atomicamente e indexado com SHA-256;
+- consulta usa o A1 do interessado somente após cadeia ICP-Brasil e CRL válidas;
+- Central Fiscal lista os DF-e recebidos e consulta o Ambiente Nacional em segundo plano;
+- implementadas Ciência, Confirmação, Desconhecimento e Operação não Realizada;
+- Operação não Realizada exige justificativa e manifestações conclusivas duplicadas são bloqueadas;
+- a interface informa o prazo conclusivo vigente de 90 dias a partir de 01/06/2026;
+- validação focada: 123 testes e 10 subtestes aprovados, incluindo 9 testes próprios de DF-e;
+- suíte completa: 1.272 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum DF-e, certificado, CNPJ, endpoint ou banco real foi utilizado nos testes.
