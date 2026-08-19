@@ -226,7 +226,12 @@ class FiscalServiceTests(unittest.TestCase):
                     "total": 1, "ready": 1, "blocked": 0, "ready_product_ids": (1,)
                 })()
 
-        result = FiscalPreflightService(self.service, ReadyCatalog()).run(password=self.password)
+        with patch.object(
+            self.service,
+            "validate_certificate_trust",
+            return_value=type("Trust", (), {"trusted": True, "message": "Cadeia de teste válida."})(),
+        ):
+            result = FiscalPreflightService(self.service, ReadyCatalog()).run(password=self.password)
         self.assertTrue(result.success, result.problems)
         self.assertEqual(result.catalog_ready, 1)
         self.assertEqual(result.certificate_document, "12345678000195")

@@ -9935,9 +9935,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 if info.document and not configured_cnpj:
                     replace_field("cnpj", info.document)
+                trust = self.fiscal_service.validate_certificate_trust(path, secret)
+                if not trust.trusted:
+                    certificate_status.configure(
+                        text=(
+                            "O arquivo abre e está dentro da validade, mas a cadeia ICP-Brasil "
+                            f"não foi confirmada: {trust.message}"
+                        ),
+                        text_color="#f85149",
+                    )
+                    return
                 certificate_status.configure(
                     text=(
-                        f"Certificado válido. Empresa: {info.company_name or 'não identificada'} | "
+                        f"Certificado e cadeia ICP-Brasil válidos. "
+                        f"Empresa: {info.company_name or 'não identificada'} | "
                         f"CNPJ: {info.document or 'não identificado'} | Validade: {info.valid_until}."
                     ),
                     text_color="#d29922" if info.expiring_soon else "#3fb950",

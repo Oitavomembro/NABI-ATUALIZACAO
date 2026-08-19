@@ -68,6 +68,9 @@ class FiscalPreflightService:
                 problems.append("O certificado está expirado ou ainda não é válido.")
             if configured_document and certificate.document and configured_document != certificate.document:
                 problems.append("O CNPJ do certificado não corresponde ao emitente configurado.")
+            trust = self.fiscal_service.validate_certificate_trust(certificate_path, password)
+            if not trust.trusted:
+                problems.append(f"Cadeia ICP-Brasil não confirmada: {trust.message}")
         except Exception as exc:
             problems.append(str(exc))
 

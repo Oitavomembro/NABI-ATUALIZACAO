@@ -20,6 +20,7 @@ from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, st
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
+from services.fiscal_icp_trust_service import FiscalICPTrustService, ICPTrustReport
 from services.windows_data_protector import WindowsDataProtector
 
 try:
@@ -157,6 +158,7 @@ class FiscalService:
         self.storage_dir = Path(storage_dir or (Path.home() / ".nabicode" / "fiscal"))
         self.storage_dir.mkdir(parents=True, exist_ok=True)
         runtime_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[1]))
+        self.runtime_root = runtime_root
         self.schema_dir = Path(
             schema_dir or runtime_root / "resources" / "fiscal" / "schemas"
         )
@@ -171,6 +173,14 @@ class FiscalService:
         self._managed_certificate_dir = self.storage_dir / "certificate"
         self._managed_certificate_path = self._managed_certificate_dir / "active.pfx"
         self._managed_secret_path = self._managed_certificate_dir / "active.secret"
+
+    def validate_certificate_trust(
+        self, pfx_path: str | Path, password: str
+    ) -> ICPTrustReport:
+        """Confirma que o A1 termina em uma raiz do catálogo oficial do ITI."""
+        return FiscalICPTrustService.from_runtime(self.runtime_root).validate_pkcs12(
+            pfx_path, password
+        )
 
     def cache_certificate_password(self, password: str) -> FiscalCertificateInfo:
         config = self.load_config()

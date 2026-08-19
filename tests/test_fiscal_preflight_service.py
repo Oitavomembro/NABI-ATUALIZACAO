@@ -17,6 +17,12 @@ class Catalog:
     ready_product_ids: tuple[int, ...] = (7,)
 
 
+@dataclass
+class Trust:
+    trusted: bool = True
+    message: str = "Cadeia válida."
+
+
 class FakeCatalogService:
     def __init__(self, report=None):
         self.report = report or Catalog()
@@ -45,6 +51,9 @@ class FakeFiscalService:
     def inspect_certificate(self, path, password):
         assert (path, password) == ("cert.pfx", "senha")
         return Certificate()
+    def validate_certificate_trust(self, path, password):
+        assert (path, password) == ("cert.pfx", "senha")
+        return Trust()
     def _normalize_cnpj(self, value): return value
     def prepare_sale_items(self, items, **_kwargs): return [{"code": "P1"}]
     def build_document_xml(self, **kwargs):
@@ -85,6 +94,16 @@ def test_pre_voo_detecta_certificado_de_outro_cnpj():
     result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
     assert result.success is False
     assert any("não corresponde" in problem for problem in result.problems)
+
+
+def test_pre_voo_rejeita_certificado_sem_cadeia_icp_brasil():
+    fiscal = FakeFiscalService()
+    fiscal.validate_certificate_trust = lambda *_args: Trust(
+        trusted=False, message="Emissor não encontrado."
+    )
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert any("Cadeia ICP-Brasil" in problem for problem in result.problems)
 
 
 def test_pre_voo_reprova_conjunto_quando_um_modelo_falha():

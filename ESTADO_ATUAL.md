@@ -1121,3 +1121,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.247 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.75 — cadeia pública de confiança ICP-Brasil
+
+- integrado o pacote público oficial de autoridades certificadoras do ITI, com 180 certificados;
+- o arquivo é conferido por SHA-512 em toda leitura, usando o hash publicado no próprio repositório oficial;
+- a extração ocorre em memória com limites de tamanho, quantidade e proteção contra caminhos inseguros;
+- a cadeia do A1 agora verifica assinaturas, validade, restrições de AC e término em uma AC Raiz oficial;
+- abrir corretamente com a senha deixou de ser apresentado como prova suficiente de confiança;
+- a tela de configuração informa separadamente validade do A1 e confiança da cadeia ICP-Brasil;
+- o pré-voo fiscal reprova certificados cuja cadeia não alcance uma raiz oficial;
+- o instalador passa a transportar somente o catálogo público; nenhuma chave privada ou senha é incluída;
+- revogação por CRL/OCSP permanece uma etapa online separada e não foi declarada artificialmente como concluída;
+- validação focada: 115 testes e 10 subtestes aprovados;
+- suíte completa: 1.252 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
