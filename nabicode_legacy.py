@@ -10019,6 +10019,52 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             certificate_management, text="Remover certificado",
             command=remove_certificate, fg_color="#da3633",
         ).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        revocation_button = None
+
+        def check_certificate_revocation_now():
+            path = certificate.get().strip()
+            secret = password.get()
+            if not path or not secret:
+                certificate_status.configure(
+                    text="Selecione o A1 e informe a senha antes de consultar a revogação.",
+                    text_color="#f85149",
+                )
+                return
+            revocation_button.configure(state="disabled", text="Consultando CRLs oficiais...")
+            certificate_status.configure(
+                text="Consultando a situação de revogação sem emitir documento...",
+                text_color="#d29922",
+            )
+
+            def worker():
+                try:
+                    trust = self.fiscal_service.validate_certificate_trust(path, secret)
+                    if not trust.trusted:
+                        raise ValueError(f"Cadeia ICP-Brasil não confirmada: {trust.message}")
+                    report = self.fiscal_service.check_certificate_revocation(path, secret)
+                    color = "#3fb950" if report.good else "#f85149"
+                    message = report.message
+                except Exception as exc:
+                    color = "#f85149"
+                    message = str(exc)
+
+                def finish():
+                    if not janela.winfo_exists():
+                        return
+                    revocation_button.configure(state="normal", text="Consultar revogação do A1")
+                    certificate_status.configure(text=message, text_color=color)
+
+                self.after(0, finish)
+
+            threading.Thread(target=worker, daemon=True).start()
+
+        revocation_button = ctk.CTkButton(
+            certificado_card,
+            text="Consultar revogação do A1",
+            command=check_certificate_revocation_now,
+            fg_color="#0969da",
+        )
+        revocation_button.pack(fill="x", padx=12, pady=(0, 10))
 
         endpoints = config.get("endpoints") or {}
         for ambiente, titulo in (("HOMOLOGACAO", "homologação"), ("PRODUCAO", "produção")):

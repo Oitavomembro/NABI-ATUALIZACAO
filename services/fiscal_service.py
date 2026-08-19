@@ -20,7 +20,11 @@ from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, st
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
-from services.fiscal_icp_trust_service import FiscalICPTrustService, ICPTrustReport
+from services.fiscal_icp_trust_service import (
+    FiscalICPTrustService,
+    ICPRevocationReport,
+    ICPTrustReport,
+)
 from services.windows_data_protector import WindowsDataProtector
 
 try:
@@ -179,6 +183,14 @@ class FiscalService:
     ) -> ICPTrustReport:
         """Confirma que o A1 termina em uma raiz do catálogo oficial do ITI."""
         return FiscalICPTrustService.from_runtime(self.runtime_root).validate_pkcs12(
+            pfx_path, password
+        )
+
+    def check_certificate_revocation(
+        self, pfx_path: str | Path, password: str
+    ) -> ICPRevocationReport:
+        """Consulta CRLs oficiais informadas pela própria cadeia do A1."""
+        return FiscalICPTrustService.from_runtime(self.runtime_root).check_pkcs12_revocation(
             pfx_path, password
         )
 
@@ -948,6 +960,13 @@ class FiscalService:
                 "A dependência 'requests' não está instalada. Execute "
                 "ATUALIZAR_DEPENDENCIAS.bat antes de usar a transmissão fiscal."
             )
+        if str(self.load_config().get("environment") or "HOMOLOGACAO").upper() == "PRODUCAO":
+            trust = self.validate_certificate_trust(pfx_path, password)
+            if not trust.trusted:
+                raise ValueError(f"Cadeia ICP-Brasil não confirmada: {trust.message}")
+            revocation = self.check_certificate_revocation(pfx_path, password)
+            if not revocation.good:
+                raise ValueError(f"Situação de revogação não confirmada: {revocation.message}")
         pem_cert, pem_key = self._temporary_pem_files(pfx_path, password)
         try:
             response = self.http_post(

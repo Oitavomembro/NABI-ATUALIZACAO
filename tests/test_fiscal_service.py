@@ -74,6 +74,24 @@ class FiscalServiceTests(unittest.TestCase):
         problems = self.service.validate_ready(operation="autorizacao", model="55")
         self.assertTrue(any("IBS/CBS" in problem for problem in problems))
 
+    def test_transmissao_direta_em_producao_falha_fechado_sem_status_de_revogacao(self):
+        self.service.http_post = lambda *_args, **_kwargs: self.fail("não deve transmitir")
+        self.service.save_config({
+            "environment": "PRODUCAO",
+            "endpoints": {"PRODUCAO": {"autorizacao": "https://sefaz.invalid/autorizacao"}},
+        })
+        trusted = type("Trust", (), {"trusted": True, "message": "Cadeia válida."})()
+        unknown = type("Revocation", (), {
+            "good": False, "message": "CRL indisponível para validação."
+        })()
+        with patch.object(self.service, "validate_certificate_trust", return_value=trusted), patch.object(
+            self.service, "check_certificate_revocation", return_value=unknown
+        ), self.assertRaisesRegex(ValueError, "Situação de revogação não confirmada"):
+            self.service.transmit(
+                operation="autorizacao", xml=b"<xml/>",
+                pfx_path=self.pfx_path, password=self.password,
+            )
+
     def test_requests_ausente_nao_impede_inicializacao_do_sistema(self):
         with patch("services.fiscal_service.requests", None):
             service = FiscalService(self.connect, storage_dir=Path(self.tmp.name) / "sem_requests")

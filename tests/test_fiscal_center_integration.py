@@ -75,6 +75,9 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert "Nenhum documento foi transmitido" in block
     assert 'text="Visualizar metadados"' in block
     assert 'text="Remover certificado"' in block
+    assert 'text="Consultar revogação do A1"' in block
+    assert "check_certificate_revocation" in block
+    assert "threading.Thread(target=worker, daemon=True).start()" in block
     assert "install_certificate_securely" in block
     assert "remove_managed_certificate" in block
     assert 'text="Testar conexão com a SEFAZ"' in block

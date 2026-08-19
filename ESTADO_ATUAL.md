@@ -1136,3 +1136,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 115 testes e 10 subtestes aprovados;
 - suíte completa: 1.252 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.76 — consulta segura de revogação por CRL
+
+- certificados da cadeia passam a usar os endereços CRL assinados presentes no próprio certificado;
+- cada CRL baixada tem tamanho limitado, emissor e assinatura conferidos e janela de validade exigida;
+- certificado listado como revogado é bloqueado e uma CRL vencida, ausente ou inválida falha de forma fechada;
+- a checagem cobre o A1 e as autoridades intermediárias até a raiz confiável;
+- transmissão direta em produção exige tanto cadeia ICP-Brasil válida quanto situação de revogação confirmada;
+- a configuração fiscal ganhou consulta manual de revogação em segundo plano, sem congelar a interface;
+- homologação e testes locais continuam sem acessar serviços reais automaticamente;
+- validação focada: 121 testes e 10 subtestes aprovados;
+- suíte completa: 1.256 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
