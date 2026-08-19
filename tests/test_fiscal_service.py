@@ -1036,6 +1036,53 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.generate_fiscal_mirror_pdf(authorized_xml="<NFe/>", output_path=Path(self.tmp.name) / "invalido.pdf")
 
+    def test_gera_danfe_oficial_modelo_55_com_xml_assinado_e_autorizado(self):
+        xml, key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "trade_name": "EMPRESA",
+                "city_code": "2927408", "city": "SALVADOR", "state": "BA",
+                "street": "RUA TESTE", "number": "100", "district": "CENTRO",
+                "zip_code": "40000000", "state_registration": "123456789",
+                "tax_regime_code": 1,
+            },
+            recipient={
+                "document": "98765432000198", "name": "CLIENTE TESTE",
+                "street": "AVENIDA CLIENTE", "number": "20", "district": "COMERCIO",
+                "city_code": "2927408", "city": "SALVADOR", "state": "BA",
+                "zip_code": "40010000", "state_taxpayer_indicator": 9,
+            },
+            items=[{
+                "code": "P1", "description": "PRODUTO TESTE", "quantity": 1,
+                "unit_price": 10, "ncm": "94036000", "cfop": "5102", "unit": "UN",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 91, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "87654321",
+            },
+        )
+        signed = self.service.sign_xml(
+            xml, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password,
+        )
+        response = (
+            '<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><protNFe versao="4.00"><infProt>'
+            f'<tpAmb>2</tpAmb><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe>'
+            '<nProt>123456789012345</nProt></infProt></protNFe></retEnviNFe>'
+        )
+        processed = self.service.merge_authorization_protocol(signed, response)
+        output = self.service.generate_official_danfe_pdf(
+            authorized_xml=processed, output_path=Path(self.tmp.name) / "danfe-oficial.pdf",
+        )
+        self.assertEqual(output.read_bytes()[:5], b"%PDF-")
+        self.assertGreater(output.stat().st_size, 3_000)
+
+    def test_danfe_oficial_rejeita_modelo_65(self):
+        with patch.object(
+            self.service, "validate_authorized_xml", return_value={"model": "65"}
+        ), self.assertRaisesRegex(ValueError, "somente NF-e modelo 55"):
+            self.service.generate_official_danfe_pdf(
+                authorized_xml=b"<xml/>", output_path=Path(self.tmp.name) / "nfce.pdf",
+            )
+
 
     def test_fluxos_assinados_de_autorizacao_consulta_evento_e_inutilizacao(self):
         self.service.save_config({

@@ -13,6 +13,7 @@ def test_official_runtime_dependencies_are_declared():
         "cryptography",
         "lxml",
         "reportlab",
+        "brazilfiscalreport",
         "openpyxl",
         "matplotlib",
         "pyinstaller",

@@ -6,6 +6,11 @@ requests==2.34.2
 cryptography==46.0.0
 lxml==6.0.2
 reportlab==4.4.9
+BrazilFiscalReport==1.0.1
+fpdf2==2.8.8
+phonenumbers==9.0.37
+python-barcode==0.16.1
+defusedxml==0.7.1
 openpyxl==3.1.5
 matplotlib==3.10.8
 pywin32==312

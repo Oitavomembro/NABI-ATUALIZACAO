@@ -43,6 +43,7 @@ REQUIRED_DISTRIBUTIONS = (
     "cryptography",
     "lxml",
     "reportlab",
+    "BrazilFiscalReport",
     "openpyxl",
     "matplotlib",
     "pywin32",

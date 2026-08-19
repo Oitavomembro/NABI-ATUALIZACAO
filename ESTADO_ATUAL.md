@@ -1046,3 +1046,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.230 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.70 — DANFE oficial da NF-e modelo 55
+
+- confirmado no Portal Nacional o MOC 7.0 e o manual técnico vigente do DANFE;
+- integrado o BrazilFiscalReport 1.0.1 como dependência separada LGPL-3.0, com aviso de terceiros e versão travada no build Windows;
+- o DANFE oficial é gerado somente a partir de NF-e modelo 55 assinada, autorizada e com chave/protocolo coerentes;
+- a gravação usa arquivo temporário, valida cabeçalho PDF e substituição atômica;
+- a Central Fiscal e as devoluções autorizadas passam a usar o gerador oficial;
+- NFC-e modelo 65 é recusada por este gerador e permanece destinada ao leiaute térmico próprio da próxima fase;
+- o antigo PDF simples continua disponível apenas internamente como espelho fiscal e não é apresentado como DANFE;
+- PyInstaller coleta os módulos do gerador e do código de barras, e o manifesto canônico declara a nova dependência;
+- validação focada: 168 testes e 10 subtestes aprovados;
+- suíte completa: 1.232 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

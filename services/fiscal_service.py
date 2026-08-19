@@ -47,6 +47,11 @@ try:
 except ModuleNotFoundError:  # DANFE é opcional no uso comum.
     A4 = mm = canvas = None  # type: ignore[assignment]
 
+try:
+    from brazilfiscalreport.danfe import Danfe as OfficialDanfe
+except ModuleNotFoundError:  # O DANFE oficial é opcional no uso não fiscal.
+    OfficialDanfe = None  # type: ignore[assignment,misc]
+
 
 @dataclass(frozen=True)
 class FiscalCertificateInfo:
@@ -241,6 +246,7 @@ class FiscalService:
             "cryptography": pkcs12 is not None,
             "lxml": etree is not None,
             "reportlab": canvas is not None,
+            "brazilfiscalreport": OfficialDanfe is not None,
         }
         if not available.get(name, False):
             raise RuntimeError(
@@ -2338,6 +2344,37 @@ class FiscalService:
             if y<20*mm: c.showPage(); y=height-20*mm; c.setFont("Helvetica",7)
         c.setFont("Helvetica-Oblique",7); c.drawString(15*mm,12*mm,"Espelho interno para conferência. Não substitui o DANFE de leiaute oficial.")
         c.save(); return output
+
+    def generate_official_danfe_pdf(
+        self, *, authorized_xml: bytes | str, output_path: str | Path,
+    ) -> Path:
+        """Gera o DANFE modelo 55 por motor dedicado, após validar XML e assinatura."""
+        self._require_dependency("brazilfiscalreport")
+        raw = authorized_xml.encode("utf-8") if isinstance(authorized_xml, str) else bytes(authorized_xml)
+        validation = self.validate_authorized_xml(raw, require_signature=True)
+        if str(validation.get("model") or "") != "55":
+            raise ValueError("Este gerador de DANFE oficial aceita somente NF-e modelo 55.")
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary_name = tempfile.mkstemp(
+            prefix=f".{output.stem}_", suffix=".pdf.tmp", dir=str(output.parent)
+        )
+        os.close(handle)
+        temporary = Path(temporary_name)
+        temporary.unlink(missing_ok=True)
+        try:
+            document = OfficialDanfe(xml=raw.decode("utf-8"))
+            document.output(str(temporary))
+            if not temporary.is_file() or temporary.stat().st_size < 500:
+                raise RuntimeError("O motor de DANFE não produziu um PDF válido.")
+            with temporary.open("rb") as stream:
+                if stream.read(5) != b"%PDF-":
+                    raise RuntimeError("O arquivo produzido pelo motor de DANFE não é PDF.")
+            temporary.replace(output)
+            return output
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
 
 
     def apply_contingency(self, xml: bytes | str, *, reason: str, emission_type: int = 9, started_at: datetime | None = None) -> bytes:

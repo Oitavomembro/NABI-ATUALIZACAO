@@ -545,11 +545,11 @@ class NFeDevolucaoService:
     ) -> Path:
         state = self.repository.carregar_estado_fiscal(devolucao_id)
         if str(state.get("status") or "").upper() not in {"AUTORIZADA", "AUTORIZADA_PENDENTE_ESTOQUE"}:
-            raise ValueError("Espelho fiscal só pode ser gerado para devolução autorizada.")
+            raise ValueError("DANFE só pode ser gerado para devolução autorizada.")
         processed_path = str((state.get("fiscal_record") or {}).get("processed_path") or "").strip()
         if not processed_path or not Path(processed_path).is_file():
             raise ValueError("XML processado da devolução não foi localizado.")
-        return fiscal_service.generate_fiscal_mirror_pdf(
+        return fiscal_service.generate_official_danfe_pdf(
             authorized_xml=Path(processed_path).read_bytes(), output_path=output_path
         )
 

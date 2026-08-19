@@ -86,9 +86,9 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert "self.fiscal_service.inutilize_numbers" in block
     assert 'text="Exportar relatório CSV"' in block
     assert "self.fiscal_service.export_fiscal_report_csv" in block
-    assert 'text="Gerar espelho PDF"' in block
-    assert "self.fiscal_service.generate_fiscal_mirror_pdf" in block
-    assert 'text="Gerar DANFE"' not in block
+    assert 'text="Gerar DANFE oficial"' in block
+    assert "self.fiscal_service.generate_official_danfe_pdf" in block
+    assert 'row.get("model")' in block
 
 
 def test_cadastro_oficial_de_produto_aceita_correcao_fiscal_assistida():

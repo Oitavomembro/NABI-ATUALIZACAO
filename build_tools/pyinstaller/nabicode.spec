@@ -1,5 +1,6 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+from PyInstaller.utils.hooks import collect_submodules
 
 project_root = Path(SPECPATH).resolve().parents[1]
 version_file = project_root / "VERSAO.txt"
@@ -45,6 +46,12 @@ hiddenimports = [
     "reportlab.graphics.renderPDF",
     "reportlab.graphics.barcode.qr",
     "reportlab.graphics.shapes",
+    "brazilfiscalreport.danfe",
+    "brazilfiscalreport.utils",
+    "fpdf",
+    "barcode",
+    "phonenumbers",
+    "defusedxml.ElementTree",
     "win32con",
     "win32print",
     "win32ui",
@@ -52,6 +59,9 @@ hiddenimports = [
 ]
 
 datas = list(dict.fromkeys(datas))
+hiddenimports = list(dict.fromkeys(hiddenimports))
+hiddenimports.extend(collect_submodules("brazilfiscalreport"))
+hiddenimports.extend(collect_submodules("barcode"))
 hiddenimports = list(dict.fromkeys(hiddenimports))
 
 a = Analysis(
