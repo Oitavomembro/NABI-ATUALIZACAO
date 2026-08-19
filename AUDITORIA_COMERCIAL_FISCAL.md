@@ -22,6 +22,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - armazenamento de XML autorizado, histórico de documentos e eventos;
 - exportação ZIP e CSV para a contabilidade;
 - retransmissão em lote de NFC-e já identificadas como contingência;
+- DANFE oficial da NF-e modelo 55 e DANFE NFC-e térmico de 80 mm para documentos autorizados;
 - preparação estrutural das 27 UFs, com Bahia como perfil atualmente validado;
 - controles básicos de ICMS, PIS, COFINS e primeira matriz regular de IBS/CBS.
 
@@ -30,8 +31,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 1. Homologação fiscal real do contribuinte e retirada controlada do bloqueio de produção.
 2. Motor tributário completo para situações especiais: ST integral, DIFAL, IPI, benefícios, reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
 3. Catálogos oficiais versionados de NCM/CEST e integração licenciada da tabela IBPT.
-4. DANFE NFC-e em leiaute oficial. O DANFE da NF-e modelo 55 passou a usar motor dedicado compatível com o MOC; o PDF simples permanece somente como `Espelho fiscal — não é DANFE`.
-5. Emissão offline completa: ativação no momento da venda, assinatura, QR Code, impressão do DANFE NFC-e de contingência e controle do prazo de transmissão. O lote atual apenas retransmite documentos que já chegaram à fila marcados como contingência.
+4. Emissão offline completa: ativação no momento da venda, assinatura, QR Code, impressão do DANFE NFC-e de contingência e controle do prazo de transmissão. O lote atual apenas retransmite documentos que já chegaram à fila marcados como contingência.
 6. Validação da cadeia ICP-Brasil contra repositório de confiança atualizado. A assinatura e o certificado incorporado são validados, mas isso não substitui a cadeia oficial.
 7. Distribuição DF-e e manifestação do destinatário.
 8. Envio de XML e documento auxiliar por e-mail com fila, consentimento e configuração segura.
@@ -49,7 +49,6 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - envio fiscal por e-mail;
 - distribuição/manifestação DF-e;
 - emissão NFS-e;
-- DANFE NFC-e oficial;
 - ativação completa da contingência diretamente no PDV.
 
 ## Regra de liberação

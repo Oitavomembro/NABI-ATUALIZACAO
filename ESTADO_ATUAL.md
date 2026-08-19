@@ -1061,3 +1061,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.232 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.71 — DANFE NFC-e térmico de 80 mm
+
+- criado o documento auxiliar próprio da NFC-e modelo 65, separado do DANFE A4 da NF-e;
+- o PDF térmico apresenta emitente, itens, totais, pagamentos, consumidor, chave, QR Code e protocolo;
+- XML autorizado somente é aceito quando assinatura, chave, protocolo, modelo e situação fiscal são coerentes;
+- rascunhos normais sem autorização são recusados, evitando documento auxiliar fiscal indevido;
+- a Central Fiscal escolhe automaticamente o gerador correto para os modelos 55 e 65;
+- documentos de homologação recebem avisos explícitos de ambiente de testes e ausência de valor fiscal;
+- a saída é gravada por arquivo temporário e substituição atômica, sem acionar impressora;
+- validação focada: 145 testes e 10 subtestes aprovados;
+- suíte completa: 1.234 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.

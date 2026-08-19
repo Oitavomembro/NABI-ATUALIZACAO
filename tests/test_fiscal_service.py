@@ -1083,6 +1083,46 @@ class FiscalServiceTests(unittest.TestCase):
                 authorized_xml=b"<xml/>", output_path=Path(self.tmp.name) / "nfce.pdf",
             )
 
+    def test_gera_danfe_nfce_80mm_autorizada_com_qrcode(self):
+        xml, key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2927408",
+                "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "100",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={},
+            items=[{
+                "code": "P1", "description": "PRODUTO TESTE", "quantity": 2,
+                "unit_price": 5, "ncm": "94036000", "cfop": "5102", "unit": "UN",
+            }],
+            document={
+                "model": "65", "series": 1, "number": 92, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "87654322",
+            },
+        )
+        signed = self.service.sign_xml(
+            xml, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password,
+        )
+        response = (
+            '<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><protNFe versao="4.00"><infProt>'
+            f'<tpAmb>2</tpAmb><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe>'
+            '<nProt>123456789012346</nProt></infProt></protNFe></retEnviNFe>'
+        )
+        processed = self.service.merge_authorization_protocol(signed, response)
+        output = self.service.generate_nfce_auxiliary_pdf(
+            fiscal_xml=processed, output_path=Path(self.tmp.name) / "danfe-nfce.pdf",
+        )
+        self.assertEqual(output.read_bytes()[:5], b"%PDF-")
+        self.assertGreater(output.stat().st_size, 2_000)
+
+    def test_danfe_nfce_bloqueia_rascunho_normal_sem_autorizacao(self):
+        with self.assertRaisesRegex(ValueError, "chave de acesso"):
+            self.service.generate_nfce_auxiliary_pdf(
+                fiscal_xml="<NFe><infNFe><ide><mod>65</mod><tpEmis>1</tpEmis></ide></infNFe></NFe>",
+                output_path=Path(self.tmp.name) / "rascunho.pdf",
+            )
+
 
     def test_fluxos_assinados_de_autorizacao_consulta_evento_e_inutilizacao(self):
         self.service.save_config({

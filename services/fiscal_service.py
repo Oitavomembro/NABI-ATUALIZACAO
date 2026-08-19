@@ -44,8 +44,11 @@ try:
     from reportlab.lib.pagesizes import A4
     from reportlab.lib.units import mm
     from reportlab.pdfgen import canvas
+    from reportlab.graphics import renderPDF
+    from reportlab.graphics.barcode import qr
+    from reportlab.graphics.shapes import Drawing
 except ModuleNotFoundError:  # DANFE é opcional no uso comum.
-    A4 = mm = canvas = None  # type: ignore[assignment]
+    A4 = mm = canvas = renderPDF = qr = Drawing = None  # type: ignore[assignment]
 
 try:
     from brazilfiscalreport.danfe import Danfe as OfficialDanfe
@@ -2370,6 +2373,128 @@ class FiscalService:
             with temporary.open("rb") as stream:
                 if stream.read(5) != b"%PDF-":
                     raise RuntimeError("O arquivo produzido pelo motor de DANFE não é PDF.")
+            temporary.replace(output)
+            return output
+        except Exception:
+            temporary.unlink(missing_ok=True)
+            raise
+
+    def generate_nfce_auxiliary_pdf(
+        self, *, fiscal_xml: bytes | str, output_path: str | Path,
+    ) -> Path:
+        """Gera DANFE NFC-e 80 mm para XML autorizado ou contingência offline assinada."""
+        self._require_dependency("reportlab")
+        self._require_dependency("lxml")
+        raw = fiscal_xml.encode("utf-8") if isinstance(fiscal_xml, str) else bytes(fiscal_xml)
+        root = etree.fromstring(raw, parser=etree.XMLParser(resolve_entities=False, no_network=True))
+        value = lambda expression: str(root.xpath(f"string({expression})") or "").strip()
+        model = value("//*[local-name()='ide']/*[local-name()='mod'][1]")
+        if model != "65":
+            raise ValueError("DANFE NFC-e aceita somente documento modelo 65.")
+        identifier = value("//*[local-name()='infNFe'][1]/@Id")
+        key = self._normalize_access_key(identifier.removeprefix("NFe"))
+        if not self._is_valid_access_key(key):
+            raise ValueError("A NFC-e não possui chave de acesso válida.")
+        status = value("//*[local-name()='protNFe']/*[local-name()='infProt']/*[local-name()='cStat'][1]")
+        protocol = value("//*[local-name()='protNFe']/*[local-name()='infProt']/*[local-name()='nProt'][1]")
+        authorized = status in self.AUTHORIZED_STATUS and bool(protocol)
+        emission_type = value("//*[local-name()='ide']/*[local-name()='tpEmis'][1]") or "1"
+        if authorized:
+            validation = self.validate_authorized_xml(raw, require_signature=True)
+            if validation["model"] != "65":
+                raise ValueError("O protocolo não pertence a uma NFC-e modelo 65.")
+        else:
+            if emission_type != "9":
+                raise ValueError("NFC-e sem autorização só pode gerar DANFE em contingência offline.")
+            signature = self.verify_xml_signature(raw)
+            if signature.get("reference_id") != identifier:
+                raise ValueError("A assinatura não referencia a NFC-e em contingência.")
+            if not value("//*[local-name()='ide']/*[local-name()='dhCont'][1]"):
+                raise ValueError("NFC-e em contingência não informa o início da contingência.")
+            if len(value("//*[local-name()='ide']/*[local-name()='xJust'][1]")) < 15:
+                raise ValueError("NFC-e em contingência não possui justificativa válida.")
+        qr_code = value("//*[local-name()='infNFeSupl']/*[local-name()='qrCode'][1]")
+        if not qr_code:
+            raise ValueError("NFC-e não possui QR Code para o DANFE.")
+        items = root.xpath("//*[local-name()='det']")
+        payments = root.xpath("//*[local-name()='pag']/*[local-name()='detPag']")
+        height = max(180.0, 135.0 + len(items) * 11.0 + len(payments) * 5.0) * mm
+        width = 80 * mm
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        handle, temporary_name = tempfile.mkstemp(
+            prefix=f".{output.stem}_", suffix=".pdf.tmp", dir=str(output.parent)
+        )
+        os.close(handle)
+        temporary = Path(temporary_name)
+        try:
+            pdf = canvas.Canvas(str(temporary), pagesize=(width, height))
+            y = height - 5 * mm
+
+            def centered(text: str, size: float = 8, bold: bool = False, gap: float = 4.2) -> None:
+                nonlocal y
+                pdf.setFont("Helvetica-Bold" if bold else "Helvetica", size)
+                pdf.drawCentredString(width / 2, y, str(text)[:70])
+                y -= gap * mm
+
+            def left(text: str, size: float = 7, gap: float = 3.6) -> None:
+                nonlocal y
+                pdf.setFont("Helvetica", size)
+                pdf.drawString(3 * mm, y, str(text)[:58])
+                y -= gap * mm
+
+            centered(value("//*[local-name()='emit']/*[local-name()='xNome'][1]"), 10, True, 4.8)
+            centered(f"CNPJ {value('//*[local-name()=\'emit\']/*[local-name()=\'CNPJ\'][1]')}", 7)
+            centered("DOCUMENTO AUXILIAR DA NOTA FISCAL", 7, True)
+            centered("DE CONSUMIDOR ELETRÔNICA", 7, True, 5)
+            pdf.line(3 * mm, y, width - 3 * mm, y); y -= 4 * mm
+            left("CÓDIGO  DESCRIÇÃO")
+            left("QTD x VL UNIT.                         VL TOTAL")
+            for item in items:
+                item_value = lambda name: str(item.xpath(f"string(.//*[local-name()='{name}'][1])") or "").strip()
+                left(f"{item_value('cProd')[:10]}  {item_value('xProd')[:42]}", 6.5, 3.2)
+                left(
+                    f"{item_value('qCom')} {item_value('uCom')} x {item_value('vUnCom')}"
+                    f"                         {item_value('vProd')}", 6.5, 3.8,
+                )
+            pdf.line(3 * mm, y, width - 3 * mm, y); y -= 4 * mm
+            left(f"Qtd. total de itens: {len(items)}", 7)
+            left(f"Valor total R$: {value('//*[local-name()=\'ICMSTot\']/*[local-name()=\'vNF\'][1]')}", 9, 4.5)
+            payment_names = {"01": "Dinheiro", "03": "Cartão de crédito", "04": "Cartão de débito", "05": "Crédito loja", "17": "PIX", "90": "Sem pagamento", "99": "Outros"}
+            for payment in payments:
+                code = str(payment.xpath("string(./*[local-name()='tPag'][1])") or "").strip()
+                amount = str(payment.xpath("string(./*[local-name()='vPag'][1])") or "").strip()
+                left(f"{payment_names.get(code, code)}: R$ {amount}", 7)
+            change = value("//*[local-name()='pag']/*[local-name()='vTroco'][1]")
+            if change:
+                left(f"Troco: R$ {change}", 7)
+            pdf.line(3 * mm, y, width - 3 * mm, y); y -= 4 * mm
+            recipient = value("//*[local-name()='dest']/*[local-name()='xNome'][1]") or "CONSUMIDOR NÃO IDENTIFICADO"
+            centered(recipient, 7, True)
+            centered(f"NFC-e nº {value('//*[local-name()=\'ide\']/*[local-name()=\'nNF\'][1]')}  Série {value('//*[local-name()=\'ide\']/*[local-name()=\'serie\'][1]')}", 7)
+            centered("Consulte pela chave de acesso", 7)
+            for start in range(0, 44, 22):
+                centered(" ".join(key[start:start + 22][index:index + 4] for index in range(0, len(key[start:start + 22]), 4)), 6.5)
+            drawing = Drawing(30 * mm, 30 * mm)
+            widget = qr.QrCodeWidget(qr_code)
+            bounds = widget.getBounds()
+            scale = min((30 * mm) / (bounds[2] - bounds[0]), (30 * mm) / (bounds[3] - bounds[1]))
+            widget.barWidth = (bounds[2] - bounds[0]) * scale
+            widget.barHeight = (bounds[3] - bounds[1]) * scale
+            drawing.add(widget)
+            renderPDF.draw(drawing, pdf, (width - 30 * mm) / 2, y - 31 * mm)
+            y -= 33 * mm
+            if authorized:
+                centered(f"Protocolo: {protocol}", 6.5)
+            else:
+                centered("EMITIDA EM CONTINGÊNCIA", 8, True)
+                centered("Pendente de autorização", 7)
+            if value("//*[local-name()='ide']/*[local-name()='tpAmb'][1]") == "2":
+                centered("EMITIDA EM AMBIENTE DE HOMOLOGAÇÃO", 7, True)
+                centered("SEM VALOR FISCAL", 8, True)
+            pdf.save()
+            if temporary.stat().st_size < 1_000 or temporary.read_bytes()[:5] != b"%PDF-":
+                raise RuntimeError("O DANFE NFC-e produzido não é um PDF válido.")
             temporary.replace(output)
             return output
         except Exception:

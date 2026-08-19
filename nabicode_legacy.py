@@ -10209,13 +10209,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def danfe():
             row = selected()
             if not row or not row.get("processed_path"):
-                messagebox.showwarning("DANFE", "Selecione uma NF-e modelo 55 autorizada com XML processado.", parent=janela); return
-            if str(row.get("model") or "") != "55":
-                messagebox.showwarning("DANFE", "O DANFE oficial desta fase aceita somente NF-e modelo 55.", parent=janela); return
-            output = filedialog.asksaveasfilename(parent=janela, defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"DANFE_{row.get('access_key','')}.pdf")
+                messagebox.showwarning("DANFE", "Selecione uma NF-e/NFC-e autorizada com XML processado.", parent=janela); return
+            model = str(row.get("model") or "")
+            if model not in {"55", "65"}:
+                messagebox.showwarning("DANFE", "O documento selecionado não é NF-e nem NFC-e.", parent=janela); return
+            prefix = "DANFE_NFCE" if model == "65" else "DANFE"
+            output = filedialog.asksaveasfilename(parent=janela, defaultextension=".pdf", filetypes=[("PDF", "*.pdf")], initialfile=f"{prefix}_{row.get('access_key','')}.pdf")
             if not output: return
             try:
-                self.fiscal_service.generate_official_danfe_pdf(authorized_xml=Path(row["processed_path"]).read_bytes(), output_path=output)
+                raw_xml = Path(row["processed_path"]).read_bytes()
+                if model == "65":
+                    self.fiscal_service.generate_nfce_auxiliary_pdf(fiscal_xml=raw_xml, output_path=output)
+                else:
+                    self.fiscal_service.generate_official_danfe_pdf(authorized_xml=raw_xml, output_path=output)
                 self.mostrar_notificacao("DANFE oficial gerado", output, nivel="success")
             except Exception as exc: messagebox.showerror("DANFE", str(exc), parent=janela)
         today = datetime.now().date()

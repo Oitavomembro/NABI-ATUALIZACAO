@@ -88,6 +88,7 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert "self.fiscal_service.export_fiscal_report_csv" in block
     assert 'text="Gerar DANFE oficial"' in block
     assert "self.fiscal_service.generate_official_danfe_pdf" in block
+    assert "self.fiscal_service.generate_nfce_auxiliary_pdf" in block
     assert 'row.get("model")' in block
 
 
