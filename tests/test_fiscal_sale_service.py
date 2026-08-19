@@ -21,6 +21,7 @@ class FakeFiscalService:
         self.released = []
         self.queued = []
         self.reservations = 0
+        self.contingency_calls = []
 
     def connection_factory(self):
         return sqlite3.connect(self.db)
@@ -64,6 +65,24 @@ class FakeFiscalService:
         row = {"id": "QUEUE-1", "status": "PENDENTE", "access_key": kwargs["access_key"]}
         self.queued.append(row)
         return row
+
+    def apply_contingency(self, xml, **kwargs):
+        self.contingency_calls.append(("apply", kwargs))
+        return xml.replace(b"29" + b"0" * 42, b"29" + b"1" * 42)
+
+    def _extract_access_key_from_xml(self, _xml):
+        return "29" + "1" * 42
+
+    def add_nfce_qr_code_v3(self, xml, **kwargs):
+        self.contingency_calls.append(("qr", kwargs))
+        return xml
+
+    def sign_xml(self, xml, **kwargs):
+        self.contingency_calls.append(("sign", kwargs))
+        return xml
+
+    def validate_official_xml(self, _xml, **kwargs):
+        self.contingency_calls.append(("validate", kwargs))
 
 
 class FiscalSaleServiceTests(unittest.TestCase):
@@ -151,6 +170,24 @@ class FiscalSaleServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "xml inválido"):
             self.service.prepare(
                 items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}], actor="caixa"
+            )
+        self.assertEqual(self.fiscal.released, ["RES-1"])
+
+    def test_contingencia_nfce_nasce_com_nova_chave_qrcode_e_assinatura(self):
+        draft = self.service.prepare(
+            items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}],
+            actor="caixa", contingency_reason="Internet indisponível durante a venda.",
+            certificate_password="senha",
+        )
+        self.assertTrue(draft.contingency)
+        self.assertEqual(draft.access_key, "29" + "1" * 42)
+        self.assertEqual([call[0] for call in self.fiscal.contingency_calls], ["apply", "qr", "sign", "validate"])
+
+    def test_contingencia_exige_senha_do_certificado(self):
+        with self.assertRaisesRegex(ValueError, "senha do certificado"):
+            self.service.prepare(
+                items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}],
+                actor="caixa", contingency_reason="Internet indisponível durante a venda.",
             )
         self.assertEqual(self.fiscal.released, ["RES-1"])
 

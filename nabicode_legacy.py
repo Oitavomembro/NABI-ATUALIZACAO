@@ -848,6 +848,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.grid_columnconfigure(1, weight=1)
         
         self.carrinho_venda = []
+        self._pdv_contingency_reason = ""
+        self._pdv_contingency_buttons = []
         
         mark_startup("ui_build_started")
         self.criar_menu_lateral()
@@ -5050,6 +5052,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             font=ctk.CTkFont(size=15, weight="bold"),
             command=lambda: self.finalizar_venda("COMPROVANTE"),
         ).grid(row=7, column=0, sticky="ew", padx=16, pady=(5, 12))
+        btn_contingencia = ctk.CTkButton(
+            resumo, text="CONTINGÊNCIA OFFLINE", height=36,
+            fg_color="#9a6700", command=self.alternar_contingencia_offline_pdv,
+        )
+        btn_contingencia.grid(row=9, column=0, sticky="ew", padx=16, pady=(0, 12))
+        self._pdv_contingency_buttons.append(btn_contingencia)
+
         ctk.CTkButton(
             resumo, text="PRÉ-VISUALIZAR FISCAL", height=36,
             fg_color="#1f6feb", command=self.previsualizar_venda_fiscal,
@@ -5631,6 +5640,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             frame_fechar, text="PRÉ-VISUALIZAR FISCAL", fg_color="#1f6feb",
             height=44, width=190, command=self.previsualizar_venda_fiscal,
         ).pack(side="right", padx=(4, 0), pady=4)
+        btn_contingencia = ctk.CTkButton(
+            frame_fechar, text="CONTINGÊNCIA OFFLINE", fg_color="#9a6700",
+            height=44, width=190, command=self.alternar_contingencia_offline_pdv,
+        )
+        btn_contingencia.pack(side="right", padx=(4, 0), pady=4)
+        self._pdv_contingency_buttons.append(btn_contingencia)
         self.btn_finalizar_venda = btn_finalizar_venda
         parent.bind("<F9>", lambda _event: self.finalizar_venda("COMPROVANTE"), add="+")
         
@@ -6769,6 +6784,55 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             subtitulo="Conferência local — não reserva número e não transmite à SEFAZ",
         )
 
+    def alternar_contingencia_offline_pdv(self):
+        parent = getattr(self, "pdv_window", self)
+        if self._pdv_contingency_reason:
+            if messagebox.askyesno(
+                "Contingência offline", "Desativar a contingência para esta venda?", parent=parent,
+            ):
+                self._pdv_contingency_reason = ""
+                self._atualizar_botoes_contingencia_pdv()
+            return
+        if not self.fiscal_service.is_enabled():
+            messagebox.showwarning("Contingência offline", "Ative o modo fiscal antes de usar a contingência.", parent=parent)
+            return
+        config = self.fiscal_service.load_config()
+        if str(config.get("default_model") or "65") != "65":
+            messagebox.showwarning("Contingência offline", "A contingência offline é exclusiva da NFC-e modelo 65.", parent=parent)
+            return
+        reason = simpledialog.askstring(
+            "Contingência offline",
+            "Informe por que a SEFAZ ou a internet está indisponível (mínimo 15 caracteres):",
+            parent=parent,
+        )
+        if reason is None:
+            return
+        reason = reason.strip()
+        if len(reason) < 15:
+            messagebox.showerror("Contingência offline", "A justificativa deve possuir ao menos 15 caracteres.", parent=parent)
+            return
+        self._pdv_contingency_reason = reason
+        self._atualizar_botoes_contingencia_pdv()
+        self.mostrar_notificacao(
+            "Contingência ativada", "A próxima NFC-e será assinada offline e ficará pendente de transmissão.",
+            nivel="warning", duracao_ms=6000,
+        )
+
+    def _atualizar_botoes_contingencia_pdv(self):
+        active = bool(self._pdv_contingency_reason)
+        live = []
+        for button in self._pdv_contingency_buttons:
+            try:
+                if button.winfo_exists():
+                    button.configure(
+                        text="CONTINGÊNCIA ATIVA — DESATIVAR" if active else "CONTINGÊNCIA OFFLINE",
+                        fg_color="#da3633" if active else "#9a6700",
+                    )
+                    live.append(button)
+            except tk.TclError:
+                continue
+        self._pdv_contingency_buttons = live
+
     def finalizar_venda(self, tipo_comprovante):
         if not self.carrinho_venda:
             messagebox.showwarning("Aviso", "O carrinho de compras está vazio!")
@@ -6783,8 +6847,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         pagamentos, recebido, troco, itens_finalizados = pagamento
         usuario_venda = getattr(getattr(self, "security", None), "current_username", "Sistema")
         rascunho_fiscal = None
+        senha_contingencia = ""
         if self.fiscal_service.is_enabled():
             try:
+                if self._pdv_contingency_reason:
+                    senha_contingencia = self._obter_senha_certificado(
+                        parent=getattr(self, "pdv_window", self), title="Emitir NFC-e em contingência",
+                    )
+                    if not senha_contingencia:
+                        return
                 config_fiscal = self.fiscal_service.load_config()
                 destinatario_fiscal, destino_fiscal = self.fiscal_sale_service.recipient_for_customer(
                     int(cliente_id), model=str(config_fiscal.get("default_model") or "65")
@@ -6795,6 +6866,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     actor=usuario_venda,
                     recipient=destinatario_fiscal,
                     destination=destino_fiscal,
+                    contingency_reason=self._pdv_contingency_reason,
+                    certificate_password=senha_contingencia,
                 )
             except (ValueError, RuntimeError) as exc:
                 messagebox.showerror(
@@ -6842,6 +6915,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 aviso_fiscal = (
                     " Documento fiscal preservado como pendente e será reenviado pela Central Fiscal."
                 )
+            if rascunho_fiscal.contingency:
+                try:
+                    folder = self.fiscal_service.storage_dir / "contingencia" / datetime.now().strftime("%Y-%m")
+                    danfe_path = folder / f"DANFE_NFCE_{rascunho_fiscal.access_key}.pdf"
+                    self.fiscal_service.generate_nfce_auxiliary_pdf(
+                        fiscal_xml=rascunho_fiscal.xml, output_path=danfe_path,
+                    )
+                    aviso_fiscal += f" DANFE NFC-e de contingência salvo em {danfe_path}."
+                except Exception as exc:
+                    logger.exception("NFC-e em contingência salva, mas DANFE não foi gerado", exc_info=exc)
+                    aviso_fiscal += " NFC-e offline preservada; gere o DANFE pela Central Fiscal."
 
         registrar_historico(
             int(cliente_id),
@@ -6874,6 +6958,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             nivel="success", duracao_ms=7000,
         )
         self.carrinho_venda.clear()
+        self._pdv_contingency_reason = ""
+        self._atualizar_botoes_contingencia_pdv()
         for row in self.tabela_carrinho.get_children():
             self.tabela_carrinho.delete(row)
         self.atualizar_total_carrinho()

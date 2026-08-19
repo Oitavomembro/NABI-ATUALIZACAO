@@ -16,6 +16,7 @@ class FiscalSaleDraft:
     model: str
     environment: str
     xml: bytes
+    contingency: bool = False
 
 
 @dataclass(frozen=True)
@@ -43,7 +44,8 @@ class FiscalSaleService:
     def prepare(
         self, *, items: Sequence[Mapping[str, Any]], payments: Sequence[Mapping[str, Any]],
         actor: str, recipient: Mapping[str, Any] | None = None, destination: int = 1,
-        issued_at: datetime | None = None,
+        issued_at: datetime | None = None, contingency_reason: str = "",
+        certificate_password: str = "",
     ) -> FiscalSaleDraft:
         config = self.fiscal_service.load_config()
         model = str(config.get("default_model") or "65")
@@ -85,7 +87,26 @@ class FiscalSaleService:
                     "final_consumer": 1, "presence": 1,
                 },
             )
-            return FiscalSaleDraft(str(reservation["id"]), access_key, model, environment, xml)
+            reason = str(contingency_reason or "").strip()
+            if reason:
+                if model != "65":
+                    raise ValueError("A contingência offline do PDV é exclusiva para NFC-e modelo 65.")
+                if not certificate_password:
+                    raise ValueError("Informe a senha do certificado A1 para emitir em contingência.")
+                xml = self.fiscal_service.apply_contingency(xml, reason=reason, emission_type=9)
+                access_key = self.fiscal_service._extract_access_key_from_xml(xml)
+                xml = self.fiscal_service.add_nfce_qr_code_v3(
+                    xml, pfx_path=config.get("certificate_path", ""), password=certificate_password,
+                )
+                xml = self.fiscal_service.sign_xml(
+                    xml, reference_id=f"NFe{access_key}",
+                    pfx_path=config.get("certificate_path", ""), password=certificate_password,
+                )
+                self.fiscal_service.validate_official_xml(xml, document_type="nfe")
+            return FiscalSaleDraft(
+                str(reservation["id"]), access_key, model, environment, xml,
+                contingency=bool(reason),
+            )
         except Exception:
             self.fiscal_service.release_number(
                 str(reservation["id"]), actor=actor,

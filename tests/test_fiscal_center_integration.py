@@ -49,6 +49,14 @@ def test_pdv_previsualiza_documento_fiscal_sem_reservar_numeracao():
     assert SOURCE.count('text="PRÉ-VISUALIZAR FISCAL"') == 2
 
 
+def test_pdv_expoe_contingencia_offline_na_fonte_da_venda():
+    block = SOURCE.split("def alternar_contingencia_offline_pdv", 1)[1].split("def tela_clientes", 1)[0]
+    assert SOURCE.count('text="CONTINGÊNCIA OFFLINE"') == 2
+    assert "contingency_reason=self._pdv_contingency_reason" in block
+    assert "certificate_password=senha_contingencia" in block
+    assert "generate_nfce_auxiliary_pdf" in block
+
+
 def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     block = SOURCE.split("def abrir_configuracao_fiscal", 1)[1].split("def abrir_central_fiscal", 1)[0]
     assert "self.fiscal_catalog_readiness_service.audit" in block

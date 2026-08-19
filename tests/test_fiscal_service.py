@@ -1123,6 +1123,40 @@ class FiscalServiceTests(unittest.TestCase):
                 output_path=Path(self.tmp.name) / "rascunho.pdf",
             )
 
+    def test_gera_danfe_nfce_de_contingencia_offline_assinada(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2927408",
+                "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "100",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={},
+            items=[{
+                "code": "P1", "description": "PRODUTO TESTE", "quantity": 1,
+                "unit_price": 10, "ncm": "94036000", "cfop": "5102", "unit": "UN",
+            }],
+            document={
+                "model": "65", "series": 1, "number": 93, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "87654323",
+            },
+        )
+        contingency = self.service.apply_contingency(
+            xml, reason="Internet indisponível durante a venda.", emission_type=9,
+        )
+        key = self.service._extract_access_key_from_xml(contingency)
+        with_qr = self.service.add_nfce_qr_code_v3(
+            contingency, pfx_path=self.pfx_path, password=self.password,
+        )
+        signed = self.service.sign_xml(
+            with_qr, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password,
+        )
+        output = self.service.generate_nfce_auxiliary_pdf(
+            fiscal_xml=signed, output_path=Path(self.tmp.name) / "danfe-contingencia.pdf",
+        )
+        self.assertEqual(output.read_bytes()[:5], b"%PDF-")
+        self.assertGreater(output.stat().st_size, 2_000)
+
 
     def test_fluxos_assinados_de_autorizacao_consulta_evento_e_inutilizacao(self):
         self.service.save_config({
@@ -1182,6 +1216,20 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(self.service.calculate_access_key_digit(contingency_key[:43]), contingency_key[-1])
         with self.assertRaises(ValueError):
             self.service.apply_contingency(xml, reason="curta", emission_type=9)
+
+    def test_fila_de_contingencia_controla_prazo_de_24_horas(self):
+        key = "29" + "0" * 18 + "65" + "0" * 12 + "9" + "0" * 9
+        xml = (
+            '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+            f'<infNFe Id="NFe{key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>'
+        )
+        queued = self.service.enqueue_transmission(
+            operation="autorizacao", xml=xml, actor="caixa", model="65", access_key=key,
+        )
+        created = datetime.fromisoformat(queued["created_at"])
+        deadline = datetime.fromisoformat(queued["contingency_deadline_at"])
+        self.assertTrue(queued["contingency"])
+        self.assertEqual(deadline - created, timedelta(hours=24))
 
     def test_contingencia_bloqueia_xml_sem_dados_para_nova_chave(self):
         xml = '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe1"><ide><tpEmis>1</tpEmis></ide></infNFe></NFe>'

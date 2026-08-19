@@ -2610,6 +2610,7 @@ class FiscalService:
         if operation == "autorizacao" and len(resolved_key) != 44:
             raise ValueError("Autorização enfileirada exige uma chave de acesso válida no XML ou no parâmetro access_key.")
         now = datetime.now(timezone.utc)
+        is_contingency = self._xml_emission_type(raw_xml) != 1
         rows = self.list_transmission_queue()
         if operation == "autorizacao" and resolved_key:
             existing = next(
@@ -2640,7 +2641,11 @@ class FiscalService:
             "last_error": "",
             "last_status_code": "",
             "last_message": "",
-            "contingency": self._xml_emission_type(raw_xml) != 1,
+            "contingency": is_contingency,
+            "contingency_deadline_at": (
+                (now + timedelta(hours=24)).isoformat() if is_contingency and model == "65" else ""
+            ),
+            "contingency_overdue": False,
         }
         rows.append(record)
         self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
@@ -2668,6 +2673,15 @@ class FiscalService:
                 continue
             if selected_ids and str(record.get("id") or "") not in selected_ids:
                 continue
+            deadline_text = str(record.get("contingency_deadline_at") or "")
+            if deadline_text:
+                try:
+                    deadline = datetime.fromisoformat(deadline_text)
+                    if deadline.tzinfo is None:
+                        deadline = deadline.replace(tzinfo=timezone.utc)
+                    record["contingency_overdue"] = current > deadline
+                except ValueError:
+                    record["contingency_overdue"] = True
             try:
                 next_attempt = datetime.fromisoformat(str(record.get("next_attempt_at") or record.get("created_at")))
                 if next_attempt.tzinfo is None:
@@ -2706,15 +2720,25 @@ class FiscalService:
                         is_draft = False
                     if is_draft:
                         model = str(record.get("model") or config.get("default_model") or "65")
-                        if model == "65":
-                            xml = self.add_nfce_qr_code_v3(
-                                xml, pfx_path=config.get("certificate_path", ""), password=password
-                            )
                         queued_key = self._normalize_access_key(record.get("access_key", ""))
-                        signed = self.sign_xml(
-                            xml, reference_id=f"NFe{queued_key}",
-                            pfx_path=config.get("certificate_path", ""), password=password,
-                        )
+                        xml_key = self._extract_access_key_from_xml(xml)
+                        if xml_key != queued_key:
+                            raise ValueError("A chave do XML não corresponde ao item da fila fiscal.")
+                        already_signed = bool(root.xpath(".//*[local-name()='Signature']"))
+                        if already_signed:
+                            signature = self.verify_xml_signature(xml)
+                            if signature.get("reference_id") != f"NFe{queued_key}":
+                                raise ValueError("A assinatura da contingência não referencia a chave enfileirada.")
+                            signed = xml
+                        else:
+                            if model == "65":
+                                xml = self.add_nfce_qr_code_v3(
+                                    xml, pfx_path=config.get("certificate_path", ""), password=password
+                                )
+                            signed = self.sign_xml(
+                                xml, reference_id=f"NFe{queued_key}",
+                                pfx_path=config.get("certificate_path", ""), password=password,
+                            )
                         self.validate_official_xml(signed, document_type="nfe")
                         record["original_xml_b64"] = base64.b64encode(signed).decode("ascii")
                         xml = self._authorization_envelope(

@@ -1075,3 +1075,18 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - suíte completa: 1.234 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - `compileall` e `git diff --check` aprovados;
 - nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.72 — contingência offline completa no PDV
+
+- o PDV ganhou ativação explícita e reversível da contingência, com justificativa mínima e indicação visual enquanto estiver ativa;
+- a venda nasce como NFC-e modelo 65 em `tpEmis=9`, antes da persistência comercial, evitando alteração tardia de documento;
+- a chave é recalculada, o QR Code offline é assinado com o A1 e o XML recebe assinatura XMLDSig antes de entrar na fila;
+- a fila reconhece e valida o XML previamente assinado, sem inserir outro QR Code ou assinar novamente;
+- o DANFE NFC-e de contingência é gerado automaticamente em PDF, sem acionar impressora física;
+- cada contingência registra prazo operacional de 24 horas e marca atraso sem bloquear uma tentativa posterior de transmissão;
+- a contingência é desativada automaticamente após concluir a venda e documentos normais continuam no fluxo anterior;
+- produção continua bloqueada e nenhuma indisponibilidade simulada ativa contingência silenciosamente;
+- validação focada: 135 testes e 10 subtestes aprovados;
+- suíte completa: 1.239 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- `compileall` e `git diff --check` aprovados;
+- nenhum programa, banco real, certificado real, endpoint fiscal ou impressora foi utilizado.
