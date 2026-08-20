@@ -235,6 +235,50 @@ class PDVTransactionService:
             for row in rows
         ]
 
+    def list_sales_for_day(self, *, day: datetime | None = None) -> list[dict[str, Any]]:
+        """Lista todas as vendas do dia, inclusive canceladas, com estado fiscal."""
+        wanted = (day or datetime.now()).strftime("%d/%m/%Y")
+        conn = self.connection_factory()
+        try:
+            movement_columns = {
+                str(row[1]).casefold()
+                for row in conn.execute("PRAGMA table_info(movimentacoes)").fetchall()
+            }
+            canonical_expr = "m.valor_decimal" if "valor_decimal" in movement_columns else "NULL"
+            fiscal_exists = conn.execute(
+                "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+            ).fetchone()
+            fiscal_join = "LEFT JOIN fiscal_sale_documents f ON f.sale_id=m.id" if fiscal_exists else ""
+            fiscal_fields = (
+                "COALESCE(f.status,''),COALESCE(f.model,''),COALESCE(f.access_key,''),COALESCE(f.protocol,'')"
+                if fiscal_exists else "'','','',''"
+            )
+            rows = conn.execute(
+                f"""
+                SELECT m.id,m.descricao,m.valor,{canonical_expr},m.data,m.cliente_id,
+                       COALESCE(m.status_pagamento,''),{fiscal_fields}
+                  FROM movimentacoes m
+                  {fiscal_join}
+                 WHERE m.tipo='COMPRA' AND substr(COALESCE(m.data,''),1,10)=?
+                 ORDER BY m.id DESC
+                """,
+                (wanted,),
+            ).fetchall()
+        finally:
+            conn.close()
+        return [
+            {
+                "id": int(row[0]), "descricao": str(row[1] or ""),
+                "valor": DecimalStorage.read(row[3], row[2], field="valor da venda"),
+                "data": str(row[4] or ""),
+                "cliente_id": int(row[5]) if row[5] is not None else None,
+                "status_pagamento": str(row[6] or ""),
+                "fiscal_status": str(row[7] or ""), "fiscal_model": str(row[8] or ""),
+                "access_key": str(row[9] or ""), "protocol": str(row[10] or ""),
+            }
+            for row in rows
+        ]
+
     def cancel_sale(
         self, sale_id: int, *, user: str,
         before_cancel_commit: Callable[[Any, int], None] | None = None,

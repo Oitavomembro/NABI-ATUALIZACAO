@@ -5143,6 +5143,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         win.nabi_help_context = "vendas"
         self.pdv_window = win
         self.pdv_fullscreen = False
+        self.pdv_orcamento_ativo = False
         win.title(f"NabiCode {APP_VERSION} — Vendas")
         win.configure(fg_color="#0d1117")
         win.minsize(1024, 650)
@@ -5180,22 +5181,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         menu_pdv = ctk.CTkFrame(corpo, fg_color="#161b22", corner_radius=10)
         menu_pdv.grid(row=0, column=0, columnspan=2, sticky="ew", pady=(0, 8))
-        for coluna in range(7):
+        for coluna in range(2):
             menu_pdv.grid_columnconfigure(coluna, weight=1, uniform="menu_pdv")
-        comandos_menu_pdv = (
-            ("Cliente [F3]", "#8957e5", lambda: self.entry_cliente_venda.focus_set()),
-            ("Cliente rápido", "#6e40c9", self.abrir_cliente_rapido_pdv),
-            ("Reabrir [F7]", "#1f6feb", self.abrir_vendas_suspensas),
-            ("Orçamento [F5]", "#6e7681", lambda: self.salvar_documento_pdv("ORCAMENTO")),
-            ("Pré-venda [F8]", "#8957e5", lambda: self.salvar_documento_pdv("PRE_VENDA")),
-            ("Documentos", "#1f6feb", self.abrir_documentos_pdv),
-            ("Cancelar", "#da3633", self.cancelar_venda_pdv),
+        ctk.CTkButton(
+            menu_pdv, text="Vendas do dia  [F7]", height=36, fg_color="#1f6feb",
+            command=self.abrir_vendas_do_dia_pdv,
+        ).grid(row=0, column=0, sticky="ew", padx=4, pady=7)
+        self.btn_modo_orcamento_pdv = ctk.CTkButton(
+            menu_pdv, text="ORÇAMENTO DESLIGADO  [F5]", height=36,
+            fg_color="#30363d", hover_color="#484f58",
+            command=self.alternar_modo_orcamento_pdv,
         )
-        for coluna, (texto, cor, comando) in enumerate(comandos_menu_pdv):
-            ctk.CTkButton(
-                menu_pdv, text=texto, height=34, fg_color=cor, command=comando
-            ).grid(row=0, column=coluna, sticky="ew", padx=3, pady=7)
-
+        self.btn_modo_orcamento_pdv.grid(row=0, column=1, sticky="ew", padx=4, pady=7)
         busca = ctk.CTkFrame(corpo, fg_color="#161b22", corner_radius=12)
         busca.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(0, 8))
         busca.grid_columnconfigure(1, weight=1)
@@ -5341,7 +5338,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             fg_color="#2ea043",
             hover_color="#238636",
             font=ctk.CTkFont(size=15, weight="bold"),
-            command=lambda: self.finalizar_venda("COMPROVANTE"),
+            command=self.concluir_acao_pdv,
         ).grid(row=6, column=0, sticky="ew", padx=16, pady=(5, 12))
         btn_contingencia = ctk.CTkButton(
             resumo, text="CONTINGÊNCIA OFFLINE", height=36,
@@ -5387,11 +5384,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         win.bind("<F3>", lambda _event: self.entry_cliente_venda.focus_set())
         win.bind("<Shift-F3>", lambda _event: self.abrir_cliente_rapido_pdv())
         win.bind("<F4>", lambda _event: self.alterar_quantidade_item_pdv())
-        win.bind("<F5>", lambda _event: self.salvar_documento_pdv("ORCAMENTO"))
+        win.bind("<F5>", lambda _event: self.alternar_modo_orcamento_pdv())
         win.bind("<F6>", lambda _event: self.suspender_venda_atual())
-        win.bind("<F7>", lambda _event: self.abrir_vendas_suspensas())
-        win.bind("<F8>", lambda _event: self.salvar_documento_pdv("PRE_VENDA"))
-        win.bind("<F9>", lambda _event: self.finalizar_venda("COMPROVANTE"))
+        win.bind("<F7>", lambda _event: self.abrir_vendas_do_dia_pdv())
+        win.bind("<F9>", lambda _event: self.concluir_acao_pdv())
         win.bind("<F10>", lambda _event: self.aplicar_desconto_item_pdv())
         win.bind("<F11>", lambda _event: self._alternar_tela_cheia_pdv())
         self._pdv_enter_controller = PDVEnterController(
@@ -5403,7 +5399,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             confirm_suggestion=self.confirmar_sugestao_produto,
             select_by_barcode=self._selecionar_produto_por_codigo_barras,
             add_item=self.adicionar_item_carrinho,
-            finalize_sale=lambda: self.finalizar_venda("COMPROVANTE"),
+            finalize_sale=self.concluir_acao_pdv,
             validate_quantity=validar_quantidade_pdv,
             validate_price=validar_preco_pdv,
         ).install()
@@ -5682,6 +5678,125 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self.entry_cliente_venda.delete(0, "end")
         self.cliente_venda_selecionado_id = None
         self.mostrar_notificacao("Venda suspensa", f"Venda {venda.id} preservada com total de R$ {venda.total:.2f}.", nivel="success")
+
+    def alternar_modo_orcamento_pdv(self):
+        self.pdv_orcamento_ativo = not bool(getattr(self, "pdv_orcamento_ativo", False))
+        button = getattr(self, "btn_modo_orcamento_pdv", None)
+        if button is not None:
+            if self.pdv_orcamento_ativo:
+                button.configure(
+                    text="ORÇAMENTO LIGADO  [F5]", fg_color="#9a6700", hover_color="#b78103"
+                )
+            else:
+                button.configure(
+                    text="ORÇAMENTO DESLIGADO  [F5]", fg_color="#30363d", hover_color="#484f58"
+                )
+        if hasattr(self, "entry_item_venda"):
+            self.entry_item_venda.focus_set()
+
+    def _limpar_venda_atual_pdv(self):
+        self.carrinho_venda.clear()
+        tabela = getattr(self, "tabela_carrinho", None)
+        if tabela is not None:
+            for row in tabela.get_children():
+                tabela.delete(row)
+        self.atualizar_total_carrinho()
+        if hasattr(self, "entry_cliente_venda"):
+            self.entry_cliente_venda.delete(0, "end")
+        if hasattr(self, "combo_cliente_venda"):
+            self.combo_cliente_venda.set("")
+        self.cliente_venda_selecionado_id = None
+        if hasattr(self, "entry_item_venda"):
+            self.entry_item_venda.focus_set()
+
+    def concluir_acao_pdv(self):
+        if bool(getattr(self, "pdv_orcamento_ativo", False)):
+            documento = self.salvar_documento_pdv("ORCAMENTO")
+            if documento is not None:
+                self._limpar_venda_atual_pdv()
+            return documento
+        return self.finalizar_venda("COMPROVANTE")
+
+    def abrir_vendas_do_dia_pdv(self):
+        parent = getattr(self, "pdv_window", self)
+        current = getattr(self, "pdv_daily_sales_window", None)
+        try:
+            if current is not None and current.winfo_exists():
+                current.deiconify(); current.lift(); return
+        except tk.TclError:
+            pass
+        window = ctk.CTkToplevel(parent)
+        prepare_hidden_toplevel(window)
+        self.pdv_daily_sales_window = window
+        window.title("Vendas do dia — reimpressão e cancelamento")
+        window.geometry("1080x680")
+        window.minsize(900, 560)
+        window.configure(fg_color="#0d1117")
+        window.grid_rowconfigure(1, weight=1)
+        window.grid_columnconfigure(0, weight=1)
+        ctk.CTkLabel(
+            window, text=f"VENDAS DE HOJE — {datetime.now().strftime('%d/%m/%Y')}",
+            font=ctk.CTkFont(size=21, weight="bold"), text_color=self.cor_acento,
+        ).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 8))
+        table_frame = ctk.CTkFrame(window, fg_color="#161b22")
+        table_frame.grid(row=1, column=0, sticky="nsew", padx=18, pady=6)
+        table_frame.grid_rowconfigure(0, weight=1); table_frame.grid_columnconfigure(0, weight=1)
+        columns = ("id", "hora", "valor", "pagamento", "fiscal", "modelo")
+        table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
+        for key, title, width in (
+            ("id", "Venda", 80), ("hora", "Data / hora", 155), ("valor", "Total", 110),
+            ("pagamento", "Situação", 130), ("fiscal", "Documento fiscal", 170), ("modelo", "Modelo", 90),
+        ):
+            table.heading(key, text=title); table.column(key, width=width, anchor="center")
+        table.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
+        scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
+        scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 8), pady=8)
+        table.configure(yscrollcommand=scrollbar.set)
+        rows_by_iid = {}
+
+        def load():
+            for iid in table.get_children(): table.delete(iid)
+            rows_by_iid.clear()
+            for row in self.pdv_transaction_service.list_sales_for_day():
+                iid = str(row["id"]); rows_by_iid[iid] = row
+                fiscal_status = row.get("fiscal_status") or "NÃO FISCAL"
+                table.insert("", "end", iid=iid, values=(
+                    f"#{row['id']}", row.get("data", ""), f"R$ {float(row['valor']):.2f}",
+                    row.get("status_pagamento") or "—", fiscal_status,
+                    f"Modelo {row.get('fiscal_model')}" if row.get("fiscal_model") else "—",
+                ), tags=("cancelada",) if str(row.get("status_pagamento")).upper() == "CANCELADO" else ())
+            table.tag_configure("cancelada", foreground="#8b949e", background="#2d1618")
+
+        def selected():
+            selection = table.selection()
+            return rows_by_iid.get(selection[0]) if selection else None
+
+        def reprint():
+            row = selected()
+            if not row:
+                messagebox.showwarning("Vendas do dia", "Selecione uma venda.", parent=window); return
+            self.reimprimir_movimentacao(int(row["id"]), "recibo")
+
+        def cancel():
+            row = selected()
+            if not row:
+                messagebox.showwarning("Vendas do dia", "Selecione uma venda.", parent=window); return
+            if str(row.get("status_pagamento") or "").upper() == "CANCELADO":
+                messagebox.showinfo("Vendas do dia", "Esta venda já está cancelada.", parent=window); return
+            if str(row.get("fiscal_status") or "").upper() == "AUTORIZADO":
+                self._cancelar_venda_fiscal_autorizada_pdv(row, parent=window, on_complete=load)
+            else:
+                self._cancelar_venda_local_pdv(row, parent=window, on_complete=load)
+
+        actions = ctk.CTkFrame(window, fg_color="transparent")
+        actions.grid(row=2, column=0, sticky="ew", padx=18, pady=(6, 14))
+        ctk.CTkButton(actions, text="Atualizar", fg_color="#30363d", command=load).pack(side="left")
+        ctk.CTkButton(actions, text="Reimprimir comprovante", fg_color="#1f6feb", command=reprint).pack(side="right")
+        ctk.CTkButton(actions, text="Cancelar venda selecionada", fg_color="#da3633", command=cancel).pack(side="right", padx=8)
+        ctk.CTkButton(actions, text="Fechar", fg_color="#30363d", command=window.destroy).pack(side="right")
+        window.bind("<Escape>", lambda _event: window.destroy())
+        load()
+        reveal_prepared_toplevel_when_idle(window, maximize=True)
 
     def abrir_vendas_suspensas(self):
         vendas = self.pdv_service.listar_suspensas()
@@ -6705,13 +6820,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def salvar_documento_pdv(self, tipo):
         if not self.carrinho_venda:
-            messagebox.showwarning("PDV", "O carrinho está vazio.", parent=getattr(self, "pdv_window", self)); return
+            messagebox.showwarning("PDV", "O carrinho está vazio.", parent=getattr(self, "pdv_window", self)); return None
         documento = self.pdv_service.salvar_documento(
             tipo, self.carrinho_venda,
             cliente_id=getattr(self, "cliente_venda_selecionado_id", None),
             cliente_nome=self.entry_cliente_venda.get().strip() if hasattr(self, "entry_cliente_venda") else "",
         )
         self.mostrar_notificacao(tipo.replace("_", " ").title(), f"Documento {documento.id} salvo. Total R$ {documento.total:.2f}.", nivel="success")
+        return documento
 
     def abrir_documentos_pdv(self):
         documentos = self.pdv_service.listar_documentos()
@@ -6979,6 +7095,102 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
         return caminho_pdf
 
+    def _cancelar_venda_local_pdv(self, venda, *, parent=None, on_complete=None):
+        parent = parent or getattr(self, "pdv_window", self)
+        if str(venda.get("fiscal_status") or "").upper() == "AUTORIZADO":
+            raise ValueError("Documento fiscal autorizado exige cancelamento oficial pela SEFAZ.")
+        if not messagebox.askyesno(
+            "Confirmar cancelamento",
+            f"Cancelar a venda #{venda['id']} e reverter estoque e financeiro?",
+            parent=parent,
+        ):
+            return
+        actor = getattr(getattr(self, "security", None), "current_username", "Sistema")
+        try:
+            self.pdv_transaction_service.cancel_sale(
+                venda["id"], user=actor,
+                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+            )
+            self.fiscal_sale_service.finalize_local_cancellation(
+                sale_id=int(venda["id"]), actor=actor
+            )
+        except (ValueError, RuntimeError) as exc:
+            messagebox.showerror("Cancelar venda", str(exc), parent=parent); return
+        self.mostrar_notificacao(
+            "Venda cancelada", f"Venda #{venda['id']} cancelada e estoque revertido.", nivel="success"
+        )
+        if on_complete:
+            on_complete()
+
+    def _cancelar_venda_fiscal_autorizada_pdv(self, venda, *, parent=None, on_complete=None):
+        parent = parent or getattr(self, "pdv_window", self)
+        if not self._autorizar("fiscal", "configure"):
+            return
+        if not messagebox.askyesno(
+            "Condição legal do cancelamento",
+            ("Confirme que a mercadoria NÃO saiu do estabelecimento.\n\n"
+             "Na Bahia, a NFC-e comum deve ser cancelada em até 30 minutos; "
+             "a SEFAZ também validará o prazo e as demais condições. Continuar?"),
+            parent=parent,
+        ):
+            return
+        justification = simpledialog.askstring(
+            "Cancelar documento fiscal",
+            "Motivo real do cancelamento para a SEFAZ (15 a 255 caracteres):",
+            parent=parent,
+        )
+        if justification is None:
+            return
+        justification = justification.strip()
+        if not 15 <= len(justification) <= 255:
+            messagebox.showwarning(
+                "Cancelamento fiscal", "O motivo deve possuir entre 15 e 255 caracteres.", parent=parent
+            ); return
+        password = self._obter_senha_certificado(parent=parent, title="Cancelar documento autorizado")
+        if password is None:
+            return
+        sale_id = int(venda["id"])
+        actor = self._usuario_financeiro()
+
+        def work(_context):
+            self.fiscal_sale_service.cancel_authorized(
+                sale_id=sale_id, password=password, actor=actor, justification=justification
+            )
+            self.pdv_transaction_service.cancel_sale(
+                sale_id, user=actor,
+                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+            )
+            self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id, actor=actor)
+            return sale_id
+
+        task = TASK_MANAGER.submit("Cancelar venda fiscal autorizada", work)
+        self.mostrar_notificacao(
+            "Cancelamento fiscal",
+            "Solicitação enviada em segundo plano. A venda só será revertida após aceitação da SEFAZ.",
+        )
+
+        def follow():
+            current = TASK_MANAGER.get(task.id)
+            try:
+                exists = parent.winfo_exists()
+            except (AttributeError, tk.TclError):
+                exists = False
+            if current is None or not exists:
+                return
+            if current.status == TaskStatus.COMPLETED:
+                self.mostrar_notificacao(
+                    "Cancelamento fiscal aceito", f"Venda #{sale_id} cancelada e revertida.", nivel="success"
+                )
+                if on_complete: on_complete()
+                return
+            if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                messagebox.showerror(
+                    "Cancelamento fiscal não concluído", current.error or "A SEFAZ não aceitou o evento.", parent=parent
+                )
+                return
+            parent.after(150, follow)
+        parent.after(100, follow)
+
     def cancelar_venda_pdv(self):
         rows = self.pdv_transaction_service.list_cancellable_sales(limit=20)
         if not rows:
@@ -6995,30 +7207,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if escolha is None:
             return
         venda = rows[escolha - 1]
-        if not messagebox.askyesno(
-            "Confirmar cancelamento",
-            f"Cancelar a venda #{venda['id']} e reverter estoque e financeiro?",
-            parent=getattr(self, "pdv_window", self),
-        ):
-            return
-        actor = getattr(getattr(self, "security", None), "current_username", "Sistema")
-        try:
-            self.pdv_transaction_service.cancel_sale(
-                venda["id"],
-                user=actor,
-                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
-            )
-            self.fiscal_sale_service.finalize_local_cancellation(
-                sale_id=int(venda["id"]), actor=actor
-            )
-        except (ValueError, RuntimeError) as exc:
-            messagebox.showerror("Cancelar venda", str(exc), parent=getattr(self, "pdv_window", self))
-            return
-        self.mostrar_notificacao(
-            "Venda cancelada",
-            f"Venda #{venda['id']} cancelada e estoque revertido.",
-            nivel="success",
-        )
+        self._cancelar_venda_local_pdv(venda, parent=getattr(self, "pdv_window", self))
 
     def _resolver_cliente_venda_atual(self):
         cli_selecionado = self.entry_cliente_venda.get().strip()
@@ -9941,6 +10130,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         content = corpo.content
         ctk.CTkLabel(content, text="Configuração fiscal da empresa", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=16, pady=(14, 4))
         ctk.CTkLabel(content, text="No modo Fiscal, os dados abaixo são obrigatórios antes da primeira venda. Depois de salvos, permanecem disponíveis mesmo ao voltar temporariamente ao modo Comercial.", wraplength=850, justify="left", text_color="#c9d1d9").pack(anchor="w", padx=16, pady=(0, 14))
+        ctk.CTkButton(
+            content,
+            text="1. IMPORTAR DADOS DA EMPRESA PELO XML",
+            height=46,
+            fg_color="#0969da",
+            font=ctk.CTkFont(size=14, weight="bold"),
+            command=lambda: fill_from_own_xml(),
+        ).pack(fill="x", padx=16, pady=(0, 12))
+        ctk.CTkLabel(
+            content,
+            text="Use uma NF-e/NFC-e emitida ou recebida pela sua empresa. O NabiCode identifica o seu CNPJ e preenche os dados disponíveis.",
+            text_color="#8b949e", wraplength=850, justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
 
         enabled = tk.BooleanVar(value=bool(config.get("enabled")))
         ctk.CTkCheckBox(content, text="Habilitar recursos fiscais oficiais", variable=enabled).pack(anchor="w", padx=16, pady=6)
@@ -9984,6 +10186,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         fields["sale_series_65"] = field("Série de venda da NFC-e 65", config.get("sale_series_65", 1))
         issuer_config = config.get("issuer") or {}
         fields["issuer_name"] = field("Razão social do emitente", issuer_config.get("name") or obter_config("nome_loja"))
+        fields["issuer_trade_name"] = field("Nome fantasia", issuer_config.get("trade_name"))
         fields["issuer_ie"] = field("Inscrição estadual", issuer_config.get("state_registration"))
         fields["issuer_im"] = field("Inscrição municipal (quando aplicável)", issuer_config.get("municipal_registration"))
         fields["issuer_city_code"] = field("Código IBGE do município", issuer_config.get("city_code"))
@@ -10016,7 +10219,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 replace_field("cnpj", draft.cnpj)
                 replace_field("state", draft.state)
                 mapping = {
-                    "issuer_name": "name", "issuer_ie": "state_registration",
+                    "issuer_name": "name", "issuer_trade_name": "trade_name",
+                    "issuer_ie": "state_registration",
                     "issuer_city_code": "city_code", "issuer_city": "city",
                     "issuer_street": "street", "issuer_number": "number",
                     "issuer_district": "district", "issuer_zip": "zip_code",
@@ -10038,12 +10242,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 messagebox.showerror("Configuração fiscal", str(exc), parent=janela)
 
-        ctk.CTkButton(
-            content,
-            text="Preencher usando uma NF-e/NFC-e emitida ou recebida",
-            fg_color="#0969da",
-            command=fill_from_own_xml,
-        ).pack(fill="x", padx=16, pady=(12, 4))
         ctk.CTkLabel(content, text="Ambiente", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
         environment = ctk.CTkComboBox(content, values=["HOMOLOGACAO", "PRODUCAO"], state="readonly")
         environment.pack(fill="x", padx=16); environment.set(config.get("environment") or "HOMOLOGACAO")
@@ -10125,6 +10323,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 if info.document and not configured_cnpj:
                     replace_field("cnpj", info.document)
+                if info.company_name and not fields["issuer_name"].get().strip():
+                    replace_field("issuer_name", info.company_name)
                 trust = self.fiscal_service.validate_certificate_trust(path, secret)
                 if not trust.trusted:
                     certificate_status.configure(
@@ -10257,12 +10457,41 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         revocation_button.pack(fill="x", padx=12, pady=(0, 10))
 
         endpoints = config.get("endpoints") or {}
+        advanced_endpoints = ctk.CTkFrame(content, fg_color="#0d1117", corner_radius=10)
+        ctk.CTkLabel(
+            advanced_endpoints,
+            text="Endereços avançados da SEFAZ",
+            font=ctk.CTkFont(size=15, weight="bold"), text_color="#d29922",
+        ).pack(anchor="w", padx=16, pady=(12, 2))
+        ctk.CTkLabel(
+            advanced_endpoints,
+            text=("Deixe estes campos vazios para usar automaticamente o catálogo oficial da UF. "
+                  "Preencha somente com orientação do suporte técnico."),
+            text_color="#8b949e", wraplength=820, justify="left",
+        ).pack(anchor="w", padx=16, pady=(0, 8))
         for ambiente, titulo in (("HOMOLOGACAO", "homologação"), ("PRODUCAO", "produção")):
             ambiente_endpoints = endpoints.get(ambiente) or {}
             for operacao, rotulo in (("autorizacao", "Autorização"), ("consulta", "Consulta de situação"), ("evento", "Eventos (cancelamento/CC-e)"), ("inutilizacao", "Inutilização")):
                 fields[f"endpoint_{ambiente.lower()}_{operacao}"] = field(
-                    f"Endpoint {rotulo} — {titulo}", ambiente_endpoints.get(operacao, "")
+                    f"Endpoint {rotulo} — {titulo}", ambiente_endpoints.get(operacao, ""),
+                    parent=advanced_endpoints,
                 )
+
+        endpoints_visible = {"value": False}
+        def toggle_advanced_endpoints():
+            endpoints_visible["value"] = not endpoints_visible["value"]
+            if endpoints_visible["value"]:
+                advanced_endpoints.pack(fill="x", padx=16, pady=(6, 10))
+                advanced_button.configure(text="Ocultar configuração técnica da SEFAZ")
+            else:
+                advanced_endpoints.pack_forget()
+                advanced_button.configure(text="Mostrar configuração técnica da SEFAZ")
+
+        advanced_button = ctk.CTkButton(
+            content, text="Mostrar configuração técnica da SEFAZ",
+            fg_color="#30363d", command=toggle_advanced_endpoints,
+        )
+        advanced_button.pack(fill="x", padx=16, pady=(10, 4))
 
         status = ctk.CTkLabel(content, text="", wraplength=610, justify="left")
         status.pack(anchor="w", padx=16, pady=8)
@@ -10315,7 +10544,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def configure_initial_numbering():
             modal = ctk.CTkToplevel(janela)
             modal.title("Numeração fiscal inicial")
-            modal.geometry("500x390")
+            modal.geometry("520x520")
             modal.transient(janela)
             modal.grab_set()
             ctk.CTkLabel(
@@ -10327,8 +10556,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             model_choice = ctk.CTkComboBox(
                 modal, values=list(self.fiscal_service.MODEL_LABELS.values()), state="readonly"
             )
+            ctk.CTkLabel(modal, text="Tipo de documento fiscal", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=20, pady=(2, 2))
             model_choice.set(default_model.get())
             model_choice.pack(fill="x", padx=20, pady=5)
+            ctk.CTkLabel(
+                modal, text="Série fiscal",
+                font=ctk.CTkFont(weight="bold"),
+            ).pack(anchor="w", padx=20, pady=(6, 2))
             series_entry = ctk.CTkEntry(modal, placeholder_text="Série")
             series_entry.pack(fill="x", padx=20, pady=5)
             selected_code = next(
@@ -10336,9 +10570,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if label == default_model.get()
             )
             series_entry.insert(0, fields[f"sale_series_{selected_code}"].get())
+            ctk.CTkLabel(
+                modal,
+                text="Próximo número da nota",
+                font=ctk.CTkFont(weight="bold"),
+            ).pack(anchor="w", padx=20, pady=(6, 2))
             next_entry = ctk.CTkEntry(modal, placeholder_text="Próximo número a emitir")
             next_entry.pack(fill="x", padx=20, pady=5)
             next_entry.insert(0, "1")
+            ctk.CTkLabel(
+                modal,
+                text=("Exemplo: série 1 e próximo número 1 para uma empresa que nunca emitiu. "
+                      "Se já emitia em outro sistema, informe o número seguinte ao último autorizado."),
+                text_color="#8b949e", wraplength=450, justify="left",
+            ).pack(anchor="w", padx=20, pady=(2, 4))
             number_status = ctk.CTkLabel(modal, text="", wraplength=450, justify="left")
             number_status.pack(anchor="w", padx=20, pady=8)
 
@@ -10516,6 +10761,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     "certificate_path": previous_certificate,
                     "issuer": {
                         "name": fields["issuer_name"].get(),
+                        "trade_name": fields["issuer_trade_name"].get(),
                         "state_registration": fields["issuer_ie"].get(),
                         "municipal_registration": fields["issuer_im"].get(),
                         "city_code": fields["issuer_city_code"].get(),
@@ -11393,7 +11639,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             except Exception as exc:
                 messagebox.showerror("Duplicar nota", str(exc), parent=janela)
-        actions = ctk.CTkFrame(frame, fg_color="transparent"); actions.pack(fill="x", padx=12, pady=(0, 10))
+        action_panel = ctk.CTkScrollableFrame(
+            frame, fg_color="#0d1117", corner_radius=8, height=155,
+            label_text="Ações do documento selecionado",
+        )
+        action_panel.pack(fill="x", padx=12, pady=(0, 10))
+        actions = ctk.CTkFrame(action_panel, fg_color="transparent"); actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
@@ -11403,8 +11654,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         transmit_button.pack(side="left", padx=4)
         retry_button = ctk.CTkButton(actions, text="Reenviar selecionado", command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922")
         retry_button.pack(side="left", padx=4)
-        export_actions = ctk.CTkFrame(frame, fg_color="transparent")
-        export_actions.pack(fill="x", padx=12, pady=(0, 10))
+        export_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        export_actions.pack(fill="x", pady=(0, 6))
         receipt_button = ctk.CTkButton(
             export_actions, text="Consultar recibo", command=lambda: transmit_queue(receipt_selected=True),
             fg_color="#1f6feb",
@@ -11419,8 +11670,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),
             fg_color="#8957e5",
         ).pack(side="left", padx=4)
-        accounting_actions = ctk.CTkFrame(frame, fg_color="transparent")
-        accounting_actions.pack(fill="x", padx=12, pady=(0, 10))
+        accounting_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        accounting_actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(
             accounting_actions, text="Retransmitir contingências",
             command=lambda: transmit_queue(contingency_batch=True), fg_color="#8957e5",
@@ -11433,8 +11684,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             accounting_actions, text="Exportar relatório CSV", command=export_fiscal_report,
             fg_color="#1f6feb",
         ).pack(side="left", padx=4)
-        email_actions = ctk.CTkFrame(frame, fg_color="transparent")
-        email_actions.pack(fill="x", padx=12, pady=(0, 10))
+        email_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        email_actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(
             email_actions, text="Configurar e-mail fiscal", command=configure_fiscal_email,
             fg_color="#8957e5",
@@ -11443,8 +11694,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             email_actions, text="Enviar XML + DANFE por e-mail", command=send_fiscal_email,
             fg_color="#2ea043",
         ).pack(side="left", padx=4)
-        dfe_actions = ctk.CTkFrame(frame, fg_color="transparent")
-        dfe_actions.pack(fill="x", padx=12, pady=(0, 10))
+        dfe_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        dfe_actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(
             dfe_actions, text="Buscar documentos recebidos (DF-e)", command=fetch_dfe_documents,
             fg_color="#1f6feb",
@@ -11453,8 +11704,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             dfe_actions, text="Manifestar NF-e recebida", command=manifest_dfe_document,
             fg_color="#d29922",
         ).pack(side="left", padx=4)
-        draft_actions = ctk.CTkFrame(frame, fg_color="transparent")
-        draft_actions.pack(fill="x", padx=12, pady=(0, 10))
+        draft_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        draft_actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(
             draft_actions, text="Duplicar nota para nova pré-venda",
             command=duplicate_fiscal_document, fg_color="#8957e5",

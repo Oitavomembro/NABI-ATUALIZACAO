@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from pathlib import Path
 
 from services.pdv_service import PDVService
@@ -110,6 +111,33 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 10)
         self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 0)
         conn.close()
+
+    def test_lista_somente_vendas_do_dia_com_estado_fiscal(self):
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "CREATE TABLE fiscal_sale_documents("
+            "sale_id INTEGER UNIQUE,status TEXT,model TEXT,access_key TEXT,protocol TEXT)"
+        )
+        conn.execute(
+            "INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor,data,status_pagamento) "
+            "VALUES(1,'COMPRA','VENDA DE HOJE',15,'20/08/2026 10:00','PAGO')"
+        )
+        today_id = conn.execute("SELECT last_insert_rowid()").fetchone()[0]
+        conn.execute(
+            "INSERT INTO fiscal_sale_documents VALUES(?,?,?,?,?)",
+            (today_id, "AUTORIZADA", "65", "29" + "1" * 42, "123"),
+        )
+        conn.execute(
+            "INSERT INTO movimentacoes(cliente_id,tipo,descricao,valor,data,status_pagamento) "
+            "VALUES(1,'COMPRA','VENDA ANTIGA',20,'19/08/2026 18:00','PAGO')"
+        )
+        conn.commit(); conn.close()
+
+        rows = self.service.list_sales_for_day(day=datetime(2026, 8, 20))
+
+        self.assertEqual([row["id"] for row in rows], [today_id])
+        self.assertEqual(rows[0]["fiscal_status"], "AUTORIZADA")
+        self.assertEqual(rows[0]["fiscal_model"], "65")
 
     def test_vinculo_fiscal_participa_da_mesma_transacao_da_venda(self):
         conn = sqlite3.connect(self.db)

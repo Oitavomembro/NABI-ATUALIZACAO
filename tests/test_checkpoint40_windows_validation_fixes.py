@@ -46,9 +46,8 @@ def test_pdv_uses_native_minimize_without_changing_function_shortcuts():
     assert "self.deiconify()" in minimize
     for key, action in (
         ("<F3>", "entry_cliente_venda.focus_set"),
-        ("<F5>", 'salvar_documento_pdv("ORCAMENTO")'),
-        ("<F7>", "abrir_vendas_suspensas"),
-        ("<F8>", 'salvar_documento_pdv("PRE_VENDA")'),
+        ("<F5>", "alternar_modo_orcamento_pdv"),
+        ("<F7>", "abrir_vendas_do_dia_pdv"),
     ):
         assert f'win.bind("{key}"' in opening
         assert action in opening
@@ -136,3 +135,31 @@ def test_official_icon_is_valid_and_wired_to_executable_and_installer():
     assert 'shutil.copy2(app_icon, distribution / "NabiCode.ico")' in BUILD
     assert 'IconFilename: "{app}\\NabiCode.ico"' in INNO
     assert "UninstallDisplayIcon={app}\\NabiCode.ico" in INNO
+
+
+def test_fiscal_onboarding_prioritizes_xml_and_hides_automatic_sefaz_addresses():
+    opening = method_block("abrir_configuracao_fiscal", "abrir_central_fiscal")
+    assert "1. IMPORTAR DADOS DA EMPRESA PELO XML" in opening
+    assert 'fields["issuer_trade_name"]' in opening
+    assert '"issuer_trade_name": "trade_name"' in opening
+    assert "if info.company_name and not fields[\"issuer_name\"].get().strip()" in opening
+    assert "Deixe estes campos vazios para usar automaticamente o catálogo oficial da UF" in opening
+    assert "advanced_endpoints.pack(fill=" in opening
+    assert opening.index("def toggle_advanced_endpoints") < opening.index("advanced_endpoints.pack(fill=")
+    assert 'text="Mostrar configuração técnica da SEFAZ"' in opening
+
+
+def test_initial_numbering_fields_are_labeled_and_fit_the_modal():
+    opening = method_block("abrir_configuracao_fiscal", "abrir_central_fiscal")
+    assert 'modal.geometry("520x520")' in opening
+    assert 'text="Tipo de documento fiscal"' in opening
+    assert 'text="Série fiscal"' in opening
+    assert 'text="Próximo número da nota"' in opening
+    assert "número seguinte ao último autorizado" in opening
+
+
+def test_fiscal_center_keeps_actions_accessible_in_scrollable_panel():
+    opening = method_block("abrir_central_fiscal", "abrir_pasta_backup_config")
+    assert "Ações do documento selecionado" in opening
+    assert "action_panel = ctk.CTkScrollableFrame(" in opening
+    assert "height=155" in opening
