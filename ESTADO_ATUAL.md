@@ -1363,3 +1363,21 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - banco elevado ao schema 18 para criar a matriz com índice de resolução;
 - 143 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
 - a matriz ainda não está ligada ao XML de venda; produção permanece bloqueada até essa integração e homologação real.
+
+## Checkpoint 42.94 — regras da Bahia integradas ao documento fiscal
+
+- a matriz tributária aprovada passa a ser resolvida na preparação oficial dos itens por regime, NCM/CEST e UF de destino;
+- ICMS-ST do Simples Nacional (CSOSN 201/202/203), MVA, FCP-ST, crédito do Simples e DIFAL passam a compor o XML e os totais nos grupos previstos pelo XSD;
+- CST/CSOSN sem gerador homologado é recusado explicitamente, sem conversão silenciosa para uma regra parecida;
+- os grupos de DIFAL foram posicionados na ordem exigida pelo esquema oficial, depois de PIS/COFINS;
+- 131 testes fiscais e 10 subtestes foram aprovados nesse bloco;
+- produção permanece bloqueada e nenhum banco real, certificado, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.95 — painel controlado da matriz tributária da Bahia
+
+- a configuração fiscal ganhou o acesso `Regras tributárias da Bahia`;
+- inclusão e desativação exigem senha mestra; regras antigas são desativadas sem apagar o histórico;
+- cada regra exige responsável e data de aprovação contábil e a tela informa que o sistema não presume alíquotas;
+- somente CST/CSOSN que possuem gerador XML validado nesta versão podem ser cadastrados;
+- suíte completa: 1.303 testes aprovados, 1 ignorado e 32 subtestes aprovados em `NABICODE_PROFILE=TESTE`;
+- fechamento comercial em produção ainda depende de homologação real com credenciais da empresa, validação do contador e autorizações da SEFAZ Bahia; esse bloqueio permanece intencional.
