@@ -1406,3 +1406,4 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o painel de ações foi ampliado para evitar botões cortados em resoluções menores;
 - o botão Compras não retorna à barra principal, mas suas rotinas e dados continuam acessíveis dentro da Central Fiscal;
 - 21 testes focados foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
+- validação consolidada posterior: 1.311 testes aprovados, 1 ignorado e 32 subtestes aprovados em perfil TESTE.

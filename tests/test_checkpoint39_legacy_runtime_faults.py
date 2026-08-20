@@ -19,7 +19,9 @@ def _method_block(name: str, next_name: str) -> str:
 def test_xml_conference_uses_the_shared_validated_number_parser():
     block = SOURCE[SOURCE.index("        def salvar_item_atual"):SOURCE.index("        candidatos_rotulo_id")]
     assert "numero(" not in block
-    assert block.count("parse_nonnegative_number(") == 4
+    # A quantidade recebida agora vem exclusivamente do XML e não é editável.
+    assert block.count("parse_nonnegative_number(") == 3
+    assert 'float(configuracoes[indice]["quantidade"])' in block
     assert "greater_than_zero=True" in block
     assert parse_nonnegative_number("1,25", "Quantidade", greater_than_zero=True) == 1.25
 

@@ -160,9 +160,9 @@ def test_initial_numbering_fields_are_labeled_and_fit_the_modal():
 
 def test_fiscal_center_keeps_actions_accessible_in_scrollable_panel():
     opening = method_block("abrir_central_fiscal", "abrir_pasta_backup_config")
-    assert "Ações do documento selecionado" in opening
+    assert "Consultas e ações" in opening
     assert "action_panel = ctk.CTkScrollableFrame(" in opening
-    assert "height=155" in opening
+    assert "height=225" in opening
 
 
 def test_ambiguous_inline_fields_have_external_labels_and_hints_are_not_values():
