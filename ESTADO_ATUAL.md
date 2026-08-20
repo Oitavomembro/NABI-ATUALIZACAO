@@ -1446,3 +1446,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - chamadas legadas para a rota `compras` são redirecionadas para a Central Fiscal, sem expor a tela antiga e sem apagar dados;
 - removido da Central Fiscal o acesso `Pedidos e fornecedores` que reabria indevidamente a tela descontinuada;
 - 46 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.
+
+## Checkpoint 43.03 — ações fiscais contextuais e tela simplificada
+
+- a Central Fiscal deixou de exibir uma grade de botões técnicos sem contexto;
+- a abertura mostra três ações principais: importar XML, buscar notas recebidas na SEFAZ e gerar pacote para contabilidade;
+- pendências comuns, contingências e inutilização ficaram agrupadas e nomeadas pelo resultado esperado;
+- detalhes, abertura/cópia do XML, DANFE, consulta, nova tentativa, cancelamento, CC-e, e-mail e manifestação aparecem somente quando o documento selecionado admite a ação;
+- arquivos de NF-e importada também podem ser abertos pela origem preservada;
+- removidos da interface principal comandos redundantes de recibo, duplicação de nota, CSV e validação técnica do pacote; os serviços internos permanecem preservados para os fluxos corretos;
+- 14 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.

@@ -7,16 +7,15 @@ SOURCE = (Path(__file__).resolve().parents[1] / "nabicode_legacy.py").read_text(
 def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     assert "self.fiscal_sale_service.summary()" in block
-    assert 'text="Cancelar autorizado"' in block
+    assert 'text="Cancelar na SEFAZ"' in block
     assert "self.pdv_transaction_service.list_sales_for_day()" in block
-    assert 'text="Transmitir pendentes"' in block
-    assert 'text="Reenviar selecionado"' in block
+    assert 'text="Processar pendências da SEFAZ"' in block
+    assert 'text="Tentar novamente"' in block
     assert "self.fiscal_service.retry_transmission" in block
-    assert 'text="Cancelar autorizado"' in block
+    assert 'text="Cancelar na SEFAZ"' in block
     assert "self.fiscal_sale_service.cancel_authorized" in block
-    assert 'text="Consultar recibo"' in block
     assert "self.fiscal_service.force_receipt_check" in block
-    assert 'text="Retransmitir contingências"' in block
+    assert 'text="Retransmitir vendas em contingência"' in block
     assert "self.fiscal_service.retry_contingency_batch" in block
     assert "queue_ids=queue_ids" in block
 
@@ -24,12 +23,10 @@ def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
 def test_central_fiscal_reune_entradas_saidas_e_preserva_compras_operacionais():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     assert "Central Fiscal — entradas, saídas e documentos" in block
-    assert 'text="Notas de entrada lançadas"' in block
-    assert "command=self.abrir_historico_nfe_importadas" in block
-    assert 'text="Importar NF-e de compra"' in block
+    assert 'text="Importar XML de compra"' in block
     assert "command=self.abrir_importacao_xml" in block
-    assert 'text="Vendas e orçamentos do dia"' in block
-    assert "command=self.abrir_vendas_do_dia_pdv" in block
+    assert 'text="Buscar notas recebidas na SEFAZ"' in block
+    assert "command=fetch_dfe_documents" in block
     assert 'text="Pedidos e fornecedores"' not in block
     assert 'self.mostrar_tela("compras")' not in block
 
@@ -104,32 +101,29 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
 
 def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
-    assert 'text="Baixar XML"' in block
-    assert 'text="Enviar CC-e"' in block
-    assert 'text="Inutilizar numeração"' in block
+    assert 'text="Salvar cópia do XML"' in block
+    assert 'text="Carta de correção"' in block
+    assert 'text="Inutilizar faixa de numeração"' in block
     assert "self.fiscal_service.send_event" in block
     assert "self.fiscal_service.inutilize_numbers" in block
-    assert 'text="Consultar situação na SEFAZ"' in block
+    assert 'text="Consultar na SEFAZ"' in block
     assert "self.fiscal_service.consult_document" in block
-    assert 'text="Validar pacote contábil"' in block
     assert "self.fiscal_service.validate_accounting_package" in block
-    assert 'text="Exportar relatório CSV"' in block
     assert "self.fiscal_service.export_fiscal_report_csv" in block
-    assert 'text="Gerar DANFE oficial"' in block
+    assert 'text="Gerar DANFE"' in block
     assert "self.fiscal_service.generate_official_danfe_pdf" in block
     assert "self.fiscal_service.generate_nfce_auxiliary_pdf" in block
     assert 'row.get("model")' in block
-    assert 'text="Configurar e-mail fiscal"' in block
-    assert 'text="Enviar XML + DANFE por e-mail"' in block
+    assert 'text="Enviar XML + DANFE"' in block
     assert "self.fiscal_email_service.enqueue" in block
     assert "self.fiscal_email_service.process_pending" in block
     assert "TASK_MANAGER.submit(\"Enviar documento fiscal por e-mail\"" in block
-    assert 'text="Buscar documentos recebidos (DF-e)"' in block
+    assert 'text="Buscar notas recebidas na SEFAZ"' in block
     assert "self.fiscal_dfe_service.fetch_next" in block
-    assert 'text="Manifestar NF-e recebida"' in block
+    assert 'text="Manifestar recebimento"' in block
     assert "self.fiscal_dfe_service.send_manifestation" in block
     assert "A manifestação conclusiva deve ser feita em até 90 dias" in block
-    assert 'text="Duplicar nota para nova pré-venda"' in block
+    assert 'text="Duplicar nota para nova pré-venda"' not in block
     assert "duplicate_authorized_to_pdv_draft" in block
     assert "chave, protocolo e tributos antigos não serão copiados" in block
 

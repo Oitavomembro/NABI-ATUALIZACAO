@@ -16,15 +16,13 @@ def test_relatorios_expoem_calculo_totais_e_pdf_de_forma_clara():
     assert "Gerar arquivo PDF" in block
 
 
-def test_central_fiscal_abre_relatorio_por_periodo():
+def test_central_fiscal_mostra_escolhas_antes_da_grade():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
-    assert "Relatório por período / PDF" in block
-    assert 'self.mostrar_tela("relatorios")' in block
     assert 'action_panel.pack(fill="x", padx=12, pady=(0, 10), before=tree)' in block
-    assert "role para ver todas as opções" in block
+    assert "O que você deseja fazer?" in block
     assert 'text="Ver saídas"' in block
     assert 'text="Ver entradas"' in block
-    assert 'text="Ver todos os documentos"' in block
+    assert 'text="Ver todos os documentos"' not in block
     assert "filters.pack_forget()" in block
     assert "tree.pack_forget()" in block
     assert 'tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)' in block

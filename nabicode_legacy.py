@@ -11263,13 +11263,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def open_files():
             row = selected()
             if not row: return
-            path = row.get("processed_path") or row.get("response_path") or row.get("request_path")
+            path = row.get("processed_path") or row.get("arquivo_origem") or row.get("path") or row.get("response_path") or row.get("request_path")
             if path and os.path.exists(path):
                 self._abrir_arquivo_sistema(path)
             else: messagebox.showwarning("Fiscal", "Arquivo fiscal não localizado.", parent=janela)
         def download_xml():
             row = selected()
-            source = str((row or {}).get("processed_path") or "")
+            source = str((row or {}).get("processed_path") or (row or {}).get("arquivo_origem") or (row or {}).get("path") or "")
             if not source or not Path(source).is_file():
                 messagebox.showwarning(
                     "Baixar XML", "Selecione um documento autorizado com XML processado.", parent=janela
@@ -12053,115 +12053,92 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 messagebox.showerror("Duplicar nota", str(exc), parent=janela)
         action_panel = ctk.CTkScrollableFrame(
-            frame, fg_color="#0d1117", corner_radius=8, height=225,
-            label_text="Consultas e ações — role para ver todas as opções",
+            frame, fg_color="#0d1117", corner_radius=8, height=190,
+            label_text="O que você deseja fazer?",
         )
         # O painel precisa reservar espaço antes da grade expansível. Quando era
         # empacotado depois dela, o Treeview consumia toda a altura disponível e
         # os comandos fiscais existiam, porém ficavam fora da janela.
         action_panel.pack(fill="x", padx=12, pady=(0, 10), before=tree)
-        def open_period_reports():
-            self.mostrar_tela("relatorios")
-            if hasattr(self, "rel_tipo"):
-                self.rel_tipo.set("nfe")
-            janela.iconify()
-
-        movement_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        movement_actions.pack(fill="x", pady=(0, 8))
+        primary_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        primary_actions.pack(fill="x", pady=(0, 8))
         ctk.CTkButton(
-            movement_actions, text="Notas de entrada lançadas",
-            command=self.abrir_historico_nfe_importadas, fg_color="#8957e5",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            movement_actions, text="Importar NF-e de compra",
+            primary_actions, text="Importar XML de compra",
             command=self.abrir_importacao_xml, fg_color="#2ea043",
-        ).pack(side="left", padx=4)
+        ).pack(side="left", fill="x", expand=True, padx=4)
         ctk.CTkButton(
-            movement_actions, text="Vendas e orçamentos do dia",
-            command=self.abrir_vendas_do_dia_pdv, fg_color="#1f6feb",
-        ).pack(side="left", padx=4)
+            primary_actions, text="Buscar notas recebidas na SEFAZ",
+            command=fetch_dfe_documents, fg_color="#1f6feb",
+        ).pack(side="left", fill="x", expand=True, padx=4)
         ctk.CTkButton(
-            movement_actions, text="Relatório por período / PDF",
-            command=open_period_reports, fg_color="#0969da",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            movement_actions, text="Ver todos os documentos",
-            command=lambda: show_document_view("TODOS"), fg_color="#30363d",
-        ).pack(side="left", padx=4)
-        actions = ctk.CTkFrame(action_panel, fg_color="transparent"); actions.pack(fill="x", pady=(0, 6))
-        ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
-        ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)
-        ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
-        ctk.CTkButton(actions, text="Baixar XML", command=download_xml).pack(side="left", padx=4)
-        ctk.CTkButton(actions, text="Gerar DANFE oficial", command=danfe).pack(side="left", padx=4)
-        ctk.CTkButton(
-            actions, text="Consultar situação na SEFAZ",
-            command=consult_selected_at_sefaz, fg_color="#0969da",
-        ).pack(side="left", padx=4)
-        transmit_button = ctk.CTkButton(actions, text="Transmitir pendentes", command=transmit_queue, fg_color="#2ea043")
-        transmit_button.pack(side="left", padx=4)
-        retry_button = ctk.CTkButton(actions, text="Reenviar selecionado", command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922")
-        retry_button.pack(side="left", padx=4)
-        export_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        export_actions.pack(fill="x", pady=(0, 6))
-        receipt_button = ctk.CTkButton(
-            export_actions, text="Consultar recibo", command=lambda: transmit_queue(receipt_selected=True),
-            fg_color="#1f6feb",
+            primary_actions, text="Gerar pacote para contabilidade",
+            command=export_accounting, fg_color="#8957e5",
+        ).pack(side="left", fill="x", expand=True, padx=4)
+
+        processing_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        processing_actions.pack(fill="x", pady=(0, 8))
+        transmit_button = ctk.CTkButton(
+            processing_actions, text="Processar pendências da SEFAZ",
+            command=transmit_queue, fg_color="#2ea043",
         )
-        receipt_button.pack(side="left", padx=4)
-        cancel_button = ctk.CTkButton(export_actions, text="Cancelar autorizado", command=cancel_authorized_sale, fg_color="#da3633")
-        cancel_button.pack(side="left", padx=4)
-        ctk.CTkButton(export_actions, text="Enviar CC-e", command=send_correction_letter, fg_color="#d29922").pack(side="left", padx=4)
-        ctk.CTkButton(export_actions, text="Inutilizar numeração", command=open_inutilization, fg_color="#da3633").pack(side="left", padx=4)
+        transmit_button.pack(side="left", fill="x", expand=True, padx=4)
         ctk.CTkButton(
-            export_actions, text="Abrir pasta fiscal",
-            command=lambda: self._abrir_diretorio_sistema(self.fiscal_service.storage_dir),
-            fg_color="#8957e5",
-        ).pack(side="left", padx=4)
-        accounting_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        accounting_actions.pack(fill="x", pady=(0, 6))
+            processing_actions, text="Retransmitir vendas em contingência",
+            command=lambda: transmit_queue(contingency_batch=True), fg_color="#d29922",
+        ).pack(side="left", fill="x", expand=True, padx=4)
         ctk.CTkButton(
-            accounting_actions, text="Retransmitir contingências",
-            command=lambda: transmit_queue(contingency_batch=True), fg_color="#8957e5",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            accounting_actions, text="Gerar arquivos para contabilidade", command=export_accounting,
-            fg_color="#2ea043",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            accounting_actions, text="Exportar relatório CSV", command=export_fiscal_report,
-            fg_color="#1f6feb",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            accounting_actions, text="Validar pacote contábil",
-            command=validate_accounting_package, fg_color="#30363d",
-        ).pack(side="left", padx=4)
-        email_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        email_actions.pack(fill="x", pady=(0, 6))
-        ctk.CTkButton(
-            email_actions, text="Configurar e-mail fiscal", command=configure_fiscal_email,
-            fg_color="#8957e5",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            email_actions, text="Enviar XML + DANFE por e-mail", command=send_fiscal_email,
-            fg_color="#2ea043",
-        ).pack(side="left", padx=4)
-        dfe_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        dfe_actions.pack(fill="x", pady=(0, 6))
-        ctk.CTkButton(
-            dfe_actions, text="Buscar documentos recebidos (DF-e)", command=fetch_dfe_documents,
-            fg_color="#1f6feb",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            dfe_actions, text="Manifestar NF-e recebida", command=manifest_dfe_document,
-            fg_color="#d29922",
-        ).pack(side="left", padx=4)
-        draft_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
-        draft_actions.pack(fill="x", pady=(0, 6))
-        ctk.CTkButton(
-            draft_actions, text="Duplicar nota para nova pré-venda",
-            command=duplicate_fiscal_document, fg_color="#8957e5",
-        ).pack(side="left", padx=4)
+            processing_actions, text="Inutilizar faixa de numeração",
+            command=open_inutilization, fg_color="#da3633",
+        ).pack(side="left", fill="x", expand=True, padx=4)
+
+        context_actions = ctk.CTkFrame(frame, fg_color="#0d1117", corner_radius=8)
+        context_label = ctk.CTkLabel(
+            context_actions, text="Ações do documento selecionado",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color="#c9d1d9",
+        )
+        context_label.pack(side="left", padx=(12, 8), pady=8)
+        context_buttons = {
+            "details": ctk.CTkButton(context_actions, text="Ver detalhes", width=105, command=details),
+            "open": ctk.CTkButton(context_actions, text="Abrir XML", width=95, command=open_files),
+            "save": ctk.CTkButton(context_actions, text="Salvar cópia do XML", width=135, command=download_xml),
+            "danfe": ctk.CTkButton(context_actions, text="Gerar DANFE", width=105, command=danfe),
+            "status": ctk.CTkButton(context_actions, text="Consultar na SEFAZ", width=125, command=consult_selected_at_sefaz, fg_color="#0969da"),
+            "retry": ctk.CTkButton(context_actions, text="Tentar novamente", width=115, command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922"),
+            "cancel": ctk.CTkButton(context_actions, text="Cancelar na SEFAZ", width=125, command=cancel_authorized_sale, fg_color="#da3633"),
+            "cce": ctk.CTkButton(context_actions, text="Carta de correção", width=125, command=send_correction_letter, fg_color="#d29922"),
+            "email": ctk.CTkButton(context_actions, text="Enviar XML + DANFE", width=135, command=send_fiscal_email, fg_color="#2ea043"),
+            "manifest": ctk.CTkButton(context_actions, text="Manifestar recebimento", width=145, command=manifest_dfe_document, fg_color="#d29922"),
+        }
+        retry_button = context_buttons["retry"]
+        receipt_button = context_buttons["retry"]
+        cancel_button = context_buttons["cancel"]
+
+        def refresh_context_actions(_event=None):
+            for button in context_buttons.values():
+                button.pack_forget()
+            row = selected()
+            if not row:
+                context_actions.pack_forget()
+                return
+            kind = str(row.get("_kind") or "")
+            status_value = str(row.get("status") or row.get("fiscal_status") or "").upper()
+            names = ["details"]
+            if row.get("processed_path") or row.get("arquivo_origem") or row.get("path"):
+                names.append("open")
+            if kind in {"DOCUMENTO", "DFE"}:
+                names.append("save")
+            if kind == "DOCUMENTO" and status_value == "AUTORIZADO":
+                names.extend(["danfe", "status", "cce", "email"])
+            elif kind == "VENDA" and status_value == "AUTORIZADO":
+                names.extend(["status", "cancel"])
+            elif kind == "VENDA" and status_value in {"FALHA", "PENDENTE", "ENFILEIRADO"}:
+                names.append("retry")
+            elif kind == "DFE":
+                names.append("manifest")
+            for name in names:
+                context_buttons[name].pack(side="left", padx=3, pady=8)
+            context_actions.pack(fill="x", padx=12, pady=(0, 8), before=tree)
+        tree.bind("<<TreeviewSelect>>", refresh_context_actions, add="+")
         def show_document_view(mode):
             view_mode["value"] = mode
             choices = {
