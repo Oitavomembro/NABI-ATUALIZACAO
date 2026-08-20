@@ -29,7 +29,7 @@ class UIPreferencesServiceTests(unittest.TestCase):
             "workspace": "Estoque",
             "adaptive_menu": True,
         })
-        self.assertEqual(profile.visible_modules, ("dashboard", "produtos", "caixa", "compras", "configs"))
+        self.assertEqual(profile.visible_modules, ("dashboard", "produtos", "caixa", "fiscal", "configs"))
 
     def test_non_adaptive_menu_uses_mode_only(self):
         profile = UIPreferencesService.build_profile({

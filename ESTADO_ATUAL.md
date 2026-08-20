@@ -1437,3 +1437,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - notas importadas, DF-e recebidos, vendas comuns e documentos fiscais permanecem identificados pela origem, sem transformar movimento não fiscal em documento fiscal;
 - o painel de ações reserva espaço antes da listagem expansível e permanece acessível em resoluções menores;
 - 39 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.
+
+## Checkpoint 43.02 — rota fiscal desvinculada da tela antiga de Compras
+
+- `Central Fiscal` deixou de ser apenas o nome visual do módulo interno `compras` e ganhou o identificador real `fiscal` em toda a navegação;
+- preferências e favoritos antigos que guardavam `compras` são migrados automaticamente para `fiscal`;
+- a antiga tela de pedidos não é mais criada nem levantada pelo roteador principal;
+- chamadas legadas para a rota `compras` são redirecionadas para a Central Fiscal, sem expor a tela antiga e sem apagar dados;
+- removido da Central Fiscal o acesso `Pedidos e fornecedores` que reabria indevidamente a tela descontinuada;
+- 46 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.

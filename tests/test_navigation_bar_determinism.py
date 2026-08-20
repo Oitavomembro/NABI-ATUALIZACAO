@@ -24,7 +24,7 @@ def test_switching_every_module_100_times_keeps_identical_buttons():
         "adaptive_menu": True,
     })
     expected = UIPreferencesService.navigation_positions(profile.visible_modules)
-    destinations = ("dashboard", "clientes", "produtos", "financeiro", "caixa", "compras")
+    destinations = ("dashboard", "clientes", "produtos", "financeiro", "caixa", "fiscal")
     for _ in range(100):
         for _destination in destinations:
             assert UIPreferencesService.navigation_positions(profile.visible_modules) == expected
@@ -37,7 +37,7 @@ def test_finance_visibility_changes_only_with_profile_configuration():
     assert "financeiro" in enabled.visible_modules
     disabled = UIPreferencesService.build_profile({
         "custom_navigation": True,
-        "navigation_modules": ["dashboard", "clientes", "produtos", "caixa", "compras"],
+        "navigation_modules": ["dashboard", "clientes", "produtos", "caixa", "fiscal"],
     })
     assert "financeiro" not in disabled.visible_modules
 
@@ -71,9 +71,9 @@ def test_custom_navigation_and_new_user_defaults_are_deterministic():
     assert default_data["navigation_modules"] == list(UIPreferencesService.MODULE_ORDER)
     selected = UIPreferencesService.build_profile({
         "custom_navigation": True,
-        "navigation_modules": ["financeiro", "dashboard", "compras"],
+        "navigation_modules": ["financeiro", "dashboard", "fiscal"],
     })
-    assert selected.visible_modules == ("dashboard", "financeiro", "caixa", "compras")
+    assert selected.visible_modules == ("dashboard", "financeiro", "caixa", "fiscal")
 
 
 def test_restart_preserves_complete_navigation_configuration(tmp_path: Path):
@@ -84,8 +84,18 @@ def test_restart_preserves_complete_navigation_configuration(tmp_path: Path):
         "workspace": "Financeiro",
         "adaptive_menu": False,
         "custom_navigation": True,
-        "navigation_modules": ["dashboard", "financeiro", "caixa", "compras"],
+        "navigation_modules": ["dashboard", "financeiro", "caixa", "fiscal"],
     })
     manager.set("interface", configured)
     reloaded = ConfigManager(path, defaults={"interface": UIPreferencesService.DEFAULTS})
     assert UIPreferencesService.normalize(reloaded.get("interface")) == configured
+
+
+def test_legacy_compras_preference_is_migrated_to_fiscal():
+    normalized = UIPreferencesService.normalize({
+        "custom_navigation": True,
+        "navigation_modules": ["dashboard", "compras"],
+        "favorites": ["compras"],
+    })
+    assert normalized["navigation_modules"] == ["dashboard", "fiscal"]
+    assert normalized["favorites"] == ["fiscal"]

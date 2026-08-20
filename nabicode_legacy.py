@@ -1554,7 +1554,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             "produtos": self.tela_produtos,
             "financeiro": self.tela_financeiro,
             "caixa": self.tela_caixa,
-            "compras": self.tela_compras,
             "relatorios": self.tela_relatorios,
             "configs": self.tela_configs,
         }
@@ -1579,6 +1578,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         return tela
 
     def mostrar_tela(self, nome):
+        if nome in {"fiscal", "compras"}:
+            self.abrir_central_fiscal()
+            return
         if not self._autorizar("financeiro" if nome == "caixa" else nome, "view"):
             return
         if nome == "vendas":
@@ -1611,8 +1613,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         elif nome == "caixa":
             self._log_caixa_runtime("CASH_SCREEN_OPEN")
             self.atualizar_tela_caixa()
-        elif nome == "compras":
-            self.carregar_compras()
         elif nome == "relatorios":
             self.gerar_relatorio_ui()
 
@@ -1665,7 +1665,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _executar_resultado_pesquisa_global(self, resultado: SearchResult):
         self._janela_pesquisa_global = None
         acao = resultado.action
-        if acao in {"dashboard", "clientes", "produtos", "financeiro", "caixa", "compras", "relatorios", "configs"}:
+        if acao in {"dashboard", "clientes", "produtos", "financeiro", "caixa", "fiscal", "relatorios", "configs"}:
             self.mostrar_tela(acao)
             return
         if acao == "vendas":
@@ -1771,9 +1771,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         btn_caixa.configure(command=lambda: self.mostrar_tela("caixa"))
         self.botoes_topo["caixa"] = btn_caixa
 
-        btn_compras = ctk.CTkButton(frame_centralizador, text="🧾 Central Fiscal", fg_color="#7c3aed", hover_color="#6d28d9", **estilo_btn)
-        btn_compras.configure(command=self.abrir_central_fiscal)
-        self.botoes_topo["compras"] = btn_compras
+        btn_fiscal = ctk.CTkButton(frame_centralizador, text="🧾 Central Fiscal", fg_color="#7c3aed", hover_color="#6d28d9", **estilo_btn)
+        btn_fiscal.configure(command=self.abrir_central_fiscal)
+        self.botoes_topo["fiscal"] = btn_fiscal
 
         btn_relatorios = ctk.CTkButton(frame_centralizador, text="📈 Relatórios", fg_color="#0369a1", hover_color="#075985", **estilo_btn)
         btn_relatorios.configure(command=lambda: self.mostrar_tela("relatorios"))
@@ -1834,6 +1834,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
     def _abrir_modulo_favorito(self, module_id):
         if module_id == "vendas":
             self.abrir_pdv_independente()
+            return
+        if module_id == "fiscal":
+            self.abrir_central_fiscal()
             return
         if module_id in getattr(self, "telas", {}):
             self.mostrar_tela(module_id)
@@ -12076,10 +12079,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             movement_actions, text="Vendas e orçamentos do dia",
             command=self.abrir_vendas_do_dia_pdv, fg_color="#1f6feb",
-        ).pack(side="left", padx=4)
-        ctk.CTkButton(
-            movement_actions, text="Pedidos e fornecedores",
-            command=lambda: self.mostrar_tela("compras"), fg_color="#30363d",
         ).pack(side="left", padx=4)
         ctk.CTkButton(
             movement_actions, text="Relatório por período / PDF",

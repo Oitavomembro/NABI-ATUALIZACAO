@@ -51,7 +51,7 @@ class UIPreferencesService:
         "produtos": "Produtos",
         "financeiro": "Financeiro",
         "caixa": "Caixa",
-        "compras": "Compras",
+        "fiscal": "Central Fiscal",
         "relatorios": "Relatórios",
         "configs": "Configurações",
     }
@@ -75,17 +75,17 @@ class UIPreferencesService:
 
     MODE_MODULES = {
         "Simples": ("dashboard", "vendas", "clientes", "caixa", "configs"),
-        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "configs"),
-        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "caixa", "financeiro", "compras", "relatorios", "configs"),
+        "Intermediário": ("dashboard", "vendas", "clientes", "produtos", "caixa", "fiscal", "configs"),
+        "Avançado": ("dashboard", "vendas", "clientes", "produtos", "caixa", "financeiro", "fiscal", "relatorios", "configs"),
     }
 
     WORKSPACE_MODULES = {
-        "Geral": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "configs"),
+        "Geral": ("dashboard", "vendas", "clientes", "produtos", "caixa", "fiscal", "configs"),
         "Caixa": ("dashboard", "vendas", "clientes", "produtos", "caixa", "configs"),
-        "Estoque": ("dashboard", "produtos", "caixa", "compras", "configs"),
+        "Estoque": ("dashboard", "produtos", "caixa", "fiscal", "configs"),
         "Financeiro": ("dashboard", "clientes", "caixa", "financeiro", "relatorios", "configs"),
         "Atendimento": ("dashboard", "clientes", "vendas", "caixa", "configs"),
-        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "caixa", "compras", "relatorios", "configs"),
+        "Gerência": ("dashboard", "vendas", "clientes", "produtos", "caixa", "fiscal", "relatorios", "configs"),
     }
 
     ROW_HEIGHTS = {"Compacta": 22, "Normal": 27, "Confortável": 34}
@@ -120,6 +120,7 @@ class UIPreferencesService:
         navigation_modules = data.get("navigation_modules")
         if not isinstance(navigation_modules, list):
             navigation_modules = list(cls.MODULE_ORDER)
+        navigation_modules = ["fiscal" if item == "compras" else item for item in navigation_modules]
         normalized_modules = [
             module_id for module_id in cls.MODULE_ORDER
             if module_id in navigation_modules
@@ -145,7 +146,7 @@ class UIPreferencesService:
             favorites = []
         normalized_favorites: list[str] = []
         for item in favorites:
-            module_id = str(item).strip()
+            module_id = "fiscal" if str(item).strip() == "compras" else str(item).strip()
             if module_id in cls.MODULE_LABELS and module_id not in normalized_favorites:
                 normalized_favorites.append(module_id)
         data["favorites"] = normalized_favorites

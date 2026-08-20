@@ -17,11 +17,13 @@ class ComprasUIIntegrationTests(unittest.TestCase):
             if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))
         }
 
-    def test_tela_compras_esta_integrada_ao_roteamento(self) -> None:
+    def test_tela_compras_nao_esta_mais_integrada_ao_roteamento(self) -> None:
         self.assertIn("tela_compras", self.methods)
         self.assertIn("carregar_compras", self.methods)
-        self.assertIn('"compras": self.tela_compras', self.source)
-        self.assertIn('elif nome == "compras":', self.source)
+        self.assertNotIn('"compras": self.tela_compras', self.source)
+        self.assertNotIn('elif nome == "compras":', self.source)
+        self.assertIn('if nome in {"fiscal", "compras"}:', self.source)
+        self.assertIn('self.botoes_topo["fiscal"] = btn_fiscal', self.source)
 
     def test_tela_compras_tem_layout_universal_e_acoes_reais(self) -> None:
         for method in (

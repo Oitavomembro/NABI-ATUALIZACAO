@@ -30,8 +30,8 @@ def test_central_fiscal_reune_entradas_saidas_e_preserva_compras_operacionais():
     assert "command=self.abrir_importacao_xml" in block
     assert 'text="Vendas e orçamentos do dia"' in block
     assert "command=self.abrir_vendas_do_dia_pdv" in block
-    assert 'text="Pedidos e fornecedores"' in block
-    assert 'self.mostrar_tela("compras")' in block
+    assert 'text="Pedidos e fornecedores"' not in block
+    assert 'self.mostrar_tela("compras")' not in block
 
 
 def test_transmissao_fiscal_roda_fora_da_interface_e_nao_persiste_senha():
