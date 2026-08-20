@@ -5262,10 +5262,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             font=ctk.CTkFont(size=13, weight="bold"), text_color="#c9d1d9"
         )
         self.lbl_pdv_status.grid(row=0, column=1, padx=18, pady=14, sticky="e")
+        if modo_operacao == "FISCAL":
+            config_fiscal = self.fiscal_service.load_config()
+            certificado_pronto = bool(str(config_fiscal.get("certificate_path") or "").strip())
+            self.lbl_pdv_sefaz = ctk.CTkButton(
+                cabecalho,
+                text=("SEFAZ: consultar" if certificado_pronto else "SEFAZ: configuração pendente"),
+                width=165,
+                height=32,
+                fg_color="#30363d" if certificado_pronto else "#9a6700",
+                command=self._consultar_status_sefaz_pdv if certificado_pronto else self.abrir_configuracao_fiscal,
+            )
+            self.lbl_pdv_sefaz.grid(row=0, column=2, padx=(0, 10), pady=14)
         ctk.CTkButton(
             cabecalho, text="Fechar  [Esc]", width=120, height=36,
             fg_color="#da3633", hover_color="#b62324", command=self._fechar_pdv
-        ).grid(row=0, column=2, padx=(0, 18), pady=14)
+        ).grid(row=0, column=3, padx=(0, 18), pady=14)
 
         corpo = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=0)
         corpo.grid(row=1, column=0, sticky="nsew", padx=14, pady=12)
@@ -5509,6 +5521,46 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 logger.exception("Não foi possível revelar a janela de vendas.")
 
         revelar_pdv_pronto()
+
+
+    def _consultar_status_sefaz_pdv(self):
+        """Consulta sob demanda para não atrasar nem bloquear a abertura do PDV."""
+        parent = getattr(self, "pdv_window", self)
+        button = getattr(self, "lbl_pdv_sefaz", None)
+        password = self._obter_senha_certificado(parent=parent, title="Consultar conexão com a SEFAZ")
+        if password is None:
+            return
+        config = self.fiscal_service.load_config()
+        model = str(config.get("default_model") or "65")
+        if button is not None:
+            button.configure(text="SEFAZ: consultando…", state="disabled", fg_color="#9a6700")
+        task = TASK_MANAGER.submit(
+            "Consultar SEFAZ no PDV",
+            lambda _context: self.fiscal_service.check_service_status(model=model, password=password),
+        )
+
+        def acompanhar():
+            current = TASK_MANAGER.get(task.id)
+            if current is None:
+                return
+            try:
+                if not parent.winfo_exists():
+                    return
+            except tk.TclError:
+                return
+            if current.status == TaskStatus.COMPLETED:
+                result = current.result
+                button.configure(
+                    text="SEFAZ: disponível" if result.available else "SEFAZ: indisponível",
+                    state="normal", fg_color="#238636" if result.available else "#da3633",
+                )
+                return
+            if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                button.configure(text="SEFAZ: falha na consulta", state="normal", fg_color="#da3633")
+                return
+            parent.after(150, acompanhar)
+
+        parent.after(100, acompanhar)
 
 
     def _enter_contexto_pdv(self, event=None):
@@ -9572,7 +9624,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         filtros = ctk.CTkFrame(frame, fg_color="#161b22")
         filtros.pack(fill="x", padx=20, pady=6)
         relatorios = self._relatorios_permitidos()
-        valores_relatorios = list(relatorios) or [""]
+        self._relatorios_rotulo_id = {titulo: report_id for report_id, titulo in relatorios.items()}
+        valores_relatorios = list(self._relatorios_rotulo_id) or ["Nenhum relatório disponível"]
         self.rel_tipo = ctk.CTkComboBox(filtros, values=valores_relatorios, width=150)
         self.rel_tipo.set(valores_relatorios[0])
         self.rel_tipo.pack(side="left", padx=6, pady=10)
@@ -9623,11 +9676,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         for texto, formato in (("CSV", "CSV"), ("Excel", "XLSX")):
             ctk.CTkButton(rodape, text=texto, width=95, command=lambda f=formato: self.exportar_relatorio_ui(f)).pack(side="left", padx=4)
         ctk.CTkButton(rodape, text="Gerar arquivo PDF", width=155, fg_color="#1f6feb", command=lambda: self.exportar_relatorio_ui("PDF")).pack(side="left", padx=4)
-        ctk.CTkButton(rodape, text="Imprimir", width=95, command=self.imprimir_relatorio_ui).pack(side="left", padx=4)
-        ctk.CTkButton(rodape, text="Gráfico / Dashboard", width=145, fg_color="#30363d", command=self.abrir_dashboard_relatorios).pack(side="left", padx=4)
-        ctk.CTkButton(rodape, text="Indicadores", width=105, fg_color="#30363d", command=self.abrir_indicadores_personalizados).pack(side="left", padx=4)
         ctk.CTkButton(rodape, text="Histórico", width=100, fg_color="#30363d", command=self.abrir_historico_relatorios).pack(side="right", padx=4)
-        ctk.CTkButton(rodape, text="Agendamentos", width=115, fg_color="#30363d", command=self.abrir_agendamentos_relatorios).pack(side="right", padx=4)
+        ctk.CTkButton(rodape, text="Agendar relatório", width=135, fg_color="#30363d", command=self.abrir_agendamentos_relatorios).pack(side="right", padx=4)
         return frame
 
     def _gerar_relatorio_por_enter(self):
@@ -9638,8 +9688,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if not hasattr(self, "rel_tipo"):
             return
         try:
+            report_id = getattr(self, "_relatorios_rotulo_id", {}).get(self.rel_tipo.get(), self.rel_tipo.get())
             result = REPORT_SERVICE.generate(
-                self.rel_tipo.get(), start_date=self.rel_inicio.get(), end_date=self.rel_fim.get(),
+                report_id, start_date=self.rel_inicio.get(), end_date=self.rel_fim.get(),
                 search=self.rel_busca.get(), status=self.rel_status.get(), user=self.rel_usuario.get(),
                 actor=self._usuario_relatorios(),
             )

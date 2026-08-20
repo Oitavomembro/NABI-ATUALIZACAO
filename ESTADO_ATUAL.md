@@ -1465,3 +1465,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - `Revisar lançamento` reutiliza o assistente oficial do XML para corrigir o cadastro originalmente vinculado, sem duplicar estoque, financeiro, fornecedor ou a própria nota;
 - a revisão não permite trocar silenciosamente o produto que recebeu a entrada original e passa a atualizar descrição, código, unidade, fator, custo, preço e dados fiscais conferidos;
 - 15 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo regressões de preservação do XML, estorno único e revisão sem efeitos duplicados; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.05 — relatórios claros e estado da SEFAZ no PDV
+
+- o seletor de relatórios deixou de exibir identificadores técnicos (`nfe`, `vendas`, etc.) e passou a mostrar os nomes completos das operações;
+- recebimentos de fichas usam a mesma permissão segura de consulta de vendas e continuam separados do faturamento;
+- o rodapé de relatórios ficou restrito a CSV, Excel, PDF, histórico e agendamento; impressão duplicada, gráficos e indicadores técnicos saíram da rotina principal;
+- no modo fiscal, o PDV informa se a configuração está pendente e oferece `SEFAZ: consultar` quando o certificado está preparado;
+- a consulta é voluntária e executada em segundo plano, sem atrasar a abertura do PDV nem travar a venda;
+- no modo não fiscal nenhuma conexão com a SEFAZ é iniciada;
+- 38 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo regressões de layout, relatórios, modo fiscal de teste e consulta não bloqueante; compilação e `git diff --check` aprovados.

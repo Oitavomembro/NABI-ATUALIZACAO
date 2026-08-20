@@ -14,6 +14,11 @@ def test_relatorios_expoem_calculo_totais_e_pdf_de_forma_clara():
     assert "REGISTROS NO PERÍODO" in block
     assert "VALOR TOTAL DO PERÍODO" in block
     assert "Gerar arquivo PDF" in block
+    assert "Gráfico / Dashboard" not in block
+    assert "Indicadores" not in block
+    assert 'text="Imprimir"' not in block
+    assert "Agendar relatório" in block
+    assert "_relatorios_rotulo_id" in block
 
 
 def test_central_fiscal_mostra_escolhas_antes_da_grade():

@@ -263,6 +263,7 @@ class LegacyBackendAdapterMixin:
     def _modulo_do_relatorio(report_id):
         return {
             "vendas": "vendas",
+            "recebimentos": "vendas",
             "produtos": "produtos",
             "clientes": "clientes",
             "financeiro": "financeiro",
