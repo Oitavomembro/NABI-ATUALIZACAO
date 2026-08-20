@@ -1293,3 +1293,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - tamanho: 72.336.026 bytes;
 - SHA-256: `0B7EFC573756D302BD998035FA0270EA6B62728893EF31B8F7E06527F7AD421A`;
 - o pacote não foi aplicado e nenhum banco, certificado, endpoint fiscal, instalador existente ou impressora real foi utilizado.
+
+## Checkpoint 42.88 / R18 TESTE — instalador consolidado para instalações novas
+
+- instalador completo reconstruído a partir da mesma distribuição validada usada pela atualização R18;
+- Inno Setup 6.7.3 concluiu a compilação e o pipeline validou conteúdo, versão, evidências e integridade;
+- a pasta de saída contém somente um executável de instalação R18, evitando nomes concorrentes da mesma revisão;
+- instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R18_Setup.exe`;
+- tamanho: 55.529.665 bytes;
+- SHA-256: `04E4264F2C4432B209CA95D63E95F0D12F19B8B0B192B58710D26C3E0D35D251`;
+- o instalador não foi executado e nenhum programa instalado, banco, certificado, endpoint fiscal ou impressora real foi utilizado.
