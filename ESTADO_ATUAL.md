@@ -1427,3 +1427,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - novas importações de NF-e armazenam o valor total da nota para relatórios de entradas; o schema foi elevado para 19 com migração idempotente;
 - 1.319 testes aprovados, 1 ignorado e 32 subtestes aprovados em `NABICODE_PROFILE=TESTE`;
 - `compileall` e `git diff --check` aprovados; nenhum banco real, certificado, endpoint fiscal, impressora ou interface gráfica foi utilizado.
+
+## Checkpoint 43.01 — Central Fiscal orientada por operação
+
+- a Central Fiscal abre primeiro com cards e ações, sem uma grade vazia ocupando toda a janela;
+- a área de pesquisa e documentos aparece somente depois de escolher `Ver saídas`, `Ver entradas` ou `Ver todos os documentos`;
+- saídas podem ser filtradas entre vendas fiscais, vendas não fiscais e orçamentos;
+- entradas podem ser filtradas entre NF-e de compras, compras não fiscais e recebimentos de fichas;
+- notas importadas, DF-e recebidos, vendas comuns e documentos fiscais permanecem identificados pela origem, sem transformar movimento não fiscal em documento fiscal;
+- o painel de ações reserva espaço antes da listagem expansível e permanece acessível em resoluções menores;
+- 39 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.

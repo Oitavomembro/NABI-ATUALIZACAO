@@ -20,6 +20,20 @@ def test_central_fiscal_abre_relatorio_por_periodo():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     assert "Relatório por período / PDF" in block
     assert 'self.mostrar_tela("relatorios")' in block
+    assert 'action_panel.pack(fill="x", padx=12, pady=(0, 10), before=tree)' in block
+    assert "role para ver todas as opções" in block
+    assert 'text="Ver saídas"' in block
+    assert 'text="Ver entradas"' in block
+    assert 'text="Ver todos os documentos"' in block
+    assert "filters.pack_forget()" in block
+    assert "tree.pack_forget()" in block
+    assert 'tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)' in block
+    assert 'view_mode["value"] in {"ENTRADAS", "TODOS"}' in block
+    assert '["Todas as saídas", "Vendas fiscais", "Vendas não fiscais", "Orçamentos"]' in block
+    assert '["Todas as entradas", "NF-e de compras", "Compras não fiscais", "Recebimentos de fichas"]' in block
+    assert 'self.pdv_transaction_service.list_sales_for_day()' in block
+    assert '"FISCAL" if is_fiscal else "NÃO FISCAL"' in block
+    assert 'REPORT_SERVICE.generate(\n                        "recebimentos"' in block
 
 
 def test_recebimentos_sao_relatorio_separado_de_vendas():

@@ -11104,17 +11104,32 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkLabel(sales_summary_card, text="SAÍDAS — VENDAS", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(9, 1))
         sales_summary_value = ctk.CTkLabel(sales_summary_card, text="0 documentos", text_color="#2ea043", font=ctk.CTkFont(size=18, weight="bold"))
         sales_summary_value.pack(anchor="w", padx=14, pady=(0, 9))
+        ctk.CTkButton(
+            sales_summary_card, text="Ver saídas", height=30, fg_color="#238636",
+            command=lambda: show_document_view("SAIDAS"),
+        ).pack(fill="x", padx=14, pady=(0, 10))
         entries_summary_card = ctk.CTkFrame(summary_frame, fg_color="#0d1117", corner_radius=10)
         entries_summary_card.pack(side="left", fill="x", expand=True, padx=(5, 0))
         ctk.CTkLabel(entries_summary_card, text="ENTRADAS — COMPRAS", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(9, 1))
         entries_summary_value = ctk.CTkLabel(entries_summary_card, text="0 notas lançadas", text_color="#58a6ff", font=ctk.CTkFont(size=18, weight="bold"))
         entries_summary_value.pack(anchor="w", padx=14, pady=(0, 9))
+        ctk.CTkButton(
+            entries_summary_card, text="Ver entradas", height=30, fg_color="#1f6feb",
+            command=lambda: show_document_view("ENTRADAS"),
+        ).pack(fill="x", padx=14, pady=(0, 10))
+        view_mode = {"value": ""}
         filters = ctk.CTkFrame(frame, fg_color="transparent")
         filters.pack(fill="x", padx=12, pady=(0, 8))
         document_search = ctk.CTkEntry(
             filters, placeholder_text="Buscar por chave, protocolo, status, modelo ou ambiente...", height=34
         )
         document_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
+        output_filter = ctk.CTkComboBox(
+            filters, values=["Todos os movimentos"],
+            width=190, state="readonly", command=lambda _value: load(),
+        )
+        output_filter.set("Todos os movimentos")
+        output_filter.pack(side="left", padx=(0, 8))
         columns = ("tipo", "chave", "status", "protocolo", "data", "ambiente")
         tree = ttk.Treeview(frame, columns=columns, show="headings", height=18)
         for col, title, width in (("tipo","Tipo",100),("chave","Chave / referência",300),("status","Status",120),("protocolo","Protocolo",130),("data","Data",150),("ambiente","Ambiente",110)):
@@ -11128,48 +11143,115 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             for item in tree.get_children(): tree.delete(item)
             rows.clear()
             query = document_search.get().strip().casefold()
+            output_choice = output_filter.get()
             summary = self.fiscal_sale_service.summary()
             sales_summary_value.configure(text=f"{summary['total']} documento(s)")
             entries_summary_value.configure(
                 text=f"{len(NFE_IMPORT_SERVICE.listar_importacoes())} nota(s) lançada(s)"
             )
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
-            for row in self.fiscal_sale_service.list_sales():
-                queue = queue_by_id.get(str(row.get("queue_id")), {})
-                merged = dict(row)
-                merged.update({
-                    "_kind": "VENDA", "_queue": queue,
-                    "last_error": row.get("last_error") or queue.get("last_error", ""),
-                })
-                searchable = " ".join(str(merged.get(field, "")) for field in ("sale_id", "access_key", "protocol", "status", "environment", "last_error")).casefold()
-                if query and query not in searchable:
-                    continue
-                item = tree.insert("", "end", values=(f"VENDA #{row.get('sale_id')}", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
-                rows[item] = merged
-            for row in self.fiscal_service.list_documents():
-                searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status", "model", "environment", "created_at")).casefold()
-                if query and query not in searchable:
-                    continue
-                item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
-                rows[item] = dict(row, _kind="DOCUMENTO")
-            for row in self.fiscal_dfe_service.list_documents():
-                searchable = " ".join(
-                    str(row.get(field, ""))
-                    for field in ("access_key", "issuer", "document", "nsu", "issued_at")
-                ).casefold()
-                if query and query not in searchable:
-                    continue
-                item = tree.insert("", "end", values=(
-                    "DF-e RECEBIDO", row.get("access_key", ""), "RECEBIDO",
-                    f"NSU {row.get('nsu', '')}", row.get("issued_at", ""), "NACIONAL",
-                ))
-                rows[item] = dict(row, _kind="DFE", processed_path=row.get("path", ""))
-            for row in self.fiscal_service.list_events():
-                searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
-                if query and query not in searchable:
-                    continue
-                item = tree.insert("", "end", values=(row.get("event_type","EVENTO"), row.get("access_key",""), row.get("status_code",""), row.get("protocol",""), row.get("created_at",""), ""))
-                rows[item] = dict(row, _kind="EVENTO")
+            if view_mode["value"] in {"SAIDAS", "TODOS"}:
+                for row in self.pdv_transaction_service.list_sales_for_day():
+                    is_fiscal = bool(str(row.get("fiscal_status") or "").strip())
+                    if output_choice == "Vendas fiscais" and not is_fiscal:
+                        continue
+                    if output_choice == "Vendas não fiscais" and is_fiscal:
+                        continue
+                    if output_choice == "Orçamentos":
+                        continue
+                    merged = dict(row, _kind="VENDA", sale_id=row.get("id"))
+                    searchable = " ".join(str(merged.get(field, "")) for field in ("id", "access_key", "protocol", "fiscal_status", "data", "descricao")).casefold()
+                    if query and query not in searchable:
+                        continue
+                    item = tree.insert("", "end", values=(
+                        f"VENDA #{row.get('id')}", row.get("access_key", "") or "SEM DOCUMENTO FISCAL",
+                        row.get("fiscal_status", "") or row.get("status_pagamento", "") or "NÃO FISCAL",
+                        row.get("protocol", ""), row.get("data", ""),
+                        "FISCAL" if is_fiscal else "NÃO FISCAL",
+                    ))
+                    rows[item] = merged
+                if output_choice in {"Todas as saídas", "Orçamentos", "Todos os movimentos"}:
+                    today_iso = datetime.now().date().isoformat()
+                    for document in self.pdv_service.listar_documentos("ORCAMENTO"):
+                        if not str(document.criada_em or "").startswith(today_iso):
+                            continue
+                        searchable = f"{document.id} {document.cliente_nome} {document.criada_em}".casefold()
+                        if query and query not in searchable:
+                            continue
+                        item = tree.insert("", "end", values=(
+                            "ORÇAMENTO", f"Orçamento {document.id}", "SEM VALOR FISCAL", "",
+                            str(document.criada_em).replace("T", " ")[:19], "NÃO FISCAL",
+                        ))
+                        rows[item] = {"_kind": "ORCAMENTO", "document": document}
+            if view_mode["value"] in {"SAIDAS", "TODOS"} and output_choice not in {"Vendas não fiscais", "Orçamentos"}:
+                for row in self.fiscal_service.list_documents():
+                    searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status", "model", "environment", "created_at")).casefold()
+                    if query and query not in searchable:
+                        continue
+                    item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
+                    rows[item] = dict(row, _kind="DOCUMENTO")
+            if view_mode["value"] in {"ENTRADAS", "TODOS"}:
+                if output_choice in {"Todas as entradas", "NF-e de compras", "Todos os movimentos"}:
+                    for row in NFE_IMPORT_SERVICE.listar_importacoes():
+                        searchable = " ".join(str(row.get(field, "")) for field in ("chave", "numero", "fornecedor_cnpj", "fornecedor_nome", "status", "data_importacao")).casefold()
+                        if query and query not in searchable:
+                            continue
+                        item = tree.insert("", "end", values=(
+                            "NF-e ENTRADA", row.get("chave", "") or f"Nota {row.get('numero', '')}",
+                            row.get("status", ""), "", row.get("data_importacao", ""), "ENTRADA",
+                        ))
+                        rows[item] = dict(row, _kind="ENTRADA_NFE")
+                    for row in self.fiscal_dfe_service.list_documents():
+                        searchable = " ".join(
+                            str(row.get(field, ""))
+                            for field in ("access_key", "issuer", "document", "nsu", "issued_at")
+                        ).casefold()
+                        if query and query not in searchable:
+                            continue
+                        item = tree.insert("", "end", values=(
+                            "DF-e RECEBIDO", row.get("access_key", ""), "RECEBIDO",
+                            f"NSU {row.get('nsu', '')}", row.get("issued_at", ""), "NACIONAL",
+                        ))
+                        rows[item] = dict(row, _kind="DFE", processed_path=row.get("path", ""))
+                if output_choice in {"Todas as entradas", "Compras não fiscais", "Todos os movimentos"}:
+                    purchases = REPORT_SERVICE.generate(
+                        "compras", start_date=start_entry.get(), end_date=end_entry.get(),
+                        actor=self._usuario_relatorios(),
+                    )
+                    purchase_columns = {name: index for index, name in enumerate(purchases.columns)}
+                    for values in purchases.rows:
+                        row = {name: values[index] for name, index in purchase_columns.items()}
+                        searchable = " ".join(str(value) for value in row.values()).casefold()
+                        if query and query not in searchable:
+                            continue
+                        item = tree.insert("", "end", values=(
+                            "COMPRA NÃO FISCAL", f"Pedido {row.get('id', '')}", row.get("status", ""), "",
+                            row.get("data_pedido") or row.get("criado_em", ""), "NÃO FISCAL",
+                        ))
+                        rows[item] = dict(row, _kind="COMPRA_NAO_FISCAL")
+                if output_choice in {"Todas as entradas", "Recebimentos de fichas", "Todos os movimentos"}:
+                    receipts = REPORT_SERVICE.generate(
+                        "recebimentos", start_date=start_entry.get(), end_date=end_entry.get(),
+                        actor=self._usuario_relatorios(),
+                    )
+                    receipt_columns = {name: index for index, name in enumerate(receipts.columns)}
+                    for values in receipts.rows:
+                        row = {name: values[index] for name, index in receipt_columns.items()}
+                        searchable = " ".join(str(value) for value in row.values()).casefold()
+                        if query and query not in searchable:
+                            continue
+                        item = tree.insert("", "end", values=(
+                            "RECEBIMENTO DE FICHA", f"Movimento {row.get('id', '')}", row.get("status", ""), "",
+                            row.get("data", ""), "NÃO FISCAL",
+                        ))
+                        rows[item] = dict(row, _kind="RECEBIMENTO_FICHA")
+            if view_mode["value"] in {"SAIDAS", "TODOS"} and output_choice not in {"Vendas não fiscais", "Orçamentos"}:
+                for row in self.fiscal_service.list_events():
+                    searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
+                    if query and query not in searchable:
+                        continue
+                    item = tree.insert("", "end", values=(row.get("event_type","EVENTO"), row.get("access_key",""), row.get("status_code",""), row.get("protocol",""), row.get("created_at",""), ""))
+                    rows[item] = dict(row, _kind="EVENTO")
         document_search.bind("<Return>", lambda _event: load())
         ctk.CTkButton(filters, text="Buscar", width=90, command=load).pack(side="left")
         def selected():
@@ -11969,9 +12051,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showerror("Duplicar nota", str(exc), parent=janela)
         action_panel = ctk.CTkScrollableFrame(
             frame, fg_color="#0d1117", corner_radius=8, height=225,
-            label_text="Consultas e ações",
+            label_text="Consultas e ações — role para ver todas as opções",
         )
-        action_panel.pack(fill="x", padx=12, pady=(0, 10))
+        # O painel precisa reservar espaço antes da grade expansível. Quando era
+        # empacotado depois dela, o Treeview consumia toda a altura disponível e
+        # os comandos fiscais existiam, porém ficavam fora da janela.
+        action_panel.pack(fill="x", padx=12, pady=(0, 10), before=tree)
         def open_period_reports():
             self.mostrar_tela("relatorios")
             if hasattr(self, "rel_tipo"):
@@ -11999,6 +12084,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             movement_actions, text="Relatório por período / PDF",
             command=open_period_reports, fg_color="#0969da",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            movement_actions, text="Ver todos os documentos",
+            command=lambda: show_document_view("TODOS"), fg_color="#30363d",
         ).pack(side="left", padx=4)
         actions = ctk.CTkFrame(action_panel, fg_color="transparent"); actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
@@ -12074,6 +12163,27 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             draft_actions, text="Duplicar nota para nova pré-venda",
             command=duplicate_fiscal_document, fg_color="#8957e5",
         ).pack(side="left", padx=4)
+        def show_document_view(mode):
+            view_mode["value"] = mode
+            choices = {
+                "SAIDAS": ["Todas as saídas", "Vendas fiscais", "Vendas não fiscais", "Orçamentos"],
+                "ENTRADAS": ["Todas as entradas", "NF-e de compras", "Compras não fiscais", "Recebimentos de fichas"],
+                "TODOS": ["Todos os movimentos"],
+            }[mode]
+            output_filter.configure(values=choices)
+            output_filter.set(choices[0])
+            filters.pack(fill="x", padx=12, pady=(0, 8), before=action_panel)
+            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)
+            xscroll.pack(fill="x", padx=12, pady=(0, 6), after=tree)
+            yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
+            load()
+
+        # A abertura mostra primeiro as escolhas e ações. A grade, que antes
+        # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
+        filters.pack_forget()
+        tree.pack_forget()
+        xscroll.pack_forget()
+        yscroll.place_forget()
         load()
         reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
