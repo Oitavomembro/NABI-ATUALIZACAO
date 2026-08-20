@@ -127,6 +127,31 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(hist["preco_novo_decimal"], "25.000000001")
         self.assertEqual(hist["custo_decimal"], "20.000000001")
 
+    def test_revisao_atualiza_cadastro_sem_repetir_estoque_financeiro_ou_nota(self):
+        importacao = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+        )
+        db = self.repo.database
+        produto = db.fetch_one("SELECT id,estoque_atual FROM produtos")
+        preparados = [{
+            "acao": "ATUALIZAR", "produto_id": produto["id"], "quantidade": 2,
+            "fator": 2, "unidade": "UN", "custo": 6.25, "margem": 60,
+            "preco": 10, "descricao": "PRODUTO UM REVISADO",
+        }]
+
+        resultado = self.service.revisar_produtos_importados(
+            importacao["importacao_id"], self.doc, itens=preparados, usuario="Teste"
+        )
+
+        self.assertEqual(resultado["produtos_atualizados"], 1)
+        revisado = db.fetch_one("SELECT nome,preco_venda,estoque_atual FROM produtos")
+        self.assertEqual(revisado["nome"], "PRODUTO UM REVISADO")
+        self.assertEqual(revisado["preco_venda"], 10)
+        self.assertEqual(revisado["estoque_atual"], produto["estoque_atual"])
+        self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 1)
+        self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM titulos_financeiros")["n"], 1)
+        self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"], 1)
+
     def test_falha_no_financeiro_reverte_toda_importacao(self):
         conn = sqlite3.connect(self.path)
         conn.execute("DROP TABLE titulos_financeiros")

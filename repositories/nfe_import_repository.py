@@ -119,6 +119,28 @@ class NFeImportRepository:
         ).fetchone()
         if not atual:
             raise ValueError("Produto selecionado não localizado.")
+        novo_codigo = str(preparado.get("codigo") or "").strip()
+        novo_nome = str(preparado.get("descricao") or "").strip().upper()
+        if novo_codigo:
+            duplicado = connection.execute(
+                "SELECT id FROM produtos WHERE codigo=? COLLATE NOCASE AND id<>? LIMIT 1",
+                (novo_codigo, int(produto_id)),
+            ).fetchone()
+            if duplicado:
+                raise ValueError(f"Já existe outro produto com o código {novo_codigo}.")
+        product_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(produtos)").fetchall()
+        }
+        if novo_nome and "descricao" in product_columns:
+            connection.execute(
+                "UPDATE produtos SET codigo=CASE WHEN ?<>'' THEN ? ELSE codigo END,nome=?,descricao=? WHERE id=?",
+                (novo_codigo, novo_codigo, novo_nome, novo_nome, int(produto_id)),
+            )
+        elif novo_nome:
+            connection.execute(
+                "UPDATE produtos SET codigo=CASE WHEN ?<>'' THEN ? ELSE codigo END,nome=? WHERE id=?",
+                (novo_codigo, novo_codigo, novo_nome, int(produto_id)),
+            )
         novo_preco = DecimalStorage.to_decimal(preparado["preco"], field="preço de venda")
         novo_custo = DecimalStorage.to_decimal(preparado["custo"], field="preço de custo")
         nova_margem = DecimalStorage.to_decimal(preparado["margem"], field="margem")
@@ -484,6 +506,29 @@ class NFeImportRepository:
         )
         return [dict(row) for row in rows]
 
+    def produtos_vinculados_importacao(self, importacao_id: int) -> dict[int, int]:
+        nota = self.database.fetch_one(
+            "SELECT chave,numero FROM nfe_importacoes WHERE id=?", (int(importacao_id),)
+        )
+        if not nota:
+            raise ValueError("NF-e importada não localizada.")
+        referencia = str(nota["chave"] or nota["numero"] or "").strip()
+        if not referencia:
+            return {}
+        rows = self.database.fetch_all(
+            """SELECT produto_id,origem_id FROM estoque_movimentacoes
+               WHERE origem='NFE_XML' AND origem_id LIKE ? ORDER BY id""",
+            (referencia + ":%",),
+        )
+        result: dict[int, int] = {}
+        for row in rows:
+            try:
+                index = int(str(row["origem_id"]).rsplit(":", 1)[1])
+            except (IndexError, ValueError):
+                continue
+            result[index] = int(row["produto_id"])
+        return result
+
     def analisar_exclusao(self, importacao_id: int) -> dict[str, Any]:
         """Retorna o impacto da exclusão sem modificar o banco."""
         nota = self.database.fetch_one(
@@ -560,6 +605,78 @@ class NFeImportRepository:
             "movimentos": itens,
             "bloqueios": bloqueios,
             "pode_excluir": not bloqueios,
+        }
+
+    def estornar_importacao(self, importacao_id: int, *, usuario: str = "Sistema") -> dict[str, Any]:
+        """Reverte efeitos locais sem apagar a NF-e, seu XML ou seu histórico."""
+        impacto = self.analisar_exclusao(importacao_id)
+        nota = impacto["nota"]
+        if str(nota.get("status") or "").upper() == "ESTORNADA":
+            raise ValueError("Esta NF-e já foi estornada.")
+        if impacto["bloqueios"]:
+            raise ValueError("A NF-e não pode ser estornada:\n- " + "\n- ".join(impacto["bloqueios"]))
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        referencia = str(nota.get("chave") or nota.get("numero") or "").strip()
+        with self.database.session(write=True) as connection:
+            atual = connection.execute(
+                "SELECT status FROM nfe_importacoes WHERE id=?", (int(importacao_id),)
+            ).fetchone()
+            if not atual:
+                raise ValueError("NF-e importada não localizada.")
+            if str(atual["status"] or "").upper() == "ESTORNADA":
+                raise ValueError("Esta NF-e já foi estornada.")
+            revertidos = 0
+            for item in impacto["movimentos"]:
+                produto_id = int(item["produto_id"])
+                quantidade = float(item["quantidade_reverter"])
+                produto = connection.execute(
+                    "SELECT estoque_atual FROM produtos WHERE id=?", (produto_id,)
+                ).fetchone()
+                if not produto:
+                    raise ValueError(f"Produto {produto_id} não localizado durante o estorno.")
+                saldo_anterior = float(produto["estoque_atual"] or 0)
+                saldo_atual = saldo_anterior - quantidade
+                if saldo_atual < -1e-9:
+                    raise ValueError(
+                        f"Estoque insuficiente para estornar {item.get('codigo')} - {item.get('nome')}."
+                    )
+                connection.execute(
+                    "UPDATE produtos SET estoque_atual=?, atualizado_em=? WHERE id=?",
+                    (saldo_atual, agora, produto_id),
+                )
+                connection.execute(
+                    """INSERT INTO estoque_movimentacoes
+                       (produto_id,tipo,quantidade,saldo_anterior,saldo_atual,origem,origem_id,motivo,usuario,data)
+                       VALUES(?,'SAIDA',?,?,?,?,?,?,?,?)""",
+                    (
+                        produto_id, -quantidade, saldo_anterior, saldo_atual,
+                        "ESTORNO_NFE_XML", f"{referencia}:ESTORNO",
+                        "Estorno controlado de lançamento de NF-e", str(usuario or "Sistema"), agora,
+                    ),
+                )
+                revertidos += 1
+            title_columns = {
+                str(row[1]).casefold()
+                for row in connection.execute("PRAGMA table_info(titulos_financeiros)").fetchall()
+            }
+            if "status" in title_columns:
+                for origem_id in {referencia, str(nota.get("numero") or "").strip()} - {""}:
+                    connection.execute(
+                        """UPDATE titulos_financeiros SET status='CANCELADO'
+                           WHERE origem IN ('NFE_XML','IMPORTACAO_XML') AND origem_id=?
+                             AND COALESCE(valor_pago,0)=0""",
+                        (origem_id,),
+                    )
+            connection.execute(
+                "UPDATE nfe_importacoes SET status='ESTORNADA' WHERE id=?",
+                (int(importacao_id),),
+            )
+        return {
+            "importacao_id": int(importacao_id),
+            "numero": str(nota.get("numero") or ""),
+            "chave": str(nota.get("chave") or ""),
+            "movimentos_revertidos": revertidos,
+            "xml_preservado": str(nota.get("arquivo_origem") or ""),
         }
 
     def excluir_importacao(self, importacao_id: int) -> dict[str, Any]:

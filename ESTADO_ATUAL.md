@@ -1456,3 +1456,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - arquivos de NF-e importada também podem ser abertos pela origem preservada;
 - removidos da interface principal comandos redundantes de recibo, duplicação de nota, CSV e validação técnica do pacote; os serviços internos permanecem preservados para os fluxos corretos;
 - 14 testes focados aprovados em `NABICODE_PROFILE=TESTE`, além de compilação e `git diff --check`.
+
+## Checkpoint 43.04 — ciclo legal da NF-e de entrada preservado
+
+- uma NF-e de compra lançada deixou de ser tratada como registro descartável: o XML, o documento e os movimentos originais permanecem no histórico;
+- `Estornar lançamento` cria movimentos inversos rastreáveis, cancela somente títulos ainda não pagos e marca a entrada como estornada;
+- o estorno é recusado quando já ocorreu, quando falta estoque para a reversão ou quando há efeitos posteriores protegidos;
+- `Revisar lançamento` reutiliza o assistente oficial do XML para corrigir o cadastro originalmente vinculado, sem duplicar estoque, financeiro, fornecedor ou a própria nota;
+- a revisão não permite trocar silenciosamente o produto que recebeu a entrada original e passa a atualizar descrição, código, unidade, fator, custo, preço e dados fiscais conferidos;
+- 15 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo regressões de preservação do XML, estorno único e revisão sem efeitos duplicados; compilação e `git diff --check` aprovados.

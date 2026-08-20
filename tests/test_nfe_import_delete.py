@@ -56,6 +56,27 @@ class NFeImportDeleteTests(unittest.TestCase):
         self.assertEqual(con.execute('SELECT COUNT(*) FROM nfe_documentos_origem').fetchone()[0], 0)
         con.close()
 
+    def test_estorno_preserva_nota_xml_e_movimentos_originais(self):
+        resultado = self.repo.estornar_importacao(1, usuario="auditor")
+        self.assertEqual(resultado["movimentos_revertidos"], 1)
+        con = sqlite3.connect(self.db_path)
+        try:
+            self.assertEqual(con.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 5)
+            self.assertEqual(con.execute("SELECT status FROM nfe_importacoes WHERE id=1").fetchone()[0], "ESTORNADA")
+            self.assertEqual(con.execute("SELECT COUNT(*) FROM nfe_documentos_origem WHERE id=1").fetchone()[0], 1)
+            movimentos = con.execute(
+                "SELECT tipo,origem,usuario FROM estoque_movimentacoes ORDER BY id"
+            ).fetchall()
+            self.assertEqual(movimentos[0][0:2], ("ENTRADA", "NFE_XML"))
+            self.assertEqual(movimentos[1], ("SAIDA", "ESTORNO_NFE_XML", "auditor"))
+        finally:
+            con.close()
+
+    def test_estorno_nao_pode_ser_repetido(self):
+        self.repo.estornar_importacao(1)
+        with self.assertRaisesRegex(ValueError, "já foi estornada"):
+            self.repo.estornar_importacao(1)
+
     def test_reverte_multiplas_linhas_do_mesmo_produto_cumulativamente(self):
         con = sqlite3.connect(self.db_path)
         con.execute("INSERT INTO estoque_movimentacoes(produto_id,tipo,quantidade,saldo_anterior,saldo_atual,origem,origem_id,motivo,usuario,data) VALUES(1,'ENTRADA',2,15,17,'NFE_XML',?,'','','2026-08-02 10:01:00')", ('1'*44+':1',))

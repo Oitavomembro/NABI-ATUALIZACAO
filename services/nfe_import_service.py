@@ -139,6 +139,65 @@ class NFeImportService:
     def excluir_importacao(self, importacao_id: int) -> dict[str, Any]:
         return self.repository.excluir_importacao(importacao_id)
 
+    def estornar_importacao(self, importacao_id: int, *, usuario: str = "Sistema") -> dict[str, Any]:
+        return self.repository.estornar_importacao(importacao_id, usuario=usuario)
+
+    def produtos_vinculados_importacao(self, importacao_id: int) -> dict[int, int]:
+        return self.repository.produtos_vinculados_importacao(importacao_id)
+
+    def revisar_produtos_importados(
+        self,
+        importacao_id: int,
+        documento: NFeDocument,
+        *,
+        itens: list[dict[str, Any]],
+        usuario: str = "Sistema",
+    ) -> dict[str, Any]:
+        """Atualiza cadastros ligados à nota sem repetir estoque ou financeiro."""
+        NFeImportValidator.complete_items(len(itens), len(documento.itens))
+        vinculados = self.produtos_vinculados_importacao(importacao_id)
+        if len(vinculados) != len(documento.itens):
+            raise ValueError("Os vínculos originais da NF-e estão incompletos; estorne e importe novamente.")
+        agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        atualizados = 0
+        with self.repository.database.session(write=True) as connection:
+            nota = connection.execute(
+                "SELECT status FROM nfe_importacoes WHERE id=?", (int(importacao_id),)
+            ).fetchone()
+            if not nota:
+                raise ValueError("NF-e importada não localizada.")
+            if str(nota["status"] or "").upper() == "ESTORNADA":
+                raise ValueError("Lançamento estornado não pode ser revisado.")
+            fornecedor_id = self.repository.obter_ou_criar_fornecedor_transacao(
+                connection, documento.cnpj, documento.fornecedor, agora
+            )
+            for index, (item_xml, preparado) in enumerate(zip(documento.itens, itens)):
+                produto_id = vinculados[index]
+                if int(preparado.get("produto_id") or 0) != produto_id:
+                    raise ValueError("A revisão não pode trocar o produto que recebeu o estoque original.")
+                unidade_id = self.repository.obter_ou_criar_unidade_transacao(
+                    connection, preparado.get("unidade") or "UN", agora
+                )
+                unidade_compra_id = self.repository.obter_ou_criar_unidade_transacao(
+                    connection, item_xml.unidade or "UN", agora
+                )
+                self.repository.atualizar_produto_transacao(
+                    connection, produto_id=produto_id, item=item_xml, preparado=preparado,
+                    fornecedor_id=fornecedor_id, unidade_id=unidade_id,
+                    unidade_compra_id=unidade_compra_id, agora=agora,
+                )
+                self.repository.vincular_produto_fornecedor_transacao(
+                    connection, produto_id=produto_id, fornecedor_id=fornecedor_id,
+                    codigo_fornecedor=item_xml.codigo, unidade_fornecedor=item_xml.unidade,
+                    fator_conversao=preparado["fator"], ultimo_custo=preparado["custo"], agora=agora,
+                )
+                atualizados += 1
+        return {
+            "importacao_id": int(importacao_id),
+            "produtos_atualizados": atualizados,
+            "usuario": str(usuario or "Sistema"),
+        }
+
     def fornecedor_existente(self, documento: NFeDocument) -> dict[str, Any] | None:
         return self.repository.localizar_fornecedor(documento.cnpj, documento.fornecedor)
 

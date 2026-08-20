@@ -4243,9 +4243,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         carregar()
 
     def abrir_historico_nfe_importadas(self):
-        """Lista e exclui NF-e de teste com backup e reversão transacional do estoque."""
+        """Lista NF-e de entrada e permite revisão ou estorno local auditável."""
         win = ctk.CTkToplevel(self)
-        win.title("NF-e importadas — excluir notas de teste")
+        win.title("NF-e de entrada — lançamentos e revisão")
         largura = max(980, int(win.winfo_screenwidth() * 0.88))
         altura = max(620, int(win.winfo_screenheight() * 0.82))
         win.geometry(f"{largura}x{altura}")
@@ -4262,7 +4262,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ).pack(anchor="w", padx=18, pady=(16, 2))
         ctk.CTkLabel(
             win,
-            text="Exclusão destinada a testes. O sistema cria snapshot, reverte as entradas de estoque e libera a chave para nova importação.",
+            text="O XML original é preservado. Use Revisar para ajustar produtos ou Estornar para reverter apenas os efeitos locais com auditoria.",
             text_color="#c9d1d9",
             wraplength=largura - 60,
             justify="left",
@@ -4348,13 +4348,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 ))
             lbl_total.configure(text=f"{len(notas)} nota(s)")
             detalhes.delete("1.0", "end")
-            detalhes.insert("end", "Selecione uma nota para visualizar o impacto da exclusão.")
+            detalhes.insert("end", "Selecione uma nota para revisar o lançamento ou visualizar o impacto do estorno.")
 
         def atualizar_impacto(_event=None):
             selecionados = tabela.selection()
             detalhes.delete("1.0", "end")
             if len(selecionados) != 1:
-                detalhes.insert("end", "Selecione exatamente uma nota para visualizar os produtos e saldos que serão revertidos.")
+                detalhes.insert("end", "Selecione exatamente uma nota para visualizar os produtos e saldos do estorno.")
                 return
             try:
                 impacto = NFE_IMPORT_SERVICE.analisar_exclusao(int(selecionados[0]))
@@ -4374,15 +4374,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     linhas.append("\nBLOQUEIOS:")
                     linhas.extend(f"• {texto}" for texto in impacto["bloqueios"])
                 else:
-                    linhas.append("\nSituação: pronta para exclusão segura.")
+                    linhas.append("\nSituação: pronta para estorno local, com XML e histórico preservados.")
                 detalhes.insert("end", "\n".join(linhas))
             except Exception as exc:
                 detalhes.insert("end", f"Falha ao analisar: {exc}")
 
-        def excluir_selecionadas():
+        def estornar_selecionadas():
             ids = [int(item) for item in tabela.selection()]
             if not ids:
-                messagebox.showwarning("Excluir NF-e", "Selecione ao menos uma nota.", parent=win)
+                messagebox.showwarning("Estornar lançamento", "Selecione ao menos uma nota.", parent=win)
                 return
             impactos = []
             bloqueios = []
@@ -4392,75 +4392,95 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     impactos.append(impacto)
                     bloqueios.extend(impacto["bloqueios"])
             except Exception as exc:
-                messagebox.showerror("Excluir NF-e", str(exc), parent=win)
+                messagebox.showerror("Estornar lançamento", str(exc), parent=win)
                 return
             if bloqueios:
                 messagebox.showerror(
-                    "Exclusão bloqueada",
-                    "Não é possível apagar as notas selecionadas:\n\n- " + "\n- ".join(bloqueios),
+                    "Estorno bloqueado",
+                    "Não é possível estornar os lançamentos selecionados:\n\n- " + "\n- ".join(bloqueios),
                     parent=win,
                 )
                 return
             senha = simpledialog.askstring(
                 "Confirmação administrativa",
-                "Informe a senha administrativa para excluir as notas selecionadas:",
+                "Informe a senha administrativa para estornar os lançamentos selecionados:",
                 show="●",
                 parent=win,
             )
             if senha is None:
                 return
             if not self._senha_administrativa_valida(senha):
-                self._registrar_acesso_admin(False, "Tentativa de exclusão de NF-e com senha incorreta.")
+                self._registrar_acesso_admin(False, "Tentativa de estorno de NF-e com senha incorreta.")
                 messagebox.showerror("Acesso negado", "Senha administrativa incorreta.", parent=win)
                 return
             numeros = ", ".join(str(item["nota"].get("numero") or item["nota"].get("id")) for item in impactos)
             movimentos = sum(len(item["movimentos"]) for item in impactos)
             if not messagebox.askyesno(
-                "Confirmar exclusão",
-                f"Excluir {len(ids)} NF-e(s) de teste?\n\nNotas: {numeros}\nEntradas de estoque a reverter: {movimentos}\n\nUm snapshot será criado antes da operação.",
+                "Confirmar estorno",
+                f"Estornar {len(ids)} lançamento(s)?\n\nNotas: {numeros}\nEntradas de estoque a reverter: {movimentos}\n\nO XML e o histórico serão preservados. Um snapshot será criado antes da operação.",
                 parent=win,
             ):
                 return
             try:
-                snapshot = criar_snapshot_sistema("antes_excluir_nfe_teste")
+                snapshot = criar_snapshot_sistema("antes_estornar_nfe_entrada")
                 resultados = []
                 for nota_id in ids:
-                    resultados.append(NFE_IMPORT_SERVICE.excluir_importacao(nota_id))
+                    resultados.append(NFE_IMPORT_SERVICE.estornar_importacao(
+                        nota_id, usuario=self._usuario_financeiro()
+                    ))
                 total_revertido = sum(item["movimentos_revertidos"] for item in resultados)
                 registrar_auditoria(
                     "XML",
-                    "EXCLUIR_NFE_TESTE",
+                    "ESTORNAR_NFE_ENTRADA",
                     objeto=numeros,
                     detalhes=f"Notas={len(resultados)}; movimentos revertidos={total_revertido}; snapshot={snapshot.get('id')}",
                     usuario="Administrador",
                 )
-                self._registrar_acesso_admin(True, f"Exclusão de {len(resultados)} NF-e(s) de teste.")
+                self._registrar_acesso_admin(True, f"Estorno de {len(resultados)} NF-e(s) de entrada.")
                 messagebox.showinfo(
-                    "NF-e excluídas",
-                    f"{len(resultados)} nota(s) excluída(s).\n{total_revertido} entrada(s) de estoque revertida(s).\n\nSnapshot: {snapshot.get('id')}",
+                    "Lançamentos estornados",
+                    f"{len(resultados)} nota(s) estornada(s).\n{total_revertido} ajuste(s) de estoque registrado(s).\nOs XMLs originais foram preservados.\n\nSnapshot: {snapshot.get('id')}",
                     parent=win,
                 )
                 carregar()
                 try:
                     self.carregar_produtos()
                 except Exception:
-                    logger.exception("Falha ao atualizar a grade de produtos após excluir NF-e")
+                    logger.exception("Falha ao atualizar a grade de produtos após estornar NF-e")
             except Exception as exc:
-                registrar_auditoria("XML", "EXCLUIR_NFE_TESTE", objeto=numeros, detalhes=str(exc), resultado="ERRO", usuario="Administrador")
-                messagebox.showerror("Excluir NF-e", f"A operação foi revertida.\n\n{exc}", parent=win)
+                registrar_auditoria("XML", "ESTORNAR_NFE_ENTRADA", objeto=numeros, detalhes=str(exc), resultado="ERRO", usuario="Administrador")
+                messagebox.showerror("Estornar lançamento", f"A operação foi revertida.\n\n{exc}", parent=win)
+
+        def revisar_selecionada():
+            ids = tabela.selection()
+            if len(ids) != 1:
+                messagebox.showwarning("Revisar lançamento", "Selecione exatamente uma NF-e.", parent=win)
+                return
+            nota = notas_cache.get(int(ids[0])) or {}
+            if str(nota.get("status") or "").upper() == "ESTORNADA":
+                messagebox.showwarning("Revisar lançamento", "Lançamento estornado não pode ser revisado.", parent=win)
+                return
+            caminho_xml = str(nota.get("arquivo_origem") or "")
+            if not caminho_xml or not Path(caminho_xml).is_file():
+                messagebox.showerror("Revisar lançamento", "O XML original preservado não foi localizado.", parent=win)
+                return
+            importacao_id = int(nota["id"])
+            win.destroy()
+            self.abrir_importacao_xml(caminho_xml, revisao_importacao_id=importacao_id)
 
         tabela.bind("<<TreeviewSelect>>", atualizar_impacto)
         botoes = ctk.CTkFrame(win, fg_color="#0d1117")
         botoes.pack(fill="x", padx=18, pady=(0, 14))
         ctk.CTkButton(botoes, text="Atualizar lista", command=carregar, fg_color="#30363d").pack(side="left")
-        ctk.CTkButton(botoes, text="Excluir selecionadas", command=excluir_selecionadas, fg_color="#da3633", hover_color="#b62324").pack(side="right")
+        ctk.CTkButton(botoes, text="Revisar lançamento", command=revisar_selecionada, fg_color="#1f6feb").pack(side="left", padx=8)
+        ctk.CTkButton(botoes, text="Estornar lançamento", command=estornar_selecionadas, fg_color="#da3633", hover_color="#b62324").pack(side="right")
         ctk.CTkButton(botoes, text="Fechar", command=win.destroy, fg_color="#30363d").pack(side="right", padx=8)
         ctk.CTkButton(filtros, text="Filtrar", command=carregar, width=105, fg_color="#1f6feb").grid(row=1, column=2, padx=8, pady=(0, 10), sticky="w")
         win.bind("<Escape>", lambda _event: win.destroy())
         carregar()
 
-    def abrir_importacao_xml(self):
-        caminho = filedialog.askopenfilename(
+    def abrir_importacao_xml(self, caminho_preselecionado=None, *, revisao_importacao_id=None):
+        caminho = str(caminho_preselecionado or "") or filedialog.askopenfilename(
             title="Selecionar XML de NF-e",
             filetypes=[("XML de NF-e", "*.xml"), ("Todos os arquivos", "*.*")],
         )
@@ -4470,13 +4490,23 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         xml_service = NFeXMLService()
         try:
             documento = xml_service.ler(caminho)
-            NFE_IMPORT_SERVICE.validar_nao_importada(documento)
+            if revisao_importacao_id is None:
+                NFE_IMPORT_SERVICE.validar_nao_importada(documento)
             analises = NFE_IMPORT_SERVICE.analisar(documento)
         except Exception as exc:
             messagebox.showerror("Importar XML", str(exc))
             return
         if not analises:
             messagebox.showerror("Importar XML", "O XML não possui produtos válidos para importação.")
+            return
+
+        try:
+            vinculos_revisao = (
+                NFE_IMPORT_SERVICE.produtos_vinculados_importacao(revisao_importacao_id)
+                if revisao_importacao_id is not None else {}
+            )
+        except Exception as exc:
+            messagebox.showerror("Revisar lançamento", str(exc))
             return
 
         fornecedor_encontrado = NFE_IMPORT_SERVICE.fornecedor_existente(documento)
@@ -4490,7 +4520,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         win = ctk.CTkToplevel(self)
         prepare_hidden_toplevel(win)
         win.nabi_help_context = "xml_import"
-        win.title("Assistente XML — Conferência obrigatória")
+        win.title("Revisar lançamento de NF-e" if revisao_importacao_id is not None else "Assistente XML — Conferência obrigatória")
         metricas_layout = UniversalLayoutPolicy.metrics(
             win.winfo_screenwidth(), win.winfo_screenheight(), preferred_width=1280, preferred_height=780
         )
@@ -4503,14 +4533,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         cabecalho.pack(fill="x", padx=18, pady=(12, 4))
         ctk.CTkLabel(
             cabecalho,
-            text="Importar NF-e de compra",
+            text="Revisar produtos da NF-e" if revisao_importacao_id is not None else "Importar NF-e de compra",
             font=ctk.CTkFont(size=22, weight="bold"),
             text_color=self.cor_acento,
         ).pack(anchor="w")
         situacao_fornecedor = "cadastrado" if fornecedor_encontrado else "será cadastrado"
         ctk.CTkLabel(
             cabecalho,
-            text="Confira o que o XML preencheu. Você só precisa resolver os itens destacados antes de importar.",
+            text=("Ajuste os cadastros. O XML, o estoque e o financeiro originais não serão recriados."
+                  if revisao_importacao_id is not None else
+                  "Confira o que o XML preencheu. Você só precisa resolver os itens destacados antes de importar."),
             text_color="#8b949e",
         ).pack(anchor="w", pady=(2, 0))
 
@@ -4642,6 +4674,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         acao_var = tk.StringVar(value="")
         acao_combo = ctk.CTkComboBox(bloco_decisao, values=["VINCULAR", "ATUALIZAR", "CRIAR"], variable=acao_var, height=34)
         acao_combo.pack(fill="x")
+        if revisao_importacao_id is not None:
+            acao_combo.configure(values=["ATUALIZAR"], state="readonly")
 
         bloco_candidato = ctk.CTkFrame(aba_vinculo, fg_color="transparent")
         bloco_candidato.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
@@ -4725,6 +4759,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "cest": str(item.cest or "").strip(),
                 "origem_mercadoria": str(getattr(item, "origem_mercadoria", "") or "").strip(),
             }
+            if revisao_importacao_id is not None:
+                produto_vinculado = vinculos_revisao.get(analise.index)
+                if not produto_vinculado:
+                    raise ValueError("Não foi possível localizar o produto originalmente ligado a um item da NF-e.")
+                configuracoes[analise.index]["produto_id"] = produto_vinculado
+                configuracoes[analise.index]["acao"] = "ATUALIZAR"
 
         estado = {"indice": None, "carregando": False, "sincronizando": False}
 
@@ -4854,6 +4894,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             for candidato in analise.candidatos:
                 rotulo = f"{candidato.codigo} — {candidato.nome} ({candidato.similaridade:.1f}% / {candidato.criterio})"
                 mapa[rotulo] = candidato.produto_id
+            produto_vinculado = vinculos_revisao.get(analise.index)
+            if produto_vinculado and produto_vinculado not in mapa.values():
+                produto = PRODUTO_SERVICE.buscar(produto_vinculado)
+                if produto:
+                    mapa[f"{produto.get('codigo', '')} — {produto.get('nome', '')} (vínculo original)"] = produto_vinculado
             candidatos_rotulo_id[analise.index] = mapa
 
         def carregar_item(indice):
@@ -5078,10 +5123,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     parent=win,
                 )
                 return
+            em_revisao = revisao_importacao_id is not None
             if not messagebox.askyesno(
-                "Concluir importação",
-                f"Processar obrigatoriamente os {len(analises)} produto(s)?\n\n"
-                "Produtos existentes serão atualizados; produtos novos serão cadastrados; estoque e histórico serão gravados.",
+                "Salvar revisão" if em_revisao else "Concluir importação",
+                (f"Salvar a revisão dos {len(analises)} produto(s)?\n\n"
+                 "Somente os cadastros vinculados serão atualizados. Estoque, financeiro e XML permanecerão inalterados."
+                 if em_revisao else
+                 f"Processar obrigatoriamente os {len(analises)} produto(s)?\n\n"
+                 "Produtos existentes serão atualizados; produtos novos serão cadastrados; estoque e histórico serão gravados."),
                 parent=win,
             ):
                 return
@@ -5092,46 +5141,54 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 cfg["indice"] = analise.index
                 itens_preparados.append(cfg)
             try:
-                resultado_importacao = NFE_IMPORT_SERVICE.importar_atomicamente(
-                    documento,
-                    arquivo_origem=caminho,
-                    itens=itens_preparados,
-                    usuario=getattr(getattr(self, "security_session", None), "username", "Sistema") or "Sistema",
-                )
-                resultados = resultado_importacao["resultados"]
-                criados = int(resultado_importacao["itens_criados"])
-                vinculados = int(resultado_importacao["itens_vinculados"])
+                usuario = getattr(getattr(self, "security_session", None), "username", "Sistema") or "Sistema"
+                if em_revisao:
+                    resultado_revisao = NFE_IMPORT_SERVICE.revisar_produtos_importados(
+                        revisao_importacao_id, documento, itens=itens_preparados, usuario=usuario
+                    )
+                    vinculados = int(resultado_revisao["produtos_atualizados"])
+                    resultados = []
+                    criados = 0
+                else:
+                    resultado_importacao = NFE_IMPORT_SERVICE.importar_atomicamente(
+                        documento, arquivo_origem=caminho, itens=itens_preparados, usuario=usuario,
+                    )
+                    resultados = resultado_importacao["resultados"]
+                    criados = int(resultado_importacao["itens_criados"])
+                    vinculados = int(resultado_importacao["itens_vinculados"])
                 lbl_progresso.configure(text="100%")
                 win.update_idletasks()
             except Exception as exc:
-                logger.exception("Falha na importação atômica da NF-e")
+                logger.exception("Falha na revisão da NF-e" if em_revisao else "Falha na importação atômica da NF-e")
                 messagebox.showerror(
-                    "Importação revertida",
-                    f"Nenhuma parte da NF-e foi mantida. A transação SQLite foi revertida.\n\n{exc}",
+                    "Revisão não salva" if em_revisao else "Importação revertida",
+                    (("Nenhum cadastro foi alterado. A revisão foi revertida.\n\n" if em_revisao else
+                      "Nenhuma parte da NF-e foi mantida. A transação SQLite foi revertida.\n\n") + str(exc)),
                     parent=win,
                 )
                 return
 
             relatorio = ""
-            try:
-                relatorio = xml_service.salvar_relatorio(documento, resultados, os.path.join(APP_DIR, "relatorios", "importacoes_xml"))
-            except Exception:
-                logger.exception("Falha ao gravar relatório da importação XML")
+            if not em_revisao:
+                try:
+                    relatorio = xml_service.salvar_relatorio(documento, resultados, os.path.join(APP_DIR, "relatorios", "importacoes_xml"))
+                except Exception:
+                    logger.exception("Falha ao gravar relatório da importação XML")
             self.carregar_produtos()
-            mensagem = (
+            mensagem = (f"Revisão salva. {vinculados} cadastro(s) de produto atualizado(s), sem alterar estoque, financeiro ou XML."
+                        if em_revisao else
                 f"NF-e importada com sucesso.\n\n{criados} produto(s) criado(s).\n"
-                f"{vinculados} produto(s) atualizado(s).\n{len(analises)} entrada(s) de estoque processada(s)."
-            )
+                f"{vinculados} produto(s) atualizado(s).\n{len(analises)} entrada(s) de estoque processada(s).")
             if relatorio:
                 mensagem += f"\n\nRelatório:\n{relatorio}"
-            self.mostrar_notificacao("XML importado", mensagem, nivel="success", parent=win, duracao_ms=7000)
+            self.mostrar_notificacao("Revisão concluída" if em_revisao else "XML importado", mensagem, nivel="success", parent=win, duracao_ms=7000)
             win.destroy()
 
         rodape = ctk.CTkFrame(win, fg_color="#0d1117")
         rodape.pack(fill="x", padx=14, pady=(4, 12))
         ctk.CTkButton(rodape, text="Ir para o próximo item pendente", command=resolver_primeira_pendencia, fg_color="#9e6a03").pack(side="left")
         ctk.CTkButton(rodape, text="Salvar produto e ir para o próximo", height=42, fg_color="#1f6feb", command=confirmar_item_e_avancar).pack(side="left", padx=8)
-        ctk.CTkButton(rodape, text="Revisar e importar NF-e", height=42, fg_color="#2ea043", command=processar_todos).pack(side="right")
+        ctk.CTkButton(rodape, text="Salvar revisão" if revisao_importacao_id is not None else "Revisar e importar NF-e", height=42, fg_color="#2ea043", command=processar_todos).pack(side="right")
         ctk.CTkButton(rodape, text="Cancelar", height=42, fg_color="#30363d", command=win.destroy).pack(side="right", padx=8)
         self.window_actions.register(
             win,
