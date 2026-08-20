@@ -55,6 +55,25 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(titulo["origem"], "NFE_XML")
         self.assertEqual(titulo["valor_original"], 25)
 
+    def test_importa_em_banco_legado_com_descricao_obrigatoria(self):
+        connection = sqlite3.connect(self.path)
+        connection.execute("DROP TABLE produtos")
+        product_schema = next(
+            statement for statement in SCHEMA.split(";")
+            if statement.strip().startswith("CREATE TABLE produtos(")
+        )
+        connection.execute(
+            product_schema.replace("nome TEXT,", "nome TEXT,descricao TEXT NOT NULL,")
+        )
+        connection.commit(); connection.close()
+
+        self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+        )
+        product = self.repo.database.fetch_one("SELECT nome, descricao FROM produtos")
+        self.assertEqual(product["nome"], "PRODUTO UM")
+        self.assertEqual(product["descricao"], "PRODUTO UM")
+
     def test_nfe_grava_colunas_decimais_canonicas(self):
         self.preparados[0].update({"preco": "15.123456789", "custo": "12.500000001", "margem": "20.0001", "fator": "1.2500"})
         self.service.importar_atomicamente(self.doc, arquivo_origem="nfe.xml", itens=self.preparados)

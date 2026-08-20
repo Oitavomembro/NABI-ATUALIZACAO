@@ -60,6 +60,14 @@ class NFeDocument:
     itens: tuple[NFeItem, ...]
     destinatario: str = ""
     destinatario_documento: str = ""
+    destinatario_ie: str = ""
+    destinatario_logradouro: str = ""
+    destinatario_numero: str = ""
+    destinatario_bairro: str = ""
+    destinatario_codigo_municipio: str = ""
+    destinatario_municipio: str = ""
+    destinatario_uf: str = ""
+    destinatario_cep: str = ""
     data_emissao: str = ""
     serie: str = ""
     modelo: str = ""
@@ -113,6 +121,7 @@ class NFeXMLService:
         emit = inf_nfe.find("emit")
         ender_emit = emit.find("enderEmit") if emit is not None else None
         dest = inf_nfe.find("dest")
+        ender_dest = dest.find("enderDest") if dest is not None else None
         ide = inf_nfe.find("ide")
         total = inf_nfe.find("total/ICMSTot")
         fornecedor = self._texto(emit, "xNome")
@@ -210,6 +219,14 @@ class NFeXMLService:
             itens=tuple(itens),
             destinatario=destinatario,
             destinatario_documento=destinatario_documento,
+            destinatario_ie=self._texto(dest, "IE"),
+            destinatario_logradouro=self._texto(ender_dest, "xLgr"),
+            destinatario_numero=self._texto(ender_dest, "nro"),
+            destinatario_bairro=self._texto(ender_dest, "xBairro"),
+            destinatario_codigo_municipio=self._texto(ender_dest, "cMun"),
+            destinatario_municipio=self._texto(ender_dest, "xMun"),
+            destinatario_uf=self._texto(ender_dest, "UF"),
+            destinatario_cep=self._texto(ender_dest, "CEP"),
             data_emissao=data_emissao,
             serie=serie,
             modelo=modelo,

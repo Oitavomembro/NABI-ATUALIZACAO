@@ -1219,3 +1219,19 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R17_Setup.exe`;
 - SHA-256: `2C411E936EC2DAFC643D2F4E226E6BA881457E4C781428C4A54CEF2610AAC6C6`;
 - o instalador não foi executado e nenhum banco, certificado, endpoint fiscal ou impressora real foi utilizado.
+
+## Checkpoint 42.82 — importação XML e prontidão fiscal determinística
+
+- a importação de NF-e passa a preencher simultaneamente `nome` e a coluna legada obrigatória `descricao`, eliminando a reversão em bancos atualizados de versões antigas;
+- código, descrição, código de barras, unidade, fator, custo, margem e preço dos produtos novos podem ser conferidos antes da gravação atômica;
+- o preenchimento fiscal por XML identifica se a empresa configurada é emitente ou destinatária e rejeita documentos de terceiros;
+- uma NF-e de compra usa os dados do destinatário como dados próprios, evitando copiar silenciosamente o fornecedor para a empresa usuária;
+- o modo operacional Fiscal tornou-se a fonte única da obrigatoriedade fiscal no PDV;
+- a prontidão fiscal é validada antes de solicitar pagamento, impedindo venda fiscal sem configuração completa;
+- a configuração fiscal permanece salva ao alternar temporariamente para o modo comercial;
+- Central Fiscal, configuração fiscal e assistente XML passam a abrir preparados e maximizados, com minimizar nativo e sem captura global da interface;
+- modo Balcão/Touch foi movido para Configurações, liberando espaço para todas as ações do PDV;
+- a busca de clientes mostra somente número e nome, sem o rótulo repetitivo `Ficha` nem identificadores duplicados;
+- validação focada: 145 testes e 10 subtestes aprovados;
+- suíte completa: 1.277 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

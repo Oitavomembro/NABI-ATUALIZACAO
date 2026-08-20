@@ -62,7 +62,7 @@ class NFeImportRepository:
         self, connection, *, item, preparado: dict[str, Any], fornecedor_id: int,
         unidade_id: int, unidade_compra_id: int, agora: str,
     ) -> int:
-        codigo = str(item.codigo or item.codigo_barras or "").strip()
+        codigo = str(preparado.get("codigo") or item.codigo or item.codigo_barras or "").strip()
         if not codigo:
             raise ValueError(f"O item {item.descricao} não possui código para criar o produto.")
         if connection.execute("SELECT 1 FROM produtos WHERE codigo=? COLLATE NOCASE", (codigo,)).fetchone():
@@ -71,17 +71,26 @@ class NFeImportRepository:
         custo_real, custo_decimal = DecimalStorage.pair(preparado["custo"], field="preço de custo")
         margem_real, margem_decimal = DecimalStorage.pair(preparado["margem"], field="margem")
         fator_real, fator_decimal = DecimalStorage.pair(preparado["fator"], field="fator de conversão")
+        product_name = str(preparado.get("descricao") or item.descricao or "").strip().upper()
+        product_barcode = str(
+            preparado.get("codigo_barras") or item.codigo_barras or ""
+        ).strip()
+        product_columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(produtos)").fetchall()
+        }
+        legacy_description_column = ",descricao" if "descricao" in product_columns else ""
+        legacy_description_value = ",?" if legacy_description_column else ""
         cursor = connection.execute(
-            """INSERT INTO produtos
-               (codigo,nome,preco_venda,preco_custo,despesas_percentual,margem_lucro,
+            f"""INSERT INTO produtos
+               (codigo,nome{legacy_description_column},preco_venda,preco_custo,despesas_percentual,margem_lucro,
                 preco_venda_decimal,preco_custo_decimal,despesas_percentual_decimal,margem_lucro_decimal,fator_conversao_decimal,
                 categoria_id,marca_id,fornecedor_id,unidade_id,unidade_compra_id,fator_conversao,tipo_produto,controla_estoque,
                 participa_xml,codigo_barras,ncm,cest,cfop,estoque_atual,estoque_minimo,permite_estoque_negativo,
                 ativo,criado_em,atualizado_em)
-               VALUES(?,?,?,?,?,?,?,?,?,?,?,NULL,NULL,?,?,?,?, 'MERCADORIA',1,1,?,?,?,?,0,0,0,1,?,?)""",
-            (codigo, str(item.descricao or "").strip().upper(), preco_real, custo_real, 0.0, margem_real,
+               VALUES(?,?{legacy_description_value},?,?,?,?,?,?,?,?,?,NULL,NULL,?,?,?,?, 'MERCADORIA',1,1,?,?,?,?,0,0,0,1,?,?)""",
+            (codigo, product_name, *((product_name,) if legacy_description_column else ()), preco_real, custo_real, 0.0, margem_real,
              preco_decimal, custo_decimal, "0", margem_decimal, fator_decimal, fornecedor_id, unidade_id,
-             unidade_compra_id, fator_real, str(item.codigo_barras or ""), str(item.ncm or ""),
+             unidade_compra_id, fator_real, product_barcode, str(item.ncm or ""),
              str(item.cest or ""), "", agora, agora),
         )
         produto_id = int(cursor.lastrowid)

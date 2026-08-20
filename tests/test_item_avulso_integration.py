@@ -39,6 +39,22 @@ class ItemAvulsoIntegrationTests(unittest.TestCase):
         self.assertIn("O modo fiscal não permite item avulso", self.source)
         self.assertIn("No modo fiscal, selecione um produto cadastrado com dados fiscais", self.source)
 
+    def test_modo_fiscal_exige_configuracao_antes_de_salvar_e_vender(self):
+        save_start = self.source.index("def salvar_configuracoes_gerais(self):")
+        save_end = self.source.index("def abrir_restauracao_fabrica(self):", save_start)
+        save_flow = self.source[save_start:save_end]
+        self.assertIn("self.fiscal_service.validate_ready(", save_flow)
+        self.assertIn("self.abrir_configuracao_fiscal(force_open=True)", save_flow)
+        sale_start = self.source.index("def finalizar_venda(self, tipo_comprovante):")
+        sale_end = self.source.index("def tela_clientes(self, parent):", sale_start)
+        sale_flow = self.source[sale_start:sale_end]
+        self.assertIn('fiscal_required = (obter_config("modo_operacao")', sale_flow)
+        self.assertIn("Venda fiscal bloqueada", sale_flow)
+        self.assertLess(
+            sale_flow.index("self.fiscal_service.validate_ready("),
+            sale_flow.index("self.solicitar_pagamentos_pdv("),
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

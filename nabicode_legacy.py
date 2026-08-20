@@ -3163,7 +3163,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         win.minsize(*UniversalLayoutPolicy.safe_minsize(metricas))
         win.configure(fg_color="#0d1117")
         win.transient(self)
-        win.grab_set()
 
         cabecalho = ctk.CTkFrame(win, fg_color="#0d1117")
         cabecalho.pack(fill="x", padx=18, pady=(14, 6))
@@ -4467,6 +4466,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         nomes_unidades = [nome for _uid, nome in unidades_ativas] or ["UN"]
 
         win = ctk.CTkToplevel(self)
+        prepare_hidden_toplevel(win)
         win.nabi_help_context = "xml_import"
         win.title("Assistente XML — Conferência obrigatória")
         metricas_layout = UniversalLayoutPolicy.metrics(
@@ -4582,17 +4582,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         candidato_combo = ctk.CTkComboBox(bloco_candidato, values=["Nenhum produto"], variable=candidato_var, height=34)
         candidato_combo.pack(fill="x")
 
-        qtd_entry.master.grid_configure(row=4)
-        fator_entry.master.grid_configure(row=5)
-        custo_entry.master.grid_configure(row=6)
-        margem_entry.master.grid_configure(row=7)
-        preco_entry.master.grid_configure(row=8)
-        bloco_unidade.grid_configure(row=9)
+        codigo_var, codigo_entry = campo_editor("Código do produto", 4)
+        descricao_var, descricao_entry = campo_editor("Descrição de venda", 5)
+        barras_var, barras_entry = campo_editor("Código de barras", 6)
+
+        qtd_entry.master.grid_configure(row=7)
+        fator_entry.master.grid_configure(row=8)
+        custo_entry.master.grid_configure(row=9)
+        margem_entry.master.grid_configure(row=10)
+        preco_entry.master.grid_configure(row=11)
+        bloco_unidade.grid_configure(row=12)
 
         lbl_calculo = ctk.CTkLabel(editor_body, text="", text_color="#2ea043", font=ctk.CTkFont(size=13, weight="bold"), justify="left")
-        lbl_calculo.grid(row=10, column=0, sticky="w", padx=10, pady=(8, 4))
+        lbl_calculo.grid(row=13, column=0, sticky="w", padx=10, pady=(8, 4))
         lbl_pendencia = ctk.CTkLabel(editor_body, text="", text_color="#f85149", wraplength=350, justify="left")
-        lbl_pendencia.grid(row=11, column=0, sticky="ew", padx=10, pady=(2, 4))
+        lbl_pendencia.grid(row=14, column=0, sticky="ew", padx=10, pady=(2, 4))
 
         configuracoes: dict[int, dict] = {}
         analises_por_indice = {analise.index: analise for analise in analises}
@@ -4617,6 +4621,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "preco": float(resultado_preco.preco_venda),
                 "acao": "CRIAR" if analise.status == "NOVO" else ("ATUALIZAR" if analise.status == "VINCULAR" else ""),
                 "produto_id": analise.produto_id if analise.status != "NOVO" else None,
+                "codigo": str(item.codigo or item.codigo_barras or "").strip(),
+                "descricao": str(item.descricao or "").strip().upper(),
+                "codigo_barras": str(item.codigo_barras or "").strip(),
             }
 
         estado = {"indice": None, "carregando": False, "sincronizando": False}
@@ -4688,6 +4695,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 resultado = XMLConferenceService.por_preco(custo, preco)
                 unidade = unidade_var.get().strip().upper() or "UN"
                 acao = acao_var.get().strip().upper()
+                codigo = codigo_var.get().strip()
+                descricao = descricao_var.get().strip().upper()
+                codigo_barras = barras_var.get().strip()
+                if acao == "CRIAR" and not codigo:
+                    raise ValueError("Informe o código do novo produto.")
+                if acao == "CRIAR" and not descricao:
+                    raise ValueError("Informe a descrição de venda do novo produto.")
                 rotulo_candidato = candidato_var.get().strip()
                 produto_id = None
                 if acao in {"VINCULAR", "ATUALIZAR"}:
@@ -4706,6 +4720,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "preco": preco,
                 "acao": acao,
                 "produto_id": produto_id,
+                "codigo": codigo,
+                "descricao": descricao,
+                "codigo_barras": codigo_barras,
             })
             atualizar_linha(indice)
             calcular_resumo()
@@ -4735,6 +4752,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             selecionado = next((rotulo for rotulo, pid in candidatos_rotulo_id.get(indice, {}).items() if pid == cfg.get("produto_id")), opcoes[0])
             candidato_var.set(selecionado)
             acao_var.set(cfg.get("acao") or "")
+            codigo_var.set(cfg.get("codigo") or analise.item.codigo)
+            descricao_var.set(cfg.get("descricao") or analise.item.descricao.upper())
+            barras_var.set(cfg.get("codigo_barras") or analise.item.codigo_barras)
             qtd_var.set(format_number_br(cfg["quantidade"]))
             fator_var.set(format_number_br(cfg["fator"]))
             custo_var.set(format_number_br(cfg["custo"], 2))
@@ -4777,10 +4797,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 carregar_item(int(selecao[0]))
         tabela.bind("<<TreeviewSelect>>", ao_selecionar)
 
-        ctk.CTkButton(editor_body, text="Aplicar alterações ao item", height=38, fg_color="#1f6feb", command=salvar_item_atual).grid(row=14, column=0, sticky="ew", padx=10, pady=(8, 4))
+        ctk.CTkButton(editor_body, text="Aplicar alterações ao item", height=38, fg_color="#1f6feb", command=salvar_item_atual).grid(row=17, column=0, sticky="ew", padx=10, pady=(8, 4))
 
         lote_frame = ctk.CTkFrame(editor_body, fg_color="transparent")
-        lote_frame.grid(row=13, column=0, sticky="ew", padx=10, pady=(4, 12))
+        lote_frame.grid(row=16, column=0, sticky="ew", padx=10, pady=(4, 12))
         margem_lote_var = tk.StringVar(value="30")
         ctk.CTkEntry(lote_frame, textvariable=margem_lote_var, width=85).pack(side="left", padx=(0, 5))
         def aplicar_margem_todos():
@@ -4845,7 +4865,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             height=36,
             command=colar_valores_excel,
             fg_color="#238636",
-        ).grid(row=12, column=0, sticky="ew", padx=10, pady=(0, 12))
+        ).grid(row=15, column=0, sticky="ew", padx=10, pady=(0, 12))
 
         def resolver_primeira_pendencia():
             salvar_item_atual(silencioso=True)
@@ -4886,7 +4906,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             processar_todos()
 
         win._enter_navigator_xml = install_enter_navigation(
-            [acao_combo, candidato_combo, qtd_entry, fator_entry, custo_entry, margem_entry, preco_entry, unidade_combo],
+            [acao_combo, candidato_combo, codigo_entry, descricao_entry, barras_entry,
+             qtd_entry, fator_entry, custo_entry, margem_entry, preco_entry, unidade_combo],
             on_finish=confirmar_item_e_avancar,
         )
 
@@ -4969,6 +4990,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if analises:
             tabela.selection_set(str(analises[0].index))
             carregar_item(analises[0].index)
+        reveal_prepared_toplevel_when_idle(win, maximize=True)
 
     def abrir_pdv_independente(self):
         """Abre o PDV em uma janela própria, limpa e focada na operação de venda."""
@@ -5019,13 +5041,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         self.lbl_pdv_status.grid(row=0, column=1, padx=18, pady=14, sticky="e")
         ctk.CTkButton(
-            cabecalho, text="Minimizar", width=110, height=36,
-            fg_color="#30363d", hover_color="#484f58", command=self._minimizar_pdv
-        ).grid(row=0, column=2, padx=(0, 8), pady=14)
-        ctk.CTkButton(
             cabecalho, text="Fechar  [Esc]", width=120, height=36,
             fg_color="#da3633", hover_color="#b62324", command=self._fechar_pdv
-        ).grid(row=0, column=3, padx=(0, 18), pady=14)
+        ).grid(row=0, column=2, padx=(0, 18), pady=14)
 
         corpo = ctk.CTkFrame(win, fg_color="#0d1117", corner_radius=0)
         corpo.grid(row=1, column=0, sticky="nsew", padx=14, pady=12)
@@ -5189,11 +5207,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             text_color="#8b949e",
             font=ctk.CTkFont(size=11),
         ).grid(row=5, column=0, sticky="ew", padx=16, pady=(8, 3))
-        self.combo_modo_pdv = ctk.CTkComboBox(
-            resumo, values=["BALCAO", "TOUCH", "RAPIDO"], command=self.aplicar_modo_pdv
-        )
-        self.combo_modo_pdv.set(getattr(self, "modo_pdv", "BALCAO"))
-        self.combo_modo_pdv.grid(row=6, column=0, sticky="ew", padx=16, pady=5)
         ctk.CTkButton(
             resumo,
             text="FINALIZAR VENDA  [F9]",
@@ -5202,18 +5215,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             hover_color="#238636",
             font=ctk.CTkFont(size=15, weight="bold"),
             command=lambda: self.finalizar_venda("COMPROVANTE"),
-        ).grid(row=7, column=0, sticky="ew", padx=16, pady=(5, 12))
+        ).grid(row=6, column=0, sticky="ew", padx=16, pady=(5, 12))
         btn_contingencia = ctk.CTkButton(
             resumo, text="CONTINGÊNCIA OFFLINE", height=36,
             fg_color="#9a6700", command=self.alternar_contingencia_offline_pdv,
         )
-        btn_contingencia.grid(row=9, column=0, sticky="ew", padx=16, pady=(0, 12))
+        btn_contingencia.grid(row=8, column=0, sticky="ew", padx=16, pady=(0, 12))
         self._pdv_contingency_buttons.append(btn_contingencia)
 
         ctk.CTkButton(
             resumo, text="PRÉ-VISUALIZAR FISCAL", height=36,
             fg_color="#1f6feb", command=self.previsualizar_venda_fiscal,
-        ).grid(row=8, column=0, sticky="ew", padx=16, pady=(0, 12))
+        ).grid(row=7, column=0, sticky="ew", padx=16, pady=(0, 12))
 
         rodape = ctk.CTkFrame(win, fg_color="#161b22", corner_radius=0)
         rodape.grid(row=2, column=0, sticky="ew")
@@ -5830,8 +5843,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.dict_clientes_venda = {}
         sugestoes = []
         for cliente in resultados:
-            prefixo = f"Ficha {cliente.numero_ficha} | " if cliente.numero_ficha is not None else ""
-            texto = f"{prefixo}{cliente.codigo} - {cliente.nome}".strip(" -")
+            numero = cliente.numero_ficha if cliente.numero_ficha is not None else cliente.codigo
+            texto = f"{numero} — {cliente.nome}".strip(" —")
             sugestoes.append(texto)
             self.dict_clientes_venda[texto] = cliente.id
 
@@ -6907,8 +6920,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if not self.carrinho_venda:
             messagebox.showwarning("Pré-visualização fiscal", "O carrinho está vazio.", parent=getattr(self, "pdv_window", self))
             return
+        if not modo_fiscal_ativo():
+            messagebox.showinfo("Pré-visualização fiscal", "Ative o modo Fiscal em Configurações.", parent=getattr(self, "pdv_window", self))
+            return
         if not self.fiscal_service.is_enabled():
-            messagebox.showinfo("Pré-visualização fiscal", "O modo fiscal está desativado.", parent=getattr(self, "pdv_window", self))
+            messagebox.showwarning("Pré-visualização fiscal", "Conclua a configuração fiscal antes de usar o PDV fiscal.", parent=getattr(self, "pdv_window", self))
             return
         try:
             cliente_id, cliente_nome = self._resolver_cliente_venda_atual()
@@ -6944,8 +6960,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 self._pdv_contingency_reason = ""
                 self._atualizar_botoes_contingencia_pdv()
             return
-        if not self.fiscal_service.is_enabled():
-            messagebox.showwarning("Contingência offline", "Ative o modo fiscal antes de usar a contingência.", parent=parent)
+        if not modo_fiscal_ativo() or not self.fiscal_service.is_enabled():
+            messagebox.showwarning("Contingência offline", "Ative e conclua a configuração fiscal antes de usar a contingência.", parent=parent)
             return
         config = self.fiscal_service.load_config()
         if str(config.get("default_model") or "65") != "65":
@@ -6990,6 +7006,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return
 
         cliente_id, cli_selecionado = self._resolver_cliente_venda_atual()
+        fiscal_required = (obter_config("modo_operacao") or "COMERCIAL").strip().upper() == "FISCAL"
+        config_fiscal = None
+        if fiscal_required:
+            config_fiscal = self.fiscal_service.load_config()
+            model_fiscal = str(config_fiscal.get("default_model") or "65")
+            problems = self.fiscal_service.validate_ready(
+                operation="autorizacao", model=model_fiscal
+            )
+            if problems:
+                messagebox.showerror(
+                    "Venda fiscal bloqueada",
+                    "Conclua a configuração fiscal antes de receber o pagamento:\n\n- "
+                    + "\n- ".join(problems),
+                    parent=getattr(self, "pdv_window", self),
+                )
+                return
 
         total_venda = self.pdv_service.totalizar(self.carrinho_venda)
         pagamento = self.solicitar_pagamentos_pdv(total_venda)
@@ -6999,7 +7031,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         usuario_venda = getattr(getattr(self, "security", None), "current_username", "Sistema")
         rascunho_fiscal = None
         senha_contingencia = ""
-        if self.fiscal_service.is_enabled():
+        if fiscal_required:
             try:
                 if self._pdv_contingency_reason:
                     senha_contingencia = self._obter_senha_certificado(
@@ -7007,7 +7039,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     )
                     if not senha_contingencia:
                         return
-                config_fiscal = self.fiscal_service.load_config()
                 destinatario_fiscal, destino_fiscal = self.fiscal_sale_service.recipient_for_customer(
                     int(cliente_id), model=str(config_fiscal.get("default_model") or "65")
                 )
@@ -9529,6 +9560,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         self.combo_modo_operacao.pack(fill="x", pady=(0, 12))
 
+        ctk.CTkLabel(
+            frame_form_cfg, text="Modo visual do PDV",
+            font=ctk.CTkFont(size=13, weight="bold"),
+        ).pack(anchor="w", pady=(2, 4))
+        self.combo_modo_pdv_config = ctk.CTkComboBox(
+            frame_form_cfg, values=["BALCAO", "TOUCH", "RAPIDO"],
+            state="readonly", height=38,
+        )
+        self.combo_modo_pdv_config.set(getattr(self, "modo_pdv", "BALCAO"))
+        self.combo_modo_pdv_config.pack(fill="x", pady=(0, 12))
+
         separador1 = ctk.CTkFrame(frame_form_cfg, height=2, fg_color="#30363d"); separador1.pack(fill="x", pady=10)
         ctk.CTkLabel(frame_form_cfg, text="Aparência e cores", font=ctk.CTkFont(size=15, weight="bold"), text_color=self.cor_acento).pack(anchor="w", pady=(2, 8))
 
@@ -9735,25 +9777,43 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return None
         return secret
 
-    def abrir_configuracao_fiscal(self):
-        if not modo_fiscal_ativo():
+    def abrir_configuracao_fiscal(self, force_open=False):
+        if not force_open and not modo_fiscal_ativo():
             messagebox.showinfo("Modo Comercial", "Os recursos fiscais estão ocultos. Ative o modo Fiscal em Configurações.", parent=self)
             return
         if not self._autorizar("fiscal", "configure"):
             return
+        current_window = getattr(self, "fiscal_config_window", None)
+        try:
+            if current_window is not None and current_window.winfo_exists():
+                current_window.deiconify()
+                current_window.lift()
+                return
+        except tk.TclError:
+            pass
         config = self.fiscal_service.load_config()
         janela = ctk.CTkToplevel(self)
-        janela.title("Fiscal oficial — configuração opcional")
-        janela.geometry("720x650")
-        janela.minsize(620, 540)
-        janela.transient(self)
-        janela.grab_set()
+        prepare_hidden_toplevel(janela)
+        self.fiscal_config_window = janela
+        janela.title("Configuração fiscal")
+        metrics = UniversalLayoutPolicy.metrics(
+            janela.winfo_screenwidth(), janela.winfo_screenheight(),
+            preferred_width=980, preferred_height=720,
+        )
+        janela.geometry(UniversalLayoutPolicy.geometry(metrics))
+        janela.minsize(*UniversalLayoutPolicy.safe_minsize(metrics))
+
+        def close_fiscal_config():
+            self.fiscal_config_window = None
+            janela.destroy()
+
+        janela.protocol("WM_DELETE_WINDOW", close_fiscal_config)
 
         corpo = BidirectionalScrollableFrame(janela, fg_color="#161b22", content_width=650)
         corpo.pack(fill="both", expand=True, padx=12, pady=12)
         content = corpo.content
-        ctk.CTkLabel(content, text="Fiscal oficial (opcional)", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=16, pady=(14, 4))
-        ctk.CTkLabel(content, text="O NabiCode continua funcionando normalmente sem CNPJ ou certificado A1. Estes dados só são exigidos para transmitir documentos à SEFAZ.", wraplength=610, justify="left", text_color="#c9d1d9").pack(anchor="w", padx=16, pady=(0, 14))
+        ctk.CTkLabel(content, text="Configuração fiscal da empresa", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(content, text="No modo Fiscal, os dados abaixo são obrigatórios antes da primeira venda. Depois de salvos, permanecem disponíveis mesmo ao voltar temporariamente ao modo Comercial.", wraplength=850, justify="left", text_color="#c9d1d9").pack(anchor="w", padx=16, pady=(0, 14))
 
         enabled = tk.BooleanVar(value=bool(config.get("enabled")))
         ctk.CTkCheckBox(content, text="Habilitar recursos fiscais oficiais", variable=enabled).pack(anchor="w", padx=16, pady=6)
@@ -9816,20 +9876,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def fill_from_own_xml():
             path = filedialog.askopenfilename(
                 parent=janela,
-                title="Selecionar NF-e/NFC-e antiga emitida pela empresa",
+                title="Selecionar NF-e/NFC-e emitida ou recebida pela empresa",
                 filetypes=[("Documento fiscal XML", "*.xml"), ("Todos", "*.*")],
             )
             if not path:
                 return
             try:
-                draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(path)
                 current_cnpj = self.fiscal_service._normalize_cnpj(fields["cnpj"].get())
-                if current_cnpj and current_cnpj != draft.cnpj and not messagebox.askyesno(
-                    "Configuração fiscal",
-                    "O CNPJ do XML é diferente do informado. Deseja usar os dados do XML autorizado?",
-                    parent=janela,
-                ):
-                    return
+                draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
+                    path, expected_cnpj=current_cnpj
+                )
                 replace_field("cnpj", draft.cnpj)
                 replace_field("state", draft.state)
                 mapping = {
@@ -9846,7 +9902,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if draft.tax_regime:
                     tax_regime.set(regime_labels[draft.tax_regime])
                 details = (
-                    "Dados recuperados do XML autorizado. Confira e clique em Salvar configuração fiscal."
+                    "Dados da sua empresa recuperados do XML autorizado. "
+                    "Confira e clique em Salvar configuração fiscal."
                 )
                 if draft.warnings:
                     details += "\n\n" + "\n".join(f"• {item}" for item in draft.warnings)
@@ -9856,7 +9913,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         ctk.CTkButton(
             content,
-            text="Preencher usando uma NF-e/NFC-e antiga da empresa",
+            text="Preencher usando uma NF-e/NFC-e emitida ou recebida",
             fg_color="#0969da",
             command=fill_from_own_xml,
         ).pack(fill="x", padx=16, pady=(12, 4))
@@ -10382,15 +10439,36 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))
+        ctk.CTkButton(content, text="Fechar configuração fiscal", fg_color="#30363d", command=close_fiscal_config).pack(fill="x", padx=16, pady=(0, 16))
+        reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
     def abrir_central_fiscal(self):
         if not self._autorizar("fiscal", "view"):
             return
+        current_window = getattr(self, "fiscal_center_window", None)
+        try:
+            if current_window is not None and current_window.winfo_exists():
+                current_window.deiconify()
+                current_window.lift()
+                return
+        except tk.TclError:
+            pass
         janela = ctk.CTkToplevel(self)
+        prepare_hidden_toplevel(janela)
+        self.fiscal_center_window = janela
         janela.title("Central fiscal")
-        janela.geometry("980x620")
-        janela.minsize(760, 500)
-        janela.transient(self)
+        metrics = UniversalLayoutPolicy.metrics(
+            janela.winfo_screenwidth(), janela.winfo_screenheight(),
+            preferred_width=1180, preferred_height=720,
+        )
+        janela.geometry(UniversalLayoutPolicy.geometry(metrics))
+        janela.minsize(*UniversalLayoutPolicy.safe_minsize(metrics))
+
+        def close_fiscal_center():
+            self.fiscal_center_window = None
+            janela.destroy()
+
+        janela.protocol("WM_DELETE_WINDOW", close_fiscal_center)
         frame = ctk.CTkFrame(janela, fg_color="#161b22")
         frame.pack(fill="both", expand=True, padx=12, pady=12)
         ctk.CTkLabel(frame, text="Documentos e eventos fiscais", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=12, pady=(12, 8))
@@ -11255,6 +11333,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=duplicate_fiscal_document, fg_color="#8957e5",
         ).pack(side="left", padx=4)
         load()
+        reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
     def fazer_backup_config_agora(self):
         self._salvar_opcoes_backup_dos_campos()
@@ -11306,6 +11385,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         modo_anterior = (obter_config("modo_operacao") or "COMERCIAL").strip().upper()
         modo_operacao_texto = self.combo_modo_operacao.get() if hasattr(self, "combo_modo_operacao") else "COMERCIAL"
         modo_novo = "FISCAL" if modo_operacao_texto.startswith("FISCAL") else "COMERCIAL"
+        modo_pdv_novo = self.pdv_service.normalizar_modo(
+            self.combo_modo_pdv_config.get()
+            if hasattr(self, "combo_modo_pdv_config") else getattr(self, "modo_pdv", "BALCAO")
+        )
         modo_alterado = modo_anterior != modo_novo
         if modo_alterado and not self._confirmar_senha_mestra(
             title="Alterar modo Comercial/Fiscal",
@@ -11321,6 +11404,26 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 else "COMERCIAL — sem emissão fiscal"
             )
             return
+        if modo_novo == "FISCAL":
+            config_fiscal = self.fiscal_service.load_config()
+            model_fiscal = str(config_fiscal.get("default_model") or "65")
+            problemas_fiscais = self.fiscal_service.validate_ready(
+                operation="autorizacao", model=model_fiscal
+            )
+            if problemas_fiscais:
+                self.combo_modo_operacao.set(
+                    "FISCAL — com recursos fiscais"
+                    if modo_anterior == "FISCAL"
+                    else "COMERCIAL — sem emissão fiscal"
+                )
+                messagebox.showwarning(
+                    "Configuração fiscal obrigatória",
+                    "Antes de ativar o modo Fiscal, conclua estas configurações:\n\n- "
+                    + "\n- ".join(problemas_fiscais),
+                    parent=self,
+                )
+                self.abrir_configuracao_fiscal(force_open=True)
+                return
         novo_nome = self.entry_cfg_loja.get().strip()
         novo_tel = self.entry_cfg_tel.get().strip()
         novo_endereco = self.entry_cfg_endereco.get().strip()
@@ -11339,6 +11442,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         salvar_config("aparencia_sistema", aparencia)
         salvar_config("cor_destaque", cor_nome)
         salvar_config("modo_operacao", modo_novo)
+        self.aplicar_modo_pdv(modo_pdv_novo)
         self._salvar_preferencias_interface()
         self._salvar_opcoes_backup_dos_campos()
         try:

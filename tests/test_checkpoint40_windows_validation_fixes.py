@@ -15,12 +15,12 @@ def method_block(name: str, next_name: str) -> str:
     return LEGACY[start:end]
 
 
-def test_pdv_has_explicit_minimize_without_changing_function_shortcuts():
+def test_pdv_uses_native_minimize_without_changing_function_shortcuts():
     opening = method_block("abrir_pdv_independente", "_enter_contexto_pdv")
     minimize = method_block("_minimizar_pdv", "_nome_item_tabela_pdv")
     assert "win.transient(self)" not in opening
-    assert 'text="Minimizar"' in opening
-    assert "command=self._minimizar_pdv" in opening
+    assert 'text="Minimizar"' not in opening
+    assert "win.transient(self)" not in opening
     assert "win.iconify()" in minimize
     assert "self.deiconify()" in minimize
     for key, action in (

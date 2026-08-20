@@ -30,7 +30,7 @@ def write_xml(tmp_path: Path, content: str) -> Path:
 
 def test_recupera_configuracao_de_xml_proprio_autorizado(tmp_path):
     draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
-        write_xml(tmp_path, authorized_xml())
+        write_xml(tmp_path, authorized_xml()), expected_cnpj="12345678000195"
     )
     assert draft.cnpj == "12345678000195"
     assert draft.state == "BA"
@@ -44,7 +44,8 @@ def test_recupera_configuracao_de_xml_proprio_autorizado(tmp_path):
 
 def test_crt_3_exige_confirmacao_do_regime(tmp_path):
     draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
-        write_xml(tmp_path, authorized_xml(crt="3", model="55", series="1"))
+        write_xml(tmp_path, authorized_xml(crt="3", model="55", series="1")),
+        expected_cnpj="12345678000195",
     )
     assert draft.tax_regime == ""
     assert "Lucro Presumido" in draft.warnings[0]
@@ -54,4 +55,30 @@ def test_rejeita_xml_sem_protocolo_de_autorizacao(tmp_path):
     with pytest.raises(ValueError, match="cStat 100"):
         FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
             write_xml(tmp_path, authorized_xml(status="110"))
+        )
+
+
+def test_nota_de_compra_usa_destinatario_e_nao_fornecedor(tmp_path):
+    xml = authorized_xml().replace(
+        "<det nItem=\"1\">",
+        """<dest><CNPJ>02624729000164</CNPJ><xNome>MINHA EMPRESA LTDA</xNome>
+        <enderDest><xLgr>RUA MINHA</xLgr><nro>20</nro><xBairro>CENTRO</xBairro>
+        <cMun>2927408</cMun><xMun>SALVADOR</xMun><UF>BA</UF><CEP>40000000</CEP></enderDest>
+        <IE>99887766</IE></dest><det nItem=\"1\">""",
+    )
+    draft = FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
+        write_xml(tmp_path, xml), expected_cnpj="02624729000164"
+    )
+    assert draft.source_role == "DESTINATARIO"
+    assert draft.cnpj == "02624729000164"
+    assert draft.issuer["name"] == "MINHA EMPRESA LTDA"
+    assert draft.issuer["street"] == "RUA MINHA"
+    assert draft.tax_regime == ""
+    assert "Nota de compra" in draft.warnings[0]
+
+
+def test_rejeita_xml_de_terceiro(tmp_path):
+    with pytest.raises(ValueError, match="nem destinatário"):
+        FiscalOnboardingService(NFeXMLService()).from_authorized_xml(
+            write_xml(tmp_path, authorized_xml()), expected_cnpj="02624729000164"
         )

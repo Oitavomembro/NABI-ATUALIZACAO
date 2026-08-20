@@ -87,7 +87,8 @@ def test_pdv_has_main_owner_and_restores_focus_after_close():
     closing = _legacy_method("_fechar_pdv")
     assert "win = ctk.CTkToplevel(self)" in opening
     assert "win.transient(self)" not in opening
-    assert "command=self._minimizar_pdv" in opening
+    assert 'text="Minimizar"' not in opening
+    assert 'win.bind("<F11>"' in opening
     assert "win.grab_release()" in closing
     assert closing.index("win.destroy()") < closing.index("self.after_idle(self._garantir_janela_principal_visivel)")
     assert "tk.Tk(" not in opening + closing

@@ -68,7 +68,8 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert 'text="Executar pré-voo fiscal local"' in block
     assert "Modelos aprovados:" in block
     assert "result.xml_sha256_by_model" in block
-    assert "Preencher usando uma NF-e/NFC-e antiga da empresa" in block
+    assert "Preencher usando uma NF-e/NFC-e emitida ou recebida" in block
+    assert "expected_cnpj=current_cnpj" in block
     assert 'fields["sale_series_55"]' in block
     assert 'fields["sale_series_65"]' in block
     assert 'fields["issuer_im"]' in block
