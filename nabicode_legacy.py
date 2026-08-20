@@ -1998,14 +1998,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         widgets = UIPreferencesService.dashboard_widgets(self.preferencias_interface)
 
         if "resumo" in widgets:
-            frame_totais_dia = ctk.CTkFrame(conteudo_frame, fg_color="#0d1117", corner_radius=10)
-            frame_totais_dia.pack(fill="x", padx=15, pady=(15, 8), ipadx=10, ipady=8)
-            self.lbl_vendas_dia = ctk.CTkLabel(frame_totais_dia, text="🛒 Vendas Hoje: R$ 0.00", font=ctk.CTkFont(size=14, weight="bold"), text_color="#00FF88")
-            self.lbl_vendas_dia.pack(side="left", expand=True, padx=10)
-            self.lbl_recebidos_dia = ctk.CTkLabel(frame_totais_dia, text="💰 Recebido Hoje: R$ 0.00", font=ctk.CTkFont(size=14, weight="bold"), text_color="#388bfd")
-            self.lbl_recebidos_dia.pack(side="left", expand=True, padx=10)
-            self.lbl_mov_total_dia = ctk.CTkLabel(frame_totais_dia, text="📊 Movimento Total: R$ 0.00", font=ctk.CTkFont(size=14, weight="bold"), text_color="#ffd700")
-            self.lbl_mov_total_dia.pack(side="left", expand=True, padx=10)
+            frame_totais_dia = ctk.CTkFrame(conteudo_frame, fg_color="transparent")
+            frame_totais_dia.pack(fill="x", padx=15, pady=(15, 8))
+            card_vendas = ctk.CTkFrame(frame_totais_dia, fg_color="#0d1117", corner_radius=10)
+            card_vendas.pack(side="left", fill="x", expand=True, padx=(0, 5))
+            ctk.CTkLabel(card_vendas, text="VENDAS REALIZADAS HOJE", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(10, 2))
+            self.lbl_vendas_dia = ctk.CTkLabel(card_vendas, text="R$ 0,00", font=ctk.CTkFont(size=22, weight="bold"), text_color="#00FF88")
+            self.lbl_vendas_dia.pack(anchor="w", padx=14, pady=(0, 10))
+            card_recebimentos = ctk.CTkFrame(frame_totais_dia, fg_color="#0d1117", corner_radius=10)
+            card_recebimentos.pack(side="left", fill="x", expand=True, padx=(5, 0))
+            ctk.CTkLabel(card_recebimentos, text="RECEBIMENTOS DE FICHAS HOJE", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(10, 2))
+            self.lbl_recebidos_dia = ctk.CTkLabel(card_recebimentos, text="R$ 0,00", font=ctk.CTkFont(size=22, weight="bold"), text_color="#388bfd")
+            self.lbl_recebidos_dia.pack(anchor="w", padx=14, pady=(0, 2))
+            ctk.CTkLabel(card_recebimentos, text="Entrada de caixa — não aumenta o faturamento", text_color="#8b949e", font=ctk.CTkFont(size=10)).pack(anchor="w", padx=14, pady=(0, 8))
 
         indicadores = ctk.CTkFrame(conteudo_frame, fg_color="transparent")
         mostrar_indicadores = False
@@ -2175,9 +2180,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
 
         if hasattr(self, 'lbl_vendas_dia'):
-            self.lbl_vendas_dia.configure(text=f"🛒 Vendas Hoje: R$ {historico.sales_total:.2f}")
-            self.lbl_recebidos_dia.configure(text=f"💰 Recebido Hoje: R$ {historico.received_total:.2f}")
-            self.lbl_mov_total_dia.configure(text=f"📊 Movimento Total: R$ {historico.movement_total:.2f}")
+            self.lbl_vendas_dia.configure(text=f"R$ {historico.sales_total:.2f}")
+            self.lbl_recebidos_dia.configure(text=f"R$ {historico.received_total:.2f}")
 
     def _agendar_pergunta_abertura_caixa(self):
         """Abre a pergunta de caixa somente depois que a janela raiz estiver visível."""
@@ -11076,11 +11080,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ).pack(fill="x", padx=12, pady=(0, 6))
         summary_frame = ctk.CTkFrame(frame, fg_color="transparent")
         summary_frame.pack(fill="x", padx=12, pady=(0, 8))
-        summary_labels = {}
-        for key, title, color in (("authorized","Autorizadas","#2ea043"),("pending","Pendentes","#d29922"),("failed","Com erro","#da3633"),("cancelled","Canceladas","#6e7681"),("total","Total","#1f6feb")):
-            label = ctk.CTkLabel(summary_frame, text=f"{title}: 0", fg_color=color, corner_radius=7, height=34, font=ctk.CTkFont(weight="bold"))
-            label.pack(side="left", fill="x", expand=True, padx=4)
-            summary_labels[key] = label
+        sales_summary_card = ctk.CTkFrame(summary_frame, fg_color="#0d1117", corner_radius=10)
+        sales_summary_card.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkLabel(sales_summary_card, text="SAÍDAS — VENDAS", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(9, 1))
+        sales_summary_value = ctk.CTkLabel(sales_summary_card, text="0 documentos", text_color="#2ea043", font=ctk.CTkFont(size=18, weight="bold"))
+        sales_summary_value.pack(anchor="w", padx=14, pady=(0, 9))
+        entries_summary_card = ctk.CTkFrame(summary_frame, fg_color="#0d1117", corner_radius=10)
+        entries_summary_card.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        ctk.CTkLabel(entries_summary_card, text="ENTRADAS — COMPRAS", text_color="#8b949e", font=ctk.CTkFont(size=11, weight="bold")).pack(anchor="w", padx=14, pady=(9, 1))
+        entries_summary_value = ctk.CTkLabel(entries_summary_card, text="0 notas lançadas", text_color="#58a6ff", font=ctk.CTkFont(size=18, weight="bold"))
+        entries_summary_value.pack(anchor="w", padx=14, pady=(0, 9))
         filters = ctk.CTkFrame(frame, fg_color="transparent")
         filters.pack(fill="x", padx=12, pady=(0, 8))
         document_search = ctk.CTkEntry(
@@ -11101,9 +11110,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             rows.clear()
             query = document_search.get().strip().casefold()
             summary = self.fiscal_sale_service.summary()
-            for key, label in summary_labels.items():
-                title = {"authorized":"Autorizadas","pending":"Pendentes","failed":"Com erro","cancelled":"Canceladas","total":"Total"}[key]
-                label.configure(text=f"{title}: {summary[key]}")
+            sales_summary_value.configure(text=f"{summary['total']} documento(s)")
+            entries_summary_value.configure(
+                text=f"{len(NFE_IMPORT_SERVICE.listar_importacoes())} nota(s) lançada(s)"
+            )
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
             for row in self.fiscal_sale_service.list_sales():
                 queue = queue_by_id.get(str(row.get("queue_id")), {})

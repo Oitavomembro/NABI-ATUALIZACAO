@@ -7,7 +7,7 @@ SOURCE = (Path(__file__).resolve().parents[1] / "nabicode_legacy.py").read_text(
 def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     assert "self.fiscal_sale_service.summary()" in block
-    assert '"cancelled","Canceladas"' in block
+    assert 'text="Cancelar autorizado"' in block
     assert "self.fiscal_sale_service.list_sales()" in block
     assert 'text="Transmitir pendentes"' in block
     assert 'text="Reenviar selecionado"' in block

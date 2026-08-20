@@ -42,6 +42,12 @@ class ReportServiceTests(unittest.TestCase):
             "INSERT INTO movimentacoes VALUES(2,'2026-07-01 10:00:00','VENDA','JOAO',75,'DINHEIRO','PAGO','operador')"
         )
         connection.execute(
+            "INSERT INTO movimentacoes VALUES(3,'2026-08-02 10:00:00','COMPRA','BIA',50,'CREDIARIO','PENDENTE','admin')"
+        )
+        connection.execute(
+            "INSERT INTO movimentacoes VALUES(4,'2026-08-03 10:00:00','PAGAMENTO','ANA',125.50,'PIX','PAGO','admin')"
+        )
+        connection.execute(
             "INSERT INTO financeiro_titulos VALUES(1,'RECEBER','ANA','Venda','2026-08-01','2026-08-10',200,50,150,'PARCIAL','VENDA','1')"
         )
         connection.execute(
@@ -85,12 +91,20 @@ class ReportServiceTests(unittest.TestCase):
 
     def test_indicators_do_not_count_pending_movements_as_sales(self) -> None:
         data = self.service.indicators(start_date="2026-08-01", end_date="2026-08-31")
-        self.assertEqual(data["vendas_quantidade"], 1)
-        self.assertEqual(data["vendas_total"], 125.50)
+        self.assertEqual(data["vendas_quantidade"], 2)
+        self.assertEqual(data["vendas_total"], 175.50)
         self.assertEqual(data["receber_aberto"], 150)
         self.assertEqual(data["pagar_aberto"], 300)
         self.assertEqual(data["estoque_baixo"], 1)
         self.assertEqual(data["clientes_ativos"], 1)
+
+    def test_relatorio_de_vendas_exclui_pagamento_de_ficha(self) -> None:
+        result = self.service.generate(
+            "vendas", start_date="2026-08-01", end_date="2026-08-31", actor="admin"
+        )
+        type_index = result.columns.index("tipo")
+        self.assertEqual({row[type_index] for row in result.rows}, {"VENDA", "COMPRA"})
+        self.assertNotIn("PAGAMENTO", {row[type_index] for row in result.rows})
 
     def test_exports_csv_xlsx_and_pdf(self) -> None:
         result = self.service.generate("financeiro", actor="admin")

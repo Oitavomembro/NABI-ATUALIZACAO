@@ -139,7 +139,9 @@ class ReportService:
                 type_col = self._first(cols, "tipo", "origem")
                 where, params = self._date_where(date_col, start, end)
                 if type_col:
-                    where.append(f"UPPER(COALESCE({type_col},'')) IN ('VENDA','RECEBIMENTO')")
+                    # Venda reconhece faturamento uma única vez. Recebimentos de
+                    # fichas apenas liquidam o contas a receber e não são nova venda.
+                    where.append(f"UPPER(COALESCE({type_col},'')) IN ('COMPRA','VENDA')")
                 sql_where = " WHERE " + " AND ".join(where) if where else ""
                 value_expr = value_col or "0"
                 row = connection.execute(f"SELECT COUNT(*), COALESCE(SUM({value_expr}),0) FROM movimentacoes{sql_where}", params).fetchone()
@@ -511,7 +513,11 @@ class ReportService:
         return candidate
 
     def _report_vendas(self, connection, **kwargs):
-        return self._generic_report(connection, "movimentacoes", kwargs, preferred=("id", "data", "tipo", "cliente", "descricao", "valor_total", "valor", "forma_pagamento", "status", "usuario"))
+        return self._generic_report(
+            connection, "movimentacoes", kwargs,
+            preferred=("id", "data", "tipo", "cliente", "descricao", "valor_total", "valor", "forma_pagamento", "status", "usuario"),
+            required_types=("COMPRA", "VENDA"),
+        )
 
     def _report_produtos(self, connection, **kwargs):
         return self._generic_report(connection, "produtos", kwargs, preferred=("id", "codigo", "codigo_barras", "nome", "preco_custo", "preco_venda", "estoque_atual", "estoque_minimo", "ativo", "atualizado_em"))
@@ -531,7 +537,10 @@ class ReportService:
     def _report_estoque(self, connection, **kwargs):
         return self._generic_report(connection, "estoque_movimentacoes", kwargs, preferred=("id", "produto_id", "tipo", "quantidade", "saldo_anterior", "saldo_atual", "origem", "origem_id", "motivo", "usuario", "data"))
 
-    def _generic_report(self, connection, table: str, options: Mapping[str, Any], *, preferred: Sequence[str]):
+    def _generic_report(
+        self, connection, table: str, options: Mapping[str, Any], *,
+        preferred: Sequence[str], required_types: Sequence[str] = (),
+    ):
         if not self._table_exists(connection, table):
             return tuple(), tuple()
         columns = self._columns(connection, table)
@@ -543,6 +552,12 @@ class ReportService:
         user_col = self._first(columns, "usuario", "updated_by", "criado_por")
         text_cols = [column for column in selected if column not in {"id"}]
         where, params = self._date_where(date_col, options.get("start"), options.get("end"))
+        if required_types and "tipo" in columns:
+            normalized_types = tuple(str(item).strip().upper() for item in required_types)
+            where.append(
+                "UPPER(COALESCE(tipo,'')) IN (" + ",".join("?" for _ in normalized_types) + ")"
+            )
+            params.extend(normalized_types)
         search = str(options.get("search") or "").strip()
         if search and text_cols:
             where.append("(" + " OR ".join(f"CAST({column} AS TEXT) LIKE ?" for column in text_cols) + ")")

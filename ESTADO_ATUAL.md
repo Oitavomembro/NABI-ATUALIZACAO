@@ -1407,3 +1407,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o botão Compras não retorna à barra principal, mas suas rotinas e dados continuam acessíveis dentro da Central Fiscal;
 - 21 testes focados foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
 - validação consolidada posterior: 1.311 testes aprovados, 1 ignorado e 32 subtestes aprovados em perfil TESTE.
+
+## Checkpoint 42.99 — faturamento separado de recebimentos e entradas
+
+- o dashboard passou a usar cards distintos para vendas realizadas e recebimentos de fichas;
+- a interface informa que recebimento de ficha é entrada de caixa e não aumenta faturamento;
+- foi removido o indicador ambíguo `Movimento Total`, que somava venda e liquidação da mesma dívida;
+- a Central Fiscal trocou os cinco blocos de status por dois cards claros: `Saídas — Vendas` e `Entradas — Compras`;
+- corrigida a causa raiz do relatório mensal: somente movimentos `COMPRA`/`VENDA` compõem faturamento; `PAGAMENTO`/`RECEBIMENTO` não entram novamente como venda;
+- 38 testes focados foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
