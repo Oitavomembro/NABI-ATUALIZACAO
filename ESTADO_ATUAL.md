@@ -1303,3 +1303,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - tamanho: 55.529.665 bytes;
 - SHA-256: `04E4264F2C4432B209CA95D63E95F0D12F19B8B0B192B58710D26C3E0D35D251`;
 - o instalador não foi executado e nenhum programa instalado, banco, certificado, endpoint fiscal ou impressora real foi utilizado.
+
+## Checkpoint 42.89 / R19 TESTE — instalador substitui revisões anteriores
+
+- revisão interna elevada de 18 para 19;
+- a detecção de instalações NabiCode agora cobre registros do Windows de 64 bits, 32 bits e instalações por usuário;
+- versões antigas identificadas oficialmente são desinstaladas antes da nova instalação, preservando os dados durante atualização;
+- atalhos antigos do NabiCode no menu Iniciar e na Área de Trabalho são removidos e somente o atalho oficial é recriado;
+- o instalador não apaga executáveis de instalação guardados pelo usuário em Downloads, Área de Trabalho ou outras pastas pessoais;
+- a preparação offline foi corrigida para calcular hashes apenas dos pacotes `.whl`, sem tentar incluir o próprio manifesto;
+- suíte completa: 1.287 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- instalador: `build_output/installer/NabiCode_2.5.1_TESTE_R19_Setup.exe`;
+- tamanho: 55.544.045 bytes;
+- SHA-256: `2B744B79D4A580CC74A51D7F0B6EEAF0321F1036483F61568DDAC9E1919A15C5`;
+- o instalador não foi executado e nenhum programa instalado, banco, certificado, endpoint fiscal ou impressora real foi utilizado.

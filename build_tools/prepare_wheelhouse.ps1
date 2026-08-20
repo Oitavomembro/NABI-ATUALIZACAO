@@ -11,7 +11,7 @@ New-Item -ItemType Directory -Force -Path $Wheelhouse | Out-Null
 python -m pip download --only-binary=:all: --dest $Wheelhouse --requirement $Lock
 if ($LASTEXITCODE -ne 0) { throw "Falha ao preparar wheelhouse." }
 
-Get-ChildItem $Wheelhouse -File | Sort-Object Name | ForEach-Object {
+Get-ChildItem $Wheelhouse -Filter '*.whl' -File | Sort-Object Name | ForEach-Object {
     $Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
     "$Hash  $($_.Name)"
 } | Set-Content -Encoding ascii (Join-Path $Wheelhouse "SHA256SUMS.txt")

@@ -158,14 +158,14 @@ begin
       DelTree(RemoveBackslashUnlessRoot(OldInstallLocations[Index]), True, True, True);
 end;
 
-function RunRegisteredUninstaller(const RegistryKey: String): Boolean;
+function RunRegisteredUninstaller(const RootKey: Integer; const RegistryKey: String): Boolean;
 var
   InstallLocation: String;
   Uninstaller: String;
   ResultCode: Integer;
 begin
   Result := True;
-  if not RegQueryStringValue(HKLM64, RegistryKey, 'InstallLocation', InstallLocation) then
+  if not RegQueryStringValue(RootKey, RegistryKey, 'InstallLocation', InstallLocation) then
     Exit;
   Uninstaller := AddBackslash(InstallLocation) + 'unins000.exe';
   if not FileExists(Uninstaller) then
@@ -177,7 +177,7 @@ begin
     ewWaitUntilTerminated, ResultCode) and (ResultCode = 0);
 end;
 
-procedure RemoveOtherRegisteredNabiCodeInstalls();
+procedure RemoveRegisteredNabiCodeInstallsAtRoot(const RootKey: Integer);
 var
   Names: TArrayOfString;
   Index: Integer;
@@ -186,33 +186,46 @@ var
   Publisher: String;
   InstallLocation: String;
 begin
-  if not RegGetSubkeyNames(HKLM64,
+  if not RegGetSubkeyNames(RootKey,
     'Software\Microsoft\Windows\CurrentVersion\Uninstall', Names) then
     Exit;
   for Index := 0 to GetArrayLength(Names) - 1 do
   begin
     RegistryKey := 'Software\Microsoft\Windows\CurrentVersion\Uninstall\' + Names[Index];
-    if CompareText(RegistryKey, OfficialUninstallKey) = 0 then
+    if (RootKey = HKLM64) and (CompareText(RegistryKey, OfficialUninstallKey) = 0) then
       Continue;
     DisplayName := '';
     Publisher := '';
-    RegQueryStringValue(HKLM64, RegistryKey, 'DisplayName', DisplayName);
-    RegQueryStringValue(HKLM64, RegistryKey, 'Publisher', Publisher);
+    RegQueryStringValue(RootKey, RegistryKey, 'DisplayName', DisplayName);
+    RegQueryStringValue(RootKey, RegistryKey, 'Publisher', Publisher);
     if (Pos('NABICODE', Uppercase(DisplayName)) = 1) and
       (CompareText(Publisher, 'NabiCode') = 0) then
     begin
       InstallLocation := '';
-      if RegQueryStringValue(HKLM64, RegistryKey, 'InstallLocation', InstallLocation) and
+      if RegQueryStringValue(RootKey, RegistryKey, 'InstallLocation', InstallLocation) and
         (InstallLocation <> '') then
         OldInstallLocations.Add(InstallLocation);
-      if not RunRegisteredUninstaller(RegistryKey) then
-        RegDeleteKeyIncludingSubkeys(HKLM64, RegistryKey);
+      if not RunRegisteredUninstaller(RootKey, RegistryKey) then
+        RegDeleteKeyIncludingSubkeys(RootKey, RegistryKey);
     end;
   end;
 end;
 
+procedure RemoveOtherRegisteredNabiCodeInstalls();
+begin
+  { Cobre instalações por máquina, por usuário e legados registrados em 32 bits. }
+  RemoveRegisteredNabiCodeInstallsAtRoot(HKLM64);
+  RemoveRegisteredNabiCodeInstallsAtRoot(HKLM32);
+  RemoveRegisteredNabiCodeInstallsAtRoot(HKCU);
+end;
+
 procedure RemoveLegacyShortcuts();
 begin
+  { Remove atalhos de qualquer revisão anterior; o instalador recria somente o oficial. }
+  DelTree(ExpandConstant('{commonprograms}\NabiCode*.lnk'), False, True, False);
+  DelTree(ExpandConstant('{userprograms}\NabiCode*.lnk'), False, True, False);
+  DelTree(ExpandConstant('{commondesktop}\NabiCode*.lnk'), False, True, False);
+  DelTree(ExpandConstant('{userdesktop}\NabiCode*.lnk'), False, True, False);
   DeleteFile(ExpandConstant('{commonprograms}\NabiCode TESTE R6.lnk'));
   DeleteFile(ExpandConstant('{userprograms}\NabiCode TESTE R6.lnk'));
   DeleteFile(ExpandConstant('{commondesktop}\NabiCode TESTE R6.lnk'));
@@ -305,7 +318,7 @@ begin
     Exit;
   end;
 
-  if not RunRegisteredUninstaller(OfficialUninstallKey) then
+  if not RunRegisteredUninstaller(HKLM64, OfficialUninstallKey) then
   begin
     MsgBox('Não foi possível executar o desinstalador oficial do NabiCode.', mbError, MB_OK);
     Result := False;

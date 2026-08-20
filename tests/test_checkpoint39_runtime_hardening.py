@@ -128,7 +128,10 @@ class DatabaseLockHardeningTests(unittest.TestCase):
             for thread in threads:
                 thread.start()
             deadline = time.monotonic() + 3.0
-            while "acquired" not in results and time.monotonic() < deadline:
+            # Mantenha o vencedor com a trava até que todos os concorrentes
+            # tenham concluído a tentativa; liberar ao primeiro resultado
+            # permitia que uma thread ainda não escalonada virasse 2º vencedor.
+            while len(results) < len(threads) and time.monotonic() < deadline:
                 time.sleep(0.01)
             release.set()
             for thread in threads:
