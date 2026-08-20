@@ -10888,9 +10888,112 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=configure_initial_numbering,
         ).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
+        ctk.CTkButton(content, text="Regras tributárias da Bahia", fg_color="#bf8700", command=self.abrir_regras_tributarias_bahia).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))
         ctk.CTkButton(content, text="Fechar configuração fiscal", fg_color="#30363d", command=close_fiscal_config).pack(fill="x", padx=16, pady=(0, 16))
+        reveal_prepared_toplevel_when_idle(janela, maximize=True)
+
+    def abrir_regras_tributarias_bahia(self):
+        """Cadastro explícito das regras aprovadas pelo contador; não presume alíquotas."""
+        parent = getattr(self, "fiscal_config_window", None) or self
+        janela = ctk.CTkToplevel(parent)
+        prepare_hidden_toplevel(janela)
+        janela.title("Regras tributárias da Bahia")
+        janela.geometry("1040x760")
+        janela.minsize(820, 620)
+        corpo = BidirectionalScrollableFrame(janela, fg_color="#161b22", content_width=780)
+        corpo.pack(fill="both", expand=True, padx=12, pady=12)
+        content = corpo.content
+        ctk.CTkLabel(content, text="Matriz tributária da Bahia", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=16, pady=(14, 4))
+        ctk.CTkLabel(
+            content,
+            text=("Cadastre somente regras revisadas pelo contador. O NabiCode usa NCM/CEST, regime e UF de destino "
+                  "para localizar a regra, mas nunca inventa alíquota. Produção continua bloqueada até homologação."),
+            wraplength=900, justify="left", text_color="#c9d1d9",
+        ).pack(anchor="w", padx=16, pady=(0, 12))
+
+        list_box = ctk.CTkTextbox(content, height=150, font=("Consolas", 12))
+        list_box.pack(fill="x", padx=16, pady=(0, 10))
+        selected_ids = []
+
+        def refresh_rules():
+            rules = self.fiscal_tax_rule_service.list_rules()
+            selected_ids[:] = [rule.id for rule in rules]
+            list_box.configure(state="normal")
+            list_box.delete("1.0", "end")
+            if not rules:
+                list_box.insert("end", "Nenhuma regra ativa. Cadastre somente após aprovação contábil.\n")
+            for rule in rules:
+                list_box.insert(
+                    "end",
+                    f"#{rule.id}  {rule.name} | {rule.tax_regime} | BA → {rule.destination_state} | "
+                    f"NCM {rule.ncm_prefix} | CEST {rule.cest or '-'} | CST/CSOSN {rule.icms_code}\n",
+                )
+            list_box.configure(state="disabled")
+
+        fields = {}
+        def add_field(name, label, default=""):
+            ctk.CTkLabel(content, text=label, font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(6, 2))
+            entry = ctk.CTkEntry(content, height=34)
+            entry.pack(fill="x", padx=16)
+            if default != "": entry.insert(0, str(default))
+            fields[name] = entry
+
+        add_field("name", "Nome da regra (ex.: Móveis BA — venda interna)")
+        add_field("destination_state", "UF de destino (* para qualquer UF)", "BA")
+        ctk.CTkLabel(content, text="Regime tributário", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(6, 2))
+        regime = ctk.CTkComboBox(content, values=["SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "MEI"], state="readonly")
+        regime.pack(fill="x", padx=16); regime.set("SIMPLES_NACIONAL")
+        add_field("ncm_prefix", "NCM ou prefixo NCM (2 a 8 dígitos)")
+        add_field("cest", "CEST (7 dígitos; obrigatório quando houver ST)")
+        add_field("icms_code", "CST/CSOSN homologado no NabiCode", "102")
+        for name, label in (
+            ("icms_rate", "Alíquota ICMS (%)"), ("icms_base_reduction", "Redução da base ICMS (%)"),
+            ("sn_credit_rate", "Crédito do Simples (%) — CSOSN 201"), ("st_mva", "MVA da ST (%)"),
+            ("st_rate", "Alíquota ICMS-ST (%)"), ("fcp_st_rate", "FCP-ST (%)"),
+            ("difal_internal_rate", "DIFAL: alíquota interna do destino (%)"),
+            ("difal_interstate_rate", "DIFAL: alíquota interestadual (%)"),
+            ("difal_fcp_rate", "DIFAL: FCP do destino (%)"),
+        ): add_field(name, label, "0")
+        add_field("benefit_code", "Código de benefício fiscal (quando aplicável)")
+        add_field("approved_by", "Responsável contábil que aprovou")
+        add_field("approved_at", "Data da aprovação (AAAA-MM-DD)", datetime.now().date().isoformat())
+        status = ctk.CTkLabel(content, text="", wraplength=900, justify="left")
+        status.pack(anchor="w", padx=16, pady=8)
+
+        def save_rule():
+            if not self._confirmar_senha_mestra(
+                title="Salvar regra tributária", prompt="Digite a senha mestra para alterar a matriz fiscal.", parent=janela
+            ): return
+            try:
+                values = {name: entry.get() for name, entry in fields.items()}
+                values.update({"issuer_state": "BA", "tax_regime": regime.get(), "operation_kind": "VENDA"})
+                saved = self.fiscal_tax_rule_service.save(values)
+                refresh_rules()
+                status.configure(text=f"Regra #{saved.id} salva. Ela só será aplicada quando todos os critérios coincidirem.", text_color="#3fb950")
+            except Exception as exc:
+                status.configure(text=str(exc), text_color="#f85149")
+
+        deactivate_id = ctk.CTkEntry(content, placeholder_text="Número da regra a desativar (ex.: 3)")
+        deactivate_id.pack(fill="x", padx=16, pady=(8, 4))
+        def deactivate_rule():
+            if not self._confirmar_senha_mestra(
+                title="Desativar regra tributária", prompt="Digite a senha mestra para preservar e desativar esta regra.", parent=janela
+            ): return
+            try:
+                rule_id = int(deactivate_id.get())
+                self.fiscal_tax_rule_service.deactivate(rule_id)
+                refresh_rules(); deactivate_id.delete(0, "end")
+                status.configure(text=f"Regra #{rule_id} desativada; o histórico foi preservado.", text_color="#d29922")
+            except Exception as exc:
+                status.configure(text=str(exc), text_color="#f85149")
+
+        actions = ctk.CTkFrame(content, fg_color="transparent")
+        actions.pack(fill="x", padx=16, pady=(6, 16))
+        ctk.CTkButton(actions, text="Salvar nova regra aprovada", fg_color="#2ea043", command=save_rule).pack(side="left", fill="x", expand=True, padx=(0, 4))
+        ctk.CTkButton(actions, text="Desativar regra informada", fg_color="#da3633", command=deactivate_rule).pack(side="left", fill="x", expand=True, padx=(4, 0))
+        refresh_rules()
         reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
     def abrir_central_fiscal(self):
