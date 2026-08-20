@@ -744,8 +744,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
             cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
         )
-        self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_tax_rule_service = FiscalTaxRuleService(conectar_banco)
+        self.fiscal_service.tax_rule_service = self.fiscal_tax_rule_service
+        self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
         self.fiscal_preflight_service = FiscalPreflightService(
             self.fiscal_service, self.fiscal_catalog_readiness_service

@@ -7,7 +7,7 @@ from typing import Any, Mapping
 class FiscalProductProfile:
     """Valida a ficha fiscal de venda sem inferir tributação da empresa."""
 
-    SIMPLE_CSOSN = {"102", "103", "300", "400", "500"}
+    SIMPLE_CSOSN = {"102", "103", "201", "202", "203", "300", "400", "500"}
     NORMAL_ICMS_CST = {"00", "40", "41", "50", "60"}
     CONTRIBUTION_TAXED = {"01", "02"}
     CONTRIBUTION_UNTAXED = {"04", "05", "06", "07", "08", "09"}
@@ -61,7 +61,7 @@ class FiscalProductProfile:
         if result["fiscal_origin"] and result["fiscal_origin"] not in set("012345678"):
             raise ValueError("Origem da mercadoria deve ficar entre 0 e 8.")
         if result["fiscal_csosn"] and result["fiscal_csosn"] not in cls.SIMPLE_CSOSN:
-            raise ValueError("CSOSN suportado deve ser 102, 103, 300, 400 ou 500.")
+            raise ValueError("CSOSN suportado deve ser 102, 103, 201, 202, 203, 300, 400 ou 500.")
         if result["fiscal_icms_cst"] and result["fiscal_icms_cst"] not in cls.NORMAL_ICMS_CST:
             raise ValueError("CST de ICMS suportado deve ser 00, 40, 41, 50 ou 60.")
         contribution_codes = cls.CONTRIBUTION_TAXED | cls.CONTRIBUTION_UNTAXED | cls.CONTRIBUTION_OTHER
@@ -97,7 +97,7 @@ class FiscalProductProfile:
         if crt == 3 and not profile["fiscal_icms_cst"]:
             required.append("fiscal_icms_cst")
         if (
-            profile["fiscal_csosn"] == "500"
+            profile["fiscal_csosn"] in {"201", "202", "203", "500"}
             or profile["fiscal_icms_cst"] == "60"
         ) and not profile["cest"]:
             required.append("cest")

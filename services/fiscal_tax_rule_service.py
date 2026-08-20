@@ -19,6 +19,7 @@ class FiscalTaxRule:
     icms_code: str
     icms_rate: str
     icms_base_reduction: str
+    sn_credit_rate: str
     st_mva: str
     st_rate: str
     fcp_st_rate: str
@@ -35,8 +36,8 @@ class FiscalTaxRuleService:
 
     VALID_REGIMES = {"SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "MEI"}
     VALID_ICMS_CODES = {
-        "00", "10", "20", "30", "40", "41", "50", "51", "60", "70", "90",
-        "101", "102", "103", "201", "202", "203", "300", "400", "500", "900",
+        "00", "40", "41", "50", "60",
+        "102", "103", "201", "202", "203", "300", "400", "500",
     }
 
     def __init__(self, connection_factory) -> None:
@@ -60,7 +61,7 @@ class FiscalTaxRuleService:
             "approved_at": str(values.get("approved_at") or "").strip(),
         }
         for field in (
-            "icms_rate", "icms_base_reduction", "st_mva", "st_rate", "fcp_st_rate",
+            "icms_rate", "icms_base_reduction", "sn_credit_rate", "st_mva", "st_rate", "fcp_st_rate",
             "difal_internal_rate", "difal_interstate_rate", "difal_fcp_rate",
         ):
             try:
@@ -84,7 +85,7 @@ class FiscalTaxRuleService:
             raise ValueError("CST/CSOSN não suportado pela matriz fiscal.")
         if not normalized["approved_by"] or not normalized["approved_at"]:
             raise ValueError("A regra exige responsável e data de aprovação contábil.")
-        uses_st = normalized["icms_code"] in {"10", "30", "70", "90", "201", "202", "203", "900"}
+        uses_st = normalized["icms_code"] in {"201", "202", "203"}
         if uses_st and not normalized["cest"]:
             raise ValueError("Regra com ICMS-ST exige CEST explícito.")
         return normalized
@@ -121,7 +122,7 @@ class FiscalTaxRuleService:
         try:
             cursor = connection.execute(
                 "SELECT id,name,issuer_state,destination_state,tax_regime,ncm_prefix,cest,operation_kind,"
-                "icms_code,icms_rate,icms_base_reduction,st_mva,st_rate,fcp_st_rate,"
+                "icms_code,icms_rate,icms_base_reduction,sn_credit_rate,st_mva,st_rate,fcp_st_rate,"
                 "difal_internal_rate,difal_interstate_rate,difal_fcp_rate,benefit_code,approved_by,approved_at "
                 "FROM fiscal_tax_rules WHERE id=?", (int(rule_id),),
             )
@@ -142,7 +143,7 @@ class FiscalTaxRuleService:
         try:
             cursor = connection.execute(
                 "SELECT id,name,issuer_state,destination_state,tax_regime,ncm_prefix,cest,operation_kind,"
-                "icms_code,icms_rate,icms_base_reduction,st_mva,st_rate,fcp_st_rate,"
+                "icms_code,icms_rate,icms_base_reduction,sn_credit_rate,st_mva,st_rate,fcp_st_rate,"
                 "difal_internal_rate,difal_interstate_rate,difal_fcp_rate,benefit_code,approved_by,approved_at "
                 "FROM fiscal_tax_rules WHERE active=1 AND issuer_state='BA' AND tax_regime=? "
                 "AND destination_state IN (?, '*') ORDER BY LENGTH(ncm_prefix) DESC, "
@@ -163,7 +164,7 @@ class FiscalTaxRuleService:
             where = "" if include_inactive else " WHERE active=1"
             cursor = connection.execute(
                 "SELECT id,name,issuer_state,destination_state,tax_regime,ncm_prefix,cest,operation_kind,"
-                "icms_code,icms_rate,icms_base_reduction,st_mva,st_rate,fcp_st_rate,"
+                "icms_code,icms_rate,icms_base_reduction,sn_credit_rate,st_mva,st_rate,fcp_st_rate,"
                 "difal_internal_rate,difal_interstate_rate,difal_fcp_rate,benefit_code,approved_by,approved_at "
                 f"FROM fiscal_tax_rules{where} ORDER BY active DESC,name,id"
             )

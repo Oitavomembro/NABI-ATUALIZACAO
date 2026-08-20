@@ -56,7 +56,9 @@ class FiscalSaleService:
             str(config.get("tax_regime") or "").upper(), 0
         )
         fiscal_items = self.fiscal_service.prepare_sale_items(
-            items, destination=destination, crt=crt
+            items, destination=destination, crt=crt,
+            destination_state=str((recipient or {}).get("state") or config.get("state") or ""),
+            tax_regime=str(config.get("tax_regime") or ""),
         )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
@@ -129,7 +131,9 @@ class FiscalSaleService:
             str(config.get("tax_regime") or "").upper(), 0
         )
         fiscal_items = self.fiscal_service.prepare_sale_items(
-            items, destination=destination, crt=crt
+            items, destination=destination, crt=crt,
+            destination_state=str((recipient or {}).get("state") or config.get("state") or ""),
+            tax_regime=str(config.get("tax_regime") or ""),
         )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)

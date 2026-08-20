@@ -1961,6 +1961,12 @@ class FiscalService:
         total_products = Decimal("0")
         total_icms_base = Decimal("0")
         total_icms = Decimal("0")
+        total_st_base = Decimal("0")
+        total_st = Decimal("0")
+        total_fcp_st = Decimal("0")
+        total_difal_destination = Decimal("0")
+        total_difal_origin = Decimal("0")
+        total_fcp_destination = Decimal("0")
         total_pis = Decimal("0")
         total_cofins = Decimal("0")
         total_ipi = Decimal("0")
@@ -1988,8 +1994,37 @@ class FiscalService:
             explicit_icms_value = Decimal(str(item.get("icms_value", 0))).quantize(Decimal("0.01"))
             if crt in {1, 2, 4}:
                 csosn = self._digits(item.get("csosn") or "102")
-                group_name = "ICMSSN500" if csosn == "500" else "ICMSSN102"
-                icmssn=etree.SubElement(icms, etree.QName(ns,group_name)); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
+                if csosn in {"102", "103", "300", "400"}:
+                    icmssn=etree.SubElement(icms, etree.QName(ns,"ICMSSN102")); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
+                elif csosn == "500":
+                    icmssn=etree.SubElement(icms, etree.QName(ns,"ICMSSN500")); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
+                elif csosn in {"201", "202", "203"}:
+                    mva = Decimal(str(item.get("st_mva", 0))).quantize(Decimal("0.01"))
+                    reduction = Decimal(str(item.get("icms_base_reduction", 0))).quantize(Decimal("0.01"))
+                    st_rate = Decimal(str(item.get("st_rate", 0))).quantize(Decimal("0.01"))
+                    fcp_rate = Decimal(str(item.get("fcp_st_rate", 0))).quantize(Decimal("0.01"))
+                    if any(rate < 0 or rate > 100 for rate in (mva, reduction, st_rate, fcp_rate)):
+                        raise ValueError(f"Item {index}: parâmetros de ICMS-ST devem ficar entre 0 e 100%.")
+                    reduced = value * (Decimal("1") - reduction / Decimal("100"))
+                    st_base = (reduced * (Decimal("1") + mva / Decimal("100"))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    st_value = (st_base * st_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    fcp_value = (st_base * fcp_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    group_name = "ICMSSN201" if csosn == "201" else "ICMSSN202"
+                    icmssn=etree.SubElement(icms, etree.QName(ns,group_name)); el(icmssn,"orig",int(item.get("origin",0) or 0)); el(icmssn,"CSOSN",csosn)
+                    el(icmssn,"modBCST",4); el(icmssn,"pMVAST",f"{mva:.2f}")
+                    if reduction > 0: el(icmssn,"pRedBCST",f"{reduction:.2f}")
+                    el(icmssn,"vBCST",f"{st_base:.2f}"); el(icmssn,"pICMSST",f"{st_rate:.2f}"); el(icmssn,"vICMSST",f"{st_value:.2f}")
+                    if fcp_rate > 0:
+                        el(icmssn,"vBCFCPST",f"{st_base:.2f}"); el(icmssn,"pFCPST",f"{fcp_rate:.2f}"); el(icmssn,"vFCPST",f"{fcp_value:.2f}")
+                    if csosn == "201":
+                        credit_rate = Decimal(str(item.get("sn_credit_rate", 0))).quantize(Decimal("0.01"))
+                        if credit_rate < 0 or credit_rate > 100:
+                            raise ValueError(f"Item {index}: crédito do Simples deve ficar entre 0 e 100%.")
+                        credit_value = (value * credit_rate / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                        el(icmssn,"pCredSN",f"{credit_rate:.2f}"); el(icmssn,"vCredICMSSN",f"{credit_value:.2f}")
+                    total_st_base += st_base; total_st += st_value; total_fcp_st += fcp_value
+                else:
+                    raise ValueError(f"Item {index}: CSOSN {csosn or 'não informado'} não possui gerador XML homologado.")
             else:
                 cst = self._digits(item.get("cst"))
                 if cst == "00":
@@ -2001,8 +2036,10 @@ class FiscalService:
                     el(icms00,"modBC",int(item.get("bc_mode",3))); el(icms00,"vBC",f"{tax_base:.2f}"); el(icms00,"pICMS",f"{rate:.2f}"); el(icms00,"vICMS",f"{tax_value:.2f}")
                 elif cst in {"40", "41", "50"}:
                     icms40=etree.SubElement(icms, etree.QName(ns,"ICMS40")); el(icms40,"orig",int(item.get("origin",0))); el(icms40,"CST",cst)
-                else:
+                elif cst == "60":
                     icms60=etree.SubElement(icms, etree.QName(ns,"ICMS60")); el(icms60,"orig",int(item.get("origin",0))); el(icms60,"CST","60")
+                else:
+                    raise ValueError(f"Item {index}: CST ICMS {cst or 'não informado'} não possui gerador XML homologado.")
 
             ipi_cst = self._digits(item.get("ipi_cst"))
             if ipi_cst:
@@ -2065,6 +2102,23 @@ class FiscalService:
                 el(cof_out,"vBC",f"{cofins_base:.2f}"); el(cof_out,"pCOFINS",f"{cofins_rate:.2f}"); el(cof_out,"vCOFINS",f"{cofins_value:.2f}")
                 total_cofins += cofins_value
 
+            difal_internal = Decimal(str(item.get("difal_internal_rate", 0))).quantize(Decimal("0.01"))
+            difal_interstate = Decimal(str(item.get("difal_interstate_rate", 0))).quantize(Decimal("0.01"))
+            difal_fcp = Decimal(str(item.get("difal_fcp_rate", 0))).quantize(Decimal("0.01"))
+            if any(rate > 0 for rate in (difal_internal, difal_interstate, difal_fcp)):
+                if int(document.get("destination", 1)) != 2 or int(document.get("final_consumer", 0)) != 1:
+                    raise ValueError(f"Item {index}: DIFAL só pode ser aplicado em venda interestadual a consumidor final.")
+                if any(rate < 0 or rate > 100 for rate in (difal_internal, difal_interstate, difal_fcp)) or difal_internal < difal_interstate:
+                    raise ValueError(f"Item {index}: alíquotas de DIFAL/FCP inválidas.")
+                destination_value = (value * (difal_internal - difal_interstate) / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                fcp_destination = (value * difal_fcp / Decimal("100")).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                difal = etree.SubElement(imposto, etree.QName(ns, "ICMSUFDest"))
+                el(difal,"vBCUFDest",f"{value:.2f}"); el(difal,"vBCFCPUFDest",f"{value:.2f}")
+                el(difal,"pFCPUFDest",f"{difal_fcp:.2f}"); el(difal,"pICMSUFDest",f"{difal_internal:.2f}")
+                el(difal,"pICMSInter",f"{difal_interstate:.2f}"); el(difal,"pICMSInterPart","100.00")
+                el(difal,"vFCPUFDest",f"{fcp_destination:.2f}"); el(difal,"vICMSUFDest",f"{destination_value:.2f}"); el(difal,"vICMSUFRemet","0.00")
+                total_difal_destination += destination_value; total_fcp_destination += fcp_destination
+
             rtc_cst = self._digits(item.get("ibs_cbs_cst"))
             if rtc_cst:
                 rtc_class = self._digits(item.get("ibs_cbs_class"))
@@ -2115,7 +2169,7 @@ class FiscalService:
 
         total=etree.SubElement(inf, etree.QName(ns,"total")); icmstot=etree.SubElement(total, etree.QName(ns,"ICMSTot"))
         total_nf = total_products + total_ipi + total_ipi_return
-        for name,val in (("vBC",total_icms_base),("vICMS",total_icms),("vICMSDeson",0),("vFCP",0),("vBCST",0),("vST",0),("vFCPST",0),("vFCPSTRet",0),("vProd",total_products),("vFrete",0),("vSeg",0),("vDesc",0),("vII",0),("vIPI",total_ipi),("vIPIDevol",total_ipi_return),("vPIS",total_pis),("vCOFINS",total_cofins),("vOutro",0),("vNF",total_nf)):
+        for name,val in (("vBC",total_icms_base),("vICMS",total_icms),("vICMSDeson",0),("vFCPUFDest",total_fcp_destination),("vICMSUFDest",total_difal_destination),("vICMSUFRemet",total_difal_origin),("vFCP",0),("vBCST",total_st_base),("vST",total_st),("vFCPST",total_fcp_st),("vFCPSTRet",0),("vProd",total_products),("vFrete",0),("vSeg",0),("vDesc",0),("vII",0),("vIPI",total_ipi),("vIPIDevol",total_ipi_return),("vPIS",total_pis),("vCOFINS",total_cofins),("vOutro",0),("vNF",total_nf)):
             el(icmstot,name,f"{Decimal(str(val)):.2f}")
         total_with_rtc = total_nf
         if total_ibs_cbs_base > 0:
@@ -2192,7 +2246,8 @@ class FiscalService:
 
     def prepare_sale_items(
         self, cart_items: Sequence[Mapping[str, Any]], *, destination: int = 1,
-        require_rtc: bool = True, crt: int = 1,
+        require_rtc: bool = True, crt: int = 1, destination_state: str = "",
+        tax_regime: str = "",
     ) -> list[dict[str, Any]]:
         """Transforma o carrinho em itens fiscais usando uma única ficha por produto."""
         if destination not in {1, 2, 3}:
@@ -2249,6 +2304,13 @@ class FiscalService:
                 csosn=profile["fiscal_csosn"], icms_cst=profile["fiscal_icms_cst"],
             )
             rtc_rule = FiscalRtcResolver.resolve(profile, destination=destination) if require_rtc else None
+            configured_rule = None
+            tax_rule_service = getattr(self, "tax_rule_service", None)
+            if tax_rule_service is not None and destination_state and tax_regime:
+                configured_rule = tax_rule_service.resolve(
+                    tax_regime=tax_regime, ncm=ncm, cest=profile["cest"],
+                    destination_state=destination_state,
+                )
             fiscal_item = {
                 "product_id": product_id,
                 "code": product.get("codigo") or product_id,
@@ -2271,6 +2333,23 @@ class FiscalService:
                 "ipi_rate": profile["fiscal_ipi_rate"],
                 "ipi_enq": profile["fiscal_ipi_enq"],
             }
+            if configured_rule is not None:
+                code = configured_rule.icms_code
+                fiscal_item.update({
+                    "tax_rule_id": configured_rule.id,
+                    "csosn": code if len(code) == 3 else fiscal_item["csosn"],
+                    "cst": code if len(code) == 2 else fiscal_item["cst"],
+                    "icms_rate": configured_rule.icms_rate,
+                    "icms_base_reduction": configured_rule.icms_base_reduction,
+                    "sn_credit_rate": configured_rule.sn_credit_rate,
+                    "st_mva": configured_rule.st_mva,
+                    "st_rate": configured_rule.st_rate,
+                    "fcp_st_rate": configured_rule.fcp_st_rate,
+                    "difal_internal_rate": configured_rule.difal_internal_rate,
+                    "difal_interstate_rate": configured_rule.difal_interstate_rate,
+                    "difal_fcp_rate": configured_rule.difal_fcp_rate,
+                    "benefit_code": configured_rule.benefit_code,
+                })
             if require_rtc:
                 fiscal_item.update({
                     "ibs_cbs_cst": rtc_rule.cst,

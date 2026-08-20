@@ -807,6 +807,7 @@ def initialize_database(
             icms_code TEXT NOT NULL,
             icms_rate TEXT NOT NULL DEFAULT '0',
             icms_base_reduction TEXT NOT NULL DEFAULT '0',
+            sn_credit_rate TEXT NOT NULL DEFAULT '0',
             st_mva TEXT NOT NULL DEFAULT '0',
             st_rate TEXT NOT NULL DEFAULT '0',
             fcp_st_rate TEXT NOT NULL DEFAULT '0',

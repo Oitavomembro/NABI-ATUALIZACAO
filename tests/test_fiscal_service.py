@@ -560,6 +560,66 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vIPI'])"), "5.00")
         self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vNF'])"), "105.00")
 
+    def test_simples_com_regra_st_explicita_gera_base_st_e_fcp_st(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105",
+                "city":"SALVADOR","state":"BA","street":"RUA","number":"1",
+                "district":"CENTRO","zip_code":"40000000","state_registration":"123",
+                "tax_regime_code":1,
+            },
+            recipient={"document":"12345678901","name":"CLIENTE"},
+            items=[{
+                "code":"P1","description":"PRODUTO ST","quantity":1,"unit_price":100,
+                "ncm":"94036000","cest":"2805900","cfop":"5401","unit":"UN",
+                "origin":"0","csosn":"201","st_mva":"40","st_rate":"18",
+                "fcp_st_rate":"2","icms_base_reduction":"0","sn_credit_rate":"3",
+            }],
+            document={"model":"55","series":1,"number":15,"state_code":"29",
+                      "environment":"HOMOLOGACAO","numeric_code":"12345671"},
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSSN201']/*[local-name()='vBCST'])"), "140.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSSN201']/*[local-name()='vICMSST'])"), "25.20")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vFCPST'])"), "2.80")
+        signed = self.service.sign_xml(xml, reference_id=f"NFe{_key}", pfx_path=self.pfx_path, password=self.password)
+        self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
+
+    def test_difal_explicito_gera_partilha_integral_para_destino(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105",
+                "city":"SALVADOR","state":"BA","street":"RUA","number":"1",
+                "district":"CENTRO","zip_code":"40000000","state_registration":"123",
+                "tax_regime_code":3,
+            },
+            recipient={"document":"12345678901","name":"CLIENTE"},
+            items=[{
+                "code":"P1","description":"PRODUTO DIFAL","quantity":1,"unit_price":100,
+                "ncm":"94036000","cfop":"6102","unit":"UN","origin":"0","cst":"00",
+                "icms_rate":"7","difal_internal_rate":"18","difal_interstate_rate":"7",
+                "difal_fcp_rate":"2",
+            }],
+            document={"model":"55","series":1,"number":16,"state_code":"29",
+                      "environment":"HOMOLOGACAO","numeric_code":"12345672",
+                      "destination":2,"final_consumer":1},
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSUFDest']/*[local-name()='vICMSUFDest'])"), "11.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSUFDest']/*[local-name()='vFCPUFDest'])"), "2.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vICMSUFDest'])"), "11.00")
+        signed = self.service.sign_xml(xml, reference_id=f"NFe{_key}", pfx_path=self.pfx_path, password=self.password)
+        self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
+
+    def test_icms_desconhecido_nao_e_convertido_silenciosamente_em_cst_60(self):
+        with self.assertRaisesRegex(ValueError, "CST suportado|não possui gerador XML homologado"):
+            self.service.build_document_xml(
+                issuer={"cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105","city":"SALVADOR","state":"BA","street":"RUA","number":"1","district":"CENTRO","zip_code":"40000000","state_registration":"123","tax_regime_code":3},
+                recipient={"document":"12345678901","name":"CLIENTE"},
+                items=[{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,"ncm":"94036000","cfop":"5102","unit":"UN","origin":"0","cst":"90"}],
+                document={"model":"55","series":1,"number":17,"state_code":"29","environment":"HOMOLOGACAO","numeric_code":"12345673"},
+            )
+
     def test_assinatura_xml_dsig(self):
         signed = self.service.sign_xml(
             '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe123"><ide/></infNFe></NFe>',
@@ -744,6 +804,22 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(items[0]["ncm"], "94036000")
         self.assertEqual(items[0]["ibs_cbs_class"], "000001")
         self.assertEqual(items[0]["cbs_rate"], "0.9")
+        configured = type("Rule", (), {
+            "id": 7, "icms_code": "201", "icms_rate": "0",
+            "icms_base_reduction": "0", "sn_credit_rate": "3", "st_mva": "40", "st_rate": "18",
+            "fcp_st_rate": "2", "difal_internal_rate": "0",
+            "difal_interstate_rate": "0", "difal_fcp_rate": "0", "benefit_code": "",
+        })()
+        resolver = type("Resolver", (), {"resolve": lambda _self, **_kwargs: configured})()
+        self.service.tax_rule_service = resolver
+        ruled_items = self.service.prepare_sale_items(
+            [{"produto_id": 1, "item": "Produto", "qtd": 2, "preco": 10}],
+            destination=1, destination_state="BA", tax_regime="SIMPLES_NACIONAL",
+        )
+        self.assertEqual(ruled_items[0]["tax_rule_id"], 7)
+        self.assertEqual(ruled_items[0]["csosn"], "201")
+        self.assertEqual(ruled_items[0]["st_mva"], "40")
+        del self.service.tax_rule_service
         export_items = self.service.prepare_sale_items(
             [{"produto_id": 1, "item": "Produto", "qtd": 2, "preco": 10}], destination=3
         )
