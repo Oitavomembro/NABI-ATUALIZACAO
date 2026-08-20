@@ -1260,3 +1260,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 19 testes aprovados;
 - `compileall` e `git diff --check` aprovados;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.85 — tributos da compra visíveis por produto
+
+- cada item da NF-e ganhou uma aba compacta de Tributos ao lado de Vínculo, Cadastro e Estoque;
+- ICMS, IPI, PIS, COFINS e IBS/CBS lidos do XML ficam visíveis com bases, alíquotas, valores, CST/CSOSN e classificação disponíveis;
+- a interface identifica esses números como valores informados pelo fornecedor e não como regra automática da venda;
+- os nomes curtos das quatro abas preservam acesso e legibilidade em 1280×768;
+- nenhuma alíquota foi inferida, corrigida silenciosamente ou aplicada ao documento de saída;
+- validação focada: 19 testes aprovados;
+- `compileall` e `git diff --check` aprovados;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

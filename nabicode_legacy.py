@@ -4586,10 +4586,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         abas_item = ctk.CTkTabview(editor_body, fg_color="#0d1117", segmented_button_fg_color="#21262d")
         abas_item.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 6))
-        aba_vinculo = abas_item.add("1. Vínculo")
-        aba_cadastro = abas_item.add("2. Cadastro")
-        aba_estoque = abas_item.add("3. Estoque e preço")
-        for aba in (aba_vinculo, aba_cadastro, aba_estoque):
+        aba_vinculo = abas_item.add("Vínculo")
+        aba_cadastro = abas_item.add("Cadastro")
+        aba_estoque = abas_item.add("Estoque")
+        aba_tributos = abas_item.add("Tributos")
+        for aba in (aba_vinculo, aba_cadastro, aba_estoque, aba_tributos):
             aba.grid_columnconfigure(0, weight=1)
 
         def campo_editor(pai, titulo, linha, valor=""):
@@ -4642,6 +4643,29 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             wraplength=340,
         )
         lbl_cfop_compra.grid(row=6, column=0, sticky="ew", padx=10, pady=(6, 10))
+
+        ctk.CTkLabel(
+            aba_tributos,
+            text="Valores informados pelo fornecedor",
+            font=ctk.CTkFont(size=13, weight="bold"),
+            text_color="#f0b429",
+        ).grid(row=0, column=0, sticky="w", padx=10, pady=(8, 2))
+        ctk.CTkLabel(
+            aba_tributos,
+            text="Use para conferência. Estes valores não substituem a regra tributária da sua venda.",
+            text_color="#8b949e",
+            justify="left",
+            wraplength=340,
+        ).grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 8))
+        lbl_tributos_xml = ctk.CTkLabel(
+            aba_tributos,
+            text="Selecione um produto.",
+            justify="left",
+            anchor="nw",
+            text_color="#c9d1d9",
+            font=ctk.CTkFont(size=12),
+        )
+        lbl_tributos_xml.grid(row=2, column=0, sticky="nsew", padx=10, pady=(0, 10))
 
         lbl_calculo = ctk.CTkLabel(aba_estoque, text="", text_color="#2ea043", font=ctk.CTkFont(size=13, weight="bold"), justify="left")
         lbl_calculo.grid(row=6, column=0, sticky="w", padx=10, pady=(8, 4))
@@ -4827,6 +4851,28 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 f"CFOP da compra: {analise.item.cfop or '—'}\n"
                 "Usado somente como referência; não substitui o CFOP de venda."
             ))
+            item_xml = analise.item
+            lbl_tributos_xml.configure(text=(
+                f"ICMS  ·  CST/CSOSN {item_xml.cst_icms or item_xml.csosn or '—'}\n"
+                f"Base R$ {format_number_br(item_xml.base_icms, 2)}  ·  "
+                f"Alíquota {format_number_br(item_xml.aliquota_icms, 2)}%  ·  "
+                f"Valor R$ {format_number_br(item_xml.valor_icms, 2)}\n\n"
+                f"IPI  ·  Base R$ {format_number_br(item_xml.base_ipi, 2)}  ·  "
+                f"Alíquota {format_number_br(item_xml.aliquota_ipi, 2)}%  ·  "
+                f"Valor R$ {format_number_br(item_xml.valor_ipi, 2)}\n\n"
+                f"PIS  ·  CST {item_xml.cst_pis or '—'}  ·  "
+                f"Base R$ {format_number_br(item_xml.base_pis, 2)}  ·  "
+                f"Valor R$ {format_number_br(item_xml.valor_pis, 2)}\n"
+                f"COFINS  ·  CST {item_xml.cst_cofins or '—'}  ·  "
+                f"Base R$ {format_number_br(item_xml.base_cofins, 2)}  ·  "
+                f"Valor R$ {format_number_br(item_xml.valor_cofins, 2)}\n\n"
+                f"IBS/CBS  ·  CST {item_xml.ibs_cbs_cst or '—'}  ·  "
+                f"Classificação {item_xml.ibs_cbs_class or '—'}\n"
+                f"Base R$ {format_number_br(item_xml.ibs_cbs_base, 2)}  ·  "
+                f"IBS UF {format_number_br(item_xml.ibs_uf_rate, 4)}%  ·  "
+                f"IBS Município {format_number_br(item_xml.ibs_city_rate, 4)}%  ·  "
+                f"CBS {format_number_br(item_xml.cbs_rate, 4)}%"
+            ))
             qtd_var.set(format_number_br(cfg["quantidade"]))
             fator_var.set(format_number_br(cfg["fator"]))
             custo_var.set(format_number_br(cfg["custo"], 2))
@@ -4836,11 +4882,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             estado["carregando"] = False
             atualizar_calculo("preco")
             if not cfg.get("acao") or (cfg.get("acao") in {"VINCULAR", "ATUALIZAR"} and not cfg.get("produto_id")):
-                abas_item.set("1. Vínculo")
+                abas_item.set("Vínculo")
             elif cfg.get("acao") == "CRIAR" and (not cfg.get("codigo") or not cfg.get("descricao")):
-                abas_item.set("2. Cadastro")
+                abas_item.set("Cadastro")
             else:
-                abas_item.set("3. Estoque e preço")
+                abas_item.set("Estoque")
 
         def atualizar_linha(indice):
             analise = analises_por_indice[indice]
