@@ -1317,3 +1317,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - tamanho: 55.544.045 bytes;
 - SHA-256: `2B744B79D4A580CC74A51D7F0B6EEAF0321F1036483F61568DDAC9E1919A15C5`;
 - o instalador não foi executado e nenhum programa instalado, banco, certificado, endpoint fiscal ou impressora real foi utilizado.
+
+## Checkpoint 42.90 — cadastro de produtos por XML acessível no modo comercial
+
+- a causa do desaparecimento foi removida: o acesso à importação estava condicionado ao modo Fiscal;
+- Produtos agora exibe sempre o botão `Cadastrar produtos via XML`, inclusive no modo normal;
+- o mesmo comando também permanece disponível na pesquisa global fora do modo Fiscal;
+- o assistente oficial existente continua conferindo e cadastrando os produtos novos antes da importação atômica da nota, sem cadastro paralelo;
+- histórico de notas importadas e NF-e de devolução permanecem exclusivos do modo Fiscal;
+- 28 testes focados, `compileall` e `git diff --check` aprovados;
+- nenhum programa, banco real, certificado, endpoint fiscal ou impressora foi aberto ou utilizado.

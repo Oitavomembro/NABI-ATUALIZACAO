@@ -1628,14 +1628,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             CommandDefinition("configs", "Abrir Configurações", ("configuracao", "preferencias", "sistema")),
             CommandDefinition("new_product", "Cadastrar novo produto", ("novo", "produto", "cadastro")),
             CommandDefinition("new_client", "Cadastrar novo cliente", ("novo", "cliente", "cadastro")),
-            CommandDefinition("import_xml", "Importar XML de NF-e", ("xml", "nota", "nfe", "entrada")),
+            CommandDefinition("import_xml", "Cadastrar produtos via XML", ("xml", "nota", "nfe", "entrada", "cadastrar")),
             CommandDefinition("nfe_history", "Abrir notas importadas", ("historico", "nfe", "nota", "excluir")),
             CommandDefinition("nfe_return", "Criar NF-e de devolução", ("devolucao", "nota", "nfe")),
             CommandDefinition("collections", "Abrir Central de Cobranças", ("cobranca", "promissoria", "inadimplencia")),
             CommandDefinition("product_aux", "Abrir marcas, fornecedores e unidades", ("marca", "fornecedor", "unidade")),
         )
         mapa = {"fiscal_config": "fiscal", "fiscal_documents": "fiscal", "new_product": "produtos", "new_client": "clientes", "import_xml": "produtos", "nfe_history": "produtos", "nfe_return": "produtos", "collections": "clientes", "product_aux": "produtos"}
-        comandos_fiscais = {"fiscal_config", "fiscal_documents", "import_xml", "nfe_history", "nfe_return"}
+        comandos_fiscais = {"fiscal_config", "fiscal_documents", "nfe_history", "nfe_return"}
         return tuple(
             cmd for cmd in comandos
             if (modo_fiscal_ativo() or cmd.action not in comandos_fiscais)
@@ -3007,9 +3007,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                       hover_color="#6e40c9", command=self.abrir_cadastro_categoria).pack(side="right", padx=(6, 0))
         ctk.CTkButton(topo, text="＋ Novo produto", width=140, fg_color="#2ea043",
                       hover_color="#238636", command=self.abrir_cadastro_produto).pack(side="right")
+        ctk.CTkButton(topo, text="📄 Cadastrar produtos via XML", width=205, fg_color="#1f6feb",
+                      hover_color="#1158c7", command=self.abrir_importacao_xml).pack(side="right", padx=(0, 8))
         if modo_fiscal_ativo():
-            ctk.CTkButton(topo, text="📄 Importar XML", width=140, fg_color="#1f6feb",
-                          hover_color="#1158c7", command=self.abrir_importacao_xml).pack(side="right", padx=(0, 8))
             ctk.CTkButton(topo, text="🗑 Notas importadas", width=155, fg_color="#da3633",
                           hover_color="#b62324", command=self.abrir_historico_nfe_importadas).pack(side="right", padx=(0, 8))
             ctk.CTkButton(topo, text="↩ NF-e Devolução", width=150, fg_color="#d29922",
