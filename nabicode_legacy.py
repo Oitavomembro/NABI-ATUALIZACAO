@@ -5744,8 +5744,25 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             documento = self.salvar_documento_pdv("ORCAMENTO")
             if documento is not None:
                 self._limpar_venda_atual_pdv()
+                self._visualizar_orcamento_pdv(documento)
             return documento
         return self.finalizar_venda("COMPROVANTE")
+
+    def _visualizar_orcamento_pdv(self, documento):
+        itens = [dict(item) for item in documento.itens]
+        texto = self.texto_comprovante_venda(
+            documento.cliente_id, itens, float(documento.total), "ORCAMENTO"
+        )
+        self.janela_preview_documento(
+            texto,
+            categoria="recibo",
+            titulo="Orçamento salvo",
+            subtitulo="Visualize, gere o PDF ou imprima somente quando desejar",
+            pdf_callback=lambda destino: self.gerar_pdf_venda(
+                documento.cliente_id, itens, float(documento.total),
+                "ORCAMENTO", destino=destino,
+            ),
+        )
 
     def abrir_vendas_do_dia_pdv(self):
         parent = getattr(self, "pdv_window", self)
@@ -5771,10 +5788,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         table_frame = ctk.CTkFrame(window, fg_color="#161b22")
         table_frame.grid(row=1, column=0, sticky="nsew", padx=18, pady=6)
         table_frame.grid_rowconfigure(0, weight=1); table_frame.grid_columnconfigure(0, weight=1)
-        columns = ("id", "hora", "valor", "pagamento", "fiscal", "modelo")
+        columns = ("id", "tipo", "hora", "valor", "pagamento", "fiscal", "modelo")
         table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
         for key, title, width in (
-            ("id", "Venda", 80), ("hora", "Data / hora", 155), ("valor", "Total", 110),
+            ("id", "Número", 80), ("tipo", "Tipo", 105), ("hora", "Data / hora", 155), ("valor", "Total", 110),
             ("pagamento", "Situação", 130), ("fiscal", "Documento fiscal", 170), ("modelo", "Modelo", 90),
         ):
             table.heading(key, text=title); table.column(key, width=width, anchor="center")
@@ -5788,14 +5805,25 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             for iid in table.get_children(): table.delete(iid)
             rows_by_iid.clear()
             for row in self.pdv_transaction_service.list_sales_for_day():
-                iid = str(row["id"]); rows_by_iid[iid] = row
+                iid = f"venda-{row['id']}"; row["record_type"] = "VENDA"; rows_by_iid[iid] = row
                 fiscal_status = row.get("fiscal_status") or "NÃO FISCAL"
                 table.insert("", "end", iid=iid, values=(
-                    f"#{row['id']}", row.get("data", ""), f"R$ {float(row['valor']):.2f}",
+                    f"#{row['id']}", "VENDA", row.get("data", ""), f"R$ {float(row['valor']):.2f}",
                     row.get("status_pagamento") or "—", fiscal_status,
                     f"Modelo {row.get('fiscal_model')}" if row.get("fiscal_model") else "—",
                 ), tags=("cancelada",) if str(row.get("status_pagamento")).upper() == "CANCELADO" else ())
+            today = datetime.now().date().isoformat()
+            for document in self.pdv_service.listar_documentos("ORCAMENTO"):
+                if not str(document.criada_em or "").startswith(today):
+                    continue
+                iid = f"orcamento-{document.id}"
+                rows_by_iid[iid] = {"record_type": "ORCAMENTO", "document": document}
+                table.insert("", "end", iid=iid, values=(
+                    document.id, "ORÇAMENTO", str(document.criada_em).replace("T", " ")[:19],
+                    f"R$ {float(document.total):.2f}", "ABERTO", "SEM VALOR FISCAL", "—",
+                ), tags=("orcamento",))
             table.tag_configure("cancelada", foreground="#8b949e", background="#2d1618")
+            table.tag_configure("orcamento", foreground="#ffffff", background="#5b4300")
 
         def selected():
             selection = table.selection()
@@ -5804,13 +5832,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def reprint():
             row = selected()
             if not row:
-                messagebox.showwarning("Vendas do dia", "Selecione uma venda.", parent=window); return
+                messagebox.showwarning("Vendas do dia", "Selecione uma venda ou orçamento.", parent=window); return
+            if row.get("record_type") == "ORCAMENTO":
+                self._visualizar_orcamento_pdv(row["document"])
+                return
             self.reimprimir_movimentacao(int(row["id"]), "recibo")
 
         def cancel():
             row = selected()
             if not row:
                 messagebox.showwarning("Vendas do dia", "Selecione uma venda.", parent=window); return
+            if row.get("record_type") == "ORCAMENTO":
+                messagebox.showinfo(
+                    "Vendas do dia",
+                    "Orçamentos não movimentam estoque ou Caixa. Use a visualização para gerar PDF ou imprimir.",
+                    parent=window,
+                ); return
             if str(row.get("status_pagamento") or "").upper() == "CANCELADO":
                 messagebox.showinfo("Vendas do dia", "Esta venda já está cancelada.", parent=window); return
             if str(row.get("fiscal_status") or "").upper() == "AUTORIZADO":

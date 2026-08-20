@@ -11,6 +11,8 @@ class ReceiptValidator:
         "COMPRA": "VENDA",
         "NAO_FISCAL": "VENDA",
         "NÃO FISCAL": "VENDA",
+        "ORCAMENTO": "ORCAMENTO",
+        "ORÇAMENTO": "ORCAMENTO",
     }
 
     @classmethod
@@ -22,7 +24,7 @@ class ReceiptValidator:
     ) -> tuple[str, float]:
         kind = str(document_type or "").strip().upper()
         kind = cls.TYPE_ALIASES.get(kind, kind)
-        if kind not in {"VENDA", "ENTREGA"}:
+        if kind not in {"VENDA", "ENTREGA", "ORCAMENTO"}:
             raise ValueError("Tipo de comprovante inválido.")
         if not items:
             raise ValueError("O comprovante precisa possuir ao menos um item.")

@@ -1390,3 +1390,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - a grade foi reduzida às informações essenciais e o botão `Salvar produto e ir para o próximo` ficou no rodapé fixo;
 - o botão superior `Compras` foi substituído por `Central Fiscal`, preservando internamente pedidos e fornecedores existentes;
 - 29 testes focados foram aprovados em perfil TESTE e `git diff --check` não encontrou erros.
+
+## Checkpoint 42.97 — orçamento visível e imprimível sob demanda
+
+- concluir um orçamento salva o documento e abre a pré-visualização, sem enviar automaticamente para impressora;
+- o comprovante identifica `ORÇAMENTO — SEM VALOR FISCAL` e permite gerar PDF;
+- `Vendas do dia` passou a listar vendas e orçamentos do dia com tipo, cor e situação distintos;
+- orçamento não movimenta estoque ou Caixa e não pode usar o cancelamento financeiro de uma venda;
+- 34 testes e 3 subtestes foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.

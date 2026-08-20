@@ -27,6 +27,7 @@ def test_nfe_import_validator_normalizes_valid_decisions(action, product_id, exp
 def test_receipt_validator_preserves_aliases_and_values():
     items = [{"item": "Mesa", "qtd": 2, "preco": 10, "subtotal": 20}]
     assert ReceiptValidator.sale_header("cupom", items, "20") == ("VENDA", 20.0)
+    assert ReceiptValidator.sale_header("ORCAMENTO", items, "20") == ("ORCAMENTO", 20.0)
     assert ReceiptValidator.sale_item(items[0]) == ("Mesa", 2.0, 10.0, 20.0)
     ReceiptValidator.matching_total(20.01, 20.0)
 

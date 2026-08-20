@@ -164,7 +164,10 @@ class ReceiptService:
         kind, normalized_total = ReceiptValidator.sale_header(document_type, items, total)
 
         width = 42
-        title = "CUPOM DE ENTREGA" if kind == "ENTREGA" else "COMPROVANTE DE VENDA"
+        title = {
+            "ENTREGA": "CUPOM DE ENTREGA",
+            "ORCAMENTO": "ORÇAMENTO — SEM VALOR FISCAL",
+        }.get(kind, "COMPROVANTE DE VENDA")
         lines = [
             self._config_getter("nome_loja") or "NabiCode",
             title,
