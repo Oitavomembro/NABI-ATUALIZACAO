@@ -15,6 +15,20 @@ def method_block(name: str, next_name: str) -> str:
     return LEGACY[start:end]
 
 
+def test_xml_import_dashboard_uses_guided_responsive_conference_flow():
+    opening = method_block("abrir_importacao_xml", "abrir_pdv_independente")
+    assert 'text="Importar NF-e de compra"' in opening
+    assert "XML identificado" in opening
+    assert "Empresa conferida" in opening
+    assert "Revisar e importar" in opening
+    assert 'abas_item.add("1. Vínculo")' in opening
+    assert 'abas_item.add("2. Cadastro")' in opening
+    assert 'abas_item.add("3. Estoque e preço")' in opening
+    assert "reveal_prepared_toplevel_when_idle(win, maximize=True)" in opening
+    assert "win.grab_set()" not in opening
+    assert 'text="Revisar e importar NF-e"' in opening
+
+
 def test_pdv_uses_native_minimize_without_changing_function_shortcuts():
     opening = method_block("abrir_pdv_independente", "_enter_contexto_pdv")
     minimize = method_block("_minimizar_pdv", "_nome_item_tabela_pdv")

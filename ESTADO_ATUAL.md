@@ -1235,3 +1235,17 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 145 testes e 10 subtestes aprovados;
 - suíte completa: 1.277 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.83 — dashboard guiada para lançamento de NF-e de compra
+
+- a conferência do XML foi reorganizada como fluxo visual em quatro etapas: identificação, empresa, produtos e revisão;
+- cartões mantêm número, emissão, fornecedor, CNPJ, situação cadastral, total e quantidade de itens visíveis;
+- a edição de cada produto foi dividida em Vínculo, Cadastro e Estoque e preço, reduzindo a sobrecarga sem esconder dados;
+- o sistema abre automaticamente a seção que precisa da atenção do usuário;
+- itens pendentes, novos e vinculados recebem estados visuais distintos na lista;
+- ações foram renomeadas em linguagem direta e a barra inferior permanece acessível;
+- a captura modal residual foi removida, preservando minimizar e alternar janelas;
+- o desenho foi baseado no detalhamento por linha usado pelo ERPNext, na conferência em rascunho do Odoo e nas recomendações de formulário responsivo e revelação progressiva da Microsoft;
+- validação focada: 20 testes aprovados;
+- `compileall` e `git diff --check` aprovados;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

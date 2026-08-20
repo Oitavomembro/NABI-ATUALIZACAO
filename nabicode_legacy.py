@@ -4476,26 +4476,64 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         win.minsize(*UniversalLayoutPolicy.safe_minsize(metricas_layout))
         win.configure(fg_color="#0d1117")
         win.transient(self)
-        win.grab_set()
 
         cabecalho = ctk.CTkFrame(win, fg_color="#0d1117")
-        cabecalho.pack(fill="x", padx=14, pady=(10, 4))
+        cabecalho.pack(fill="x", padx=18, pady=(12, 4))
         ctk.CTkLabel(
             cabecalho,
-            text="Conferência obrigatória dos produtos da NF-e",
-            font=ctk.CTkFont(size=20, weight="bold"),
+            text="Importar NF-e de compra",
+            font=ctk.CTkFont(size=22, weight="bold"),
             text_color=self.cor_acento,
         ).pack(anchor="w")
         situacao_fornecedor = "cadastrado" if fornecedor_encontrado else "será cadastrado"
         ctk.CTkLabel(
             cabecalho,
-            text=(f"NF-e {documento.numero or '-'} | Fornecedor: {documento.fornecedor or '-'} | "
-                  f"CNPJ: {documento.cnpj or '-'} ({situacao_fornecedor})"),
-            text_color="#c9d1d9",
+            text="Confira o que o XML preencheu. Você só precisa resolver os itens destacados antes de importar.",
+            text_color="#8b949e",
         ).pack(anchor="w", pady=(2, 0))
 
+        etapas = ctk.CTkFrame(win, fg_color="transparent")
+        etapas.pack(fill="x", padx=18, pady=(6, 5))
+        for numero, texto_etapa, ativa in (
+            ("1", "XML identificado", False),
+            ("2", "Empresa conferida", False),
+            ("3", "Produtos", True),
+            ("4", "Revisar e importar", False),
+        ):
+            bloco_etapa = ctk.CTkFrame(
+                etapas,
+                fg_color="#163a5f" if ativa else "#161b22",
+                border_width=1,
+                border_color="#2f81f7" if ativa else "#30363d",
+                corner_radius=8,
+            )
+            bloco_etapa.pack(side="left", fill="x", expand=True, padx=(0, 6))
+            ctk.CTkLabel(
+                bloco_etapa,
+                text=f"{numero}  {texto_etapa}",
+                font=ctk.CTkFont(size=12, weight="bold"),
+                text_color="#ffffff" if ativa else "#8b949e",
+            ).pack(padx=10, pady=7)
+
+        dados_nota = ctk.CTkFrame(win, fg_color="transparent")
+        dados_nota.pack(fill="x", padx=18, pady=(0, 6))
+
+        def card_nota(titulo, valor, detalhe="", cor="#58a6ff"):
+            card = ctk.CTkFrame(dados_nota, fg_color="#161b22", corner_radius=10)
+            card.pack(side="left", fill="both", expand=True, padx=(0, 7))
+            ctk.CTkLabel(card, text=titulo.upper(), text_color="#8b949e", font=ctk.CTkFont(size=10, weight="bold")).pack(anchor="w", padx=12, pady=(8, 0))
+            ctk.CTkLabel(card, text=valor, text_color=cor, font=ctk.CTkFont(size=15, weight="bold"), wraplength=360, justify="left").pack(anchor="w", padx=12, pady=(1, 0))
+            if detalhe:
+                ctk.CTkLabel(card, text=detalhe, text_color="#c9d1d9", font=ctk.CTkFont(size=11), wraplength=360, justify="left").pack(anchor="w", padx=12, pady=(0, 8))
+            else:
+                ctk.CTkLabel(card, text="", height=8).pack()
+
+        card_nota("Documento", f"NF-e {documento.numero or '-'}", f"Emissão: {documento.data_emissao[:10] or '-'}")
+        card_nota("Fornecedor", documento.fornecedor or "Não informado", f"CNPJ {documento.cnpj or '-'} · {situacao_fornecedor}")
+        card_nota("Total da nota", f"R$ {format_number_br(documento.valor_total, 2)}", f"{len(analises)} produto(s) no XML", "#2ea043")
+
         resumo_frame = ctk.CTkFrame(win, fg_color="#161b22", corner_radius=10)
-        resumo_frame.pack(fill="x", padx=14, pady=(2, 6))
+        resumo_frame.pack(fill="x", padx=18, pady=(0, 6))
         lbl_resumo = ctk.CTkLabel(resumo_frame, text="", justify="left", anchor="w")
         lbl_resumo.pack(side="left", fill="x", expand=True, padx=12, pady=8)
         lbl_progresso = ctk.CTkLabel(resumo_frame, text="0%", text_color="#58a6ff", font=ctk.CTkFont(size=16, weight="bold"))
@@ -4546,8 +4584,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         lbl_item = ctk.CTkLabel(editor_body, text="Selecione um produto.", wraplength=350, justify="left")
         lbl_item.grid(row=1, column=0, sticky="ew", padx=10, pady=(0, 8))
 
-        def campo_editor(titulo, linha, valor=""):
-            bloco = ctk.CTkFrame(editor_body, fg_color="transparent")
+        abas_item = ctk.CTkTabview(editor_body, fg_color="#0d1117", segmented_button_fg_color="#21262d")
+        abas_item.grid(row=2, column=0, sticky="ew", padx=8, pady=(0, 6))
+        aba_vinculo = abas_item.add("1. Vínculo")
+        aba_cadastro = abas_item.add("2. Cadastro")
+        aba_estoque = abas_item.add("3. Estoque e preço")
+        for aba in (aba_vinculo, aba_cadastro, aba_estoque):
+            aba.grid_columnconfigure(0, weight=1)
+
+        def campo_editor(pai, titulo, linha, valor=""):
+            bloco = ctk.CTkFrame(pai, fg_color="transparent")
             bloco.grid(row=linha, column=0, sticky="ew", padx=10, pady=4)
             ctk.CTkLabel(bloco, text=titulo, anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(fill="x", pady=(0, 2))
             var = tk.StringVar(value=valor)
@@ -4555,48 +4601,41 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             entrada.pack(fill="x")
             return var, entrada
 
-        qtd_var, qtd_entry = campo_editor("Quantidade recebida", 2)
-        fator_var, fator_entry = campo_editor("Fator (1 compra = X estoque)", 3, "1")
-        custo_var, custo_entry = campo_editor("Custo por unidade de estoque", 4)
-        margem_var, margem_entry = campo_editor("Margem sobre custo (%)", 5, "30")
-        preco_var, preco_entry = campo_editor("Preço de venda", 6)
+        qtd_var, qtd_entry = campo_editor(aba_estoque, "Quantidade recebida", 0)
+        fator_var, fator_entry = campo_editor(aba_estoque, "Fator (1 compra = X estoque)", 1, "1")
+        custo_var, custo_entry = campo_editor(aba_estoque, "Custo por unidade de estoque", 2)
+        margem_var, margem_entry = campo_editor(aba_estoque, "Margem sobre custo (%)", 3, "30")
+        preco_var, preco_entry = campo_editor(aba_estoque, "Preço de venda", 4)
 
-        bloco_unidade = ctk.CTkFrame(editor_body, fg_color="transparent")
-        bloco_unidade.grid(row=7, column=0, sticky="ew", padx=10, pady=4)
+        bloco_unidade = ctk.CTkFrame(aba_estoque, fg_color="transparent")
+        bloco_unidade.grid(row=5, column=0, sticky="ew", padx=10, pady=4)
         ctk.CTkLabel(bloco_unidade, text="Unidade de estoque/venda", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(fill="x", pady=(0, 2))
         unidade_var = tk.StringVar(value=nomes_unidades[0])
         unidade_combo = ctk.CTkComboBox(bloco_unidade, values=nomes_unidades, variable=unidade_var, height=34)
         unidade_combo.pack(fill="x")
 
-        bloco_decisao = ctk.CTkFrame(editor_body, fg_color="transparent")
-        bloco_decisao.grid(row=2, column=0, sticky="ew", padx=10, pady=4)
+        bloco_decisao = ctk.CTkFrame(aba_vinculo, fg_color="transparent")
+        bloco_decisao.grid(row=0, column=0, sticky="ew", padx=10, pady=4)
         ctk.CTkLabel(bloco_decisao, text="Decisão do item", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(fill="x", pady=(0, 2))
         acao_var = tk.StringVar(value="")
         acao_combo = ctk.CTkComboBox(bloco_decisao, values=["VINCULAR", "ATUALIZAR", "CRIAR"], variable=acao_var, height=34)
         acao_combo.pack(fill="x")
 
-        bloco_candidato = ctk.CTkFrame(editor_body, fg_color="transparent")
-        bloco_candidato.grid(row=3, column=0, sticky="ew", padx=10, pady=4)
+        bloco_candidato = ctk.CTkFrame(aba_vinculo, fg_color="transparent")
+        bloco_candidato.grid(row=1, column=0, sticky="ew", padx=10, pady=4)
         ctk.CTkLabel(bloco_candidato, text="Produto cadastrado / similaridade", anchor="w", font=ctk.CTkFont(size=12, weight="bold")).pack(fill="x", pady=(0, 2))
         candidato_var = tk.StringVar(value="")
         candidato_combo = ctk.CTkComboBox(bloco_candidato, values=["Nenhum produto"], variable=candidato_var, height=34)
         candidato_combo.pack(fill="x")
 
-        codigo_var, codigo_entry = campo_editor("Código do produto", 4)
-        descricao_var, descricao_entry = campo_editor("Descrição de venda", 5)
-        barras_var, barras_entry = campo_editor("Código de barras", 6)
+        codigo_var, codigo_entry = campo_editor(aba_cadastro, "Código do produto", 0)
+        descricao_var, descricao_entry = campo_editor(aba_cadastro, "Descrição de venda", 1)
+        barras_var, barras_entry = campo_editor(aba_cadastro, "Código de barras", 2)
 
-        qtd_entry.master.grid_configure(row=7)
-        fator_entry.master.grid_configure(row=8)
-        custo_entry.master.grid_configure(row=9)
-        margem_entry.master.grid_configure(row=10)
-        preco_entry.master.grid_configure(row=11)
-        bloco_unidade.grid_configure(row=12)
-
-        lbl_calculo = ctk.CTkLabel(editor_body, text="", text_color="#2ea043", font=ctk.CTkFont(size=13, weight="bold"), justify="left")
-        lbl_calculo.grid(row=13, column=0, sticky="w", padx=10, pady=(8, 4))
-        lbl_pendencia = ctk.CTkLabel(editor_body, text="", text_color="#f85149", wraplength=350, justify="left")
-        lbl_pendencia.grid(row=14, column=0, sticky="ew", padx=10, pady=(2, 4))
+        lbl_calculo = ctk.CTkLabel(aba_estoque, text="", text_color="#2ea043", font=ctk.CTkFont(size=13, weight="bold"), justify="left")
+        lbl_calculo.grid(row=6, column=0, sticky="w", padx=10, pady=(8, 4))
+        lbl_pendencia = ctk.CTkLabel(aba_estoque, text="", text_color="#f85149", wraplength=350, justify="left")
+        lbl_pendencia.grid(row=7, column=0, sticky="ew", padx=10, pady=(2, 8))
 
         configuracoes: dict[int, dict] = {}
         analises_por_indice = {analise.index: analise for analise in analises}
@@ -4642,8 +4681,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             existentes = total - novos
             entrada = sum(float(c["quantidade"]) * float(c["fator"]) for c in configuracoes.values())
             lbl_resumo.configure(text=(
-                f"Produtos: {total} | Existentes: {existentes} | Novos: {novos} | "
-                f"Pendentes: {len(pendencias)} | Entrada calculada: {format_number_br(entrada)}"
+                f"{total} produtos  ·  {existentes} vinculados  ·  {novos} novos  ·  "
+                f"{len(pendencias)} precisam de atenção  ·  Entrada: {format_number_br(entrada)} unidades"
             ))
             lbl_progresso.configure(text=f"{percentual}%", text_color="#2ea043" if not pendencias else "#f0b429")
             return pendencias
@@ -4763,6 +4802,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             unidade_var.set(cfg["unidade"])
             estado["carregando"] = False
             atualizar_calculo("preco")
+            if not cfg.get("acao") or (cfg.get("acao") in {"VINCULAR", "ATUALIZAR"} and not cfg.get("produto_id")):
+                abas_item.set("1. Vínculo")
+            elif cfg.get("acao") == "CRIAR" and (not cfg.get("codigo") or not cfg.get("descricao")):
+                abas_item.set("2. Cadastro")
+            else:
+                abas_item.set("3. Estoque e preço")
 
         def atualizar_linha(indice):
             analise = analises_por_indice[indice]
@@ -4782,11 +4827,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 f"R$ {cfg['custo']:.2f}", f"{float(resultado.margem_percentual):.2f}%",
                 f"R$ {cfg['preco']:.2f}", f"R$ {float(resultado.lucro_unitario):.2f}", status,
             )
+            tag = "pendente" if erros else ("novo" if cfg.get("acao") == "CRIAR" else "vinculado")
             if tabela.exists(str(indice)):
-                tabela.item(str(indice), values=valores, tags=("pendente",) if erros else ())
+                tabela.item(str(indice), values=valores, tags=(tag,))
             else:
-                tabela.insert("", "end", iid=str(indice), values=valores, tags=("pendente",) if erros else ())
+                tabela.insert("", "end", iid=str(indice), values=valores, tags=(tag,))
         tabela.tag_configure("pendente", background="#5a1e1e", foreground="#ffffff")
+        tabela.tag_configure("novo", background="#332b00", foreground="#ffffff")
+        tabela.tag_configure("vinculado", background="#12351f", foreground="#ffffff")
 
         for analise in analises:
             atualizar_linha(analise.index)
@@ -4797,7 +4845,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 carregar_item(int(selecao[0]))
         tabela.bind("<<TreeviewSelect>>", ao_selecionar)
 
-        ctk.CTkButton(editor_body, text="Aplicar alterações ao item", height=38, fg_color="#1f6feb", command=salvar_item_atual).grid(row=17, column=0, sticky="ew", padx=10, pady=(8, 4))
+        ctk.CTkButton(editor_body, text="Salvar item e atualizar lista", height=38, fg_color="#1f6feb", command=salvar_item_atual).grid(row=17, column=0, sticky="ew", padx=10, pady=(8, 4))
 
         lote_frame = ctk.CTkFrame(editor_body, fg_color="transparent")
         lote_frame.grid(row=16, column=0, sticky="ew", padx=10, pady=(4, 12))
@@ -4974,8 +5022,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         rodape = ctk.CTkFrame(win, fg_color="#0d1117")
         rodape.pack(fill="x", padx=14, pady=(4, 12))
-        ctk.CTkButton(rodape, text="Resolver pendências", command=resolver_primeira_pendencia, fg_color="#9e6a03").pack(side="left")
-        ctk.CTkButton(rodape, text="Concluir importação", height=42, fg_color="#2ea043", command=processar_todos).pack(side="right")
+        ctk.CTkButton(rodape, text="Ir para o próximo item pendente", command=resolver_primeira_pendencia, fg_color="#9e6a03").pack(side="left")
+        ctk.CTkButton(rodape, text="Revisar e importar NF-e", height=42, fg_color="#2ea043", command=processar_todos).pack(side="right")
         ctk.CTkButton(rodape, text="Cancelar", height=42, fg_color="#30363d", command=win.destroy).pack(side="right", padx=8)
         self.window_actions.register(
             win,
