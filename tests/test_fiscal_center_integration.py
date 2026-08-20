@@ -21,6 +21,19 @@ def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
     assert "queue_ids=queue_ids" in block
 
 
+def test_central_fiscal_reune_entradas_saidas_e_preserva_compras_operacionais():
+    block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
+    assert "Central Fiscal — entradas, saídas e documentos" in block
+    assert 'text="Notas de entrada lançadas"' in block
+    assert "command=self.abrir_historico_nfe_importadas" in block
+    assert 'text="Importar NF-e de compra"' in block
+    assert "command=self.abrir_importacao_xml" in block
+    assert 'text="Vendas e orçamentos do dia"' in block
+    assert "command=self.abrir_vendas_do_dia_pdv" in block
+    assert 'text="Pedidos e fornecedores"' in block
+    assert 'self.mostrar_tela("compras")' in block
+
+
 def test_transmissao_fiscal_roda_fora_da_interface_e_nao_persiste_senha():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     password_helper = SOURCE.split("def _obter_senha_certificado", 1)[1].split("def abrir_configuracao_fiscal", 1)[0]

@@ -11069,7 +11069,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         janela.protocol("WM_DELETE_WINDOW", close_fiscal_center)
         frame = ctk.CTkFrame(janela, fg_color="#161b22")
         frame.pack(fill="both", expand=True, padx=12, pady=12)
-        ctk.CTkLabel(frame, text="Documentos e eventos fiscais", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=12, pady=(12, 8))
+        ctk.CTkLabel(frame, text="Central Fiscal — entradas, saídas e documentos", font=ctk.CTkFont(size=19, weight="bold"), text_color=self.cor_acento).pack(anchor="w", padx=12, pady=(12, 8))
         ctk.CTkLabel(
             frame, text=f"Arquivos locais: {self.fiscal_service.storage_dir}",
             text_color="#8b949e", anchor="w",
@@ -11939,10 +11939,28 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 messagebox.showerror("Duplicar nota", str(exc), parent=janela)
         action_panel = ctk.CTkScrollableFrame(
-            frame, fg_color="#0d1117", corner_radius=8, height=155,
-            label_text="Ações do documento selecionado",
+            frame, fg_color="#0d1117", corner_radius=8, height=225,
+            label_text="Consultas e ações",
         )
         action_panel.pack(fill="x", padx=12, pady=(0, 10))
+        movement_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
+        movement_actions.pack(fill="x", pady=(0, 8))
+        ctk.CTkButton(
+            movement_actions, text="Notas de entrada lançadas",
+            command=self.abrir_historico_nfe_importadas, fg_color="#8957e5",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            movement_actions, text="Importar NF-e de compra",
+            command=self.abrir_importacao_xml, fg_color="#2ea043",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            movement_actions, text="Vendas e orçamentos do dia",
+            command=self.abrir_vendas_do_dia_pdv, fg_color="#1f6feb",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            movement_actions, text="Pedidos e fornecedores",
+            command=lambda: self.mostrar_tela("compras"), fg_color="#30363d",
+        ).pack(side="left", padx=4)
         actions = ctk.CTkFrame(action_panel, fg_color="transparent"); actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Detalhes", command=details).pack(side="left", padx=4)

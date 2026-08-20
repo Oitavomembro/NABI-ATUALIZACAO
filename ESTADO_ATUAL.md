@@ -1398,3 +1398,11 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - `Vendas do dia` passou a listar vendas e orçamentos do dia com tipo, cor e situação distintos;
 - orçamento não movimenta estoque ou Caixa e não pode usar o cancelamento financeiro de uma venda;
 - 34 testes e 3 subtestes foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
+
+## Checkpoint 42.98 — Central Fiscal como entrada única de documentos
+
+- a Central Fiscal passou a se identificar como área de entradas, saídas e documentos;
+- foram adicionados acessos diretos para notas de entrada lançadas, importação de NF-e, vendas/orçamentos do dia e pedidos/fornecedores;
+- o painel de ações foi ampliado para evitar botões cortados em resoluções menores;
+- o botão Compras não retorna à barra principal, mas suas rotinas e dados continuam acessíveis dentro da Central Fiscal;
+- 21 testes focados foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
