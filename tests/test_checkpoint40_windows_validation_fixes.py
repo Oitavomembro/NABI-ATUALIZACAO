@@ -163,3 +163,19 @@ def test_fiscal_center_keeps_actions_accessible_in_scrollable_panel():
     assert "Ações do documento selecionado" in opening
     assert "action_panel = ctk.CTkScrollableFrame(" in opening
     assert "height=155" in opening
+
+
+def test_ambiguous_inline_fields_have_external_labels_and_hints_are_not_values():
+    assert 'text="Margem para todos (%):"' in LEGACY
+    assert 'text="Resultado do contato"' in LEGACY
+    assert 'text="Observação da cobrança"' in LEGACY
+    assert 'text="Promissória"' in LEGACY
+    assert 'text="Dias de antecedência"' in LEGACY
+    assert 'text="Observação do lembrete"' in LEGACY
+    assert 'text="Resultado do retorno"' in LEGACY
+    assert 'text="Observação do retorno"' in LEGACY
+    assert 'text="De:"' in LEGACY and 'text="Até:"' in LEGACY
+    assert 'text="Tipo:"' in LEGACY and 'text="Status:"' in LEGACY
+    assert '.insert("1.0","Observação da cobrança")' not in LEGACY
+    assert '.insert("1.0","Observação do retorno")' not in LEGACY
+    assert '.insert("1.0","Cliente pediu para ser lembrado' not in LEGACY

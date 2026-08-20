@@ -4929,7 +4929,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         lote_frame = ctk.CTkFrame(editor_body, fg_color="transparent")
         lote_frame.grid(row=16, column=0, sticky="ew", padx=10, pady=(4, 12))
         margem_lote_var = tk.StringVar(value="30")
-        ctk.CTkEntry(lote_frame, textvariable=margem_lote_var, width=85).pack(side="left", padx=(0, 5))
+        ctk.CTkLabel(lote_frame, text="Margem para todos (%):").pack(side="left", padx=(0, 6))
+        ctk.CTkEntry(
+            lote_frame, textvariable=margem_lote_var, width=85,
+            placeholder_text="Ex.: 30",
+        ).pack(side="left", padx=(0, 5))
         def aplicar_margem_todos():
             try:
                 margem = parse_nonnegative_number(margem_lote_var.get(), "Margem em lote")
@@ -8106,10 +8110,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         parcela_id=int(sel[0]); dados=self._dados_parcela_cobranca(parcela_id)
         if not dados: return
         cliente_id=dados["cliente_id"]; nome=dados["nome"]; num=dados.get("numero_parcela")
-        win=ctk.CTkToplevel(self); win.title("Registrar contato de cobrança"); win.geometry("480x410"); win.configure(fg_color="#0d1117"); win.grab_set()
+        win=ctk.CTkToplevel(self); win.title("Registrar contato de cobrança"); win.geometry("500x500"); win.configure(fg_color="#0d1117"); win.grab_set()
         ctk.CTkLabel(win,text=f"Contato — {nome} / Parcela {num or 1}",font=ctk.CTkFont(size=17,weight="bold")).pack(pady=15)
+        ctk.CTkLabel(win, text="Resultado do contato").pack(anchor="w", padx=25)
         resultado=ctk.CTkComboBox(win,values=["Contatado","Prometeu pagar","Não respondeu","Número inválido","Negociando","Outro"]); resultado.set("Contatado"); resultado.pack(fill="x",padx=25,pady=6)
-        obs=ctk.CTkTextbox(win,height=110); obs.pack(fill="both",expand=True,padx=25,pady=6); obs.insert("1.0","Observação da cobrança")
+        ctk.CTkLabel(win, text="Observação da cobrança").pack(anchor="w", padx=25)
+        obs=ctk.CTkTextbox(win,height=110); obs.pack(fill="both",expand=True,padx=25,pady=6)
         proximo=ctk.CTkEntry(win,placeholder_text="Próximo contato (AAAA-MM-DD, opcional)"); proximo.pack(fill="x",padx=25,pady=6)
         def salvar():
             prox=proximo.get().strip()
@@ -8128,12 +8134,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         parcelas=COBRANCA_SERVICE.parcelas_pendentes_cliente(cliente_id)
         if not parcelas: messagebox.showinfo("Lembrete","Este cliente não possui promissórias pendentes com vencimento."); return
         mapa={f"Parcela {row.get('numero_parcela') or 1} — {row.get('vencimento')} — R$ {float(row.get('valor_parcela') or 0):.2f}":row["parcela_id"] for row in parcelas}
-        win=ctk.CTkToplevel(self); win.title("Lembrar antes do vencimento"); win.geometry("510x390"); win.configure(fg_color="#0d1117"); win.grab_set()
+        win=ctk.CTkToplevel(self); win.title("Lembrar antes do vencimento"); win.geometry("530x500"); win.configure(fg_color="#0d1117"); win.grab_set()
         ctk.CTkLabel(win,text="🔔 Lembrete de promissória",font=ctk.CTkFont(size=18,weight="bold")).pack(pady=15)
+        ctk.CTkLabel(win, text="Promissória").pack(anchor="w", padx=25)
         combo=ctk.CTkComboBox(win,values=list(mapa.keys()),width=450); combo.set(next(iter(mapa))); combo.pack(padx=25,pady=7)
+        ctk.CTkLabel(win,text="Dias de antecedência").pack(anchor="w", padx=25)
         dias=ctk.CTkComboBox(win,values=["1","2","3","5","7","10"]); dias.set("2"); dias.pack(fill="x",padx=25,pady=7)
-        ctk.CTkLabel(win,text="Dias de antecedência").pack()
-        obs=ctk.CTkTextbox(win,height=100); obs.pack(fill="both",expand=True,padx=25,pady=7); obs.insert("1.0","Cliente pediu para ser lembrado pelo WhatsApp.")
+        ctk.CTkLabel(win, text="Observação do lembrete").pack(anchor="w", padx=25)
+        obs=ctk.CTkTextbox(win,height=100); obs.pack(fill="both",expand=True,padx=25,pady=7)
         def salvar():
             pid=mapa[combo.get()]; anteced=int(dias.get()); texto=obs.get("1.0","end").strip()
             COBRANCA_SERVICE.salvar_lembrete(cliente_id=cliente_id, parcela_id=pid, dias_antecedencia=anteced, observacao=texto)
@@ -8210,10 +8218,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if not dados:
             return
         cliente_id=dados["cliente_id"]; parcela_id=dados["parcela_id"]; nome=dados["nome"]; num=dados.get("numero_parcela")
-        win=ctk.CTkToplevel(self); win.title("Registrar novo retorno"); win.geometry("480x410"); win.configure(fg_color="#0d1117"); win.grab_set()
+        win=ctk.CTkToplevel(self); win.title("Registrar novo retorno"); win.geometry("500x500"); win.configure(fg_color="#0d1117"); win.grab_set()
         ctk.CTkLabel(win,text=f"Novo retorno — {nome} / Parcela {num or 1}",font=ctk.CTkFont(size=17,weight="bold")).pack(pady=15)
+        ctk.CTkLabel(win, text="Resultado do retorno").pack(anchor="w", padx=25)
         resultado=ctk.CTkComboBox(win,values=["Contatado","Prometeu pagar","Não respondeu","Negociando","Outro"]); resultado.set("Contatado"); resultado.pack(fill="x",padx=25,pady=6)
-        obs=ctk.CTkTextbox(win,height=110); obs.pack(fill="both",expand=True,padx=25,pady=6); obs.insert("1.0","Observação do retorno")
+        ctk.CTkLabel(win, text="Observação do retorno").pack(anchor="w", padx=25)
+        obs=ctk.CTkTextbox(win,height=110); obs.pack(fill="both",expand=True,padx=25,pady=6)
         proximo=ctk.CTkEntry(win,placeholder_text="Próximo contato (AAAA-MM-DD, opcional)"); proximo.pack(fill="x",padx=25,pady=6)
         def salvar():
             try:
@@ -9729,17 +9739,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         filtros.pack(fill="x", padx=20, pady=(0, 10))
         hoje = datetime.now()
         inicio = hoje.replace(day=1).strftime("%Y-%m-%d")
+        ctk.CTkLabel(filtros, text="De:").pack(side="left", padx=(12, 2), pady=10)
         self.fin_inicio = ctk.CTkEntry(filtros, width=120)
         self.fin_inicio.insert(0, inicio)
-        self.fin_inicio.pack(side="left", padx=(12, 4), pady=10)
+        self.fin_inicio.pack(side="left", padx=(2, 4), pady=10)
+        ctk.CTkLabel(filtros, text="Até:").pack(side="left", padx=(4, 2), pady=10)
         self.fin_fim = ctk.CTkEntry(filtros, width=120)
         self.fin_fim.insert(0, hoje.strftime("%Y-%m-%d"))
         self.fin_fim.pack(side="left", padx=4, pady=10)
         SearchEntryBehavior.attach(self.fin_inicio, on_enter=self.carregar_financeiro)
         SearchEntryBehavior.attach(self.fin_fim, on_enter=self.carregar_financeiro)
+        ctk.CTkLabel(filtros, text="Tipo:").pack(side="left", padx=(4, 2), pady=10)
         self.fin_tipo = ctk.CTkComboBox(filtros, values=["TODOS", "PAGAR", "RECEBER"], width=120)
         self.fin_tipo.set("TODOS")
         self.fin_tipo.pack(side="left", padx=4, pady=10)
+        ctk.CTkLabel(filtros, text="Status:").pack(side="left", padx=(4, 2), pady=10)
         self.fin_status = ctk.CTkComboBox(filtros, values=["TODOS", "ABERTO", "PARCIAL", "PAGO", "CANCELADO"], width=130)
         self.fin_status.set("TODOS")
         self.fin_status.pack(side="left", padx=4, pady=10)
@@ -10985,8 +10999,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         period = ctk.CTkFrame(frame, fg_color="transparent")
         period.pack(fill="x", padx=12, pady=(2, 4))
         ctk.CTkLabel(period, text="Período contábil:").pack(side="left", padx=(4, 6))
+        ctk.CTkLabel(period, text="De").pack(side="left", padx=(2, 0))
         start_entry = ctk.CTkEntry(period, width=115)
         start_entry.pack(side="left", padx=4); start_entry.insert(0, today.replace(day=1).isoformat())
+        ctk.CTkLabel(period, text="até").pack(side="left", padx=(2, 0))
         end_entry = ctk.CTkEntry(period, width=115)
         end_entry.pack(side="left", padx=4); end_entry.insert(0, today.isoformat())
         include_homologation = tk.BooleanVar(value=False)
