@@ -236,10 +236,11 @@ class NFeImportRepository:
     ) -> int:
         cursor = connection.execute(
             """INSERT INTO nfe_importacoes
-               (chave,numero,fornecedor_cnpj,fornecedor_nome,arquivo_origem,status,itens_total,itens_criados,itens_vinculados,data_importacao)
-               VALUES(?,?,?,?,?,'CONCLUIDA',?,?,?,?)""",
+               (chave,numero,fornecedor_cnpj,fornecedor_nome,arquivo_origem,status,itens_total,itens_criados,itens_vinculados,valor_total,data_importacao)
+               VALUES(?,?,?,?,?,'CONCLUIDA',?,?,?,?,?)""",
             (documento.chave, documento.numero, documento.cnpj, documento.fornecedor, arquivo_origem,
-             len(documento.itens), int(itens_criados), int(itens_vinculados), agora),
+             len(documento.itens), int(itens_criados), int(itens_vinculados),
+             DecimalStorage.canonical(getattr(documento, "valor_total", 0) or 0, field="valor total da NF-e"), agora),
         )
         return int(cursor.lastrowid)
 
@@ -447,15 +448,17 @@ class NFeImportRepository:
         itens_total: int,
         itens_criados: int,
         itens_vinculados: int,
+        valor_total: object = 0,
         status: str = "CONCLUIDA",
     ) -> int:
         return self.database.execute(
             """INSERT INTO nfe_importacoes
-               (chave,numero,fornecedor_cnpj,fornecedor_nome,arquivo_origem,status,itens_total,itens_criados,itens_vinculados,data_importacao)
-               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+               (chave,numero,fornecedor_cnpj,fornecedor_nome,arquivo_origem,status,itens_total,itens_criados,itens_vinculados,valor_total,data_importacao)
+               VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
             (
                 chave, numero, fornecedor_cnpj, fornecedor_nome, arquivo_origem,
                 status, int(itens_total), int(itens_criados), int(itens_vinculados),
+                DecimalStorage.canonical(valor_total, field="valor total da NF-e"),
                 datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
             ),
         )
@@ -474,7 +477,7 @@ class NFeImportRepository:
         where = " WHERE " + " AND ".join(filtros) if filtros else ""
         rows = self.database.fetch_all(
             f"""SELECT id,chave,numero,fornecedor_cnpj,fornecedor_nome,arquivo_origem,
-                       status,itens_total,itens_criados,itens_vinculados,data_importacao
+                       status,itens_total,itens_criados,itens_vinculados,valor_total,data_importacao
                 FROM nfe_importacoes{where}
                 ORDER BY datetime(data_importacao) DESC, id DESC""",
             tuple(parametros),

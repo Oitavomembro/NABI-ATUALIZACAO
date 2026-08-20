@@ -82,6 +82,7 @@ class NFeImportServiceTests(unittest.TestCase):
                 itens_total INTEGER NOT NULL DEFAULT 0,
                 itens_criados INTEGER NOT NULL DEFAULT 0,
                 itens_vinculados INTEGER NOT NULL DEFAULT 0,
+                valor_total TEXT NOT NULL DEFAULT '0',
                 data_importacao TEXT NOT NULL
             );
             """

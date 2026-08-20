@@ -162,6 +162,7 @@ class NFeImportService:
             itens_total=len(documento.itens),
             itens_criados=itens_criados,
             itens_vinculados=itens_vinculados,
+            valor_total=documento.valor_total,
         )
         # A nota e seus itens ficam disponíveis para o Assistente de Devolução.
         # Bancos usados por testes ou integrações antigas podem ainda não ter o schema 9.

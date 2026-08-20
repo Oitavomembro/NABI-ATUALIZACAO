@@ -6,6 +6,7 @@ import unittest
 from unittest.mock import patch
 from pathlib import Path
 from datetime import datetime
+from decimal import Decimal
 
 from services.report_service import ReportService
 
@@ -46,6 +47,9 @@ class ReportServiceTests(unittest.TestCase):
         )
         connection.execute(
             "INSERT INTO movimentacoes VALUES(4,'2026-08-03 10:00:00','PAGAMENTO','ANA',125.50,'PIX','PAGO','admin')"
+        )
+        connection.execute(
+            "INSERT INTO movimentacoes VALUES(5,'04/08/2026 10:00:00','VENDA','BIA',30,'DINHEIRO','PAGO','admin')"
         )
         connection.execute(
             "INSERT INTO financeiro_titulos VALUES(1,'RECEBER','ANA','Venda','2026-08-01','2026-08-10',200,50,150,'PARCIAL','VENDA','1')"
@@ -91,8 +95,8 @@ class ReportServiceTests(unittest.TestCase):
 
     def test_indicators_do_not_count_pending_movements_as_sales(self) -> None:
         data = self.service.indicators(start_date="2026-08-01", end_date="2026-08-31")
-        self.assertEqual(data["vendas_quantidade"], 2)
-        self.assertEqual(data["vendas_total"], 175.50)
+        self.assertEqual(data["vendas_quantidade"], 3)
+        self.assertEqual(data["vendas_total"], 205.50)
         self.assertEqual(data["receber_aberto"], 150)
         self.assertEqual(data["pagar_aberto"], 300)
         self.assertEqual(data["estoque_baixo"], 1)
@@ -105,6 +109,27 @@ class ReportServiceTests(unittest.TestCase):
         type_index = result.columns.index("tipo")
         self.assertEqual({row[type_index] for row in result.rows}, {"VENDA", "COMPRA"})
         self.assertNotIn("PAGAMENTO", {row[type_index] for row in result.rows})
+
+    def test_datas_brasileiras_e_resumo_do_periodo(self) -> None:
+        result = self.service.generate(
+            "vendas", start_date="01/08/2026", end_date="31/08/2026", actor="admin"
+        )
+        self.assertEqual(result.row_count, 3)
+        self.assertEqual(
+            self.service.result_summary(result),
+            {"quantidade": 3, "valor_total": Decimal("205.5")},
+        )
+
+    def test_recebimentos_tem_total_separado_do_faturamento(self) -> None:
+        result = self.service.generate(
+            "recebimentos", start_date="01/08/2026", end_date="31/08/2026", actor="admin"
+        )
+        type_index = result.columns.index("tipo")
+        self.assertEqual({row[type_index] for row in result.rows}, {"PAGAMENTO"})
+        self.assertEqual(
+            self.service.result_summary(result),
+            {"quantidade": 1, "valor_total": Decimal("125.5")},
+        )
 
     def test_exports_csv_xlsx_and_pdf(self) -> None:
         result = self.service.generate("financeiro", actor="admin")
@@ -212,7 +237,7 @@ class ReportServiceTests(unittest.TestCase):
         self.assertEqual(saved["aggregation"], "SUM")
         evaluated = self.service.evaluate_custom_indicators(start_date="2026-08-01", end_date="2026-08-31")
         self.assertEqual(len(evaluated), 1)
-        self.assertEqual(evaluated[0]["value"], 125.50)
+        self.assertEqual(evaluated[0]["value"], Decimal("155.5"))
         dashboard = self.service.dashboard(start_date="2026-08-01", end_date="2026-08-31")
         self.assertEqual(dashboard["custom_indicators"][0]["name"], "Total vendido")
         self.service.delete_custom_indicator("Total vendido", actor="admin")

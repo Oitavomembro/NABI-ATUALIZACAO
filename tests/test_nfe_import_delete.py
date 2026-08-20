@@ -12,7 +12,7 @@ from repositories import NFeImportRepository
 SCHEMA = """
 CREATE TABLE produtos (id INTEGER PRIMARY KEY, codigo TEXT, nome TEXT, estoque_atual REAL, atualizado_em TEXT);
 CREATE TABLE estoque_movimentacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, produto_id INTEGER, tipo TEXT, quantidade REAL, saldo_anterior REAL, saldo_atual REAL, origem TEXT, origem_id TEXT, motivo TEXT, usuario TEXT, data TEXT);
-CREATE TABLE nfe_importacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, chave TEXT UNIQUE, numero TEXT, fornecedor_cnpj TEXT, fornecedor_nome TEXT, arquivo_origem TEXT, status TEXT, itens_total INTEGER, itens_criados INTEGER, itens_vinculados INTEGER, data_importacao TEXT);
+CREATE TABLE nfe_importacoes (id INTEGER PRIMARY KEY AUTOINCREMENT, chave TEXT UNIQUE, numero TEXT, fornecedor_cnpj TEXT, fornecedor_nome TEXT, arquivo_origem TEXT, status TEXT, itens_total INTEGER, itens_criados INTEGER, itens_vinculados INTEGER, valor_total TEXT NOT NULL DEFAULT '0', data_importacao TEXT);
 CREATE TABLE nfe_documentos_origem (id INTEGER PRIMARY KEY AUTOINCREMENT, chave TEXT, numero TEXT);
 CREATE TABLE nfe_documentos_origem_itens (id INTEGER PRIMARY KEY AUTOINCREMENT, documento_id INTEGER);
 CREATE TABLE nfe_devolucoes (id INTEGER PRIMARY KEY AUTOINCREMENT, documento_origem_id INTEGER);

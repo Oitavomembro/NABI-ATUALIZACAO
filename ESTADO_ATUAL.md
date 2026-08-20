@@ -1416,3 +1416,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - a Central Fiscal trocou os cinco blocos de status por dois cards claros: `Saídas — Vendas` e `Entradas — Compras`;
 - corrigida a causa raiz do relatório mensal: somente movimentos `COMPRA`/`VENDA` compõem faturamento; `PAGAMENTO`/`RECEBIMENTO` não entram novamente como venda;
 - 38 testes focados foram aprovados em perfil TESTE; compilação e `git diff --check` também foram aprovados.
+
+## Checkpoint 43.00 — relatórios por período com totais e PDF
+
+- a Central Fiscal ganhou acesso direto ao relatório por período, sem duplicar a rotina de relatórios;
+- o usuário informa data inicial e final, clica em `Calcular e listar` e vê os registros e o valor total antes de exportar;
+- vendas e recebimentos de fichas possuem relatórios e totais separados, evitando contar a liquidação de dívida como novo faturamento;
+- filtros aceitam `DD/MM/AAAA` e continuam compatíveis com datas ISO; registros históricos gravados em ambos os formatos são encontrados corretamente;
+- o PDF passou a informar a quantidade de registros e o valor total do período;
+- novas importações de NF-e armazenam o valor total da nota para relatórios de entradas; o schema foi elevado para 19 com migração idempotente;
+- 1.319 testes aprovados, 1 ignorado e 32 subtestes aprovados em `NABICODE_PROFILE=TESTE`;
+- `compileall` e `git diff --check` aprovados; nenhum banco real, certificado, endpoint fiscal, impressora ou interface gráfica foi utilizado.

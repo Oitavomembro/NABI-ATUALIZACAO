@@ -421,9 +421,15 @@ def initialize_database(
             itens_total INTEGER NOT NULL DEFAULT 0,
             itens_criados INTEGER NOT NULL DEFAULT 0,
             itens_vinculados INTEGER NOT NULL DEFAULT 0,
+            valor_total TEXT NOT NULL DEFAULT '0',
             data_importacao TEXT NOT NULL
         )
     """)
+    colunas_nfe_importacoes = {
+        str(row[1]).casefold() for row in cursor.execute("PRAGMA table_info(nfe_importacoes)").fetchall()
+    }
+    if "valor_total" not in colunas_nfe_importacoes:
+        cursor.execute("ALTER TABLE nfe_importacoes ADD COLUMN valor_total TEXT NOT NULL DEFAULT '0'")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nfe_importacoes_numero ON nfe_importacoes(numero)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nfe_importacoes_cnpj ON nfe_importacoes(fornecedor_cnpj)")
 

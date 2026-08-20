@@ -88,6 +88,10 @@ class SchemaInitializerTests(unittest.TestCase):
                 row[1] for row in connection.execute("PRAGMA index_list(cash_sessions)")
             }
             self.assertIn("idx_cash_sessions_terminal_opened", cash_indexes)
+            nfe_columns = {
+                row[1] for row in connection.execute("PRAGMA table_info(nfe_importacoes)")
+            }
+            self.assertIn("valor_total", nfe_columns)
             version = connection.execute(
                 "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
             ).fetchone()[0]

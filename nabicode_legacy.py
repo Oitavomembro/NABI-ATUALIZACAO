@@ -283,7 +283,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 18
+DB_SCHEMA_VERSION = 19
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -9516,10 +9516,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.rel_tipo = ctk.CTkComboBox(filtros, values=valores_relatorios, width=150)
         self.rel_tipo.set(valores_relatorios[0])
         self.rel_tipo.pack(side="left", padx=6, pady=10)
-        self.rel_inicio = ctk.CTkEntry(filtros, placeholder_text="Início AAAA-MM-DD", width=145)
+        self.rel_inicio = ctk.CTkEntry(filtros, placeholder_text="Data inicial DD/MM/AAAA", width=175)
         self.rel_inicio.pack(side="left", padx=6)
-        self.rel_fim = ctk.CTkEntry(filtros, placeholder_text="Fim AAAA-MM-DD", width=145)
+        self.rel_inicio.insert(0, datetime.now().replace(day=1).strftime("%d/%m/%Y"))
+        self.rel_fim = ctk.CTkEntry(filtros, placeholder_text="Data final DD/MM/AAAA", width=175)
         self.rel_fim.pack(side="left", padx=6)
+        self.rel_fim.insert(0, datetime.now().strftime("%d/%m/%Y"))
         self.rel_busca = ctk.CTkEntry(filtros, placeholder_text="Pesquisar", width=160)
         self.rel_busca.pack(side="left", padx=6)
         SearchEntryBehavior.attach(
@@ -9529,7 +9531,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.rel_status.pack(side="left", padx=6)
         self.rel_usuario = ctk.CTkEntry(filtros, placeholder_text="Usuário", width=110)
         self.rel_usuario.pack(side="left", padx=6)
-        ctk.CTkButton(filtros, text="Gerar", width=85, command=self.gerar_relatorio_ui).pack(side="left", padx=6)
+        ctk.CTkButton(filtros, text="Calcular e listar", width=135, fg_color="#2ea043", command=self.gerar_relatorio_ui).pack(side="left", padx=6)
+
+        resumo_periodo = ctk.CTkFrame(frame, fg_color="transparent")
+        resumo_periodo.pack(fill="x", padx=20, pady=(2, 4))
+        card_quantidade = ctk.CTkFrame(resumo_periodo, fg_color="#161b22", corner_radius=9)
+        card_quantidade.pack(side="left", fill="x", expand=True, padx=(0, 5))
+        ctk.CTkLabel(card_quantidade, text="REGISTROS NO PERÍODO", text_color="#8b949e", font=ctk.CTkFont(size=10, weight="bold")).pack(anchor="w", padx=12, pady=(8, 1))
+        self.rel_quantidade_periodo = ctk.CTkLabel(card_quantidade, text="0", font=ctk.CTkFont(size=19, weight="bold"), text_color="#58a6ff")
+        self.rel_quantidade_periodo.pack(anchor="w", padx=12, pady=(0, 8))
+        card_valor = ctk.CTkFrame(resumo_periodo, fg_color="#161b22", corner_radius=9)
+        card_valor.pack(side="left", fill="x", expand=True, padx=(5, 0))
+        ctk.CTkLabel(card_valor, text="VALOR TOTAL DO PERÍODO", text_color="#8b949e", font=ctk.CTkFont(size=10, weight="bold")).pack(anchor="w", padx=12, pady=(8, 1))
+        self.rel_valor_periodo = ctk.CTkLabel(card_valor, text="R$ 0,00", font=ctk.CTkFont(size=19, weight="bold"), text_color="#2ea043")
+        self.rel_valor_periodo.pack(anchor="w", padx=12, pady=(0, 8))
 
         table_frame = ctk.CTkFrame(frame, fg_color="#161b22")
         table_frame.pack(fill="both", expand=True, padx=20, pady=8)
@@ -9545,8 +9560,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         rodape = ctk.CTkFrame(frame, fg_color="transparent")
         rodape.pack(fill="x", padx=20, pady=(4, 16))
-        for texto, formato in (("CSV", "CSV"), ("Excel", "XLSX"), ("PDF", "PDF")):
+        for texto, formato in (("CSV", "CSV"), ("Excel", "XLSX")):
             ctk.CTkButton(rodape, text=texto, width=95, command=lambda f=formato: self.exportar_relatorio_ui(f)).pack(side="left", padx=4)
+        ctk.CTkButton(rodape, text="Gerar arquivo PDF", width=155, fg_color="#1f6feb", command=lambda: self.exportar_relatorio_ui("PDF")).pack(side="left", padx=4)
         ctk.CTkButton(rodape, text="Imprimir", width=95, command=self.imprimir_relatorio_ui).pack(side="left", padx=4)
         ctk.CTkButton(rodape, text="Gráfico / Dashboard", width=145, fg_color="#30363d", command=self.abrir_dashboard_relatorios).pack(side="left", padx=4)
         ctk.CTkButton(rodape, text="Indicadores", width=105, fg_color="#30363d", command=self.abrir_indicadores_personalizados).pack(side="left", padx=4)
@@ -9575,6 +9591,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 self.rel_tabela.column(column, width=130, minwidth=80, stretch=True)
             for index, row in enumerate(result.rows):
                 self.rel_tabela.insert("", "end", iid=str(index), values=row)
+            summary = REPORT_SERVICE.result_summary(result)
+            self.rel_quantidade_periodo.configure(text=str(summary["quantidade"]))
+            self.rel_valor_periodo.configure(text=f"R$ {summary['valor_total']:.2f}")
             indicators = REPORT_SERVICE.indicators(start_date=self.rel_inicio.get(), end_date=self.rel_fim.get())
             self.rel_indicadores.configure(text=f"Vendas R$ {indicators['vendas_total']:.2f} • A receber R$ {indicators['receber_aberto']:.2f} • Estoque baixo {indicators['estoque_baixo']}")
         except Exception as exc:
@@ -11953,6 +11972,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             label_text="Consultas e ações",
         )
         action_panel.pack(fill="x", padx=12, pady=(0, 10))
+        def open_period_reports():
+            self.mostrar_tela("relatorios")
+            if hasattr(self, "rel_tipo"):
+                self.rel_tipo.set("nfe")
+            janela.iconify()
+
         movement_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
         movement_actions.pack(fill="x", pady=(0, 8))
         ctk.CTkButton(
@@ -11970,6 +11995,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             movement_actions, text="Pedidos e fornecedores",
             command=lambda: self.mostrar_tela("compras"), fg_color="#30363d",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            movement_actions, text="Relatório por período / PDF",
+            command=open_period_reports, fg_color="#0969da",
         ).pack(side="left", padx=4)
         actions = ctk.CTkFrame(action_panel, fg_color="transparent"); actions.pack(fill="x", pady=(0, 6))
         ctk.CTkButton(actions, text="Atualizar", command=load).pack(side="left", padx=4)

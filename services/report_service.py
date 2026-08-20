@@ -43,6 +43,7 @@ class ReportService:
 
     REPORTS = {
         "vendas": "Vendas por período",
+        "recebimentos": "Recebimentos de fichas por período",
         "produtos": "Produtos e estoque",
         "clientes": "Clientes e saldos",
         "financeiro": "Títulos financeiros",
@@ -168,6 +169,18 @@ class ReportService:
             return indicators
         finally:
             connection.close()
+
+    @staticmethod
+    def result_summary(result: ReportResult) -> dict[str, Decimal | int]:
+        """Totaliza somente a coluna monetária oficial do relatório exibido."""
+        candidates = ("valor_total", "valor", "total")
+        value_column = next((name for name in candidates if name in result.columns), None)
+        total = Decimal("0")
+        if value_column is not None:
+            position = result.columns.index(value_column)
+            for row in result.rows:
+                total += DecimalStorage.to_decimal(row[position] or 0, field="valor do relatório")
+        return {"quantidade": result.row_count, "valor_total": total}
 
 
     def chart_series(self, result: ReportResult, *, max_categories: int = 12) -> dict[str, Any]:
@@ -519,6 +532,13 @@ class ReportService:
             required_types=("COMPRA", "VENDA"),
         )
 
+    def _report_recebimentos(self, connection, **kwargs):
+        return self._generic_report(
+            connection, "movimentacoes", kwargs,
+            preferred=("id", "data", "tipo", "cliente", "descricao", "valor_total", "valor", "forma_pagamento", "status", "usuario"),
+            required_types=("PAGAMENTO", "RECEBIMENTO"),
+        )
+
     def _report_produtos(self, connection, **kwargs):
         return self._generic_report(connection, "produtos", kwargs, preferred=("id", "codigo", "codigo_barras", "nome", "preco_custo", "preco_venda", "estoque_atual", "estoque_minimo", "ativo", "atualizado_em"))
 
@@ -532,7 +552,7 @@ class ReportService:
         return self._generic_report(connection, "pedidos_compra", kwargs, preferred=("id", "fornecedor_id", "status", "observacao", "valor_total", "data_pedido", "data_recebimento", "criado_em"))
 
     def _report_nfe(self, connection, **kwargs):
-        return self._generic_report(connection, "nfe_importacoes", kwargs, preferred=("id", "chave", "numero", "fornecedor_cnpj", "fornecedor_nome", "status", "itens_total", "itens_criados", "itens_vinculados", "data_importacao"))
+        return self._generic_report(connection, "nfe_importacoes", kwargs, preferred=("id", "chave", "numero", "fornecedor_cnpj", "fornecedor_nome", "status", "valor_total", "itens_total", "itens_criados", "itens_vinculados", "data_importacao"))
 
     def _report_estoque(self, connection, **kwargs):
         return self._generic_report(connection, "estoque_movimentacoes", kwargs, preferred=("id", "produto_id", "tipo", "quantidade", "saldo_anterior", "saldo_atual", "origem", "origem_id", "motivo", "usuario", "data"))
@@ -621,6 +641,8 @@ class ReportService:
         page = landscape(A4) if len(result.columns) > 6 else A4
         document = SimpleDocTemplate(str(path), pagesize=page, rightMargin=24, leftMargin=24, topMargin=24, bottomMargin=24)
         styles = getSampleStyleSheet()
+        summary = ReportService.result_summary(result)
+        total = DecimalStorage.canonical(summary["valor_total"], field="valor total do relatório")
         data = [list(result.columns)] + [["" if value is None else str(value) for value in row] for row in result.rows]
         table = Table(data, repeatRows=1)
         table.setStyle(TableStyle([
@@ -635,6 +657,7 @@ class ReportService:
         document.build([
             Paragraph(result.title, styles["Title"]),
             Paragraph(f"Gerado em {result.generated_at} • {result.row_count} registro(s)", styles["Normal"]),
+            Paragraph(f"Valor total do período: R$ {total}", styles["Normal"]),
             Spacer(1, 12), table,
         ])
 
@@ -683,20 +706,38 @@ class ReportService:
         value = str(value or "").strip()
         if not value:
             return None
-        parsed = datetime.strptime(value, "%Y-%m-%d")
+        parsed = None
+        for pattern in ("%d/%m/%Y", "%Y-%m-%d"):
+            try:
+                parsed = datetime.strptime(value, pattern)
+                break
+            except ValueError:
+                continue
+        if parsed is None:
+            raise ValueError("Data inválida. Use DD/MM/AAAA.")
         return parsed.strftime("%Y-%m-%d") + (" 23:59:59" if end else " 00:00:00")
 
     @staticmethod
     def _date_where(column: str | None, start: str | None, end: str | None) -> tuple[list[str], list[Any]]:
         where: list[str] = []
         params: list[Any] = []
+        expression = ReportService._normalized_date_expression(column) if column else ""
         if column and start:
-            where.append(f"{column}>=?")
+            where.append(f"{expression}>=?")
             params.append(start)
         if column and end:
-            where.append(f"{column}<=?")
+            where.append(f"{expression}<=?")
             params.append(end)
         return where, params
+
+    @staticmethod
+    def _normalized_date_expression(column: str) -> str:
+        """Compara datas ISO e o formato histórico DD/MM/AAAA sem alterar dados."""
+        return (
+            f"(CASE WHEN substr({column},3,1)='/' AND substr({column},6,1)='/' "
+            f"THEN substr({column},7,4)||'-'||substr({column},4,2)||'-'||"
+            f"substr({column},1,2)||substr({column},11) ELSE {column} END)"
+        )
 
     _table_exists = staticmethod(table_exists)
 
