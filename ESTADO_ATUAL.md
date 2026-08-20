@@ -1475,3 +1475,5 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - a consulta é voluntária e executada em segundo plano, sem atrasar a abertura do PDV nem travar a venda;
 - no modo não fiscal nenhuma conexão com a SEFAZ é iniciada;
 - 38 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo regressões de layout, relatórios, modo fiscal de teste e consulta não bloqueante; compilação e `git diff --check` aprovados.
+- validação consolidada: 1.325 testes aprovados, 1 ignorado e 32 subtestes aprovados; o teste isolado de DPAPI também foi aprovado fora do sandbox do Codex;
+- `compileall`, smoke de `main.py` (versão 2.5.1) e `git diff --check` aprovados, sem abrir interface, usar banco real, certificado real, SEFAZ ou impressora.

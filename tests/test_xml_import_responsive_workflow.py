@@ -33,5 +33,5 @@ def test_barra_principal_abre_central_fiscal_no_lugar_de_compras():
         "def _chave_usuario_preferencias", 1
     )[0]
     assert 'text="🧾 Central Fiscal"' in header
-    assert "btn_compras.configure(command=self.abrir_central_fiscal)" in header
+    assert "btn_fiscal.configure(command=self.abrir_central_fiscal)" in header
     assert 'text="📥 Compras"' not in header

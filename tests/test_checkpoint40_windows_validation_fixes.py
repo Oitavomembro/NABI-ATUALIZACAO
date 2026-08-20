@@ -17,7 +17,7 @@ def method_block(name: str, next_name: str) -> str:
 
 def test_xml_import_dashboard_uses_guided_responsive_conference_flow():
     opening = method_block("abrir_importacao_xml", "abrir_pdv_independente")
-    assert 'text="Importar NF-e de compra"' in opening
+    assert '"Importar NF-e de compra"' in opening
     assert "XML identificado" in opening
     assert "Empresa conferida" in opening
     assert "Revisar e importar" in opening
@@ -33,7 +33,7 @@ def test_xml_import_dashboard_uses_guided_responsive_conference_flow():
     assert "Estes valores não substituem a regra tributária da sua venda" in opening
     assert "reveal_prepared_toplevel_when_idle(win, maximize=True)" in opening
     assert "win.grab_set()" not in opening
-    assert 'text="Revisar e importar NF-e"' in opening
+    assert '"Revisar e importar NF-e"' in opening
 
 
 def test_pdv_uses_native_minimize_without_changing_function_shortcuts():
@@ -160,9 +160,9 @@ def test_initial_numbering_fields_are_labeled_and_fit_the_modal():
 
 def test_fiscal_center_keeps_actions_accessible_in_scrollable_panel():
     opening = method_block("abrir_central_fiscal", "abrir_pasta_backup_config")
-    assert "Consultas e ações" in opening
+    assert "O que você deseja fazer?" in opening
     assert "action_panel = ctk.CTkScrollableFrame(" in opening
-    assert "height=225" in opening
+    assert "height=190" in opening
 
 
 def test_ambiguous_inline_fields_have_external_labels_and_hints_are_not_values():
