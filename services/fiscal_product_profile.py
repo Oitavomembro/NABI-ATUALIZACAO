@@ -15,6 +15,8 @@ class FiscalProductProfile:
         "49", "50", "51", "52", "53", "54", "55", "56", "60", "61", "62", "63",
         "64", "65", "66", "67", "70", "71", "72", "73", "74", "75", "98", "99",
     }
+    IPI_TAXED = {"50", "99"}
+    IPI_UNTAXED = {"51", "52", "53", "54", "55"}
 
     @staticmethod
     def digits(value: Any) -> str:
@@ -44,6 +46,8 @@ class FiscalProductProfile:
             "fiscal_icms_cst": cls.digits(values.get("fiscal_icms_cst")),
             "fiscal_pis_cst": cls.digits(values.get("fiscal_pis_cst")),
             "fiscal_cofins_cst": cls.digits(values.get("fiscal_cofins_cst")),
+            "fiscal_ipi_cst": cls.digits(values.get("fiscal_ipi_cst")),
+            "fiscal_ipi_enq": cls.digits(values.get("fiscal_ipi_enq")),
             "fiscal_profile_source": str(values.get("fiscal_profile_source") or "").strip().upper(),
             "ibs_cbs_cst": cls.digits(values.get("ibs_cbs_cst")),
             "ibs_cbs_class": cls.digits(values.get("ibs_cbs_class")),
@@ -64,6 +68,10 @@ class FiscalProductProfile:
         for field, label in (("fiscal_pis_cst", "CST PIS"), ("fiscal_cofins_cst", "CST COFINS")):
             if result[field] and result[field] not in contribution_codes:
                 raise ValueError(f"{label} não é suportado pela ficha fiscal.")
+        if result["fiscal_ipi_cst"] and result["fiscal_ipi_cst"] not in cls.IPI_TAXED | cls.IPI_UNTAXED:
+            raise ValueError("CST IPI de saída deve ser 50, 51, 52, 53, 54, 55 ou 99.")
+        if result["fiscal_ipi_cst"] and len(result["fiscal_ipi_enq"]) != 3:
+            raise ValueError("IPI configurado exige código de enquadramento com 3 dígitos.")
         if result["ibs_cbs_cst"] and len(result["ibs_cbs_cst"]) != 3:
             raise ValueError("CST IBS/CBS deve possuir 3 dígitos.")
         if result["ibs_cbs_class"] and len(result["ibs_cbs_class"]) != 6:
@@ -72,6 +80,7 @@ class FiscalProductProfile:
             ("fiscal_icms_rate", "Alíquota de ICMS"),
             ("fiscal_pis_rate", "Alíquota de PIS"),
             ("fiscal_cofins_rate", "Alíquota de COFINS"),
+            ("fiscal_ipi_rate", "Alíquota de IPI"),
             ("ibs_uf_rate", "Alíquota IBS estadual"),
             ("ibs_city_rate", "Alíquota IBS municipal"),
             ("cbs_rate", "Alíquota CBS"),

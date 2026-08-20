@@ -1338,3 +1338,15 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - numeração e configuração continuam usando internamente os códigos oficiais `HOMOLOGACAO` e `PRODUCAO`;
 - 134 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
 - nenhuma UF adicional foi liberada e nenhum programa, banco real, certificado, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.92 — IPI de saída configurável e sem presunção
+
+- a ficha oficial do produto ganhou CST de IPI de saída, alíquota e código de enquadramento legal;
+- bancos existentes recebem os novos campos pela inicialização idempotente, sem apagar cadastros;
+- somente CSTs de saída suportados são aceitos e qualquer IPI configurado exige enquadramento explícito de três dígitos;
+- CST tributado gera `IPITrib`, enquanto CST não tributado gera `IPINT`;
+- valor do IPI é calculado com `Decimal`, totalizado em `ICMSTot/vIPI` e compõe corretamente o valor da NF-e;
+- produto sem IPI configurado preserva exatamente o comportamento anterior;
+- consultas toleram esquemas legados durante migração, sem inventar valor fiscal;
+- 153 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
+- produção e UFs adicionais continuam bloqueadas; nenhum banco real, certificado, endpoint fiscal ou impressora foi utilizado.

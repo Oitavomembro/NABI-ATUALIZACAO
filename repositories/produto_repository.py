@@ -166,6 +166,7 @@ class ProdutoRepository:
         for fiscal_field in (
             "fiscal_origin", "fiscal_csosn", "fiscal_icms_cst", "fiscal_icms_rate",
             "fiscal_pis_cst", "fiscal_pis_rate", "fiscal_cofins_cst", "fiscal_cofins_rate",
+            "fiscal_ipi_cst", "fiscal_ipi_rate", "fiscal_ipi_enq",
             "fiscal_profile_source", "ibs_cbs_cst", "ibs_cbs_class", "ibs_uf_rate",
             "ibs_city_rate", "cbs_rate",
         ):

@@ -3316,11 +3316,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         e_pis_rate = campo(fiscal, "Alíquota PIS (%)", 3, 1)
         e_cofins_cst = campo(fiscal, "CST COFINS", 3, 2)
         e_cofins_rate = campo(fiscal, "Alíquota COFINS (%)", 4, 0)
-        e_ibs_cst = campo(fiscal, "CST IBS/CBS", 4, 1)
-        e_ibs_class = campo(fiscal, "Classificação IBS/CBS", 4, 2)
-        e_ibs_uf_rate = campo(fiscal, "IBS estadual (%)", 5, 0)
-        e_ibs_city_rate = campo(fiscal, "IBS municipal (%)", 5, 1)
-        e_cbs_rate = campo(fiscal, "CBS (%)", 5, 2)
+        e_ipi_cst = campo(fiscal, "CST IPI de saída", 4, 1)
+        e_ipi_rate = campo(fiscal, "Alíquota IPI (%)", 4, 2)
+        e_ipi_enq = campo(fiscal, "Enquadramento legal do IPI (3 dígitos)", 5, 0)
+        e_ibs_cst = campo(fiscal, "CST IBS/CBS", 6, 0)
+        e_ibs_class = campo(fiscal, "Classificação IBS/CBS", 6, 1)
+        e_ibs_uf_rate = campo(fiscal, "IBS estadual (%)", 7, 0)
+        e_ibs_city_rate = campo(fiscal, "IBS municipal (%)", 7, 1)
+        e_cbs_rate = campo(fiscal, "CBS (%)", 7, 2)
 
         def buscar_ncm_oficial():
             query = simpledialog.askstring(
@@ -3509,6 +3512,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             (e_pis_rate, perfil_fiscal.get("fiscal_pis_rate", "0")),
             (e_cofins_cst, perfil_fiscal.get("fiscal_cofins_cst", "")),
             (e_cofins_rate, perfil_fiscal.get("fiscal_cofins_rate", "0")),
+            (e_ipi_cst, perfil_fiscal.get("fiscal_ipi_cst", "")),
+            (e_ipi_rate, perfil_fiscal.get("fiscal_ipi_rate", "0")),
+            (e_ipi_enq, perfil_fiscal.get("fiscal_ipi_enq", "")),
             (e_ibs_cst, perfil_fiscal.get("ibs_cbs_cst", "")),
             (e_ibs_class, perfil_fiscal.get("ibs_cbs_class", "")),
             (e_ibs_uf_rate, perfil_fiscal.get("ibs_uf_rate", "0")),
@@ -3542,6 +3548,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     fiscal_icms_cst=e_icms_cst.get(), fiscal_icms_rate=e_icms_rate.get(),
                     fiscal_pis_cst=e_pis_cst.get(), fiscal_pis_rate=e_pis_rate.get(),
                     fiscal_cofins_cst=e_cofins_cst.get(), fiscal_cofins_rate=e_cofins_rate.get(),
+                    fiscal_ipi_cst=e_ipi_cst.get(), fiscal_ipi_rate=e_ipi_rate.get(),
+                    fiscal_ipi_enq=e_ipi_enq.get(),
                     fiscal_profile_source="MANUAL", ibs_cbs_cst=e_ibs_cst.get(),
                     ibs_cbs_class=e_ibs_class.get(), ibs_uf_rate=e_ibs_uf_rate.get(),
                     ibs_city_rate=e_ibs_city_rate.get(), cbs_rate=e_cbs_rate.get(),
@@ -3638,7 +3646,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 bool(permite_negativo_var.get()),
                 e_ncm.get(), e_cest.get(), e_cfop.get(), e_origem.get(), e_csosn.get(),
                 e_icms_cst.get(), e_icms_rate.get(), e_pis_cst.get(), e_pis_rate.get(),
-                e_cofins_cst.get(), e_cofins_rate.get(), e_ibs_cst.get(), e_ibs_class.get(),
+                e_cofins_cst.get(), e_cofins_rate.get(), e_ipi_cst.get(), e_ipi_rate.get(),
+                e_ipi_enq.get(), e_ibs_cst.get(), e_ibs_class.get(),
                 e_ibs_uf_rate.get(), e_ibs_city_rate.get(), e_cbs_rate.get(),
             )
 

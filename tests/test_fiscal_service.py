@@ -534,6 +534,32 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='ICMS00']/*[local-name()='vICMS'])"), "3.60")
         self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vICMS'])"), "3.60")
 
+    def test_ipi_configurado_gera_grupo_total_e_compõe_valor_da_nfe(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2925105",
+                "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "10",
+                "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 3,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto com ipi", "quantity": 2,
+                "unit_price": 50, "ncm": "94036000", "cfop": "5102", "unit": "UN",
+                "cst": "40", "ipi_cst": "50", "ipi_rate": "5", "ipi_enq": "999",
+            }],
+            document={
+                "model": "55", "series": 1, "number": 14, "state_code": "29",
+                "issued_at": datetime(2026, 8, 20, 12, 0, tzinfo=timezone.utc),
+                "environment": "HOMOLOGACAO", "numeric_code": "12345670",
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='IPI']/*[local-name()='cEnq'])"), "999")
+        self.assertEqual(root.xpath("string(//*[local-name()='IPITrib']/*[local-name()='vIPI'])"), "5.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vIPI'])"), "5.00")
+        self.assertEqual(root.xpath("string(//*[local-name()='ICMSTot']/*[local-name()='vNF'])"), "105.00")
+
     def test_assinatura_xml_dsig(self):
         signed = self.service.sign_xml(
             '<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe123"><ide/></infNFe></NFe>',

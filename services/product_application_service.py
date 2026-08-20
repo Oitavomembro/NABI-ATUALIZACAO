@@ -122,6 +122,9 @@ class ProductFormData:
     fiscal_pis_rate: str = "0"
     fiscal_cofins_cst: str = ""
     fiscal_cofins_rate: str = "0"
+    fiscal_ipi_cst: str = ""
+    fiscal_ipi_rate: str = "0"
+    fiscal_ipi_enq: str = ""
     fiscal_profile_source: str = ""
     ibs_cbs_cst: str = ""
     ibs_cbs_class: str = ""
@@ -162,6 +165,9 @@ class ProductSaveCommand:
     fiscal_pis_rate: str = "0"
     fiscal_cofins_cst: str = ""
     fiscal_cofins_rate: str = "0"
+    fiscal_ipi_cst: str = ""
+    fiscal_ipi_rate: str = "0"
+    fiscal_ipi_enq: str = ""
     fiscal_profile_source: str = ""
     ibs_cbs_cst: str = ""
     ibs_cbs_class: str = ""
@@ -588,6 +594,9 @@ class ProductApplicationService:
             fiscal_pis_rate=str(dados.fiscal_pis_rate or "0").strip(),
             fiscal_cofins_cst=str(dados.fiscal_cofins_cst or "").strip(),
             fiscal_cofins_rate=str(dados.fiscal_cofins_rate or "0").strip(),
+            fiscal_ipi_cst=str(dados.fiscal_ipi_cst or "").strip(),
+            fiscal_ipi_rate=str(dados.fiscal_ipi_rate or "0").strip(),
+            fiscal_ipi_enq=str(dados.fiscal_ipi_enq or "").strip(),
             fiscal_profile_source=str(dados.fiscal_profile_source or "").strip(),
             ibs_cbs_cst=str(dados.ibs_cbs_cst or "").strip(),
             ibs_cbs_class=str(dados.ibs_cbs_class or "").strip(),
@@ -643,6 +652,8 @@ class ProductApplicationService:
             fiscal_icms_cst=command.fiscal_icms_cst, fiscal_icms_rate=command.fiscal_icms_rate,
             fiscal_pis_cst=command.fiscal_pis_cst, fiscal_pis_rate=command.fiscal_pis_rate,
             fiscal_cofins_cst=command.fiscal_cofins_cst, fiscal_cofins_rate=command.fiscal_cofins_rate,
+            fiscal_ipi_cst=command.fiscal_ipi_cst, fiscal_ipi_rate=command.fiscal_ipi_rate,
+            fiscal_ipi_enq=command.fiscal_ipi_enq,
             fiscal_profile_source=command.fiscal_profile_source,
             ibs_cbs_cst=command.ibs_cbs_cst, ibs_cbs_class=command.ibs_cbs_class,
             ibs_uf_rate=command.ibs_uf_rate, ibs_city_rate=command.ibs_city_rate,

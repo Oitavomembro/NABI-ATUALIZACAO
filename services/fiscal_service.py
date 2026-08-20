@@ -1963,6 +1963,7 @@ class FiscalService:
         total_icms = Decimal("0")
         total_pis = Decimal("0")
         total_cofins = Decimal("0")
+        total_ipi = Decimal("0")
         total_ipi_return = Decimal("0")
         total_ibs_cbs_base = Decimal("0")
         total_ibs_uf = Decimal("0")
@@ -2002,6 +2003,33 @@ class FiscalService:
                     icms40=etree.SubElement(icms, etree.QName(ns,"ICMS40")); el(icms40,"orig",int(item.get("origin",0))); el(icms40,"CST",cst)
                 else:
                     icms60=etree.SubElement(icms, etree.QName(ns,"ICMS60")); el(icms60,"orig",int(item.get("origin",0))); el(icms60,"CST","60")
+
+            ipi_cst = self._digits(item.get("ipi_cst"))
+            if ipi_cst:
+                if ipi_cst not in FiscalProductProfile.IPI_TAXED | FiscalProductProfile.IPI_UNTAXED:
+                    raise ValueError(f"Item {index}: CST IPI de saída não suportado.")
+                ipi_enq = self._digits(item.get("ipi_enq"))
+                if len(ipi_enq) != 3:
+                    raise ValueError(f"Item {index}: código de enquadramento do IPI deve possuir 3 dígitos.")
+                ipi = etree.SubElement(imposto, etree.QName(ns, "IPI"))
+                el(ipi, "cEnq", ipi_enq)
+                if ipi_cst in FiscalProductProfile.IPI_TAXED:
+                    ipi_rate = Decimal(str(item.get("ipi_rate", 0))).quantize(Decimal("0.01"))
+                    if ipi_rate < 0 or ipi_rate > 100:
+                        raise ValueError(f"Item {index}: alíquota de IPI deve ficar entre 0 e 100%.")
+                    ipi_base = Decimal(str(item.get("ipi_base", value))).quantize(Decimal("0.01"))
+                    ipi_value = Decimal(str(item.get(
+                        "ipi_value", ipi_base * ipi_rate / Decimal("100")
+                    ))).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+                    if ipi_base < 0 or ipi_value < 0:
+                        raise ValueError(f"Item {index}: base ou valor de IPI inválido.")
+                    ipi_trib = etree.SubElement(ipi, etree.QName(ns, "IPITrib"))
+                    el(ipi_trib, "CST", ipi_cst); el(ipi_trib, "vBC", f"{ipi_base:.2f}")
+                    el(ipi_trib, "pIPI", f"{ipi_rate:.2f}"); el(ipi_trib, "vIPI", f"{ipi_value:.2f}")
+                    total_ipi += ipi_value
+                else:
+                    ipi_nt = etree.SubElement(ipi, etree.QName(ns, "IPINT"))
+                    el(ipi_nt, "CST", ipi_cst)
 
             pis_has_values = any(Decimal(str(item.get(field, 0) or 0)) > 0 for field in ("pis_value", "pis_base", "pis_rate"))
             pis_cst = self._digits(item.get("pis_cst") or ("49" if pis_has_values else "07"))
@@ -2086,8 +2114,8 @@ class FiscalService:
                 total_ipi_return += ipi_return
 
         total=etree.SubElement(inf, etree.QName(ns,"total")); icmstot=etree.SubElement(total, etree.QName(ns,"ICMSTot"))
-        total_nf = total_products + total_ipi_return
-        for name,val in (("vBC",total_icms_base),("vICMS",total_icms),("vICMSDeson",0),("vFCP",0),("vBCST",0),("vST",0),("vFCPST",0),("vFCPSTRet",0),("vProd",total_products),("vFrete",0),("vSeg",0),("vDesc",0),("vII",0),("vIPI",0),("vIPIDevol",total_ipi_return),("vPIS",total_pis),("vCOFINS",total_cofins),("vOutro",0),("vNF",total_nf)):
+        total_nf = total_products + total_ipi + total_ipi_return
+        for name,val in (("vBC",total_icms_base),("vICMS",total_icms),("vICMSDeson",0),("vFCP",0),("vBCST",0),("vST",0),("vFCPST",0),("vFCPSTRet",0),("vProd",total_products),("vFrete",0),("vSeg",0),("vDesc",0),("vII",0),("vIPI",total_ipi),("vIPIDevol",total_ipi_return),("vPIS",total_pis),("vCOFINS",total_cofins),("vOutro",0),("vNF",total_nf)):
             el(icmstot,name,f"{Decimal(str(val)):.2f}")
         total_with_rtc = total_nf
         if total_ibs_cbs_base > 0:
@@ -2176,10 +2204,21 @@ class FiscalService:
         placeholders = ",".join("?" for _ in unique_ids)
         conn = self.connection_factory()
         try:
+            product_columns = {
+                str(row[1]) for row in conn.execute("PRAGMA table_info(produtos)").fetchall()
+            }
+            ipi_select = ",".join(
+                field if field in product_columns else f"'{default}' AS {field}"
+                for field, default in (
+                    ("fiscal_ipi_cst", ""), ("fiscal_ipi_rate", "0"),
+                    ("fiscal_ipi_enq", ""),
+                )
+            )
             cursor = conn.execute(
                 f"""SELECT id,codigo,nome,ncm,cest,cfop,
                            fiscal_origin,fiscal_csosn,fiscal_icms_cst,fiscal_icms_rate,
                            fiscal_pis_cst,fiscal_pis_rate,fiscal_cofins_cst,fiscal_cofins_rate,
+                           {ipi_select},
                            fiscal_profile_source,
                            ibs_cbs_cst,ibs_cbs_class,ibs_uf_rate,ibs_city_rate,cbs_rate
                     FROM produtos WHERE id IN ({placeholders})""",
@@ -2228,6 +2267,9 @@ class FiscalService:
                 "pis_rate": profile["fiscal_pis_rate"],
                 "cofins_cst": profile["fiscal_cofins_cst"],
                 "cofins_rate": profile["fiscal_cofins_rate"],
+                "ipi_cst": profile["fiscal_ipi_cst"],
+                "ipi_rate": profile["fiscal_ipi_rate"],
+                "ipi_enq": profile["fiscal_ipi_enq"],
             }
             if require_rtc:
                 fiscal_item.update({

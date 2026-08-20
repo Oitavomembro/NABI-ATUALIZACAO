@@ -74,3 +74,17 @@ def test_substituicao_tributaria_exige_cest(changes, crt):
 
 def test_origem_da_ficha_nao_e_inventada_pela_normalizacao():
     assert FiscalProductProfile.normalize(complete_profile())["fiscal_profile_source"] == ""
+
+
+def test_ipi_so_e_aceito_com_cst_de_saida_e_enquadramento_explicito():
+    profile = FiscalProductProfile.normalize(complete_profile(
+        fiscal_ipi_cst="50", fiscal_ipi_rate="5", fiscal_ipi_enq="999",
+    ))
+    assert profile["fiscal_ipi_cst"] == "50"
+    assert profile["fiscal_ipi_enq"] == "999"
+    assert Decimal(profile["fiscal_ipi_rate"]) == Decimal("5")
+
+    with pytest.raises(ValueError, match="CST IPI de saída"):
+        FiscalProductProfile.normalize(complete_profile(fiscal_ipi_cst="00", fiscal_ipi_enq="999"))
+    with pytest.raises(ValueError, match="enquadramento"):
+        FiscalProductProfile.normalize(complete_profile(fiscal_ipi_cst="50", fiscal_ipi_enq=""))
