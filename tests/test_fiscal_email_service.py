@@ -1,4 +1,5 @@
 import tempfile
+from datetime import datetime
 from pathlib import Path
 
 import pytest
@@ -106,3 +107,39 @@ def test_remocao_apaga_configuracao_e_segredo(email_service):
     service.remove_config()
     assert not service.config_path.exists()
     assert not service.secret_path.exists()
+
+
+def test_envio_mensal_usa_mes_anterior_e_nao_repete_periodo(email_service):
+    service, smtp, root = email_service
+    package = root / "contabilidade.zip"; package.write_bytes(b"PK\x03\x04teste")
+    service.configure(
+        host="smtp.example.com", port=587, username="empresa@example.com",
+        password="segredo", sender="empresa@example.com", security="TLS",
+        accountant_recipient="contador@example.com", accounting_day=5,
+        accounting_enabled=True,
+    )
+    assert service.accounting_period_due(now=datetime(2026, 8, 5, 9)) == (
+        "2026-07-01", "2026-07-31"
+    )
+    service.enqueue(
+        recipient="contador@example.com", subject="Fechamento", body="Segue.",
+        attachments=[package],
+    )
+    assert service.process_pending()[0]["status"] == "ENVIADO"
+    assert list(smtp.message.iter_attachments())[0].get_filename() == "contabilidade.zip"
+    service.mark_accounting_period_sent("2026-07-01")
+    assert service.accounting_period_due(now=datetime(2026, 8, 5, 10)) is None
+
+
+def test_agendamento_contabil_exige_destinatario_e_dia_seguro(email_service):
+    service, _smtp, _root = email_service
+    with pytest.raises(ValueError, match="contador"):
+        service.configure(
+            host="smtp.example.com", port=587, username="empresa@example.com",
+            password="segredo", sender="empresa@example.com", accounting_enabled=True,
+        )
+    with pytest.raises(ValueError, match="entre 1 e 28"):
+        service.configure(
+            host="smtp.example.com", port=587, username="empresa@example.com",
+            password="segredo", sender="empresa@example.com", accounting_day=31,
+        )

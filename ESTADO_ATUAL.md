@@ -1477,3 +1477,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - 38 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo regressões de layout, relatórios, modo fiscal de teste e consulta não bloqueante; compilação e `git diff --check` aprovados.
 - validação consolidada: 1.325 testes aprovados, 1 ignorado e 32 subtestes aprovados; o teste isolado de DPAPI também foi aprovado fora do sandbox do Codex;
 - `compileall`, smoke de `main.py` (versão 2.5.1) e `git diff --check` aprovados, sem abrir interface, usar banco real, certificado real, SEFAZ ou impressora.
+
+## Checkpoint 43.06 — fechamento mensal automático para o contador
+
+- a Central Fiscal ganhou acesso direto a `Configurar envio mensal`, reutilizando o gerador oficial de pacote contábil e a fila segura de e-mail existentes;
+- a configuração guarda e-mail do contador, dia mensal entre 1 e 28 e ativação explícita, mantendo a senha de aplicativo protegida pelo Windows;
+- no dia escolhido, o sistema gera em segundo plano o ZIP completo do mês anterior e não inclui documentos de homologação;
+- o ZIP fiscal passou a ser um anexo autorizado pela fila e continua sujeito ao limite de tamanho e à validação do destinatário;
+- o período somente é marcado como enviado depois da confirmação real do servidor de e-mail, impedindo perda silenciosa e duplicidade mensal;
+- falhas permanecem auditáveis e podem ser tentadas novamente no próximo ciclo sem travar a interface;
+- 41 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo período anterior, não repetição, validação do dia, anexo ZIP, Central Fiscal e agendamentos; compilação e `git diff --check` aprovados.

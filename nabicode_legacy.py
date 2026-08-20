@@ -9854,6 +9854,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             caminhos = REPORT_SERVICE.run_due_schedules(actor=self._usuario_relatorios())
             if caminhos:
                 self.mostrar_notificacao("Relatórios agendados", f"{len(caminhos)} arquivo(s) gerado(s).", nivel="success")
+            self._iniciar_envio_contabil_agendado()
         except Exception as exc:
             registrar_auditoria("relatorios", "EXECUTAR_AGENDAMENTOS", "", str(exc), "ERRO", self._usuario_relatorios())
         finally:
@@ -9861,6 +9862,67 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 self.after(60000, self._executar_agendamentos_relatorios)
             except Exception:
                 pass
+
+    def _iniciar_envio_contabil_agendado(self):
+        """Gera e envia o fechamento anterior sem bloquear a interface."""
+        task_id = getattr(self, "_envio_contabil_task_id", None)
+        if task_id:
+            current = TASK_MANAGER.get(task_id)
+            if current and current.status not in {TaskStatus.COMPLETED, TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                return
+            self._envio_contabil_task_id = None
+        period = self.fiscal_email_service.accounting_period_due()
+        if not period:
+            return
+        start_date, end_date = period
+        config = self.fiscal_email_service.public_config()
+        recipient = str(config.get("accountant_recipient") or "").strip()
+        actor = self._usuario_financeiro()
+
+        def work(_context):
+            output_dir = Path(APP_DIR) / "fiscal" / "contabilidade"
+            output_dir.mkdir(parents=True, exist_ok=True)
+            output = output_dir / f"NabiCode_Contabilidade_{start_date[:7]}.zip"
+            result = self.fiscal_service.export_accounting_package(
+                start_date=start_date, end_date=end_date, output_path=output,
+                include_homologation=False,
+                received_documents=self.fiscal_dfe_service.list_documents(),
+            )
+            queued = self.fiscal_email_service.enqueue(
+                recipient=recipient,
+                subject=f"Fechamento fiscal NabiCode — {start_date[:7]}",
+                body=(f"Olá,\n\nSegue o pacote fiscal do período de {start_date} a {end_date}.\n\n"
+                      "Mensagem enviada automaticamente pelo NabiCode."),
+                attachments=[result["path"]],
+            )
+            sent = next(
+                (item for item in self.fiscal_email_service.process_pending(limit=20)
+                 if item.get("id") == queued["id"]), None,
+            )
+            if not sent or sent.get("status") != "ENVIADO":
+                raise ValueError((sent or {}).get("last_error") or "O pacote permaneceu pendente.")
+            self.fiscal_email_service.mark_accounting_period_sent(start_date)
+            return result
+
+        task = TASK_MANAGER.submit("Enviar fechamento mensal ao contador", work)
+        self._envio_contabil_task_id = task.id
+
+        def follow():
+            current = TASK_MANAGER.get(task.id)
+            if current is None:
+                return
+            if current.status == TaskStatus.COMPLETED:
+                registrar_auditoria(actor, "ENVIAR_FECHAMENTO_CONTABIL", "Fiscal", f"{start_date} a {end_date}", "SUCESSO")
+                self.mostrar_notificacao("Fechamento enviado", f"Pacote de {start_date[:7]} enviado ao contador.", nivel="success")
+                self._envio_contabil_task_id = None
+                return
+            if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                registrar_auditoria(actor, "ENVIAR_FECHAMENTO_CONTABIL", "Fiscal", current.error or "Envio cancelado", "ERRO")
+                self._envio_contabil_task_id = None
+                return
+            self.after(250, follow)
+
+        self.after(150, follow)
 
     def abrir_historico_relatorios(self):
         janela = ctk.CTkToplevel(self); janela.title("Histórico de relatórios"); janela.geometry("900x500"); janela.transient(self)
@@ -11826,7 +11888,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             current = self.fiscal_email_service.public_config()
             modal = ctk.CTkToplevel(janela)
             modal.title("Configurar e-mail fiscal")
-            modal.geometry("560x570")
+            modal.geometry("560x690")
             modal.transient(janela)
             modal.grab_set()
             ctk.CTkLabel(
@@ -11845,13 +11907,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             defaults = {
                 "host": current.get("host", ""), "port": current.get("port", 587),
                 "username": current.get("username", ""), "sender": current.get("sender", ""),
-                "password": "",
+                "password": "", "accountant_recipient": current.get("accountant_recipient", ""),
+                "accounting_day": current.get("accounting_day", 1),
             }
             labels = {
                 "host": "Servidor SMTP", "port": "Porta", "username": "Usuário",
                 "sender": "E-mail remetente", "password": "Senha de aplicativo",
+                "accountant_recipient": "E-mail do contador",
+                "accounting_day": "Dia do envio mensal (1 a 28)",
             }
-            for name in ("host", "port", "username", "sender", "password"):
+            for name in ("host", "port", "username", "sender", "password", "accountant_recipient", "accounting_day"):
                 ctk.CTkLabel(modal, text=labels[name]).pack(anchor="w", padx=20, pady=(7, 2))
                 entry = ctk.CTkEntry(modal, show="*" if name == "password" else "")
                 entry.pack(fill="x", padx=20)
@@ -11861,6 +11926,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             security.set(str(current.get("security") or "TLS"))
             ctk.CTkLabel(modal, text="Segurança").pack(anchor="w", padx=20, pady=(7, 2))
             security.pack(fill="x", padx=20)
+            accounting_enabled = tk.BooleanVar(value=bool(current.get("accounting_enabled")))
+            ctk.CTkCheckBox(
+                modal,
+                text="Enviar automaticamente o pacote do mês anterior ao contador",
+                variable=accounting_enabled,
+            ).pack(anchor="w", padx=20, pady=(12, 2))
+            ctk.CTkLabel(
+                modal,
+                text="O envio acontece uma única vez no dia escolhido e nunca inclui documentos de homologação.",
+                text_color="#8b949e", wraplength=510, justify="left",
+            ).pack(anchor="w", padx=20, pady=(0, 4))
 
             def save_email_config():
                 if not self._confirmar_senha_mestra(
@@ -11874,6 +11950,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         host=entries["host"].get(), port=int(entries["port"].get()),
                         username=entries["username"].get(), password=entries["password"].get(),
                         sender=entries["sender"].get(), security=security.get(),
+                        accountant_recipient=entries["accountant_recipient"].get(),
+                        accounting_day=int(entries["accounting_day"].get()),
+                        accounting_enabled=accounting_enabled.get(),
                     )
                     registrar_auditoria(
                         self._usuario_financeiro(), "CONFIGURAR_EMAIL_FISCAL", "Fiscal",
@@ -12181,6 +12260,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             primary_actions, text="Gerar pacote para contabilidade",
             command=export_accounting, fg_color="#8957e5",
+        ).pack(side="left", fill="x", expand=True, padx=4)
+        ctk.CTkButton(
+            primary_actions, text="Configurar envio mensal",
+            command=configure_fiscal_email, fg_color="#30363d",
         ).pack(side="left", fill="x", expand=True, padx=4)
 
         processing_actions = ctk.CTkFrame(action_panel, fg_color="transparent")

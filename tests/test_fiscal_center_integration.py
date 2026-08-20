@@ -117,6 +117,7 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert 'text="Enviar XML + DANFE"' in block
     assert "self.fiscal_email_service.enqueue" in block
     assert "self.fiscal_email_service.process_pending" in block
+    assert 'text="Configurar envio mensal"' in block
     assert "TASK_MANAGER.submit(\"Enviar documento fiscal por e-mail\"" in block
     assert 'text="Buscar notas recebidas na SEFAZ"' in block
     assert "self.fiscal_dfe_service.fetch_next" in block

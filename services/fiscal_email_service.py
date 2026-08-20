@@ -39,7 +39,8 @@ class FiscalEmailService:
 
     def configure(
         self, *, host: str, port: int, username: str, password: str,
-        sender: str, security: str = "TLS",
+        sender: str, security: str = "TLS", accountant_recipient: str = "",
+        accounting_day: int = 1, accounting_enabled: bool = False,
     ) -> dict[str, Any]:
         host = str(host or "").strip()
         username = str(username or "").strip()
@@ -53,10 +54,22 @@ class FiscalEmailService:
             raise ValueError("A segurança SMTP deve ser TLS ou SSL.")
         if not username or not password:
             raise ValueError("Informe o usuário e a senha de aplicativo do e-mail.")
+        accountant_recipient = str(accountant_recipient or "").strip()
+        if accountant_recipient:
+            accountant_recipient = self._valid_email(accountant_recipient, "contador")
+        if accounting_enabled and not accountant_recipient:
+            raise ValueError("Informe o e-mail do contador para ativar o envio mensal.")
+        accounting_day = int(accounting_day)
+        if not 1 <= accounting_day <= 28:
+            raise ValueError("O dia do envio mensal deve estar entre 1 e 28.")
         protected = self.secret_protector.protect(str(password).encode("utf-8"))
         config = {
             "host": host, "port": int(port), "username": username,
             "sender": sender, "security": security,
+            "accountant_recipient": accountant_recipient,
+            "accounting_day": accounting_day,
+            "accounting_enabled": bool(accounting_enabled),
+            "last_accounting_period": str(self.public_config().get("last_accounting_period") or ""),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
         self._atomic_write(self.secret_path, protected)
@@ -82,6 +95,31 @@ class FiscalEmailService:
     def remove_config(self) -> None:
         self.config_path.unlink(missing_ok=True)
         self.secret_path.unlink(missing_ok=True)
+
+    def accounting_period_due(self, *, now: datetime | None = None) -> tuple[str, str] | None:
+        """Retorna o mês anterior somente uma vez, no dia configurado."""
+        config = self.public_config()
+        current = now or datetime.now()
+        if not config.get("accounting_enabled") or current.day != int(config.get("accounting_day") or 1):
+            return None
+        first_current = current.date().replace(day=1)
+        end = first_current.fromordinal(first_current.toordinal() - 1)
+        start = end.replace(day=1)
+        period_key = start.strftime("%Y-%m")
+        if str(config.get("last_accounting_period") or "") == period_key:
+            return None
+        return start.isoformat(), end.isoformat()
+
+    def mark_accounting_period_sent(self, period_start: str) -> None:
+        config = self.public_config()
+        if not config:
+            raise ValueError("Configure o e-mail fiscal antes de registrar o envio mensal.")
+        config["last_accounting_period"] = str(period_start)[:7]
+        config["accounting_sent_at"] = datetime.now().isoformat(timespec="seconds")
+        self._atomic_write(
+            self.config_path,
+            json.dumps(config, ensure_ascii=False, sort_keys=True).encode("utf-8"),
+        )
 
     def enqueue(
         self, *, recipient: str, subject: str, body: str,
@@ -165,6 +203,8 @@ class FiscalEmailService:
                 maintype, subtype = "application", "xml"
             elif path.suffix.lower() == ".pdf" and data.startswith(b"%PDF"):
                 maintype, subtype = "application", "pdf"
+            elif path.suffix.lower() == ".zip" and data.startswith(b"PK"):
+                maintype, subtype = "application", "zip"
             else:
                 raise ValueError(f"Tipo de anexo fiscal não permitido: {path.name}.")
             message.add_attachment(data, maintype=maintype, subtype=subtype, filename=path.name)
