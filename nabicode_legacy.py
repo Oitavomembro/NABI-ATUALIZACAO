@@ -11067,6 +11067,23 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
             except Exception as exc:
                 messagebox.showerror("Relatório fiscal", str(exc), parent=janela)
+        def validate_accounting_package():
+            package = filedialog.askopenfilename(
+                parent=janela, title="Validar pacote fiscal da contabilidade",
+                filetypes=[("Pacote ZIP", "*.zip")],
+            )
+            if not package:
+                return
+            try:
+                result = self.fiscal_service.validate_accounting_package(package)
+                messagebox.showinfo(
+                    "Pacote fiscal íntegro",
+                    f"Período: {result['period_start']} a {result['period_end']}\n"
+                    f"{result['files_checked']} arquivo(s) fiscal(is) conferido(s).",
+                    parent=janela,
+                )
+            except Exception as exc:
+                messagebox.showerror("Pacote fiscal inválido", str(exc), parent=janela)
         transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
         transmission_status.pack(fill="x", padx=16, pady=(0, 3))
 
@@ -11762,6 +11779,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(
             accounting_actions, text="Exportar relatório CSV", command=export_fiscal_report,
             fg_color="#1f6feb",
+        ).pack(side="left", padx=4)
+        ctk.CTkButton(
+            accounting_actions, text="Validar pacote contábil",
+            command=validate_accounting_package, fg_color="#30363d",
         ).pack(side="left", padx=4)
         email_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
         email_actions.pack(fill="x", pady=(0, 6))

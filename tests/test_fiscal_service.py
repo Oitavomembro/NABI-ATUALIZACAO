@@ -998,7 +998,7 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertEqual(result["documents"], 0)
         with zipfile.ZipFile(output) as archive:
-            self.assertEqual(archive.namelist(), ["manifesto.json"])
+            self.assertEqual(set(archive.namelist()), {"LEIA-ME.txt", "manifesto.json"})
 
     def test_exportacao_contabil_inclui_cancelada_e_entrada_dfe_pela_data_do_xml(self):
         issued = datetime.now().astimezone().replace(day=3)
@@ -1049,6 +1049,24 @@ class FiscalServiceTests(unittest.TestCase):
             self.assertEqual(manifest["received_documents"][0]["access_key"], received_key)
             self.assertEqual(manifest["received_documents"][0]["content"], "XML_COMPLETO")
             self.assertTrue(any(name.startswith("entradas_DFe/") for name in archive.namelist()))
+
+        validation = self.service.validate_accounting_package(output)
+        self.assertTrue(validation["valid"])
+        self.assertEqual(validation["files_checked"], 2)
+
+    def test_validacao_do_pacote_contabil_rejeita_xml_alterado(self):
+        package = Path(self.tmp.name) / "alterado.zip"
+        manifest = {
+            "product": "NabiCode", "version": 1,
+            "period": {"start": "2026-08-01", "end": "2026-08-31"},
+            "documents": [{"file": "producao/NFe/nota.xml", "sha256": "0" * 64}],
+            "received_documents": [], "events": [],
+        }
+        with zipfile.ZipFile(package, "w") as archive:
+            archive.writestr("producao/NFe/nota.xml", b"<xml/>")
+            archive.writestr("manifesto.json", json.dumps(manifest))
+        with self.assertRaisesRegex(ValueError, "alterado ou corrompido"):
+            self.service.validate_accounting_package(package)
 
     def test_relatorio_fiscal_csv_deriva_valores_do_xml_e_inutilizacoes(self):
         now = datetime.now().astimezone()

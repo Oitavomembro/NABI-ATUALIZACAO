@@ -1448,8 +1448,15 @@ class FiscalService:
                 continue
             if start <= created <= end or key in selected_keys:
                 events.append(dict(row))
+        accounting_config = self.load_config()
         manifest: dict[str, Any] = {
             "product": "NabiCode", "purpose": "Pacote fiscal para contabilidade",
+            "version": 1,
+            "issuer": {
+                "cnpj": str(accounting_config.get("cnpj") or ""),
+                "name": str((accounting_config.get("issuer") or {}).get("name") or ""),
+                "state": str(accounting_config.get("state") or ""),
+            },
             "period": {"start": start.isoformat(), "end": end.isoformat()},
             "includes_homologation": bool(include_homologation),
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
@@ -1523,6 +1530,18 @@ class FiscalService:
                         "status_code": row.get("status_code", ""), "created_at": row.get("created_at", ""),
                         "files": exported,
                     })
+                readme = (
+                    "PACOTE FISCAL NABICODE PARA CONTABILIDADE\n\n"
+                    f"Período: {start.isoformat()} a {end.isoformat()}\n"
+                    "producao/NFe e producao/NFCe: documentos de saída.\n"
+                    "entradas_DFe: documentos recebidos da SEFAZ; consulte o manifesto para saber "
+                    "se o conteúdo é XML_COMPLETO ou apenas RESUMO.\n"
+                    "eventos: cancelamentos, cartas de correção e inutilizações aceitos.\n"
+                    "manifesto.json: relação de arquivos e hashes SHA-256 para validação.\n\n"
+                    "Este pacote de XMLs não substitui a EFD ICMS/IPI nem outras declarações "
+                    "exigidas conforme o regime e a UF da empresa.\n"
+                )
+                archive.writestr("LEIA-ME.txt", readme.encode("utf-8"))
                 archive.writestr("manifesto.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
             os.replace(temp_path, destination)
             temp_path = None
@@ -1536,6 +1555,60 @@ class FiscalService:
                 1 for row in manifest["received_documents"] if row.get("content") == "RESUMO"
             ),
             "period_start": start.isoformat(), "period_end": end.isoformat(),
+        }
+
+    def validate_accounting_package(self, archive_path: str | Path) -> dict[str, Any]:
+        """Valida estrutura, caminhos e SHA-256 de um pacote contábil exportado."""
+        path = Path(archive_path)
+        if not path.is_file() or path.suffix.casefold() != ".zip":
+            raise ValueError("Selecione um pacote contábil ZIP gerado pelo NabiCode.")
+        if path.stat().st_size > 2 * 1024 * 1024 * 1024:
+            raise ValueError("O pacote contábil excede o limite seguro de 2 GB.")
+        try:
+            with zipfile.ZipFile(path) as archive:
+                names = set(archive.namelist())
+                if "manifesto.json" not in names:
+                    raise ValueError("Pacote sem manifesto fiscal.")
+                infos = archive.infolist()
+                if any(info.file_size > 100 * 1024 * 1024 for info in infos):
+                    raise ValueError("Pacote contém arquivo interno acima do limite seguro.")
+                if sum(info.file_size for info in infos) > 4 * 1024 * 1024 * 1024:
+                    raise ValueError("Conteúdo descompactado do pacote excede o limite seguro.")
+                for name in names:
+                    normalized = name.replace("\\", "/")
+                    if normalized.startswith("/") or ".." in normalized.split("/"):
+                        raise ValueError("Pacote contém caminho interno inseguro.")
+                try:
+                    manifest = json.loads(archive.read("manifesto.json").decode("utf-8"))
+                except (UnicodeDecodeError, json.JSONDecodeError) as exc:
+                    raise ValueError("Manifesto fiscal inválido.") from exc
+                if manifest.get("product") != "NabiCode" or manifest.get("version") != 1:
+                    raise ValueError("Pacote contábil incompatível com esta versão do NabiCode.")
+                checked = 0
+                entries = list(manifest.get("documents") or []) + list(
+                    manifest.get("received_documents") or []
+                )
+                for event in manifest.get("events") or []:
+                    entries.extend(
+                        {"file": item, "sha256": ""} for item in (event.get("files") or [])
+                    )
+                by_name = {
+                    str(item.get("file") or ""): str(item.get("sha256") or "").casefold()
+                    for item in entries if item.get("file")
+                }
+                for name, expected in by_name.items():
+                    if name not in names:
+                        raise ValueError(f"Arquivo fiscal ausente no pacote: {name}")
+                    data = archive.read(name)
+                    if expected and hashlib.sha256(data).hexdigest() != expected:
+                        raise ValueError(f"Arquivo fiscal alterado ou corrompido: {name}")
+                    checked += 1
+        except zipfile.BadZipFile as exc:
+            raise ValueError("O arquivo não é um pacote ZIP válido.") from exc
+        return {
+            "valid": True, "files_checked": checked,
+            "period_start": str((manifest.get("period") or {}).get("start") or ""),
+            "period_end": str((manifest.get("period") or {}).get("end") or ""),
         }
 
     def export_fiscal_report_csv(

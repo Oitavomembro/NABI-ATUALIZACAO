@@ -98,6 +98,8 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert "self.fiscal_service.inutilize_numbers" in block
     assert 'text="Consultar situação na SEFAZ"' in block
     assert "self.fiscal_service.consult_document" in block
+    assert 'text="Validar pacote contábil"' in block
+    assert "self.fiscal_service.validate_accounting_package" in block
     assert 'text="Exportar relatório CSV"' in block
     assert "self.fiscal_service.export_fiscal_report_csv" in block
     assert 'text="Gerar DANFE oficial"' in block
