@@ -11899,7 +11899,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 modal,
                 text=(
                     "Use a senha de aplicativo fornecida pelo seu serviço de e-mail. "
-                    "Ela será protegida pelo Windows e não aparecerá na configuração nem na fila."
+                    "Ela será protegida pelo Windows e não aparecerá na configuração nem na fila. "
+                    "Ao editar uma configuração existente, deixe a senha vazia para mantê-la."
                 ),
                 wraplength=510, justify="left", text_color="#c9d1d9",
             ).pack(anchor="w", padx=20, pady=(0, 10))

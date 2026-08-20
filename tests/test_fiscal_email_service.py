@@ -46,6 +46,23 @@ def test_configuracao_protege_senha_e_expoe_so_dados_publicos(email_service):
     assert service.secret_path.read_bytes() == b"protected:segredo"
 
 
+def test_edicao_do_agendamento_preserva_senha_protegida_quando_campo_fica_vazio(email_service):
+    service, _smtp, _root = email_service
+    service.configure(
+        host="smtp.example.com", port=587, username="empresa@example.com",
+        password="segredo", sender="empresa@example.com", security="TLS",
+    )
+    original = service.secret_path.read_bytes()
+    config = service.configure(
+        host="smtp.example.com", port=587, username="empresa@example.com",
+        password="", sender="empresa@example.com", security="TLS",
+        accountant_recipient="contador@example.com", accounting_day=10,
+        accounting_enabled=True,
+    )
+    assert service.secret_path.read_bytes() == original
+    assert config["accounting_day"] == 10
+
+
 def test_fila_envia_xml_e_pdf_com_tls(email_service):
     service, smtp, root = email_service
     xml = root / "nota.xml"; xml.write_bytes(b"<nfeProc/>")

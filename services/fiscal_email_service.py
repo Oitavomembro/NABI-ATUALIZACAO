@@ -44,6 +44,7 @@ class FiscalEmailService:
     ) -> dict[str, Any]:
         host = str(host or "").strip()
         username = str(username or "").strip()
+        password = str(password or "")
         sender = self._valid_email(sender, "remetente")
         security = str(security or "TLS").strip().upper()
         if not host or any(char.isspace() for char in host):
@@ -52,7 +53,7 @@ class FiscalEmailService:
             raise ValueError("A porta SMTP deve estar entre 1 e 65535.")
         if security not in self.VALID_SECURITY:
             raise ValueError("A segurança SMTP deve ser TLS ou SSL.")
-        if not username or not password:
+        if not username or (not password and not self.secret_path.is_file()):
             raise ValueError("Informe o usuário e a senha de aplicativo do e-mail.")
         accountant_recipient = str(accountant_recipient or "").strip()
         if accountant_recipient:
@@ -62,7 +63,7 @@ class FiscalEmailService:
         accounting_day = int(accounting_day)
         if not 1 <= accounting_day <= 28:
             raise ValueError("O dia do envio mensal deve estar entre 1 e 28.")
-        protected = self.secret_protector.protect(str(password).encode("utf-8"))
+        protected = self.secret_protector.protect(password.encode("utf-8")) if password else None
         config = {
             "host": host, "port": int(port), "username": username,
             "sender": sender, "security": security,
@@ -72,14 +73,19 @@ class FiscalEmailService:
             "last_accounting_period": str(self.public_config().get("last_accounting_period") or ""),
             "updated_at": datetime.now().isoformat(timespec="seconds"),
         }
-        self._atomic_write(self.secret_path, protected)
+        previous_secret = self.secret_path.read_bytes() if self.secret_path.is_file() else None
+        if protected is not None:
+            self._atomic_write(self.secret_path, protected)
         try:
             self._atomic_write(
                 self.config_path,
                 json.dumps(config, ensure_ascii=False, sort_keys=True).encode("utf-8"),
             )
         except Exception:
-            self.secret_path.unlink(missing_ok=True)
+            if previous_secret is None:
+                self.secret_path.unlink(missing_ok=True)
+            elif protected is not None:
+                self._atomic_write(self.secret_path, previous_secret)
             raise
         return dict(config)
 

@@ -1485,5 +1485,6 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - no dia escolhido, o sistema gera em segundo plano o ZIP completo do mês anterior e não inclui documentos de homologação;
 - o ZIP fiscal passou a ser um anexo autorizado pela fila e continua sujeito ao limite de tamanho e à validação do destinatário;
 - o período somente é marcado como enviado depois da confirmação real do servidor de e-mail, impedindo perda silenciosa e duplicidade mensal;
+- editar destinatário, dia ou ativação preserva a senha já protegida quando o campo de senha fica vazio;
 - falhas permanecem auditáveis e podem ser tentadas novamente no próximo ciclo sem travar a interface;
 - 41 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo período anterior, não repetição, validação do dia, anexo ZIP, Central Fiscal e agendamentos; compilação e `git diff --check` aprovados.
