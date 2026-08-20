@@ -1271,3 +1271,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 19 testes aprovados;
 - `compileall` e `git diff --check` aprovados;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.86 — validação integral da frente de lançamento de notas
+
+- toda a frente de importação XML, prontidão fiscal, dashboard guiada e conferência tributária foi validada em conjunto;
+- um teste de recuperação de lock revelou prazo frágil de inicialização de subprocesso sob carga no Windows;
+- a verificação funcional foi preservada e somente a espera de inicialização passou de 5 para 15 segundos;
+- o teste isolado confirmou a recuperação correta após encerramento abrupto;
+- suíte completa final: 1.279 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.

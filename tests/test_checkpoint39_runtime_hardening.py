@@ -152,7 +152,9 @@ class DatabaseLockHardeningTests(unittest.TestCase):
                 cwd=str(ROOT),
             )
             try:
-                deadline = time.monotonic() + 5.0
+                # Em Windows carregado, a criação do processo Python pode levar
+                # mais de cinco segundos antes mesmo de importar o módulo.
+                deadline = time.monotonic() + 15.0
                 while not ready.exists() and process.poll() is None and time.monotonic() < deadline:
                     time.sleep(0.02)
                 self.assertTrue(ready.exists())
