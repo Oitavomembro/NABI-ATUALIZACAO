@@ -1327,3 +1327,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - histórico de notas importadas e NF-e de devolução permanecem exclusivos do modo Fiscal;
 - 28 testes focados, `compileall` e `git diff --check` aprovados;
 - nenhum programa, banco real, certificado, endpoint fiscal ou impressora foi aberto ou utilizado.
+
+## Checkpoint 42.91 — Modo de Teste Fiscal protegido
+
+- a homologação passou a ser apresentada como `TESTE FISCAL — HOMOLOGAÇÃO (SEM VALOR FISCAL)`;
+- produção aparece explicitamente bloqueada nesta versão, sem induzir o usuário a acreditar que já pode emitir documentos reais;
+- o PDV identifica permanentemente o ambiente de homologação como `FISCAL TESTE — SEM VALOR FISCAL`;
+- trocar entre teste e produção exige senha mestra antes de salvar a configuração;
+- cancelar a senha restaura imediatamente a seleção anterior e não altera o ambiente persistido;
+- numeração e configuração continuam usando internamente os códigos oficiais `HOMOLOGACAO` e `PRODUCAO`;
+- 134 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
+- nenhuma UF adicional foi liberada e nenhum programa, banco real, certificado, endpoint fiscal ou impressora foi utilizado.

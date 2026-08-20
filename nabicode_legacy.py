@@ -5165,7 +5165,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if modo_operacao not in {"COMERCIAL", "FISCAL"}:
             modo_operacao = "COMERCIAL"
         self.modo_operacao = modo_operacao
-        rotulo_operacao = "SEM FISCAL" if modo_operacao == "COMERCIAL" else "COM FISCAL"
+        if modo_operacao == "COMERCIAL":
+            rotulo_operacao = "SEM FISCAL"
+        else:
+            ambiente_fiscal = str(self.fiscal_service.load_config().get("environment") or "HOMOLOGACAO").upper()
+            rotulo_operacao = (
+                "FISCAL TESTE — SEM VALOR FISCAL"
+                if ambiente_fiscal == "HOMOLOGACAO"
+                else "FISCAL PRODUÇÃO"
+            )
         self.lbl_pdv_status = ctk.CTkLabel(
             cabecalho,
             text=f"Caixa ativo  •  {rotulo_operacao}  •  {datetime.now().strftime('%d/%m/%Y %H:%M')}",
@@ -10260,9 +10268,32 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc:
                 messagebox.showerror("Configuração fiscal", str(exc), parent=janela)
 
-        ctk.CTkLabel(content, text="Ambiente", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
-        environment = ctk.CTkComboBox(content, values=["HOMOLOGACAO", "PRODUCAO"], state="readonly")
-        environment.pack(fill="x", padx=16); environment.set(config.get("environment") or "HOMOLOGACAO")
+        environment_labels = {
+            "TESTE FISCAL — HOMOLOGAÇÃO (SEM VALOR FISCAL)": "HOMOLOGACAO",
+            "PRODUÇÃO FISCAL — BLOQUEADA NESTA VERSÃO": "PRODUCAO",
+        }
+        environment_label_by_code = {code: label for label, code in environment_labels.items()}
+
+        ctk.CTkLabel(content, text="Como deseja operar o fiscal?", font=ctk.CTkFont(weight="bold")).pack(anchor="w", padx=16, pady=(8, 2))
+        environment = ctk.CTkComboBox(content, values=list(environment_labels), state="readonly")
+        environment.pack(fill="x", padx=16)
+        environment.set(environment_label_by_code.get(
+            str(config.get("environment") or "HOMOLOGACAO").upper(),
+            environment_label_by_code["HOMOLOGACAO"],
+        ))
+        ctk.CTkLabel(
+            content,
+            text=(
+                "Use TESTE para configurar e validar o fluxo sem valor fiscal. "
+                "A produção permanece protegida até a homologação final da empresa."
+            ),
+            text_color="#d29922",
+            wraplength=650,
+            justify="left",
+        ).pack(anchor="w", padx=16, pady=(4, 8))
+
+        def selected_environment():
+            return environment_labels.get(environment.get(), "HOMOLOGACAO")
 
         certificado_card = ctk.CTkFrame(content, fg_color="#0d1117", corner_radius=10)
         certificado_card.pack(fill="x", padx=16, pady=(14, 4))
@@ -10615,7 +10646,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     series_entry.insert(0, fields[f"sale_series_{code}"].get())
                 try:
                     scope = self.fiscal_service.numbering_scope(
-                        model=code, series=int(series_entry.get()), environment=environment.get()
+                        model=code, series=int(series_entry.get()), environment=selected_environment()
                     )
                     number_status.configure(
                         text=(
@@ -10646,7 +10677,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 try:
                     record = self.fiscal_service.initialize_numbering(
                         model=code, series=int(series_entry.get()),
-                        next_number=int(next_entry.get()), environment=environment.get(),
+                        next_number=int(next_entry.get()), environment=selected_environment(),
                         actor=self._usuario_financeiro(),
                     )
                     registrar_auditoria(
@@ -10758,6 +10789,24 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         text="A emissão fiscal não foi alterada.", text_color="#d29922"
                     )
                     return
+                chosen_environment = selected_environment()
+                environment_changed = str(config.get("environment") or "HOMOLOGACAO").upper() != chosen_environment
+                if environment_changed and not self._confirmar_senha_mestra(
+                    title="Alterar ambiente fiscal",
+                    prompt=(
+                        "Digite a senha mestra para trocar entre o modo de teste fiscal "
+                        "e o ambiente de produção."
+                    ),
+                    parent=janela,
+                ):
+                    environment.set(environment_label_by_code.get(
+                        str(config.get("environment") or "HOMOLOGACAO").upper(),
+                        environment_label_by_code["HOMOLOGACAO"],
+                    ))
+                    status.configure(
+                        text="O ambiente fiscal não foi alterado.", text_color="#d29922"
+                    )
+                    return
                 selected_models = [model for model, variable in model_vars.items() if variable.get()]
                 selected_default = next(
                     model for model, label in self.fiscal_service.MODEL_LABELS.items()
@@ -10770,7 +10819,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         "Informe a senha para validar e instalar o novo certificado A1."
                     )
                 saved = self.fiscal_service.save_config({
-                    "enabled": enabled.get(), "environment": environment.get(),
+                    "enabled": enabled.get(), "environment": chosen_environment,
                     "cnpj": fields["cnpj"].get(), "state": fields["state"].get(),
                     "tax_regime": regime_by_label[tax_regime.get()],
                     "enabled_models": selected_models, "default_model": selected_default,
