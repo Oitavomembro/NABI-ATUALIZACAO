@@ -1350,3 +1350,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - consultas toleram esquemas legados durante migração, sem inventar valor fiscal;
 - 153 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
 - produção e UFs adicionais continuam bloqueadas; nenhum banco real, certificado, endpoint fiscal ou impressora foi utilizado.
+
+## Checkpoint 42.93 — matriz tributária parametrizada da Bahia
+
+- criado cadastro persistente de regras tributárias por regime, prefixo NCM, CEST e UF de destino;
+- a matriz guarda ICMS, redução de base, MVA/ST, FCP-ST, DIFAL interno/interestadual, FCP do destino e código de benefício;
+- nenhuma alíquota nasce preenchida automaticamente e toda regra exige responsável e data de aprovação contábil;
+- regras de ICMS-ST exigem CEST explícito e todas as alíquotas são validadas entre 0 e 100%;
+- regras de emitente diferente da Bahia são recusadas nesta fase;
+- a resolução prefere a combinação mais específica de NCM e destino, sem tratar apenas o NCM como prova tributária;
+- desativação preserva o histórico e impede imediatamente o uso da regra em novas operações;
+- banco elevado ao schema 18 para criar a matriz com índice de resolução;
+- 143 testes focados e 10 subtestes, `compileall` e `git diff --check` aprovados;
+- a matriz ainda não está ligada ao XML de venda; produção permanece bloqueada até essa integração e homologação real.

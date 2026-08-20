@@ -794,6 +794,37 @@ def initialize_database(
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fiscal_sale_status ON fiscal_sale_documents(status,created_at)")
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fiscal_tax_rules (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0,1)),
+            issuer_state TEXT NOT NULL DEFAULT 'BA',
+            destination_state TEXT NOT NULL DEFAULT '*',
+            tax_regime TEXT NOT NULL,
+            ncm_prefix TEXT NOT NULL DEFAULT '',
+            cest TEXT NOT NULL DEFAULT '',
+            operation_kind TEXT NOT NULL DEFAULT 'VENDA',
+            icms_code TEXT NOT NULL,
+            icms_rate TEXT NOT NULL DEFAULT '0',
+            icms_base_reduction TEXT NOT NULL DEFAULT '0',
+            st_mva TEXT NOT NULL DEFAULT '0',
+            st_rate TEXT NOT NULL DEFAULT '0',
+            fcp_st_rate TEXT NOT NULL DEFAULT '0',
+            difal_internal_rate TEXT NOT NULL DEFAULT '0',
+            difal_interstate_rate TEXT NOT NULL DEFAULT '0',
+            difal_fcp_rate TEXT NOT NULL DEFAULT '0',
+            benefit_code TEXT NOT NULL DEFAULT '',
+            approved_by TEXT NOT NULL,
+            approved_at TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_fiscal_tax_rules_match
+        ON fiscal_tax_rules(active,issuer_state,destination_state,tax_regime,ncm_prefix,cest)
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS documentos_emitidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             movimentacao_id INTEGER,
