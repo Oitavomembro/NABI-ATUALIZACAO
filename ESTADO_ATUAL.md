@@ -1280,3 +1280,16 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o teste isolado confirmou a recuperação correta após encerramento abrupto;
 - suíte completa final: 1.279 testes e 32 subtestes aprovados, com 1 teste opcional ignorado;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.87 / R18 TESTE — atualização incremental da frente fiscal
+
+- revisão interna elevada de 17 para 18;
+- distribuição Windows reconstruída com as correções de importação e a nova dashboard de lançamento de notas;
+- smoke empacotado, inspeção da árvore e geração do manifesto foram aprovados pelo pipeline oficial;
+- pacote incremental criado para atualizar instalações 2.5.1 sem reinstalação completa;
+- manifesto interno confirma produto NabiCode, versão 2.5.1, revisão 18 e 1.365 arquivos;
+- 48 testes de atualização, empacotamento, integração e versão, além de 2 subtestes, foram aprovados;
+- pacote: `build_output/updates/NabiCode_ATUALIZACAO_2_5_1_R18.zip`;
+- tamanho: 72.336.026 bytes;
+- SHA-256: `0B7EFC573756D302BD998035FA0270EA6B62728893EF31B8F7E06527F7AD421A`;
+- o pacote não foi aplicado e nenhum banco, certificado, endpoint fiscal, instalador existente ou impressora real foi utilizado.
