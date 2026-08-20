@@ -24,6 +24,10 @@ def test_xml_import_dashboard_uses_guided_responsive_conference_flow():
     assert 'abas_item.add("1. Vínculo")' in opening
     assert 'abas_item.add("2. Cadastro")' in opening
     assert 'abas_item.add("3. Estoque e preço")' in opening
+    assert 'campo_editor(aba_cadastro, "NCM (8 dígitos)"' in opening
+    assert 'campo_editor(aba_cadastro, "CEST (7 dígitos, quando aplicável)"' in opening
+    assert 'campo_editor(aba_cadastro, "Origem da mercadoria (0 a 8)"' in opening
+    assert "não substitui o CFOP de venda" in opening
     assert "reveal_prepared_toplevel_when_idle(win, maximize=True)" in opening
     assert "win.grab_set()" not in opening
     assert 'text="Revisar e importar NF-e"' in opening

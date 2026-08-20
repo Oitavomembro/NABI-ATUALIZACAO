@@ -75,6 +75,8 @@ class NFeImportRepository:
         product_barcode = str(
             preparado.get("codigo_barras") or item.codigo_barras or ""
         ).strip()
+        product_ncm = str(preparado.get("ncm") or item.ncm or "").strip()
+        product_cest = str(preparado.get("cest") or item.cest or "").strip()
         product_columns = {
             str(row[1]) for row in connection.execute("PRAGMA table_info(produtos)").fetchall()
         }
@@ -90,11 +92,11 @@ class NFeImportRepository:
                VALUES(?,?{legacy_description_value},?,?,?,?,?,?,?,?,?,NULL,NULL,?,?,?,?, 'MERCADORIA',1,1,?,?,?,?,0,0,0,1,?,?)""",
             (codigo, product_name, *((product_name,) if legacy_description_column else ()), preco_real, custo_real, 0.0, margem_real,
              preco_decimal, custo_decimal, "0", margem_decimal, fator_decimal, fornecedor_id, unidade_id,
-             unidade_compra_id, fator_real, product_barcode, str(item.ncm or ""),
-             str(item.cest or ""), "", agora, agora),
+             unidade_compra_id, fator_real, product_barcode, product_ncm,
+             product_cest, "", agora, agora),
         )
         produto_id = int(cursor.lastrowid)
-        self._salvar_tributacao_rtc(connection, produto_id=produto_id, item=item)
+        self._salvar_tributacao_rtc(connection, produto_id=produto_id, item=item, preparado=preparado)
         connection.execute(
             """INSERT INTO historico_precos_produtos
                (produto_id,preco_anterior,preco_novo,custo,margem_percentual,
@@ -134,10 +136,11 @@ class NFeImportRepository:
                atualizado_em=? WHERE id=?""",
             (fornecedor_id, unidade_id, unidade_compra_id, fator_real, fator_decimal, custo_real, custo_decimal,
              margem_real, margem_decimal, preco_real, preco_decimal,
-             str(item.codigo_barras or ""), str(item.codigo_barras or ""), str(item.ncm or ""), str(item.ncm or ""),
-             str(item.cest or ""), str(item.cest or ""), agora, int(produto_id)),
+             str(preparado.get("codigo_barras") or item.codigo_barras or ""), str(preparado.get("codigo_barras") or item.codigo_barras or ""),
+             str(preparado.get("ncm") or item.ncm or ""), str(preparado.get("ncm") or item.ncm or ""),
+             str(preparado.get("cest") or item.cest or ""), str(preparado.get("cest") or item.cest or ""), agora, int(produto_id)),
         )
-        self._salvar_tributacao_rtc(connection, produto_id=int(produto_id), item=item)
+        self._salvar_tributacao_rtc(connection, produto_id=int(produto_id), item=item, preparado=preparado)
         preco_anterior = DecimalStorage.to_decimal(atual["preco_venda"], field="preço anterior")
         custo_anterior = DecimalStorage.to_decimal(atual["preco_custo"], field="custo anterior")
         if preco_anterior != novo_preco or custo_anterior != novo_custo:
@@ -152,9 +155,10 @@ class NFeImportRepository:
             )
 
     @staticmethod
-    def _salvar_tributacao_rtc(connection, *, produto_id: int, item) -> None:
+    def _salvar_tributacao_rtc(connection, *, produto_id: int, item, preparado: dict[str, Any] | None = None) -> None:
         """Preserva a ficha RTC recebida no XML sem inferir regra tributária."""
-        origin = str(getattr(item, "origem_mercadoria", "") or "").strip()
+        preparado = preparado or {}
+        origin = str(preparado.get("origem_mercadoria") or getattr(item, "origem_mercadoria", "") or "").strip()
         if origin and origin not in set("012345678"):
             raise ValueError("O XML possui origem da mercadoria inválida.")
         if origin:

@@ -4631,6 +4631,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         codigo_var, codigo_entry = campo_editor(aba_cadastro, "Código do produto", 0)
         descricao_var, descricao_entry = campo_editor(aba_cadastro, "Descrição de venda", 1)
         barras_var, barras_entry = campo_editor(aba_cadastro, "Código de barras", 2)
+        ncm_var, ncm_entry = campo_editor(aba_cadastro, "NCM (8 dígitos)", 3)
+        cest_var, cest_entry = campo_editor(aba_cadastro, "CEST (7 dígitos, quando aplicável)", 4)
+        origem_var, origem_entry = campo_editor(aba_cadastro, "Origem da mercadoria (0 a 8)", 5)
+        lbl_cfop_compra = ctk.CTkLabel(
+            aba_cadastro,
+            text="CFOP da compra: —\nUsado somente como referência; não substitui o CFOP de venda.",
+            text_color="#8b949e",
+            justify="left",
+            wraplength=340,
+        )
+        lbl_cfop_compra.grid(row=6, column=0, sticky="ew", padx=10, pady=(6, 10))
 
         lbl_calculo = ctk.CTkLabel(aba_estoque, text="", text_color="#2ea043", font=ctk.CTkFont(size=13, weight="bold"), justify="left")
         lbl_calculo.grid(row=6, column=0, sticky="w", padx=10, pady=(8, 4))
@@ -4663,6 +4674,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "codigo": str(item.codigo or item.codigo_barras or "").strip(),
                 "descricao": str(item.descricao or "").strip().upper(),
                 "codigo_barras": str(item.codigo_barras or "").strip(),
+                "ncm": str(item.ncm or "").strip(),
+                "cest": str(item.cest or "").strip(),
+                "origem_mercadoria": str(getattr(item, "origem_mercadoria", "") or "").strip(),
             }
 
         estado = {"indice": None, "carregando": False, "sincronizando": False}
@@ -4737,10 +4751,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 codigo = codigo_var.get().strip()
                 descricao = descricao_var.get().strip().upper()
                 codigo_barras = barras_var.get().strip()
+                ncm = "".join(ch for ch in ncm_var.get() if ch.isdigit())
+                cest = "".join(ch for ch in cest_var.get() if ch.isdigit())
+                origem_mercadoria = origem_var.get().strip()
                 if acao == "CRIAR" and not codigo:
                     raise ValueError("Informe o código do novo produto.")
                 if acao == "CRIAR" and not descricao:
                     raise ValueError("Informe a descrição de venda do novo produto.")
+                if ncm and len(ncm) != 8:
+                    raise ValueError("O NCM deve possuir exatamente 8 dígitos.")
+                if cest and len(cest) != 7:
+                    raise ValueError("O CEST deve possuir exatamente 7 dígitos.")
+                if origem_mercadoria and origem_mercadoria not in set("012345678"):
+                    raise ValueError("A origem da mercadoria deve ser um código de 0 a 8.")
                 rotulo_candidato = candidato_var.get().strip()
                 produto_id = None
                 if acao in {"VINCULAR", "ATUALIZAR"}:
@@ -4762,6 +4785,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "codigo": codigo,
                 "descricao": descricao,
                 "codigo_barras": codigo_barras,
+                "ncm": ncm,
+                "cest": cest,
+                "origem_mercadoria": origem_mercadoria,
             })
             atualizar_linha(indice)
             calcular_resumo()
@@ -4794,6 +4820,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             codigo_var.set(cfg.get("codigo") or analise.item.codigo)
             descricao_var.set(cfg.get("descricao") or analise.item.descricao.upper())
             barras_var.set(cfg.get("codigo_barras") or analise.item.codigo_barras)
+            ncm_var.set(cfg.get("ncm") or analise.item.ncm)
+            cest_var.set(cfg.get("cest") or analise.item.cest)
+            origem_var.set(cfg.get("origem_mercadoria") or getattr(analise.item, "origem_mercadoria", ""))
+            lbl_cfop_compra.configure(text=(
+                f"CFOP da compra: {analise.item.cfop or '—'}\n"
+                "Usado somente como referência; não substitui o CFOP de venda."
+            ))
             qtd_var.set(format_number_br(cfg["quantidade"]))
             fator_var.set(format_number_br(cfg["fator"]))
             custo_var.set(format_number_br(cfg["custo"], 2))
@@ -4954,7 +4987,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             processar_todos()
 
         win._enter_navigator_xml = install_enter_navigation(
-            [acao_combo, candidato_combo, codigo_entry, descricao_entry, barras_entry,
+            [acao_combo, candidato_combo, codigo_entry, descricao_entry, barras_entry, ncm_entry, cest_entry, origem_entry,
              qtd_entry, fator_entry, custo_entry, margem_entry, preco_entry, unidade_combo],
             on_finish=confirmar_item_e_avancar,
         )

@@ -55,6 +55,23 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(titulo["origem"], "NFE_XML")
         self.assertEqual(titulo["valor_original"], 25)
 
+    def test_conferencia_pode_corrigir_ncm_cest_e_codigo_de_barras_antes_de_criar(self):
+        self.preparados[0].update({
+            "codigo_barras": "7891234567890",
+            "ncm": "94036000",
+            "cest": "2805900",
+        })
+        self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+        )
+        product = self.repo.database.fetch_one(
+            "SELECT codigo_barras,ncm,cest,cfop FROM produtos"
+        )
+        self.assertEqual(product["codigo_barras"], "7891234567890")
+        self.assertEqual(product["ncm"], "94036000")
+        self.assertEqual(product["cest"], "2805900")
+        self.assertEqual(product["cfop"], "")
+
     def test_importa_em_banco_legado_com_descricao_obrigatoria(self):
         connection = sqlite3.connect(self.path)
         connection.execute("DROP TABLE produtos")

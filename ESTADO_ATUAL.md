@@ -1249,3 +1249,14 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - validação focada: 20 testes aprovados;
 - `compileall` e `git diff --check` aprovados;
 - nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
+
+## Checkpoint 42.84 — conferência fiscal do produto antes da entrada
+
+- NCM, CEST, origem da mercadoria e código de barras podem ser conferidos e corrigidos na própria ficha do item antes da importação;
+- NCM e CEST corrigidos seguem na mesma transação atômica de criação ou atualização do cadastro oficial;
+- validações locais exigem 8 dígitos para NCM, 7 para CEST e origem entre 0 e 8;
+- o CFOP do fornecedor é exibido como referência da compra, mas nunca é gravado como CFOP da futura venda;
+- a origem fiscal recebida ou corrigida continua alimentando a ficha oficial sem criar cadastro paralelo;
+- validação focada: 19 testes aprovados;
+- `compileall` e `git diff --check` aprovados;
+- nenhum banco real, certificado real, endpoint fiscal de emissão ou impressora foi utilizado.
