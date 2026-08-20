@@ -214,6 +214,7 @@ class FiscalDFeService:
                 "issuer": self._text(root, "xNome"), "document": self._text(root, "CNPJ"),
                 "issued_at": self._text(root, "dhEmi"), "total": self._text(root, "vNF"),
                 "path": str(path), "schema": str(record.get("schema") or ""),
+                "sha256": str(record.get("sha256") or ""),
             })
         return rows
 

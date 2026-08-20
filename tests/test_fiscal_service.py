@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import csv
+import hashlib
 import json
 import sqlite3
 import tempfile
@@ -998,6 +999,56 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(result["documents"], 0)
         with zipfile.ZipFile(output) as archive:
             self.assertEqual(archive.namelist(), ["manifesto.json"])
+
+    def test_exportacao_contabil_inclui_cancelada_e_entrada_dfe_pela_data_do_xml(self):
+        issued = datetime.now().astimezone().replace(day=3)
+        key = self.service.build_access_key(
+            state_code="29", issued_at=issued, cnpj="12345678000195", model="55",
+            series=1, number=79, emission_type=1, numeric_code="76543213",
+        )
+        request = (
+            f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}" versao="4.00">'
+            f'<ide><mod>55</mod><dhEmi>{issued.isoformat()}</dhEmi></ide></infNFe></NFe>'
+        )
+        response_xml = f'<ret><protNFe><infProt><cStat>100</cStat><chNFe>{key}</chNFe><nProt>12347</nProt></infProt></protNFe></ret>'
+        self.service.store_document(
+            access_key=key, model="55", environment="PRODUCAO", request_xml=request,
+            response=FiscalResponse(True, "100", "Autorizado", "12347", access_key=key, raw_xml=response_xml),
+            actor="admin",
+        )
+        self.service._mark_document_cancelled(
+            access_key=key, event_protocol="CANCEL123", actor="admin",
+            event_record={"status_code": "135", "message": "Cancelamento homologado"},
+        )
+        received_key = "29" + "8" * 42
+        received_xml = (
+            '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe>'
+            f'<ide><dhEmi>{issued.isoformat()}</dhEmi></ide></infNFe></NFe>'
+            f'<protNFe><infProt><chNFe>{received_key}</chNFe></infProt></protNFe></nfeProc>'
+        ).encode()
+        received_path = Path(self.tmp.name) / "entrada.xml"
+        received_path.write_bytes(received_xml)
+        output = Path(self.tmp.name) / "contabilidade_completa.zip"
+
+        result = self.service.export_accounting_package(
+            start_date=issued.date().isoformat(), end_date=issued.date().isoformat(),
+            output_path=output,
+            received_documents=[{
+                "nsu": "1", "access_key": received_key, "schema": "procNFe_v4.00.xsd",
+                "issued_at": issued.isoformat(), "path": str(received_path),
+                "sha256": hashlib.sha256(received_xml).hexdigest(),
+            }],
+        )
+
+        self.assertEqual(result["documents"], 1)
+        self.assertEqual(result["received_documents"], 1)
+        self.assertEqual(result["received_summaries"], 0)
+        with zipfile.ZipFile(output) as archive:
+            manifest = json.loads(archive.read("manifesto.json"))
+            self.assertEqual(manifest["documents"][0]["status"], "CANCELADO")
+            self.assertEqual(manifest["received_documents"][0]["access_key"], received_key)
+            self.assertEqual(manifest["received_documents"][0]["content"], "XML_COMPLETO")
+            self.assertTrue(any(name.startswith("entradas_DFe/") for name in archive.namelist()))
 
     def test_relatorio_fiscal_csv_deriva_valores_do_xml_e_inutilizacoes(self):
         now = datetime.now().astimezone()

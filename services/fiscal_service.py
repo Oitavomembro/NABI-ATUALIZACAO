@@ -1379,8 +1379,10 @@ class FiscalService:
     def export_accounting_package(
         self, *, start_date: str | datetime, end_date: str | datetime,
         output_path: str | Path, include_homologation: bool = False,
+        received_documents: Sequence[Mapping[str, Any]] = (),
     ) -> dict[str, Any]:
-        """Exporta XMLs autorizados e eventos aceitos para a contabilidade."""
+        """Exporta saídas, entradas DF-e e eventos íntegros para a contabilidade."""
+        self._require_dependency("lxml")
         def as_date(value: str | datetime):
             return value.date() if isinstance(value, datetime) else datetime.fromisoformat(str(value).strip()).date()
 
@@ -1391,16 +1393,31 @@ class FiscalService:
         if destination.suffix.lower() != ".zip":
             destination = destination.with_suffix(".zip")
         destination.parent.mkdir(parents=True, exist_ok=True)
+        def issued_date(path_value: Any, fallback: Any = ""):
+            path = Path(str(path_value or ""))
+            if path.is_file():
+                root = etree.fromstring(
+                    path.read_bytes(), parser=etree.XMLParser(resolve_entities=False, no_network=True)
+                )
+                issued = str(root.xpath(
+                    "string((//*[local-name()='ide']/*[local-name()='dhEmi'] | "
+                    "//*[local-name()='ide']/*[local-name()='dEmi'] | "
+                    "//*[local-name()='dhEmi'])[1])"
+                ) or "").strip()
+                if issued:
+                    return datetime.fromisoformat(issued.replace("Z", "+00:00")).date()
+            return datetime.fromisoformat(str(fallback or "").strip()).date()
+
         documents: list[dict[str, Any]] = []
         for row in self.list_documents():
-            if str(row.get("status") or "").upper() != "AUTORIZADO":
+            if str(row.get("status") or "").upper() not in {"AUTORIZADO", "CANCELADO"}:
                 continue
             environment = str(row.get("environment") or "").upper()
             if environment != "PRODUCAO" and not include_homologation:
                 continue
             try:
-                created = datetime.fromisoformat(str(row.get("created_at") or "")).date()
-            except ValueError:
+                created = issued_date(row.get("processed_path"), row.get("created_at"))
+            except (OSError, ValueError, etree.XMLSyntaxError):
                 continue
             if not start <= created <= end:
                 continue
@@ -1416,6 +1433,7 @@ class FiscalService:
             for row in self.list_documents()
             if str(row.get("status") or "").upper() == "AUTORIZADO"
         }
+        selected_keys = {str(row.get("access_key") or "") for row in documents}
         events: list[dict[str, Any]] = []
         for row in self.list_events():
             key = str(row.get("access_key") or "")
@@ -1428,14 +1446,14 @@ class FiscalService:
                 created = datetime.fromisoformat(str(row.get("created_at") or "")).date()
             except ValueError:
                 continue
-            if start <= created <= end:
+            if start <= created <= end or key in selected_keys:
                 events.append(dict(row))
         manifest: dict[str, Any] = {
             "product": "NabiCode", "purpose": "Pacote fiscal para contabilidade",
             "period": {"start": start.isoformat(), "end": end.isoformat()},
             "includes_homologation": bool(include_homologation),
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            "documents": [], "events": [],
+            "documents": [], "received_documents": [], "events": [],
         }
         temp_path: Path | None = None
         try:
@@ -1452,8 +1470,38 @@ class FiscalService:
                     archive.writestr(name, data)
                     manifest["documents"].append({
                         "access_key": key, "model": model, "environment": row["environment"],
+                        "status": row.get("status", ""),
                         "protocol": row.get("protocol", ""), "created_at": row.get("created_at", ""),
                         "file": name, "sha256": hashlib.sha256(data).hexdigest(),
+                    })
+                for index, row in enumerate(received_documents, 1):
+                    path = Path(str(row.get("path") or ""))
+                    if not path.is_file():
+                        continue
+                    data = path.read_bytes()
+                    expected = str(row.get("sha256") or "").lower()
+                    digest = hashlib.sha256(data).hexdigest()
+                    if expected and digest != expected:
+                        raise ValueError(
+                            f"DF-e recebido NSU {row.get('nsu', '')} falhou na verificação de integridade."
+                        )
+                    try:
+                        received_date = issued_date(path, row.get("issued_at"))
+                    except (OSError, ValueError, etree.XMLSyntaxError):
+                        continue
+                    if not start <= received_date <= end:
+                        continue
+                    schema = str(row.get("schema") or "documento").removesuffix(".xsd")
+                    is_summary = schema.casefold().startswith("resnfe")
+                    key = str(row.get("access_key") or "sem_chave")
+                    name = f"entradas_DFe/{received_date:%Y-%m}/{index:04d}_{schema}_{key}.xml"
+                    archive.writestr(name, data)
+                    manifest["received_documents"].append({
+                        "nsu": str(row.get("nsu") or ""), "access_key": key,
+                        "schema": str(row.get("schema") or ""),
+                        "content": "RESUMO" if is_summary else "XML_COMPLETO",
+                        "issued_at": str(row.get("issued_at") or ""),
+                        "file": name, "sha256": digest,
                     })
                 for index, row in enumerate(events, 1):
                     key = str(row["access_key"])
@@ -1483,6 +1531,10 @@ class FiscalService:
                 temp_path.unlink(missing_ok=True)
         return {
             "path": str(destination), "documents": len(documents), "events": len(events),
+            "received_documents": len(manifest["received_documents"]),
+            "received_summaries": sum(
+                1 for row in manifest["received_documents"] if row.get("content") == "RESUMO"
+            ),
             "period_start": start.isoformat(), "period_end": end.isoformat(),
         }
 

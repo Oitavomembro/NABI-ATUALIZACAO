@@ -9436,7 +9436,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         cabecalho.pack(fill="x", padx=20, pady=(18, 8))
         ctk.CTkLabel(cabecalho, text="📈 Relatórios e indicadores", font=ctk.CTkFont(size=24, weight="bold")).pack(side="left")
         self.rel_indicadores = ctk.CTkLabel(cabecalho, text="", text_color="#8b949e")
-        self.rel_indicadores.pack(side="right")
+        self.rel_indicadores.pack(side="right", padx=(8, 12))
+        ctk.CTkButton(
+            cabecalho, text="Fiscal / Contabilidade", width=165,
+            fg_color="#1f6feb", command=self.abrir_central_fiscal,
+        ).pack(side="right", padx=6, pady=8)
 
         filtros = ctk.CTkFrame(frame, fg_color="#161b22")
         filtros.pack(fill="x", padx=20, pady=6)
@@ -11021,6 +11025,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 result = self.fiscal_service.export_accounting_package(
                     start_date=start_entry.get(), end_date=end_entry.get(), output_path=output,
                     include_homologation=include_homologation.get(),
+                    received_documents=self.fiscal_dfe_service.list_documents(),
                 )
                 registrar_auditoria(
                     self._usuario_financeiro(), "EXPORTAR_XML_CONTABILIDADE", "Fiscal",
@@ -11028,7 +11033,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 )
                 self.mostrar_notificacao(
                     "Pacote fiscal gerado",
-                    f"{result['documents']} documento(s) e {result['events']} evento(s).\n{result['path']}",
+                    f"{result['documents']} saída(s), {result['received_documents']} entrada(s) "
+                    f"e {result['events']} evento(s)."
+                    + (
+                        f"\nAtenção: {result['received_summaries']} entrada(s) ainda são apenas resumo da SEFAZ."
+                        if result["received_summaries"] else ""
+                    )
+                    + f"\n{result['path']}",
                     nivel="success", duracao_ms=7000,
                 )
             except Exception as exc:
@@ -11058,6 +11069,54 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showerror("Relatório fiscal", str(exc), parent=janela)
         transmission_status = ctk.CTkLabel(frame, text="", text_color="#d29922", anchor="w")
         transmission_status.pack(fill="x", padx=16, pady=(0, 3))
+
+        def consult_selected_at_sefaz():
+            if not self._autorizar("fiscal", "view"):
+                return
+            row = selected()
+            key = str((row or {}).get("access_key") or "")
+            if len("".join(ch for ch in key if ch.isdigit())) != 44:
+                messagebox.showwarning(
+                    "Consultar situação", "Selecione uma NF-e/NFC-e com chave de acesso.", parent=janela,
+                )
+                return
+            password = self._obter_senha_certificado(
+                parent=janela, title="Consultar situação na SEFAZ"
+            )
+            if password is None:
+                return
+            transmission_status.configure(
+                text="Consultando a situação oficial sem alterar o documento...", text_color="#d29922"
+            )
+            task = TASK_MANAGER.submit(
+                "Consultar situação fiscal",
+                lambda _context: self.fiscal_service.consult_document(
+                    access_key=key, password=password
+                ),
+            )
+
+            def follow_query():
+                nonlocal password
+                current = TASK_MANAGER.get(task.id)
+                if current is None or not janela.winfo_exists():
+                    return
+                if current.status == TaskStatus.COMPLETED:
+                    result = current.result
+                    transmission_status.configure(
+                        text=f"SEFAZ {result.status_code}: {result.message}",
+                        text_color="#2ea043" if result.success else "#d29922",
+                    )
+                    password = ""
+                    return
+                if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
+                    transmission_status.configure(
+                        text=current.error or "Consulta não concluída.", text_color="#da3633"
+                    )
+                    password = ""
+                    return
+                janela.after(150, follow_query)
+
+            janela.after(100, follow_query)
 
         def transmit_queue(*, retry_selected=False, receipt_selected=False, contingency_batch=False):
             if not self._autorizar("fiscal", "configure"):
@@ -11666,6 +11725,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(actions, text="Abrir arquivo", command=open_files).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Baixar XML", command=download_xml).pack(side="left", padx=4)
         ctk.CTkButton(actions, text="Gerar DANFE oficial", command=danfe).pack(side="left", padx=4)
+        ctk.CTkButton(
+            actions, text="Consultar situação na SEFAZ",
+            command=consult_selected_at_sefaz, fg_color="#0969da",
+        ).pack(side="left", padx=4)
         transmit_button = ctk.CTkButton(actions, text="Transmitir pendentes", command=transmit_queue, fg_color="#2ea043")
         transmit_button.pack(side="left", padx=4)
         retry_button = ctk.CTkButton(actions, text="Reenviar selecionado", command=lambda: transmit_queue(retry_selected=True), fg_color="#d29922")

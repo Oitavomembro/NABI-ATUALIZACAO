@@ -68,7 +68,7 @@ def test_configuracao_fiscal_oferece_auditoria_unica_do_catalogo():
     assert 'text="Executar pré-voo fiscal local"' in block
     assert "Modelos aprovados:" in block
     assert "result.xml_sha256_by_model" in block
-    assert "Preencher usando uma NF-e/NFC-e emitida ou recebida" in block
+    assert "IMPORTAR DADOS DA EMPRESA PELO XML" in block
     assert "expected_cnpj=current_cnpj" in block
     assert 'fields["sale_series_55"]' in block
     assert 'fields["sale_series_65"]' in block
@@ -96,6 +96,8 @@ def test_central_fiscal_expoe_eventos_e_download_sem_rotas_paralelas():
     assert 'text="Inutilizar numeração"' in block
     assert "self.fiscal_service.send_event" in block
     assert "self.fiscal_service.inutilize_numbers" in block
+    assert 'text="Consultar situação na SEFAZ"' in block
+    assert "self.fiscal_service.consult_document" in block
     assert 'text="Exportar relatório CSV"' in block
     assert "self.fiscal_service.export_fiscal_report_csv" in block
     assert 'text="Gerar DANFE oficial"' in block
