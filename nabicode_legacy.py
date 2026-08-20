@@ -1771,8 +1771,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         btn_caixa.configure(command=lambda: self.mostrar_tela("caixa"))
         self.botoes_topo["caixa"] = btn_caixa
 
-        btn_compras = ctk.CTkButton(frame_centralizador, text="📥 Compras", fg_color="#7c3aed", hover_color="#6d28d9", **estilo_btn)
-        btn_compras.configure(command=lambda: self.mostrar_tela("compras"))
+        btn_compras = ctk.CTkButton(frame_centralizador, text="🧾 Central Fiscal", fg_color="#7c3aed", hover_color="#6d28d9", **estilo_btn)
+        btn_compras.configure(command=self.abrir_central_fiscal)
         self.botoes_topo["compras"] = btn_compras
 
         btn_relatorios = ctk.CTkButton(frame_centralizador, text="📈 Relatórios", fg_color="#0369a1", hover_color="#075985", **estilo_btn)
@@ -4474,7 +4474,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         fornecedor_encontrado = NFE_IMPORT_SERVICE.fornecedor_existente(documento)
         unidades_ativas = self._auxiliares_ativos("unidade")
-        nomes_unidades = [nome for _uid, nome in unidades_ativas] or ["UN"]
+        unidades_padrao = ["UN", "CX", "PC", "PCT", "FD", "DZ", "KG", "G", "L", "ML", "M", "M2", "M3"]
+        nomes_unidades = list(dict.fromkeys(
+            [str(nome).strip().upper() for _uid, nome in unidades_ativas if str(nome).strip()]
+            + unidades_padrao
+        ))
 
         win = ctk.CTkToplevel(self)
         prepare_hidden_toplevel(win)
@@ -4561,18 +4565,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         tabela_frame.grid_rowconfigure(0, weight=1)
         tabela_frame.grid_columnconfigure(0, weight=1)
 
-        colunas = (
-            "Codigo", "Descricao", "QtdXML", "Fator", "Entrada", "UnEstoque",
-            "Custo", "Margem", "Venda", "Lucro", "Status",
-        )
+        colunas = ("Codigo", "Descricao", "Recebido", "Entrada", "Custo", "Venda", "Status")
         tabela = ttk.Treeview(tabela_frame, columns=colunas, show="headings", selectmode="browse")
         definicoes = (
-            ("Codigo", "Código", 95), ("Descricao", "Descrição", 250),
-            ("QtdXML", "Qtd. recebida", 95), ("Fator", "Fator", 65),
-            ("Entrada", "Entrada estoque", 100), ("UnEstoque", "Un.", 60),
-            ("Custo", "Custo", 82), ("Margem", "Margem %", 78),
-            ("Venda", "Preço venda", 88), ("Lucro", "Lucro", 78),
-            ("Status", "Ação automática", 120),
+            ("Codigo", "Código", 105), ("Descricao", "Produto", 285),
+            ("Recebido", "Recebido no XML", 110), ("Entrada", "Entrada no estoque", 125),
+            ("Custo", "Custo unitário", 95), ("Venda", "Preço de venda", 100),
+            ("Status", "Situação", 95),
         )
         for coluna, titulo, largura_coluna in definicoes:
             tabela.heading(coluna, text=titulo)
@@ -4613,8 +4612,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             entrada.pack(fill="x")
             return var, entrada
 
-        qtd_var, qtd_entry = campo_editor(aba_estoque, "Quantidade recebida", 0)
-        fator_var, fator_entry = campo_editor(aba_estoque, "Fator (1 compra = X estoque)", 1, "1")
+        recebido_label = ctk.CTkLabel(
+            aba_estoque, text="Recebido no XML: —", anchor="w", justify="left",
+            font=ctk.CTkFont(size=12, weight="bold"), text_color="#c9d1d9",
+        )
+        recebido_label.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
+        fator_var, fator_entry = campo_editor(aba_estoque, "Conteúdo por embalagem recebida", 1, "1")
         custo_var, custo_entry = campo_editor(aba_estoque, "Custo por unidade de estoque", 2)
         margem_var, margem_entry = campo_editor(aba_estoque, "Margem sobre custo (%)", 3, "30")
         preco_var, preco_entry = campo_editor(aba_estoque, "Preço de venda", 4)
@@ -4699,6 +4702,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 resultado_preco = XMLConferenceService.por_margem(custo_estoque, 30)
             configuracoes[analise.index] = {
                 "quantidade": float(item.quantidade),
+                "unidade_compra": str(item.unidade or "UN").strip().upper(),
+                "custo_embalagem": float(item.valor_unitario),
                 "fator": fator_padrao,
                 "unidade": unidade_padrao,
                 "custo": float(resultado_preco.custo),
@@ -4740,9 +4745,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if estado["carregando"] or estado["sincronizando"]:
                 return
             try:
-                quantidade = parse_nonnegative_number(qtd_var.get(), "Quantidade", greater_than_zero=True)
+                indice = estado["indice"]
+                if indice is None:
+                    return
+                quantidade = float(configuracoes[indice]["quantidade"])
                 fator = parse_nonnegative_number(fator_var.get(), "Fator", greater_than_zero=True)
-                custo = parse_nonnegative_number(custo_var.get(), "Custo")
+                if origem == "fator":
+                    custo = float(configuracoes[indice]["custo_embalagem"]) / fator
+                    estado["sincronizando"] = True
+                    custo_var.set(format_number_br(custo, 4))
+                    estado["sincronizando"] = False
+                else:
+                    custo = parse_nonnegative_number(custo_var.get(), "Custo")
                 estado["sincronizando"] = True
                 if origem == "preco":
                     resultado = XMLConferenceService.por_preco(custo, preco_var.get())
@@ -4764,8 +4778,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             finally:
                 estado["sincronizando"] = False
 
-        qtd_var.trace_add("write", lambda *_: atualizar_calculo("margem"))
-        fator_var.trace_add("write", lambda *_: atualizar_calculo("margem"))
+        fator_var.trace_add("write", lambda *_: atualizar_calculo("fator"))
         custo_var.trace_add("write", lambda *_: atualizar_calculo("margem"))
         margem_var.trace_add("write", lambda *_: atualizar_calculo("margem"))
         preco_var.trace_add("write", lambda *_: atualizar_calculo("preco"))
@@ -4776,7 +4789,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if indice is None:
                 return True
             try:
-                quantidade = parse_nonnegative_number(qtd_var.get(), "Quantidade recebida", greater_than_zero=True)
+                quantidade = float(configuracoes[indice]["quantidade"])
                 fator = parse_nonnegative_number(fator_var.get(), "Fator de conversão", greater_than_zero=True)
                 custo = parse_nonnegative_number(custo_var.get(), "Custo unitário")
                 preco = parse_nonnegative_number(preco_var.get(), "Preço de venda", greater_than_zero=True)
@@ -4884,7 +4897,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 f"IBS Município {format_number_br(item_xml.ibs_city_rate, 4)}%  ·  "
                 f"CBS {format_number_br(item_xml.cbs_rate, 4)}%"
             ))
-            qtd_var.set(format_number_br(cfg["quantidade"]))
+            recebido_label.configure(
+                text=(f"Recebido no XML: {format_number_br(cfg['quantidade'])} "
+                      f"{cfg.get('unidade_compra') or 'UN'} (somente leitura)")
+            )
             fator_var.set(format_number_br(cfg["fator"]))
             custo_var.set(format_number_br(cfg["custo"], 2))
             margem_var.set(format_number_br(cfg["margem"], 2))
@@ -4912,10 +4928,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 erros.append(str(exc))
             status = "PENDENTE" if erros else cfg.get("acao", "")
             valores = (
-                item.codigo, item.descricao.upper(), format_number_br(cfg["quantidade"]),
-                format_number_br(cfg["fator"]), format_number_br(entrada), cfg["unidade"],
-                f"R$ {cfg['custo']:.2f}", f"{float(resultado.margem_percentual):.2f}%",
-                f"R$ {cfg['preco']:.2f}", f"R$ {float(resultado.lucro_unitario):.2f}", status,
+                item.codigo, item.descricao.upper(),
+                f"{format_number_br(cfg['quantidade'])} {cfg.get('unidade_compra') or 'UN'}",
+                f"{format_number_br(entrada)} {cfg['unidade']}",
+                f"R$ {cfg['custo']:.4f}", f"R$ {cfg['preco']:.2f}", status,
             )
             tag = "pendente" if erros else ("novo" if cfg.get("acao") == "CRIAR" else "vinculado")
             if tabela.exists(str(indice)):
@@ -4934,8 +4950,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if selecao:
                 carregar_item(int(selecao[0]))
         tabela.bind("<<TreeviewSelect>>", ao_selecionar)
-
-        ctk.CTkButton(editor_body, text="Salvar item e atualizar lista", height=38, fg_color="#1f6feb", command=salvar_item_atual).grid(row=17, column=0, sticky="ew", padx=10, pady=(8, 4))
 
         lote_frame = ctk.CTkFrame(editor_body, fg_color="transparent")
         lote_frame.grid(row=16, column=0, sticky="ew", padx=10, pady=(4, 12))
@@ -5001,14 +5015,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 titulo="Conferência XML",
             )
 
-        ctk.CTkButton(
-            editor_body,
-            text="Colar valores do Excel",
-            height=36,
-            command=colar_valores_excel,
-            fg_color="#238636",
-        ).grid(row=15, column=0, sticky="ew", padx=10, pady=(0, 12))
-
         def resolver_primeira_pendencia():
             salvar_item_atual(silencioso=True)
             pendencias = calcular_resumo()
@@ -5038,8 +5044,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 tabela.focus(proximo)
                 tabela.see(proximo)
                 carregar_item(int(proximo))
-                qtd_entry.focus_set()
-                qtd_entry.select_range(0, "end")
+                fator_entry.focus_set()
+                fator_entry.select_range(0, "end")
                 return
             pendencias = calcular_resumo()
             if pendencias:
@@ -5049,7 +5055,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         win._enter_navigator_xml = install_enter_navigation(
             [acao_combo, candidato_combo, codigo_entry, descricao_entry, barras_entry, ncm_entry, cest_entry, origem_entry,
-             qtd_entry, fator_entry, custo_entry, margem_entry, preco_entry, unidade_combo],
+             fator_entry, custo_entry, margem_entry, preco_entry, unidade_combo],
             on_finish=confirmar_item_e_avancar,
         )
 
@@ -5117,6 +5123,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         rodape = ctk.CTkFrame(win, fg_color="#0d1117")
         rodape.pack(fill="x", padx=14, pady=(4, 12))
         ctk.CTkButton(rodape, text="Ir para o próximo item pendente", command=resolver_primeira_pendencia, fg_color="#9e6a03").pack(side="left")
+        ctk.CTkButton(rodape, text="Salvar produto e ir para o próximo", height=42, fg_color="#1f6feb", command=confirmar_item_e_avancar).pack(side="left", padx=8)
         ctk.CTkButton(rodape, text="Revisar e importar NF-e", height=42, fg_color="#2ea043", command=processar_todos).pack(side="right")
         ctk.CTkButton(rodape, text="Cancelar", height=42, fg_color="#30363d", command=win.destroy).pack(side="right", padx=8)
         self.window_actions.register(

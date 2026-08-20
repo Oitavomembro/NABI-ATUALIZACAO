@@ -1381,3 +1381,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - somente CST/CSOSN que possuem gerador XML validado nesta versão podem ser cadastrados;
 - suíte completa: 1.303 testes aprovados, 1 ignorado e 32 subtestes aprovados em `NABICODE_PROFILE=TESTE`;
 - fechamento comercial em produção ainda depende de homologação real com credenciais da empresa, validação do contador e autorizações da SEFAZ Bahia; esse bloqueio permanece intencional.
+
+## Checkpoint 42.96 — conferência XML responsiva e orientada por embalagem
+
+- a quantidade recebida passou a ser somente leitura e conserva a quantidade/unidade informada no XML;
+- o fator foi renomeado para `Conteúdo por embalagem recebida` e recalcula imediatamente entrada, custo unitário e preço de venda;
+- unidades usuais de peça, embalagem, peso, volume e comprimento ficam disponíveis mesmo sem cadastro auxiliar prévio;
+- a grade foi reduzida às informações essenciais e o botão `Salvar produto e ir para o próximo` ficou no rodapé fixo;
+- o botão superior `Compras` foi substituído por `Central Fiscal`, preservando internamente pedidos e fornecedores existentes;
+- 29 testes focados foram aprovados em perfil TESTE e `git diff --check` não encontrou erros.
