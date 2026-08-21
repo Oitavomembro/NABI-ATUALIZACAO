@@ -196,6 +196,10 @@ class ProcessCleanupContractTests(unittest.TestCase):
         )[0]
         self.assertIn("TASK_MANAGER.shutdown(wait=True, cancel_pending=True)", shutdown)
         self.assertIn("if _RUNTIME_SHUTDOWN_DONE:", shutdown)
+        self.assertIn("if not worker.stop(timeout=55.0):", shutdown)
+        self.assertIn("raise RuntimeError", shutdown)
+        self.assertIn("runtime_shutdown_complete", final_block)
+        self.assertIn("database_lock is not None and runtime_shutdown_complete", final_block)
 
 
 class ResourceSoakTests(unittest.TestCase):

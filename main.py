@@ -535,13 +535,19 @@ def main() -> int:
         return 1
     finally:
         mark_startup("shutdown_started")
+        runtime_shutdown_complete = legacy_module is None
         if legacy_module is not None:
             try:
                 legacy_module.shutdown_runtime_resources()
+                runtime_shutdown_complete = True
             except Exception:
                 startup_logger.exception("Falha ao encerrar recursos de runtime")
-        if database_lock is not None:
+        if database_lock is not None and runtime_shutdown_complete:
             database_lock.release()
+        elif database_lock is not None:
+            startup_logger.critical(
+                "Lock do banco preservado porque o worker fiscal ainda pode estar ativo."
+            )
         if not splash_completed:
             _pause_splash(pause_file)
             _stop_splash(stop_file)

@@ -1048,6 +1048,11 @@ class FiscalService:
         timeout: int = 45,
         headers: Mapping[str, str] | None = None,
     ) -> FiscalResponse:
+        environment = str(
+            self.load_config().get("environment") or "HOMOLOGACAO"
+        ).upper()
+        if environment == "PRODUCAO":
+            raise ValueError("Produção fiscal permanece bloqueada nesta versão.")
         self._require_dependency("requests")
         self._require_dependency("cryptography")
         endpoint = self.endpoint(operation, model=model)
@@ -1058,13 +1063,6 @@ class FiscalService:
                 "A dependência 'requests' não está instalada. Execute "
                 "ATUALIZAR_DEPENDENCIAS.bat antes de usar a transmissão fiscal."
             )
-        if str(self.load_config().get("environment") or "HOMOLOGACAO").upper() == "PRODUCAO":
-            trust = self.validate_certificate_trust(pfx_path, password)
-            if not trust.trusted:
-                raise ValueError(f"Cadeia ICP-Brasil não confirmada: {trust.message}")
-            revocation = self.check_certificate_revocation(pfx_path, password)
-            if not revocation.good:
-                raise ValueError(f"Situação de revogação não confirmada: {revocation.message}")
         pem_cert, pem_key = self._temporary_pem_files(pfx_path, password)
         try:
             response = self.http_post(

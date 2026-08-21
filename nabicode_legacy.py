@@ -326,13 +326,23 @@ def shutdown_runtime_resources() -> None:
     global _RUNTIME_SHUTDOWN_DONE
     if _RUNTIME_SHUTDOWN_DONE:
         return
-    _RUNTIME_SHUTDOWN_DONE = True
+    pending_workers = []
     for worker in list(_RUNTIME_FISCAL_WORKERS):
         try:
-            worker.stop(timeout=55.0)
+            if not worker.stop(timeout=55.0):
+                pending_workers.append(worker)
         except Exception:
             logger.exception("Falha ao encerrar worker fiscal")
+            pending_workers.append(worker)
+    if pending_workers:
+        logger.critical(
+            "Shutdown fiscal pendente: %s worker(s) ainda usam o banco; "
+            "recursos e lock serão preservados.",
+            len(pending_workers),
+        )
+        raise RuntimeError("Worker fiscal ainda está processando; shutdown não concluído.")
     TASK_MANAGER.shutdown(wait=True, cancel_pending=True)
+    _RUNTIME_SHUTDOWN_DONE = True
 COBRANCA_SERVICE = CobrancaService(DatabaseManager(DB_NAME, network_mode=MODO_REDE, logger=logger))
 NFE_IMPORT_SERVICE = NFeImportService(NFeImportRepository(DatabaseManager(DB_NAME, network_mode=MODO_REDE, logger=logger)))
 NFE_DEVOLUCAO_SERVICE = NFeDevolucaoService(NFeDevolucaoRepository(DatabaseManager(DB_NAME, network_mode=MODO_REDE, logger=logger)))

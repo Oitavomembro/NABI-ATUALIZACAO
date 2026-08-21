@@ -1,5 +1,34 @@
 # HANDOFF NABICODE
 
+## ATUALIZAÇÃO — MISSÃO FISCAL 04 / HARDENING DO WORKER
+
+`FiscalService.transmit()` agora rejeita `PRODUCAO` diretamente, antes de
+resolver endpoint, certificado ou executar qualquer chamada HTTP. O bloqueio
+não depende do pré-voo, do worker ou de outra camada; `HOMOLOGACAO` conserva o
+fluxo existente.
+
+O claim da outbox passou a ter heartbeat durante todo processamento. A
+renovação atômica exige `status=PROCESSANDO`, o mesmo `worker_id` proprietário
+e nunca pode ser feita por outra instância. Persistências intermediárias não
+reduzem mais um lease já renovado. Se a renovação falhar ou o claim mudar de
+dono, o worker antigo não altera o estado novo. O marcador
+`transmission_started_at` continua convertendo lease realmente expirado em
+`RESPOSTA_DESCONHECIDA`, exigindo reconciliação e impedindo reenvio cego.
+
+No encerramento, retorno `False` de `worker.stop()` agora é falha explícita. O
+runtime não encerra o gerenciador de tarefas nem se declara finalizado, e o
+processo principal preserva o lock do banco enquanto uma operação fiscal ainda
+pode estar ativa. Não há tentativa de matar thread Python.
+
+Regressões diretas cobrem bloqueio de produção sem `http_post`, homologação,
+heartbeat além do lease original, rejeição de renovação por intruso, proteção
+contra overwrite tardio e primeiro timeout de shutdown. Nenhum schema, XML,
+tributo, DANFE, contingência, cancelamento, DF-e, PIX ou interface foi alterado.
+Testes focados: 292 aprovados e 10 subtestes. Suíte completa funcional: 1.379
+aprovados, 1 ignorado e 32 subtestes. O único teste DPAPI, repetido isoladamente,
+não executa no token restrito do runtime Codex; é a mesma limitação ambiental
+já registrada na missão anterior e não envolve código alterado nesta missão.
+
 ## ATUALIZAÇÃO — MISSÃO FISCAL 03 / WORKER AUTOMÁTICO
 
 ### Arquitetura anterior

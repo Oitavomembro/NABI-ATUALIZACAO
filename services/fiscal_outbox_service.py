@@ -200,7 +200,8 @@ class FiscalOutboxService:
             self.ensure_schema(connection)
             changed = connection.execute(
                 """UPDATE fiscal_outbox SET operation=?,status=?,attempts=?,max_attempts=?,
-                       retry_minutes=?,next_attempt_at=?,worker_id=?,claimed_at=?,lease_until=?,
+                       retry_minutes=?,next_attempt_at=?,worker_id=?,claimed_at=?,
+                       lease_until=CASE WHEN ?=1 THEN NULL ELSE lease_until END,
                        receipt=?,last_error_code=?,last_error_message=?,xml_b64=?,
                        original_xml_b64=?,contingency=?,contingency_deadline_at=?,
                        metadata_json=?,updated_at=?
@@ -212,7 +213,7 @@ class FiscalOutboxService:
                     int(record.get("retry_minutes") or 5), str(record.get("next_attempt_at") or ""),
                     "" if finish else str(worker_id),
                     None if finish else record.get("claimed_at"),
-                    None if finish else record.get("lease_until"),
+                    1 if finish else 0,
                     str(record.get("receipt") or ""),
                     str(record.get("last_status_code") or record.get("last_error_code") or ""),
                     str(record.get("last_error") or record.get("last_error_message") or record.get("last_message") or ""),
@@ -226,6 +227,36 @@ class FiscalOutboxService:
             if changed != 1:
                 raise ValueError("O claim fiscal não pertence mais a este worker.")
             result = self._by_id(connection, int(record["id"]))
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def renew_lease(self, item_id: int, *, worker_id: str, lease_seconds: int = 120,
+                    now: datetime | None = None) -> dict[str, Any] | None:
+        """Renova um claim ativo somente quando o worker ainda é seu proprietário."""
+        owner = str(worker_id or "").strip()
+        if not owner:
+            raise ValueError("Identificação do worker é obrigatória.")
+        current = self._utc(now)
+        lease_until = (current + timedelta(seconds=max(1, int(lease_seconds)))).isoformat()
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self.ensure_schema(connection)
+            changed = connection.execute(
+                """UPDATE fiscal_outbox
+                      SET lease_until=?,updated_at=?
+                    WHERE id=? AND status='PROCESSANDO' AND worker_id=?""",
+                (lease_until, current.isoformat(), int(item_id), owner),
+            ).rowcount
+            if changed != 1:
+                connection.rollback()
+                return None
+            result = self._by_id(connection, int(item_id))
             connection.commit()
             return result
         except Exception:

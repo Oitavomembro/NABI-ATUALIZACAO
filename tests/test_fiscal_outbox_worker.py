@@ -88,8 +88,9 @@ class FiscalOutboxWorkerTests(unittest.TestCase):
         return self.outbox.list_items()[0]
 
     def worker(self, **kwargs):
+        lease_seconds = kwargs.pop("lease_seconds", 60)
         return FiscalOutboxWorker(
-            self.processor, poll_seconds=0.1, lease_seconds=60,
+            self.processor, poll_seconds=0.1, lease_seconds=lease_seconds,
             max_per_cycle=1, **kwargs,
         )
 
@@ -136,6 +137,69 @@ class FiscalOutboxWorkerTests(unittest.TestCase):
         self.processor.release.set(); thread.join(2)
         self.assertFalse(thread.is_alive())
         self.assertEqual(self.processor.calls, 1)
+
+    def test_heartbeat_renova_lease_e_impede_segundo_worker_apos_prazo_original(self):
+        self.enqueue(); self.processor.block = True
+        first = self.worker(lease_seconds=1, heartbeat_seconds=0.01)
+        renewed = threading.Event()
+        original_renew = first.outbox.renew_lease
+
+        def observed_renew(*args, **kwargs):
+            result = original_renew(*args, **kwargs)
+            renewed.set()
+            return result
+
+        first.outbox.renew_lease = observed_renew
+        thread = threading.Thread(target=first.run_once)
+        thread.start(); self.assertTrue(self.processor.started.wait(2))
+        original = self.outbox.list_items()[0]
+        original_deadline = datetime.fromisoformat(original["lease_until"])
+        self.assertTrue(renewed.wait(2))
+        self.assertIsNone(self.outbox.claim_next(
+            worker_id="segundo-worker", lease_seconds=1,
+            now=original_deadline + timedelta(microseconds=1),
+        ))
+        active = self.outbox.list_items()[0]
+        self.assertEqual(active["worker_id"], first.worker_id)
+        self.processor.release.set(); thread.join(2)
+        self.assertFalse(thread.is_alive())
+
+    def test_renovacao_de_lease_exige_worker_proprietario(self):
+        item = self.enqueue()
+        moment = datetime.fromisoformat(item["created_at"]) + timedelta(seconds=1)
+        claimed = self.outbox.claim_item(
+            int(item["id"]), worker_id="dono", lease_seconds=1, now=moment
+        )
+        self.assertIsNone(self.outbox.renew_lease(
+            int(item["id"]), worker_id="intruso", lease_seconds=10,
+            now=moment + timedelta(seconds=1),
+        ))
+        renewed = self.outbox.renew_lease(
+            int(item["id"]), worker_id="dono", lease_seconds=10,
+            now=moment + timedelta(seconds=1),
+        )
+        self.assertEqual(renewed["worker_id"], "dono")
+        self.assertGreater(
+            datetime.fromisoformat(renewed["lease_until"]),
+            datetime.fromisoformat(claimed["lease_until"]),
+        )
+
+    def test_claim_perdido_impede_overwrite_tardio(self):
+        item = self.enqueue()
+        moment = datetime.fromisoformat(item["created_at"]) + timedelta(seconds=1)
+        stale = self.outbox.claim_item(
+            int(item["id"]), worker_id="antigo", lease_seconds=1, now=moment
+        )
+        current = self.outbox.claim_next(
+            worker_id="novo", lease_seconds=30, now=moment + timedelta(seconds=2)
+        )
+        self.assertEqual(current["worker_id"], "novo")
+        stale["status"] = "CONCLUIDO"
+        with self.assertRaisesRegex(ValueError, "não pertence mais"):
+            self.outbox.save_claimed_record(stale, worker_id="antigo", finish=True)
+        latest = self.outbox.list_items()[0]
+        self.assertEqual(latest["worker_id"], "novo")
+        self.assertEqual(latest["status"], "PROCESSANDO")
 
     def test_resposta_desconhecida_e_somente_consultada(self):
         self.enqueue(status="RESPOSTA_DESCONHECIDA")
@@ -204,6 +268,16 @@ class FiscalOutboxWorkerTests(unittest.TestCase):
         self.assertTrue(worker.is_running)
         self.processor.release.set(); stopper.join(3)
         self.assertEqual(stopped, [True])
+        self.assertFalse(worker.is_running)
+
+    def test_shutdown_primeiro_timeout_nao_finge_encerramento(self):
+        self.enqueue(); self.processor.block = True
+        worker = self.worker(); worker.start()
+        self.assertTrue(self.processor.started.wait(2))
+        self.assertFalse(worker.stop(timeout=0.001))
+        self.assertTrue(worker.is_running)
+        self.processor.release.set()
+        self.assertTrue(worker.stop(timeout=2))
         self.assertFalse(worker.is_running)
 
     def test_central_nao_fura_claim_ativo(self):
