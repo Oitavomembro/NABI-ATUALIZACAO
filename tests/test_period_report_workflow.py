@@ -39,6 +39,12 @@ def test_central_fiscal_mostra_escolhas_antes_da_grade():
     assert "open_date_picker" in block
     assert 'text="Mostrar resultados"' in block
     assert "def apply_document_filters" in block
+    assert "def hide_document_results" in block
+    assert 'period.pack(fill="x", padx=12, pady=(2, 4), before=action_panel)' in block
+    assert 'period.pack(fill="x", padx=12, pady=(2, 4), before=filters)' not in block
+    assert 'command=lambda _value: hide_document_results()' in block
+    assert "select_period_date(start_var, value)" in block
+    assert "select_period_date(end_var, value)" in block
     assert '"FISCAL" if is_fiscal else "NÃO FISCAL"' in block
     assert 'REPORT_SERVICE.generate(\n                        "recebimentos"' in block
 

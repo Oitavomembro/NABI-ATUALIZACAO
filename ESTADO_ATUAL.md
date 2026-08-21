@@ -1507,3 +1507,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - Entradas diferencia `Entradas fiscais (NF-e/DF-e)`, `Entradas não fiscais` e recebimentos de fichas;
 - a grade aparece somente após `Mostrar resultados`, evitando uma tela cheia de dados que o usuário não solicitou;
 - 25 testes focados, compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.09 — cards de entradas e saídas restaurados na fonte
+
+- corrigida a ordem de montagem dos painéis da Central Fiscal: o calendário não tenta mais se posicionar em relação a um painel ainda oculto;
+- `Ver entradas` e `Ver saídas` passam a abrir deterministicamente os filtros de período e natureza do movimento;
+- trocar a natureza ou uma data volta a ocultar resultados anteriores, exigindo nova confirmação em `Mostrar resultados`;
+- o calendário deixa de disparar consulta durante a escolha da data;
+- regressão específica impede o retorno do posicionamento inválido `before=filters`;
+- 16 testes focados, compilação e `git diff --check` aprovados.

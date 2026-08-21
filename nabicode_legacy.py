@@ -11300,7 +11300,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         document_search.pack(side="left", fill="x", expand=True, padx=(0, 8))
         output_filter = ctk.CTkComboBox(
             filters, values=["Todos os movimentos"],
-            width=190, state="readonly", command=lambda _value: load(),
+            width=190, state="readonly", command=lambda _value: hide_document_results(),
         )
         output_filter.set("Todos os movimentos")
         output_filter.pack(side="left", padx=(0, 8))
@@ -11462,6 +11462,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
             load()
 
+        def hide_document_results():
+            """Mantém a grade oculta até o usuário confirmar os filtros."""
+            context_actions.pack_forget()
+            tree.pack_forget()
+            xscroll.pack_forget()
+            yscroll.place_forget()
+
+        def select_period_date(variable, value):
+            variable.set(value)
+            hide_document_results()
+
         document_search.bind("<Return>", lambda _event: apply_document_filters())
         ctk.CTkButton(
             filters, text="Mostrar resultados", width=135, fg_color="#2ea043",
@@ -11537,12 +11548,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         end_var = tk.StringVar(value=today.isoformat())
         ctk.CTkButton(
             period, textvariable=start_var, width=125, fg_color="#30363d",
-            command=lambda: open_date_picker(janela, initial=start_var.get(), on_select=lambda value: (start_var.set(value), load()), title="Data inicial"),
+            command=lambda: open_date_picker(janela, initial=start_var.get(), on_select=lambda value: select_period_date(start_var, value), title="Data inicial"),
         ).pack(side="left", padx=4)
         ctk.CTkLabel(period, text="até").pack(side="left", padx=(4, 0))
         ctk.CTkButton(
             period, textvariable=end_var, width=125, fg_color="#30363d",
-            command=lambda: open_date_picker(janela, initial=end_var.get(), on_select=lambda value: (end_var.set(value), load()), title="Data final"),
+            command=lambda: open_date_picker(janela, initial=end_var.get(), on_select=lambda value: select_period_date(end_var, value), title="Data final"),
         ).pack(side="left", padx=4)
         include_homologation = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
@@ -12384,12 +12395,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             }[mode]
             output_filter.configure(values=choices)
             output_filter.set(choices[0])
-            period.pack(fill="x", padx=12, pady=(2, 4), before=filters)
+            # Os dois painéis estavam ocultos. Referenciar ``before=filters``
+            # enquanto filters ainda não estava empacotado fazia o Tcl rejeitar
+            # o clique e os cards pareciam não funcionar.
+            period.pack(fill="x", padx=12, pady=(2, 4), before=action_panel)
             filters.pack(fill="x", padx=12, pady=(0, 8), before=action_panel)
-            context_actions.pack_forget()
-            tree.pack_forget()
-            xscroll.pack_forget()
-            yscroll.place_forget()
+            hide_document_results()
 
         # A abertura mostra primeiro as escolhas e ações. A grade, que antes
         # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
