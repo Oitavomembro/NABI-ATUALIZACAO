@@ -259,10 +259,14 @@ class PDVTransactionService:
                 "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
             ).fetchone()
             fiscal_join = "LEFT JOIN fiscal_sale_documents f ON f.sale_id=m.id" if fiscal_exists else ""
-            fiscal_fields = (
-                "COALESCE(f.status,''),COALESCE(f.model,''),COALESCE(f.access_key,''),COALESCE(f.protocol,'')"
-                if fiscal_exists else "'','','',''"
-            )
+            fiscal_columns = {
+                str(row[1]).casefold()
+                for row in conn.execute("PRAGMA table_info(fiscal_sale_documents)").fetchall()
+            } if fiscal_exists else set()
+            fiscal_field = lambda name: f"COALESCE(f.{name},'')" if name in fiscal_columns else "''"
+            fiscal_fields = ",".join(fiscal_field(name) for name in (
+                "status", "model", "access_key", "protocol", "environment", "created_at"
+            ))
             rows = conn.execute(
                 f"""
                 SELECT m.id,m.descricao,m.valor,{canonical_expr},m.data,m.cliente_id,
@@ -288,6 +292,8 @@ class PDVTransactionService:
                 "status_pagamento": str(row[6] or ""),
                 "fiscal_status": str(row[7] or ""), "fiscal_model": str(row[8] or ""),
                 "access_key": str(row[9] or ""), "protocol": str(row[10] or ""),
+                "fiscal_environment": str(row[11] or ""),
+                "fiscal_authorized_at": str(row[12] or ""),
             }
             for row in rows
         ]

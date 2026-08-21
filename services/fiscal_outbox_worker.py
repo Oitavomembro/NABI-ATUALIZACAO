@@ -23,6 +23,7 @@ class FiscalOutboxWorker:
         heartbeat_seconds: float | None = None,
         credential_retry_minutes: int = 15,
         max_per_cycle: int = 5,
+        result_handler: Any | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self.fiscal_service = fiscal_service
@@ -36,6 +37,7 @@ class FiscalOutboxWorker:
         self.credential_retry_minutes = max(1, int(credential_retry_minutes))
         self.max_per_cycle = max(1, int(max_per_cycle))
         self.logger = logger or logging.getLogger("NabiCode.FiscalOutboxWorker")
+        self.result_handler = result_handler
         self.worker_id = (
             f"{socket.gethostname()}-{os.getpid()}-{uuid.uuid4().hex[:12]}"
         )
@@ -87,7 +89,7 @@ class FiscalOutboxWorker:
             worker_id=self.worker_id,
             lease_seconds=self.lease_seconds,
             now=now,
-            operations=("autorizacao", "recibo"),
+            operations=("autorizacao", "recibo", "evento"),
         )
         reconciliation = False
         if claimed is None:
@@ -154,6 +156,8 @@ class FiscalOutboxWorker:
             if not processed:
                 raise RuntimeError("O item reivindicado não foi processado.")
             result = processed[0]
+            if self.result_handler is not None:
+                self.result_handler(dict(result))
             self.logger.info(
                 "process_result worker_id=%s item=%s status=%s cstat=%s recibo=%s mensagem=%s",
                 self.worker_id, item_id, result.get("status", ""),

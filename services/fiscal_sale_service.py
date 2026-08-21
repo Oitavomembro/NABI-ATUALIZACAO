@@ -396,6 +396,11 @@ class FiscalSaleService:
             raise ValueError(
                 "Esta venda possui documento autorizado. Cancele pela Central Fiscal antes de reverter estoque e financeiro."
             )
+        if status in {"CANCELAMENTO_PENDENTE", "PROCESSANDO", "RESPOSTA_DESCONHECIDA"}:
+            raise ValueError(
+                "O documento possui cancelamento fiscal pendente ou resposta desconhecida. "
+                "O estorno comercial só pode ocorrer após confirmação da SEFAZ."
+            )
         if status == "CANCELADO":
             raise ValueError("O documento fiscal desta venda já está cancelado.")
         outbox_exists = connection.execute(

@@ -36,6 +36,7 @@ from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessServ
 from services.fiscal_preflight_service import FiscalPreflightService
 from services.fiscal_onboarding_service import FiscalOnboardingService
 from services.fiscal_outbox_worker import FiscalOutboxWorker
+from services.fiscal_cancellation_service import FiscalCancellationService
 from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -779,6 +780,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             conectar_banco, estoque_service=ESTOQUE_SERVICE,
             financeiro_service=FINANCEIRO_SERVICE, pdv_service=self.pdv_service
         )
+        def cancel_commercial_after_fiscal(sale_id, actor):
+            self.pdv_transaction_service.cancel_sale(
+                int(sale_id), user=str(actor or "Sistema"),
+                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+            )
+            self.fiscal_sale_service.finalize_local_cancellation(
+                sale_id=int(sale_id), actor=str(actor or "Sistema")
+            )
+        self.fiscal_cancellation_service = FiscalCancellationService(
+            self.fiscal_service,
+            cancel_commercial_sale=cancel_commercial_after_fiscal,
+        )
+        self.fiscal_outbox_worker.result_handler = (
+            self.fiscal_cancellation_service.handle_worker_result
+        )
+        self.fiscal_cancellation_service.recover_pending_reversals()
         self.modo_pdv = self.pdv_service.normalizar_modo(obter_config("pdv_modo") or "BALCAO")
         self.security.bootstrap_admin(obter_config("admin_senha_hash"))
         # Migração corretiva 2.4.42: o login de abertura fica DESATIVADO em toda
@@ -5926,38 +5943,68 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         window.geometry("1080x680")
         window.minsize(900, 560)
         window.configure(fg_color="#0d1117")
-        window.grid_rowconfigure(1, weight=1)
+        window.grid_rowconfigure(2, weight=1)
         window.grid_columnconfigure(0, weight=1)
         ctk.CTkLabel(
             window, text=f"VENDAS DE HOJE — {datetime.now().strftime('%d/%m/%Y')}",
             font=ctk.CTkFont(size=21, weight="bold"), text_color=self.cor_acento,
         ).grid(row=0, column=0, sticky="w", padx=18, pady=(16, 8))
+        filters = ctk.CTkFrame(window, fg_color="transparent")
+        filters.grid(row=1, column=0, sticky="ew", padx=18, pady=(0, 4))
+        filters.grid_columnconfigure(0, weight=1)
+        search_var = tk.StringVar()
+        search_entry = ctk.CTkEntry(
+            filters, textvariable=search_var,
+            placeholder_text="Buscar por número, série, chave, cliente, horário, valor ou modelo",
+        )
+        search_entry.grid(row=0, column=0, sticky="ew")
         table_frame = ctk.CTkFrame(window, fg_color="#161b22")
-        table_frame.grid(row=1, column=0, sticky="nsew", padx=18, pady=6)
+        table_frame.grid(row=2, column=0, sticky="nsew", padx=18, pady=6)
         table_frame.grid_rowconfigure(0, weight=1); table_frame.grid_columnconfigure(0, weight=1)
-        columns = ("id", "tipo", "hora", "valor", "pagamento", "fiscal", "modelo")
+        columns = ("id", "tipo", "hora", "autorizada", "valor", "pagamento", "fiscal", "modelo", "uf", "ambiente", "serie", "chave", "protocolo")
         table = ttk.Treeview(table_frame, columns=columns, show="headings", selectmode="browse")
         for key, title, width in (
-            ("id", "Número", 80), ("tipo", "Tipo", 105), ("hora", "Data / hora", 155), ("valor", "Total", 110),
+            ("id", "Número", 80), ("tipo", "Tipo", 105), ("hora", "Data / hora", 155),
+            ("autorizada", "Autorizada em", 155), ("valor", "Total", 110),
             ("pagamento", "Situação", 130), ("fiscal", "Documento fiscal", 170), ("modelo", "Modelo", 90),
+            ("uf", "UF", 50), ("ambiente", "Ambiente", 115), ("serie", "Série", 65),
+            ("chave", "Chave de acesso", 310),
+            ("protocolo", "Protocolo", 155),
         ):
             table.heading(key, text=title); table.column(key, width=width, anchor="center")
         table.grid(row=0, column=0, sticky="nsew", padx=(8, 0), pady=8)
         scrollbar = ttk.Scrollbar(table_frame, orient="vertical", command=table.yview)
         scrollbar.grid(row=0, column=1, sticky="ns", padx=(0, 8), pady=8)
-        table.configure(yscrollcommand=scrollbar.set)
+        horizontal = ttk.Scrollbar(table_frame, orient="horizontal", command=table.xview)
+        horizontal.grid(row=1, column=0, sticky="ew", padx=8, pady=(0, 8))
+        table.configure(yscrollcommand=scrollbar.set, xscrollcommand=horizontal.set)
         rows_by_iid = {}
 
         def load():
             for iid in table.get_children(): table.delete(iid)
             rows_by_iid.clear()
+            wanted = search_var.get().strip().casefold()
             for row in self.pdv_transaction_service.list_sales_for_day():
+                key = str(row.get("access_key") or "")
+                searchable = " ".join(str(row.get(name) or "") for name in (
+                    "id", "descricao", "data", "valor", "status_pagamento",
+                    "fiscal_status", "fiscal_model", "access_key", "protocol",
+                    "fiscal_environment", "fiscal_authorized_at", "cliente_id",
+                )).casefold()
+                if wanted and wanted not in searchable:
+                    continue
                 iid = f"venda-{row['id']}"; row["record_type"] = "VENDA"; rows_by_iid[iid] = row
                 fiscal_status = row.get("fiscal_status") or "NÃO FISCAL"
+                fiscal_display = "AUTORIZADA" if fiscal_status == "AUTORIZADO" else fiscal_status
+                uf_codes = {"29": "BA", "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO", "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL", "28": "SE", "31": "MG", "32": "ES", "33": "RJ", "35": "SP", "41": "PR", "42": "SC", "43": "RS", "50": "MS", "51": "MT", "52": "GO", "53": "DF"}
                 table.insert("", "end", iid=iid, values=(
-                    f"#{row['id']}", "VENDA", row.get("data", ""), f"R$ {float(row['valor']):.2f}",
-                    row.get("status_pagamento") or "—", fiscal_status,
+                    f"#{row['id']}", "VENDA", row.get("data", ""), row.get("fiscal_authorized_at") or "—",
+                    f"R$ {float(row['valor']):.2f}", row.get("status_pagamento") or "—", fiscal_display,
                     f"Modelo {row.get('fiscal_model')}" if row.get("fiscal_model") else "—",
+                    uf_codes.get(key[:2], "—") if len(key) == 44 else "—",
+                    row.get("fiscal_environment") or "—",
+                    key[22:25] if len(key) == 44 else "—", key or "—",
+                    row.get("protocol") or "—",
                 ), tags=("cancelada",) if str(row.get("status_pagamento")).upper() == "CANCELADO" else ())
             today = datetime.now().date().isoformat()
             for document in self.pdv_service.listar_documentos("ORCAMENTO"):
@@ -5967,7 +6014,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 rows_by_iid[iid] = {"record_type": "ORCAMENTO", "document": document}
                 table.insert("", "end", iid=iid, values=(
                     document.id, "ORÇAMENTO", str(document.criada_em).replace("T", " ")[:19],
-                    f"R$ {float(document.total):.2f}", "ABERTO", "SEM VALOR FISCAL", "—",
+                    "—", f"R$ {float(document.total):.2f}", "ABERTO", "SEM VALOR FISCAL", "—",
+                    "—", "—", "—", "—", "—", "—",
                 ), tags=("orcamento",))
             table.tag_configure("cancelada", foreground="#8b949e", background="#2d1618")
             table.tag_configure("orcamento", foreground="#ffffff", background="#5b4300")
@@ -5999,11 +6047,39 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showinfo("Vendas do dia", "Esta venda já está cancelada.", parent=window); return
             if str(row.get("fiscal_status") or "").upper() == "AUTORIZADO":
                 self._cancelar_venda_fiscal_autorizada_pdv(row, parent=window, on_complete=load)
+            elif str(row.get("fiscal_status") or "").strip():
+                messagebox.showinfo(
+                    "Cancelamento fiscal",
+                    "Este documento não permite cancelamento local. Consulte o estado fiscal exibido.",
+                    parent=window,
+                )
             else:
                 self._cancelar_venda_local_pdv(row, parent=window, on_complete=load)
 
         actions = ctk.CTkFrame(window, fg_color="transparent")
-        actions.grid(row=2, column=0, sticky="ew", padx=18, pady=(6, 14))
+        actions.grid(row=3, column=0, sticky="ew", padx=18, pady=(6, 14))
+        deadline_label = ctk.CTkLabel(actions, text="Selecione um documento fiscal.", text_color="#8b949e")
+        deadline_label.pack(side="left", padx=(12, 0))
+
+        def update_deadline(_event=None):
+            row = selected()
+            if not row or not str(row.get("fiscal_status") or "").strip():
+                deadline_label.configure(text="Venda não fiscal: cancelamento somente local.")
+                return
+            try:
+                eligibility = self.fiscal_cancellation_service.eligibility(
+                    int(row["id"]), user_has_permission=True
+                )
+                seconds = int(eligibility["remaining_seconds"])
+                deadline_label.configure(
+                    text=f"Restam {seconds // 60} min {seconds % 60:02d} s para cancelamento normal."
+                )
+            except (ValueError, PermissionError) as exc:
+                deadline_label.configure(text=str(exc))
+
+        table.bind("<<TreeviewSelect>>", update_deadline)
+        ctk.CTkButton(filters, text="Buscar", width=100, command=load).grid(row=0, column=1, padx=(8, 0))
+        search_entry.bind("<Return>", lambda _event: load())
         ctk.CTkButton(actions, text="Atualizar", fg_color="#30363d", command=load).pack(side="left")
         ctk.CTkButton(actions, text="Reimprimir comprovante", fg_color="#1f6feb", command=reprint).pack(side="right")
         ctk.CTkButton(actions, text="Cancelar venda selecionada", fg_color="#da3633", command=cancel).pack(side="right", padx=8)
@@ -7338,13 +7414,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _cancelar_venda_fiscal_autorizada_pdv(self, venda, *, parent=None, on_complete=None):
         parent = parent or getattr(self, "pdv_window", self)
-        if not self._autorizar("fiscal", "configure"):
+        if not self._autorizar("fiscal", "cancel"):
             return
         if not messagebox.askyesno(
             "Condição legal do cancelamento",
             ("Confirme que a mercadoria NÃO saiu do estabelecimento.\n\n"
-             "Na Bahia, a NFC-e comum deve ser cancelada em até 30 minutos; "
-             "a SEFAZ também validará o prazo e as demais condições. Continuar?"),
+             "O NabiCode verificará o prazo específico da UF e do modelo. "
+             "A SEFAZ também validará as demais condições. Continuar?"),
             parent=parent,
         ):
             return
@@ -7366,44 +7442,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         sale_id = int(venda["id"])
         actor = self._usuario_financeiro()
 
-        def work(_context):
-            self.fiscal_sale_service.cancel_authorized(
-                sale_id=sale_id, password=password, actor=actor, justification=justification
+        try:
+            queued = self.fiscal_cancellation_service.request(
+                sale_id=sale_id, password=password, actor=actor,
+                justification=justification, no_circulation_confirmed=True,
+                user_has_permission=True,
             )
-            self.pdv_transaction_service.cancel_sale(
-                sale_id, user=actor,
-                before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
-            )
-            self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id, actor=actor)
-            return sale_id
-
-        task = TASK_MANAGER.submit("Cancelar venda fiscal autorizada", work)
+        except (ValueError, PermissionError, RuntimeError) as exc:
+            messagebox.showerror("Cancelamento fiscal não solicitado", str(exc), parent=parent)
+            return
+        self.fiscal_outbox_worker.wake()
         self.mostrar_notificacao(
-            "Cancelamento fiscal",
-            "Solicitação enviada em segundo plano. A venda só será revertida após aceitação da SEFAZ.",
+            "Cancelamento fiscal pendente",
+            f"Solicitação #{queued['id']} gravada com segurança. O estorno ocorrerá somente após aceitação da SEFAZ.",
         )
-
-        def follow():
-            current = TASK_MANAGER.get(task.id)
-            try:
-                exists = parent.winfo_exists()
-            except (AttributeError, tk.TclError):
-                exists = False
-            if current is None or not exists:
-                return
-            if current.status == TaskStatus.COMPLETED:
-                self.mostrar_notificacao(
-                    "Cancelamento fiscal aceito", f"Venda #{sale_id} cancelada e revertida.", nivel="success"
-                )
-                if on_complete: on_complete()
-                return
-            if current.status in {TaskStatus.FAILED, TaskStatus.CANCELLED}:
-                messagebox.showerror(
-                    "Cancelamento fiscal não concluído", current.error or "A SEFAZ não aceitou o evento.", parent=parent
-                )
-                return
-            parent.after(150, follow)
-        parent.after(100, follow)
+        if on_complete:
+            on_complete()
 
     def cancelar_venda_pdv(self):
         rows = self.pdv_transaction_service.list_cancellable_sales(limit=20)

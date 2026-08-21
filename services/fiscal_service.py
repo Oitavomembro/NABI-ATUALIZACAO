@@ -3202,6 +3202,44 @@ class FiscalService:
                     retry = max(1, int(record.get("retry_minutes", 5)))
                     record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
                     record["last_error"] = ""
+                elif (
+                    operation == "consulta"
+                    and str(record.get("reconciliation_for") or "") == "evento_cancelamento"
+                    and response.status_code in {"101", "151", "155"}
+                ):
+                    original_xml = base64.b64decode(
+                        str(record.get("original_xml_b64") or "")
+                    )
+                    reconciled = FiscalResponse(
+                        True, response.status_code, response.message,
+                        response.protocol, response.receipt, queued_key, response.raw_xml,
+                    )
+                    event_record = self.register_event(
+                        access_key=queued_key, event_type="CANCELAMENTO",
+                        response=reconciled, request_xml=original_xml,
+                        actor=str(record.get("actor") or "Sistema"),
+                        metadata={"reconciled": True},
+                    )
+                    record["event_record"] = event_record
+                    record["event_success"] = True
+                    record["status"] = "CONCLUIDO"
+                    record["completed_at"] = current.isoformat()
+                    self._sync_sale_document(record, status="CANCELADO_FISCAL")
+                elif (
+                    operation == "consulta"
+                    and str(record.get("reconciliation_for") or "") == "evento_cancelamento"
+                    and response.status_code in self.AUTHORIZED_STATUS
+                ):
+                    record["event_success"] = False
+                    record["status"] = "FALHA"
+                    record["failed_at"] = current.isoformat()
+                    record["last_error"] = (
+                        "Consulta confirmou que o documento permanece autorizado; "
+                        "cancelamento não confirmado."
+                    )
+                    self._sync_sale_document(
+                        record, status="AUTORIZADO", error=record["last_error"]
+                    )
                 elif response.success:
                     is_authorization_result = operation in {"autorizacao", "recibo"} or (
                         operation == "consulta"
@@ -3236,14 +3274,53 @@ class FiscalService:
                                 reservation_id, access_key=queued_key,
                                 actor=str(record.get("actor", "")),
                             )
+                    elif operation == "evento":
+                        event_type = str(record.get("event_type") or "EVENTO").upper()
+                        event_record = self.register_event(
+                            access_key=queued_key,
+                            event_type=event_type,
+                            response=response,
+                            request_xml=xml,
+                            actor=str(record.get("actor") or "Sistema"),
+                            metadata={
+                                "justification": str(record.get("justification") or ""),
+                                "no_circulation_confirmed": bool(
+                                    record.get("no_circulation_confirmed")
+                                ),
+                                "requested_at": str(record.get("requested_at") or ""),
+                            },
+                        )
+                        record["event_record"] = event_record
+                        record["event_success"] = True
+                        if event_type == "CANCELAMENTO":
+                            self._sync_sale_document(
+                                record, status="CANCELADO_FISCAL",
+                            )
                     record["status"] = "CONCLUIDO"
                     record["completed_at"] = current.isoformat()
-                    self._sync_sale_document(record, status="AUTORIZADO", protocol=response.protocol)
+                    if is_authorization_result:
+                        self._sync_sale_document(
+                            record, status="AUTORIZADO", protocol=response.protocol
+                        )
                 else:
                     record["status"] = "FALHA"
                     record["failed_at"] = current.isoformat()
                     record["last_error"] = f"{response.status_code}: {response.message}"
-                    self._sync_sale_document(record, status="FALHA", error=record["last_error"])
+                    if operation == "evento" and str(record.get("event_type") or "").upper() == "CANCELAMENTO":
+                        event_record = self.register_event(
+                            access_key=queued_key, event_type="CANCELAMENTO",
+                            response=response, request_xml=xml,
+                            actor=str(record.get("actor") or "Sistema"),
+                            metadata={"justification": str(record.get("justification") or "")},
+                        )
+                        record["event_record"] = event_record
+                        record["event_success"] = False
+                        self._sync_sale_document(
+                            record, status="AUTORIZADO", protocol="",
+                            error=record["last_error"],
+                        )
+                    else:
+                        self._sync_sale_document(record, status="FALHA", error=record["last_error"])
             except FiscalTransmissionUnknownError as exc:
                 record["status"] = "RESPOSTA_DESCONHECIDA"
                 record["unknown_since"] = current.isoformat()
@@ -3297,7 +3374,13 @@ class FiscalService:
         key = self._normalize_access_key(target.get("access_key", ""))
         receipt = self._digits(target.get("receipt", ""))
         environment = str(target.get("environment") or "HOMOLOGACAO")
-        if receipt:
+        original_operation = str(target.get("operation") or "").lower()
+        event_type = str(target.get("event_type") or "").upper()
+        if original_operation == "evento" and event_type == "CANCELAMENTO" and len(key) == 44:
+            target["operation"] = "consulta"
+            query_xml = self.build_query_xml(access_key=key, environment=environment)
+            target["reconciliation_for"] = "evento_cancelamento"
+        elif receipt:
             target["operation"] = "recibo"
             query_xml = self.build_receipt_query_xml(receipt=receipt, environment=environment)
         elif len(key) == 44:
@@ -3306,7 +3389,8 @@ class FiscalService:
         else:
             raise ValueError("Não há recibo nem chave válida para reconciliar o documento.")
         target["xml_b64"] = base64.b64encode(query_xml).decode("ascii")
-        target["reconciliation_for"] = "autorizacao"
+        if not target.get("reconciliation_for"):
+            target["reconciliation_for"] = "autorizacao"
         target["reconciliation_started_at"] = datetime.now(timezone.utc).isoformat()
         FiscalOutboxService(self.connection_factory).save_claimed_record(
             target, worker_id=worker_id, finish=False
@@ -3347,8 +3431,12 @@ class FiscalService:
                 return
             conn.execute(
                 """UPDATE fiscal_sale_documents
-                      SET status=?,protocol=?,last_error=?,updated_at=? WHERE access_key=?""",
-                (status, str(protocol or ""), str(error or ""), datetime.now(timezone.utc).isoformat(), access_key),
+                      SET status=?,protocol=CASE WHEN ?='' THEN protocol ELSE ? END,
+                          last_error=?,updated_at=? WHERE access_key=?""",
+                (
+                    status, str(protocol or ""), str(protocol or ""), str(error or ""),
+                    datetime.now(timezone.utc).isoformat(), access_key,
+                ),
             )
             conn.commit()
         finally:

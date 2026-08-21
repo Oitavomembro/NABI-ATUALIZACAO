@@ -138,6 +138,16 @@ class FiscalOutboxWorkerTests(unittest.TestCase):
         self.assertFalse(thread.is_alive())
         self.assertEqual(self.processor.calls, 1)
 
+    def test_dois_workers_nao_processam_mesmo_cancelamento(self):
+        self.enqueue(operation="evento"); self.processor.block = True
+        first = self.worker(); second = self.worker()
+        thread = threading.Thread(target=first.run_once)
+        thread.start(); self.assertTrue(self.processor.started.wait(2))
+        self.assertIsNone(second.run_once())
+        self.processor.release.set(); thread.join(2)
+        self.assertFalse(thread.is_alive())
+        self.assertEqual(self.processor.calls, 1)
+
     def test_heartbeat_renova_lease_e_impede_segundo_worker_apos_prazo_original(self):
         self.enqueue(); self.processor.block = True
         first = self.worker(lease_seconds=1, heartbeat_seconds=0.01)

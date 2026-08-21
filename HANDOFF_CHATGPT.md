@@ -1,5 +1,49 @@
 # HANDOFF NABICODE
 
+## ATUALIZAÇÃO — MISSÃO FISCAL 05 / CANCELAMENTO FISCAL SEGURO
+
+Base `81520ed`, branch `dev/nabicode-2.5.1`. A arquitetura anterior já possuía
+XML de evento 110111, assinatura, validação, registro fiscal e estorno comercial
+transacional, mas a interface transmitia o evento diretamente e podia iniciar o
+estorno sem a confirmação segura da SEFAZ. Eventos também não participavam do
+claim/lease e da reconciliação da outbox.
+
+Foi criado `FiscalCancellationService`, que separa solicitação fiscal, confirmação
+SEFAZ e estorno comercial. A elegibilidade exige permissão `fiscal:cancel`, estado
+AUTORIZADO, chave de 44 dígitos, protocolo, XML autorizado íntegro, regra suportada,
+prazo vigente, justificativa entre 15 e 255 caracteres e declaração explícita de
+que a mercadoria não circulou. O XML autorizado original nunca é removido.
+
+As regras versionadas desta entrega são somente HOMOLOGAÇÃO na Bahia: NFC-e modelo
+65 em até 30 minutos e NF-e modelo 55 em até 24 horas, resolvidas separadamente por
+UF/modelo/evento/ambiente. Outras UFs/situações são recusadas, não inferidas. As
+fontes oficiais e os limites estão registrados em
+`docs/CANCELAMENTO_FISCAL_BAHIA.md`. SAT, MFe, cancelamento extemporâneo e evento
+110112 permanecem fora do escopo.
+
+O evento usa a outbox existente com identidade determinística, claim/lease,
+heartbeat e proteção contra dois cliques/dois workers. Os estados incluem
+`CANCELAMENTO_PENDENTE`, `RESPOSTA_DESCONHECIDA`, `CANCELADO_FISCAL` e
+`FISCAL_CANCELADO_ESTORNO_PENDENTE`. Timeout após possível transmissão nunca gera
+reenvio cego: primeiro ocorre reconciliação. Rejeição restaura o documento para
+AUTORIZADO e preserva cStat/xMotivo e os arquivos/hashes do evento. Somente um
+retorno ou reconciliação conclusiva de cancelamento aceito dispara o estorno
+comercial existente de estoque, Caixa, financeiro, crediário, contas a receber e
+saldo do cliente. Falha interna posterior fica recuperável no reinício.
+
+A visão “Vendas do dia” do PDV permite busca e apresenta venda/orçamento, modelo,
+UF, ambiente, número/série, chave, valor, emissão, autorização, protocolo, estado
+fiscal e comercial, além do contador do prazo. Venda COMERCIAL continua usando
+somente cancelamento local e não cria evento, certificado, XML ou acesso à SEFAZ.
+PRODUÇÃO continua bloqueada antes de rede, inclusive para cancelamento.
+
+Não houve migration ou alteração de schema. Testes focados: 104 aprovados. Suíte
+completa funcional: 1.407 aprovados, 1 ignorado e 32 subtestes; o único erro foi o
+teste Windows DPAPI no token restrito do runtime Codex, limitação ambiental já
+documentada e sem relação com esta missão. Permanecem necessários homologação
+manual com certificado de teste e suporte normativo explícito antes de incluir
+outra UF, situação especial ou PRODUÇÃO.
+
 ## ATUALIZAÇÃO — MISSÃO FISCAL 04 / HARDENING DO WORKER
 
 `FiscalService.transmit()` agora rejeita `PRODUCAO` diretamente, antes de

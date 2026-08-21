@@ -27,6 +27,7 @@ from services.fiscal_service import (
     InvalidCertificatePasswordError,
 )
 from services.fiscal_preflight_service import FiscalPreflightService
+from services.fiscal_outbox_service import FiscalOutboxService
 from services.pdv_service import PDVService
 
 
@@ -2195,6 +2196,23 @@ class FiscalEventEligibilityTests(unittest.TestCase):
     def tearDown(self):
         self.tmp.cleanup()
 
+    def _enqueue_cancel_event(self):
+        xml, _ = self.service.build_event_xml(
+            event_type="CANCELAMENTO", access_key=self.key, sequence=1,
+            actor_document="12345678000195", protocol="12345",
+            justification="CANCELAMENTO COM JUSTIFICATIVA", environment="HOMOLOGACAO",
+        )
+        encoded = base64.b64encode(xml).decode("ascii")
+        return FiscalOutboxService(self.service.connection_factory).enqueue_record({
+            "operation": "evento", "access_key": self.key, "model": "55",
+            "environment": "HOMOLOGACAO", "xml_b64": encoded,
+            "original_xml_b64": encoded, "actor": "gerente",
+            "event_type": "CANCELAMENTO", "event_sequence": 1,
+            "justification": "CANCELAMENTO COM JUSTIFICATIVA",
+            "no_circulation_confirmed": True,
+            "legacy_id": f"cancelamento:{self.key}:1",
+        })
+
     def test_cancelamento_exige_protocolo_do_documento(self):
         with self.assertRaisesRegex(ValueError, "protocolo de autorização"):
             self.service.validate_event_eligibility(access_key=self.key, event_type="CANCELAMENTO", sequence=1, protocol="999")
@@ -2252,6 +2270,64 @@ class FiscalEventEligibilityTests(unittest.TestCase):
         )
         document = [row for row in self.service.list_documents() if row["access_key"] == self.key][-1]
         self.assertEqual(document["status"], "AUTORIZADO")
+
+    def test_outbox_evento_aceito_registra_xml_retorno_e_auditoria(self):
+        self._enqueue_cancel_event()
+        self.service.transmit = Mock(return_value=FiscalResponse(
+            True, "135", "Evento registrado", "CANCEL-OUTBOX",
+            access_key=self.key,
+            raw_xml="<ret><cStat>135</cStat><nProt>CANCEL-OUTBOX</nProt></ret>",
+        ))
+        result = self.service.process_transmission_queue(password="teste")[0]
+        self.assertEqual(result["status"], "CONCLUIDO")
+        self.assertTrue(result["event_success"])
+        event = self.service.list_events(self.key)[-1]
+        self.assertEqual(event["status_code"], "135")
+        self.assertTrue(Path(event["request_path"]).is_file())
+        self.assertTrue(Path(event["response_path"]).is_file())
+
+    def test_outbox_evento_rejeitado_preserva_documento_autorizado(self):
+        self._enqueue_cancel_event()
+        self.service.transmit = Mock(return_value=FiscalResponse(
+            False, "573", "Duplicidade de evento", "",
+            raw_xml="<ret><cStat>573</cStat><xMotivo>Duplicidade</xMotivo></ret>",
+        ))
+        result = self.service.process_transmission_queue(password="teste")[0]
+        self.assertEqual(result["status"], "FALHA")
+        self.assertFalse(result["event_success"])
+        document = self.service.list_documents()[-1]
+        self.assertEqual(document["status"], "AUTORIZADO")
+
+    def test_timeout_de_evento_vira_desconhecido_sem_reenvio_cego(self):
+        self._enqueue_cancel_event()
+        self.service.transmit = Mock(side_effect=FiscalTransmissionUnknownError("timeout"))
+        first = self.service.process_transmission_queue(password="teste")[0]
+        self.assertEqual(first["status"], "RESPOSTA_DESCONHECIDA")
+        self.assertEqual(self.service.process_transmission_queue(password="teste"), [])
+        self.assertEqual(self.service.transmit.call_count, 1)
+
+    def test_reconciliacao_posterior_confirma_cancelamento_sem_reenviar_evento(self):
+        queued = self._enqueue_cancel_event()
+        self.service.transmit = Mock(side_effect=FiscalTransmissionUnknownError("timeout"))
+        self.service.process_transmission_queue(password="teste")
+        outbox = FiscalOutboxService(self.service.connection_factory)
+        claimed = outbox.claim_unknown(worker_id="reconciliador", lease_seconds=60)
+        prepared = self.service.prepare_claimed_reconciliation(
+            claimed, worker_id="reconciliador"
+        )
+        self.assertEqual(prepared["operation"], "consulta")
+        self.assertEqual(prepared["reconciliation_for"], "evento_cancelamento")
+        self.service.transmit = Mock(return_value=FiscalResponse(
+            False, "101", "Cancelamento homologado", "CANCEL-REC",
+            access_key=self.key,
+            raw_xml="<ret><cStat>101</cStat><nProt>CANCEL-REC</nProt></ret>",
+        ))
+        result = self.service.process_transmission_queue(
+            password="teste", queue_ids=[queued["id"]],
+            claimed_worker_id="reconciliador",
+        )[0]
+        self.assertEqual(result["status"], "CONCLUIDO")
+        self.assertTrue(result["event_success"])
 
 class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
     def setUp(self):

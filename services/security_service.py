@@ -16,7 +16,7 @@ DEFAULT_PERMISSIONS = {
     "GERENTE": {
         "dashboard": ["view"], "vendas": ["view", "create", "cancel"],
         "clientes": ["view", "create", "edit"], "produtos": ["view", "create", "edit"],
-        "financeiro": ["view", "create", "pay", "reconcile", "report"], "relatorios": ["view", "generate", "export", "schedule"], "compras": ["view", "create", "receive"], "fiscal": ["view", "configure", "transmit"], "configs": ["view"], "technical": [],
+        "financeiro": ["view", "create", "pay", "reconcile", "report"], "relatorios": ["view", "generate", "export", "schedule"], "compras": ["view", "create", "receive"], "fiscal": ["view", "configure", "transmit", "cancel"], "configs": ["view"], "technical": [],
     },
     "OPERADOR": {
         "dashboard": ["view"], "vendas": ["view", "create"],
@@ -281,6 +281,10 @@ class SecurityService:
         for name, permissions in DEFAULT_PERMISSIONS.items():
             if name not in state["profiles"]:
                 state["profiles"][name] = permissions; changed = True
+        manager_fiscal = state["profiles"].get("GERENTE", {}).get("fiscal")
+        if isinstance(manager_fiscal, list) and "cancel" not in manager_fiscal:
+            manager_fiscal.append("cancel")
+            changed = True
         if changed:
             self._save(state)
 

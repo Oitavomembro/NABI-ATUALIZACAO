@@ -271,6 +271,18 @@ class FiscalSaleServiceTests(unittest.TestCase):
             self.service.prepare_local_cancellation(connection, 23)
         connection.close()
 
+    def test_cancelamento_local_bloqueia_cancelamento_fiscal_pendente(self):
+        draft = FiscalSaleDraft("RES-P", "29" + "5" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 24, draft)
+        connection.execute(
+            "UPDATE fiscal_sale_documents SET status='CANCELAMENTO_PENDENTE' WHERE sale_id=24"
+        )
+        connection.commit()
+        with self.assertRaisesRegex(ValueError, "estorno comercial"):
+            self.service.prepare_local_cancellation(connection, 24)
+        connection.close()
+
     def test_cancelamento_autorizado_registra_evento_antes_da_reversao(self):
         draft = FiscalSaleDraft("RES-3", "29" + "2" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
         connection = sqlite3.connect(self.db)

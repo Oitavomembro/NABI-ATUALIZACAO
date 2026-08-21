@@ -78,6 +78,10 @@ class FiscalOutboxService:
             row = connection.execute(
                 "SELECT * FROM fiscal_outbox WHERE fiscal_document_id=?", (int(fiscal_document_id),)
             ).fetchone()
+        elif legacy_id:
+            row = connection.execute(
+                "SELECT * FROM fiscal_outbox WHERE legacy_id=?", (str(legacy_id),)
+            ).fetchone()
         elif cursor.lastrowid:
             row = connection.execute(
                 "SELECT * FROM fiscal_outbox WHERE id=?", (int(cursor.lastrowid),)
@@ -381,7 +385,7 @@ class FiscalOutboxService:
             row = connection.execute(
                 """SELECT id FROM fiscal_outbox
                     WHERE status='RESPOSTA_DESCONHECIDA'
-                      AND operation IN ('autorizacao','recibo','consulta')
+                      AND operation IN ('autorizacao','recibo','consulta','evento')
                       AND (next_attempt_at IS NULL OR next_attempt_at='' OR next_attempt_at<=?)
                     ORDER BY updated_at,id LIMIT 1""",
                 (current.isoformat(),),
