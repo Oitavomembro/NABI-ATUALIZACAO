@@ -11170,7 +11170,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 list_box.insert(
                     "end",
                     f"#{rule.id}  {rule.name} | {rule.tax_regime} | BA → {rule.destination_state} | "
-                    f"NCM {rule.ncm_prefix} | CEST {rule.cest or '-'} | CST/CSOSN {rule.icms_code}\n",
+                    f"NCM {rule.ncm_prefix} | CEST {rule.cest or '-'} | CST/CSOSN {rule.icms_code} | "
+                    f"cBenef {rule.benefit_code or '-'}\n",
                 )
             list_box.configure(state="disabled")
 
@@ -11198,7 +11199,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ("difal_interstate_rate", "DIFAL: alíquota interestadual (%)"),
             ("difal_fcp_rate", "DIFAL: FCP do destino (%)"),
         ): add_field(name, label, "0")
-        add_field("benefit_code", "Código de benefício fiscal (quando aplicável)")
+        add_field(
+            "benefit_code",
+            "Código de benefício fiscal aprovado (8 ou 10 caracteres; vazio quando não aplicável)",
+        )
         add_field("approved_by", "Responsável contábil que aprovou")
         add_field("approved_at", "Data da aprovação (AAAA-MM-DD)", datetime.now().date().isoformat())
         status = ctk.CTkLabel(content, text="", wraplength=900, justify="left")

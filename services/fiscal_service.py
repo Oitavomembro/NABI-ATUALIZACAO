@@ -2319,7 +2319,7 @@ class FiscalService:
             if tax_rule_service is not None and destination_state and tax_regime:
                 configured_rule = tax_rule_service.resolve(
                     tax_regime=tax_regime, ncm=ncm, cest=profile["cest"],
-                    destination_state=destination_state,
+                    destination_state=destination_state, operation_kind="VENDA",
                 )
             fiscal_item = {
                 "product_id": product_id,

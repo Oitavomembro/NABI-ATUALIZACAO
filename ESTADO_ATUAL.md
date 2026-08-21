@@ -1543,3 +1543,10 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o sistema continua sem inventar benefício: o código precisa vir de regra cadastrada e aprovada pela contabilidade;
 - XML de regressão foi gerado, assinado com certificado temporário e validado pelo schema oficial;
 - 136 testes fiscais e 10 subtestes passaram no conjunto ampliado; as 3 novas regressões passaram isoladamente; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.13 — regra fiscal de venda explícita e cBenef legível
+
+- a resolução da matriz passa a filtrar também a natureza da operação, impedindo que uma regra futura de outra finalidade seja aplicada silenciosamente a uma venda;
+- nesta fase, somente regras `VENDA` podem ser cadastradas e resolvidas; devoluções continuam no fluxo fiscal próprio já existente;
+- a tela explica que `cBenef` deve possuir 8 ou 10 caracteres quando aplicável e mostra o código na relação de regras ativas;
+- 9 regressões de matriz, preparação do item, XML e interface aprovadas em `NABICODE_PROFILE=TESTE`; `git diff --check` aprovado.

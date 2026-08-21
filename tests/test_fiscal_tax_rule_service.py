@@ -52,6 +52,8 @@ def test_regra_exige_aprovacao_contabil_e_nao_aceita_outra_uf_emitente(service):
         service.save(rule(approved_by=""))
     with pytest.raises(ValueError, match="somente para a Bahia"):
         service.save(rule(issuer_state="SP"))
+    with pytest.raises(ValueError, match="somente regras tributárias de venda"):
+        service.save(rule(operation_kind="DEVOLUCAO"))
 
 
 def test_icms_st_exige_cest_e_taxas_nao_podem_ser_inventadas(service):
@@ -83,6 +85,10 @@ def test_resolucao_prefere_ncm_e_uf_mais_especificos(service):
     ).id == generic.id
     assert service.resolve(
         tax_regime="LUCRO_REAL", ncm="94036000", destination_state="SE"
+    ) is None
+    assert service.resolve(
+        tax_regime="SIMPLES_NACIONAL", ncm="94036000", destination_state="SE",
+        operation_kind="DEVOLUCAO",
     ) is None
 
 

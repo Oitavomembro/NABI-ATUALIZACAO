@@ -39,6 +39,7 @@ class FiscalTaxRuleService:
         "00", "40", "41", "50", "60",
         "102", "103", "201", "202", "203", "300", "400", "500",
     }
+    VALID_OPERATION_KINDS = {"VENDA"}
 
     def __init__(self, connection_factory) -> None:
         self.connection_factory = connection_factory
@@ -77,6 +78,8 @@ class FiscalTaxRuleService:
             raise ValueError("Esta versão aceita regras de emitente somente para a Bahia.")
         if normalized["tax_regime"] not in cls.VALID_REGIMES:
             raise ValueError("Regime tributário inválido para a regra fiscal.")
+        if normalized["operation_kind"] not in cls.VALID_OPERATION_KINDS:
+            raise ValueError("Esta versão aceita somente regras tributárias de venda.")
         if not 2 <= len(normalized["ncm_prefix"]) <= 8:
             raise ValueError("Informe um prefixo NCM entre 2 e 8 dígitos.")
         if normalized["cest"] and len(normalized["cest"]) != 7:
@@ -143,21 +146,27 @@ class FiscalTaxRuleService:
             if own:
                 connection.close()
 
-    def resolve(self, *, tax_regime: str, ncm: str, cest: str = "", destination_state: str) -> FiscalTaxRule | None:
+    def resolve(
+        self, *, tax_regime: str, ncm: str, cest: str = "",
+        destination_state: str, operation_kind: str = "VENDA",
+    ) -> FiscalTaxRule | None:
         regime = str(tax_regime or "").strip().upper()
         ncm_digits = "".join(ch for ch in str(ncm or "") if ch.isdigit())
         cest_digits = "".join(ch for ch in str(cest or "") if ch.isdigit())
         destination = str(destination_state or "").strip().upper()
+        operation = str(operation_kind or "").strip().upper()
+        if operation not in self.VALID_OPERATION_KINDS:
+            return None
         connection = self.connection_factory()
         try:
             cursor = connection.execute(
                 "SELECT id,name,issuer_state,destination_state,tax_regime,ncm_prefix,cest,operation_kind,"
                 "icms_code,icms_rate,icms_base_reduction,sn_credit_rate,st_mva,st_rate,fcp_st_rate,"
                 "difal_internal_rate,difal_interstate_rate,difal_fcp_rate,benefit_code,approved_by,approved_at "
-                "FROM fiscal_tax_rules WHERE active=1 AND issuer_state='BA' AND tax_regime=? "
+                "FROM fiscal_tax_rules WHERE active=1 AND issuer_state='BA' AND tax_regime=? AND operation_kind=? "
                 "AND destination_state IN (?, '*') ORDER BY LENGTH(ncm_prefix) DESC, "
                 "CASE WHEN destination_state=? THEN 0 ELSE 1 END, id DESC",
-                (regime, destination, destination),
+                (regime, operation, destination, destination),
             )
             for row in cursor.fetchall():
                 rule = FiscalTaxRule(*row)
