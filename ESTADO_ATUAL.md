@@ -1498,3 +1498,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - os campos digitáveis foram substituídos por um calendário visual em português, com navegação por mês e seleção de dia e ano;
 - falhas de consulta agora são registradas e exibidas ao usuário, em vez de o clique parecer não funcionar;
 - 25 testes focados aprovados em `NABICODE_PROFILE=TESTE`; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.08 — seleção antes da listagem fiscal
+
+- clicar em `Ver entradas` ou `Ver saídas` abre somente a área de filtros, sem carregar ou exibir a grade imediatamente;
+- o usuário escolhe o período no calendário e a natureza do movimento antes de consultar;
+- Saídas diferencia vendas fiscais, vendas não fiscais e orçamentos;
+- Entradas diferencia `Entradas fiscais (NF-e/DF-e)`, `Entradas não fiscais` e recebimentos de fichas;
+- a grade aparece somente após `Mostrar resultados`, evitando uma tela cheia de dados que o usuário não solicitou;
+- 25 testes focados, compilação e `git diff --check` aprovados.

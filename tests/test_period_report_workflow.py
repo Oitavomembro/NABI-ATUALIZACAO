@@ -33,10 +33,12 @@ def test_central_fiscal_mostra_escolhas_antes_da_grade():
     assert 'tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)' in block
     assert 'view_mode["value"] in {"ENTRADAS", "TODOS"}' in block
     assert '["Todas as saídas", "Vendas fiscais", "Vendas não fiscais", "Orçamentos"]' in block
-    assert '["Todas as entradas", "NF-e de compras", "Compras não fiscais", "Recebimentos de fichas"]' in block
+    assert '["Todas as entradas", "Entradas fiscais (NF-e/DF-e)", "Entradas não fiscais", "Recebimentos de fichas"]' in block
     assert 'self.pdv_transaction_service.list_sales_for_period(' in block
     assert "period.pack_forget()" in block
     assert "open_date_picker" in block
+    assert 'text="Mostrar resultados"' in block
+    assert "def apply_document_filters" in block
     assert '"FISCAL" if is_fiscal else "NÃO FISCAL"' in block
     assert 'REPORT_SERVICE.generate(\n                        "recebimentos"' in block
 

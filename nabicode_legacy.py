@@ -11384,7 +11384,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     item = tree.insert("", "end", values=("DOCUMENTO", row.get("access_key",""), row.get("status",""), row.get("protocol",""), row.get("created_at",""), row.get("environment","")))
                     rows[item] = dict(row, _kind="DOCUMENTO")
             if view_mode["value"] in {"ENTRADAS", "TODOS"}:
-                if output_choice in {"Todas as entradas", "NF-e de compras", "Todos os movimentos"}:
+                if output_choice in {"Todas as entradas", "Entradas fiscais (NF-e/DF-e)", "Todos os movimentos"}:
                     for row in NFE_IMPORT_SERVICE.listar_importacoes(start_date, end_date):
                         searchable = " ".join(str(row.get(field, "")) for field in ("chave", "numero", "fornecedor_cnpj", "fornecedor_nome", "status", "data_importacao")).casefold()
                         if query and query not in searchable:
@@ -11408,7 +11408,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                             f"NSU {row.get('nsu', '')}", row.get("issued_at", ""), "NACIONAL",
                         ))
                         rows[item] = dict(row, _kind="DFE", processed_path=row.get("path", ""))
-                if output_choice in {"Todas as entradas", "Compras não fiscais", "Todos os movimentos"}:
+                if output_choice in {"Todas as entradas", "Entradas não fiscais", "Todos os movimentos"}:
                     purchases = REPORT_SERVICE.generate(
                         "compras", start_date=start_date, end_date=end_date,
                         actor=self._usuario_relatorios(),
@@ -11456,8 +11456,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 logger.exception("Falha ao carregar entradas e saídas da Central Fiscal")
                 messagebox.showerror("Central Fiscal", f"Não foi possível carregar os movimentos.\n\n{exc}", parent=janela)
 
-        document_search.bind("<Return>", lambda _event: load())
-        ctk.CTkButton(filters, text="Buscar", width=90, command=load).pack(side="left")
+        def apply_document_filters():
+            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)
+            xscroll.pack(fill="x", padx=12, pady=(0, 6), after=tree)
+            yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
+            load()
+
+        document_search.bind("<Return>", lambda _event: apply_document_filters())
+        ctk.CTkButton(
+            filters, text="Mostrar resultados", width=135, fg_color="#2ea043",
+            command=apply_document_filters,
+        ).pack(side="left")
         def selected():
             selection = tree.selection()
             return rows.get(selection[0]) if selection else None
@@ -12370,17 +12379,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             view_mode["value"] = mode
             choices = {
                 "SAIDAS": ["Todas as saídas", "Vendas fiscais", "Vendas não fiscais", "Orçamentos"],
-                "ENTRADAS": ["Todas as entradas", "NF-e de compras", "Compras não fiscais", "Recebimentos de fichas"],
+                "ENTRADAS": ["Todas as entradas", "Entradas fiscais (NF-e/DF-e)", "Entradas não fiscais", "Recebimentos de fichas"],
                 "TODOS": ["Todos os movimentos"],
             }[mode]
             output_filter.configure(values=choices)
             output_filter.set(choices[0])
             period.pack(fill="x", padx=12, pady=(2, 4), before=filters)
             filters.pack(fill="x", padx=12, pady=(0, 8), before=action_panel)
-            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)
-            xscroll.pack(fill="x", padx=12, pady=(0, 6), after=tree)
-            yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
-            load()
+            context_actions.pack_forget()
+            tree.pack_forget()
+            xscroll.pack_forget()
+            yscroll.place_forget()
 
         # A abertura mostra primeiro as escolhas e ações. A grade, que antes
         # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
