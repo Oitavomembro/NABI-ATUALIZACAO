@@ -1525,3 +1525,21 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - os cards abrem somente o espaço de seleção; a grade permanece oculta até `Mostrar resultados`;
 - referências abertas do ERPNext e Odoo orientaram a separação entre documentos de entrada/saída e ações contextuais, sem copiar regras tributárias externas;
 - 37 regressões fiscais, de navegação, relatórios e importação XML aprovadas em `NABICODE_PROFILE=TESTE`; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.11 — segunda auditoria da consulta fiscal
+
+- confirmado que a antiga tela de Compras permanece fora do roteamento e não é empilhada sob a Central Fiscal;
+- a abertura da Central Fiscal deixa de executar antecipadamente a consulta completa e atualiza somente os totais dos cards;
+- `Mostrar resultados` passa a carregar e validar os dados antes de revelar a grade;
+- quando uma consulta falha, o painel de resultados permanece fechado e mostra erro, evitando uma área vazia que parecia clique sem resposta;
+- o painel informa quantos registros foram encontrados e orienta separadamente a seleção de entradas ou saídas;
+- 22 regressões da Central Fiscal, Compras desativada, períodos e separação de recebimentos aprovadas em `NABICODE_PROFILE=TESTE`; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.12 — benefício fiscal ligado ao XML oficial
+
+- a matriz tributária da Bahia já armazenava o código aprovado, mas o valor não chegava ao XML; essa lacuna foi fechada na fonte do gerador;
+- `cBenef` passa a ser escrito no grupo `prod`, depois de NCM/CEST e antes de CFOP, exatamente na ordem exigida pelo XSD oficial incluído no NabiCode;
+- somente valores com 8 ou 10 caracteres sem espaços, além do marcador oficial `SEM CBENEF`, são aceitos;
+- o sistema continua sem inventar benefício: o código precisa vir de regra cadastrada e aprovada pela contabilidade;
+- XML de regressão foi gerado, assinado com certificado temporário e validado pelo schema oficial;
+- 136 testes fiscais e 10 subtestes passaram no conjunto ampliado; as 3 novas regressões passaram isoladamente; compilação e `git diff --check` aprovados.

@@ -61,6 +61,13 @@ def test_icms_st_exige_cest_e_taxas_nao_podem_ser_inventadas(service):
         service.save(rule(icms_rate="101"))
 
 
+def test_codigo_de_beneficio_respeita_formato_do_schema_oficial(service):
+    saved = service.save(rule(benefit_code="BA123456"))
+    assert saved.benefit_code == "BA123456"
+    with pytest.raises(ValueError, match="8 ou 10 caracteres"):
+        service.save(rule(benefit_code="BA 123"))
+
+
 def test_resolucao_prefere_ncm_e_uf_mais_especificos(service):
     generic = service.save(rule())
     specific = service.save(rule(

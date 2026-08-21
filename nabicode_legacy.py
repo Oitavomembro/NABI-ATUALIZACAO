@@ -11319,6 +11319,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
         tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24)); yscroll.place(relx=1.0, rely=0.12, relheight=0.76, anchor="ne"); xscroll.pack(fill="x", padx=12, pady=(0, 6))
         rows = {}
+
+        def refresh_summary_cards():
+            summary = self.fiscal_sale_service.summary()
+            sales_summary_value.configure(text=f"{summary['total']} documento(s)")
+            entries_summary_value.configure(
+                text=f"{len(NFE_IMPORT_SERVICE.listar_importacoes())} nota(s) lançada(s)"
+            )
+
         def _load_rows():
             for item in tree.get_children(): tree.delete(item)
             rows.clear()
@@ -11340,11 +11348,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     except ValueError:
                         continue
                 return False
-            summary = self.fiscal_sale_service.summary()
-            sales_summary_value.configure(text=f"{summary['total']} documento(s)")
-            entries_summary_value.configure(
-                text=f"{len(NFE_IMPORT_SERVICE.listar_importacoes())} nota(s) lançada(s)"
-            )
+            refresh_summary_cards()
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
             if view_mode["value"] in {"SAIDAS", "TODOS"}:
                 for row in self.pdv_transaction_service.list_sales_for_period(
@@ -11458,16 +11462,21 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def load():
             try:
                 _load_rows()
+                result_status.configure(
+                    text=f"{len(rows)} registro(s) encontrado(s)", text_color="#8b949e"
+                )
+                return True
             except Exception as exc:
                 logger.exception("Falha ao carregar entradas e saídas da Central Fiscal")
                 messagebox.showerror("Central Fiscal", f"Não foi possível carregar os movimentos.\n\n{exc}", parent=janela)
+                result_status.configure(text="Consulta não concluída", text_color="#da3633")
+                return False
 
         def apply_document_filters():
-            document_layout.show_results()
-            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24))
-            xscroll.pack(fill="x", padx=12, pady=(0, 6))
-            yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
-            load()
+            if load():
+                document_layout.show_results()
+            else:
+                document_layout.hide_results()
 
         def hide_document_results():
             """Mantém a grade oculta até o usuário confirmar os filtros."""
@@ -11482,6 +11491,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             filters, text="Mostrar resultados", width=135, fg_color="#2ea043",
             command=apply_document_filters,
         ).pack(side="left")
+        result_status = ctk.CTkLabel(
+            document_workspace, text="Escolha o período e clique em Mostrar resultados.",
+            text_color="#8b949e", anchor="w",
+        )
+        result_status.pack(fill="x", padx=12, pady=(0, 6), before=filters)
         def selected():
             selection = tree.selection()
             return rows.get(selection[0]) if selection else None
@@ -12405,13 +12419,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             }[mode]
             output_filter.configure(values=choices)
             output_filter.set(choices[0])
+            result_status.configure(
+                text=("Selecione o período e o tipo de saída." if mode == "SAIDAS"
+                      else "Selecione o período e o tipo de entrada."),
+                text_color="#8b949e",
+            )
             document_layout.show_filters()
 
         # A abertura mostra primeiro as escolhas e ações. A grade, que antes
         # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
-        period.pack(fill="x", padx=12, pady=(2, 4), before=filters)
+        period.pack(fill="x", padx=12, pady=(2, 4), before=result_status)
         document_layout.hide()
-        load()
+        refresh_summary_cards()
         reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
     def fazer_backup_config_agora(self):

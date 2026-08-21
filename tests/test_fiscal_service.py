@@ -585,6 +585,47 @@ class FiscalServiceTests(unittest.TestCase):
         signed = self.service.sign_xml(xml, reference_id=f"NFe{_key}", pfx_path=self.pfx_path, password=self.password)
         self.assertEqual(self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), [])
 
+    def test_beneficio_fiscal_aprovado_compõe_produto_e_valida_no_schema(self):
+        xml, key = self.service.build_document_xml(
+            issuer={
+                "cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105",
+                "city":"SALVADOR","state":"BA","street":"RUA","number":"1",
+                "district":"CENTRO","zip_code":"40000000","state_registration":"123",
+                "tax_regime_code":1,
+            },
+            recipient={"document":"12345678901","name":"CLIENTE"},
+            items=[{
+                "code":"P1","description":"PRODUTO BENEFICIADO","quantity":1,"unit_price":100,
+                "ncm":"94036000","cfop":"5102","unit":"UN","origin":"0","csosn":"102",
+                "benefit_code":"BA123456",
+            }],
+            document={"model":"55","series":1,"number":115,"state_code":"29",
+                      "environment":"HOMOLOGACAO","numeric_code":"12345631"},
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(root.xpath("string(//*[local-name()='prod']/*[local-name()='cBenef'])"), "BA123456")
+        signed = self.service.sign_xml(
+            xml, reference_id=f"NFe{key}", pfx_path=self.pfx_path, password=self.password
+        )
+        self.assertEqual(
+            self.service.validate_xml_schema(signed, self.service.official_schema_path("nfe")), []
+        )
+
+    def test_beneficio_fiscal_invalido_e_bloqueado_antes_do_xml(self):
+        with self.assertRaisesRegex(ValueError, "8 ou 10 caracteres"):
+            self.service.build_document_xml(
+                issuer={"cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105",
+                        "city":"SALVADOR","state":"BA","street":"RUA","number":"1",
+                        "district":"CENTRO","zip_code":"40000000","state_registration":"123",
+                        "tax_regime_code":1},
+                recipient={"document":"12345678901","name":"CLIENTE"},
+                items=[{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,
+                        "ncm":"94036000","cfop":"5102","unit":"UN","csosn":"102",
+                        "benefit_code":"INVALIDO COM ESPACO"}],
+                document={"model":"55","series":1,"number":116,"state_code":"29",
+                          "environment":"HOMOLOGACAO","numeric_code":"12345632"},
+            )
+
     def test_difal_explicito_gera_partilha_integral_para_destino(self):
         xml, _key = self.service.build_document_xml(
             issuer={

@@ -1985,6 +1985,16 @@ class FiscalService:
             cest = self._digits(item.get("cest"))
             if cest:
                 el(prod, "CEST", cest)
+            benefit_code = str(item.get("benefit_code") or "").strip().upper()
+            if benefit_code:
+                if benefit_code != "SEM CBENEF" and (
+                    len(benefit_code) not in {8, 10}
+                    or any(character.isspace() or not 33 <= ord(character) <= 255 for character in benefit_code)
+                ):
+                    raise ValueError(
+                        f"Item {index}: código de benefício fiscal deve possuir 8 ou 10 caracteres sem espaços."
+                    )
+                el(prod, "cBenef", benefit_code)
             el(prod,"CFOP",item.get("cfop") or "5102"); el(prod,"uCom",str(item.get("unit","UN")).upper())
             el(prod,"qCom",f"{qty:.4f}"); el(prod,"vUnCom",f"{unit:.10f}"); el(prod,"vProd",f"{value:.2f}"); el(prod,"cEANTrib",item.get("ean") or "SEM GTIN")
             el(prod,"uTrib",str(item.get("unit","UN")).upper()); el(prod,"qTrib",f"{qty:.4f}"); el(prod,"vUnTrib",f"{unit:.10f}"); el(prod,"indTot",1)

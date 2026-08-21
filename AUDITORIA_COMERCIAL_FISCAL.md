@@ -28,6 +28,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - referência CEST consolidada do Convênio ICMS 142/18, com conferência obrigatória de descrição e UF;
 - preparação estrutural das 27 UFs, com Bahia como perfil atualmente validado;
 - controles básicos de ICMS, PIS, COFINS e primeira matriz regular de IBS/CBS.
+- código de benefício fiscal aprovado pela contabilidade transportado para `cBenef` na ordem oficial do produto e validado pelo XSD;
 - cadeia ICP-Brasil conferida contra o pacote público oficial do ITI e revogação por CRL com falha fechada;
 - envio de XML autorizado e DANFE por e-mail, com credencial DPAPI, consentimento e fila persistente.
 - guarda fiscal externa junto ao backup diário/manual, com manifesto, SHA-256, retenção mínima indicada e restauração sem sobrescrita destrutiva.
@@ -37,7 +38,7 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 ## Bloqueadores para comercialização fiscal em produção
 
 1. Homologação fiscal real do contribuinte e retirada controlada do bloqueio de produção.
-2. Motor tributário completo para situações especiais: ST integral, DIFAL, IPI, benefícios, reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
+2. Motor tributário completo para situações especiais: além do `cBenef` já transportado, ainda faltam as regras materiais de benefícios/reduções, monofasia, créditos e demais classificações IBS/CBS aplicáveis.
 3. Integração licenciada da tabela IBPT. NCM e referência CEST já usam publicações oficiais gratuitas; a incidência de ST continua submetida à matriz tributária e à legislação da UF.
 4. Consulta automática de CNPJ e IE por provedor oficial/contratado, com tratamento de indisponibilidade e limites de uso.
 5. NFS-e, que exige arquitetura separada por padrão nacional/provedor municipal e não deve ser simulada pelo motor de NF-e.

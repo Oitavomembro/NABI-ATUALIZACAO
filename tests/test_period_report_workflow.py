@@ -41,8 +41,11 @@ def test_central_fiscal_mostra_escolhas_antes_da_grade():
     assert 'text="Mostrar resultados"' in block
     assert "def apply_document_filters" in block
     assert "def hide_document_results" in block
-    assert 'period.pack(fill="x", padx=12, pady=(2, 4), before=filters)' in block
+    assert 'period.pack(fill="x", padx=12, pady=(2, 4), before=result_status)' in block
     assert 'document_layout.show_filters()' in block
+    assert "if load():" in block
+    assert "refresh_summary_cards()" in block
+    assert 'text=f"{len(rows)} registro(s) encontrado(s)"' in block
     assert 'command=lambda _value: hide_document_results()' in block
     assert "select_period_date(start_var, value)" in block
     assert "select_period_date(end_var, value)" in block

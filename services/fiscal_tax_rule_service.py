@@ -83,6 +83,15 @@ class FiscalTaxRuleService:
             raise ValueError("CEST da regra deve possuir 7 dígitos.")
         if normalized["icms_code"] not in cls.VALID_ICMS_CODES:
             raise ValueError("CST/CSOSN não suportado pela matriz fiscal.")
+        benefit_code = normalized["benefit_code"]
+        if benefit_code and benefit_code != "SEM CBENEF":
+            if len(benefit_code) not in {8, 10} or any(
+                character.isspace() or not 33 <= ord(character) <= 255
+                for character in benefit_code
+            ):
+                raise ValueError(
+                    "Código de benefício fiscal deve possuir 8 ou 10 caracteres sem espaços."
+                )
         if not normalized["approved_by"] or not normalized["approved_at"]:
             raise ValueError("A regra exige responsável e data de aprovação contábil.")
         uses_st = normalized["icms_code"] in {"201", "202", "203"}
