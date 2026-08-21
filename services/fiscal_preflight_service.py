@@ -31,12 +31,17 @@ class FiscalPreflightService:
 
     def run(self, *, password: str) -> FiscalPreflightResult:
         config = self.fiscal_service.load_config()
+        environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         model = str(config.get("default_model") or "65")
         configured_models = config.get("enabled_models") or [model]
         models = tuple(dict.fromkeys(str(item) for item in configured_models if str(item) in {"55", "65"}))
         if not models:
             models = (model,)
         problems: list[str] = []
+        if environment != "HOMOLOGACAO":
+            problems.append(
+                "O pré-voo fiscal só pode ser executado no ambiente de homologação."
+            )
         for current_model in models:
             label = "NF-e 55" if current_model == "55" else "NFC-e 65"
             problems.extend(
@@ -88,7 +93,8 @@ class FiscalPreflightService:
                         "tax_regime_code": crt,
                     })
                     recipient = {} if current_model == "65" else {
-                        "document": "52998224725", "name": "CONSUMIDOR DE HOMOLOGACAO"
+                        "document": self.fiscal_service.HOMOLOGATION_RECIPIENT_CNPJ,
+                        "name": self.fiscal_service.HOMOLOGATION_RECIPIENT_NAME,
                     }
                     issued_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
                     xml, access_key = self.fiscal_service.build_document_xml(

@@ -34,6 +34,8 @@ Nenhuma dessas restrições deve ser contornada com valores tributários presumi
 - guarda fiscal externa junto ao backup diário/manual, com manifesto, SHA-256, retenção mínima indicada e restauração sem sobrescrita destrutiva.
 - Distribuição DF-e nacional incremental por NSU e manifestações de Ciência, Confirmação, Desconhecimento e Operação não Realizada.
 - duplicação controlada de nota autorizada para nova pré-venda, relendo produtos, preços, estoque e regras atuais.
+- pré-voo local restrito à homologação, sem transmissão nem reserva de numeração;
+- anonimização central do destinatário em homologação com CNPJ e razão social oficiais de teste, sem endereço, IE ou e-mail reais.
 
 ## Bloqueadores para comercialização fiscal em produção
 

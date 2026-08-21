@@ -11131,7 +11131,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Verificar catálogo fiscal", fg_color="#8957e5", command=verify_fiscal_catalog).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Regras tributárias da Bahia", fg_color="#bf8700", command=self.abrir_regras_tributarias_bahia).pack(fill="x", padx=16, pady=(0, 6))
-        ctk.CTkButton(content, text="Executar pré-voo fiscal local", fg_color="#0969da", command=run_fiscal_preflight).pack(fill="x", padx=16, pady=(0, 6))
+        ctk.CTkButton(
+            content,
+            text="Pré-voo fiscal local — não transmite",
+            fg_color="#0969da",
+            command=run_fiscal_preflight,
+        ).pack(fill="x", padx=16, pady=(0, 6))
         ctk.CTkButton(content, text="Abrir central de documentos fiscais", fg_color="#1f6feb", command=self.abrir_central_fiscal).pack(fill="x", padx=16, pady=(0, 16))
         ctk.CTkButton(content, text="Fechar configuração fiscal", fg_color="#30363d", command=close_fiscal_config).pack(fill="x", padx=16, pady=(0, 16))
         reveal_prepared_toplevel_when_idle(janela, maximize=True)

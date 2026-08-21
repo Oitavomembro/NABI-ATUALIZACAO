@@ -529,6 +529,20 @@ class FiscalServiceTests(unittest.TestCase):
             document={"model": "55", "series": 1, "number": 13, "state_code": "29", "issued_at": issued, "environment": "HOMOLOGACAO", "numeric_code": "12345679"},
         )
         root = etree.fromstring(xml)
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='dest']/*[local-name()='xNome'])"),
+            FiscalService.HOMOLOGATION_RECIPIENT_NAME,
+        )
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='dest']/*[local-name()='CNPJ'])"),
+            FiscalService.HOMOLOGATION_RECIPIENT_CNPJ,
+        )
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='dest']/*[local-name()='CPF'])"), ""
+        )
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='dest']/*[local-name()='enderDest'])"), ""
+        )
         self.assertEqual(root.xpath("string(//*[local-name()='dest']/*[local-name()='indIEDest'])"), "9")
         self.assertEqual(root.xpath("string(//*[local-name()='ICMS00']/*[local-name()='vBC'])"), "20.00")
         self.assertEqual(root.xpath("string(//*[local-name()='ICMS00']/*[local-name()='vICMS'])"), "3.60")

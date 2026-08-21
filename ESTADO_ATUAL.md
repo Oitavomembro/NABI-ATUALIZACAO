@@ -1,5 +1,18 @@
 # NabiCode — Estado Atual
 
+## Etapa comercial 2 — Fiscal preparado para homologação controlada
+
+- o pré-voo fiscal local agora se recusa a executar quando a configuração está em produção;
+- NF-e/NFC-e identificada em homologação substitui centralmente CPF/CNPJ real pelo CNPJ oficial de teste `99999999000191`;
+- a razão social do destinatário usa obrigatoriamente `NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL`, prevenindo a rejeição 598;
+- endereço, IE e e-mail reais do destinatário não são enviados em testes fiscais;
+- a proteção foi aplicada no gerador oficial, cobrindo PDV, pré-voo e demais origens do documento;
+- o botão do pré-voo esclarece que a operação é local e não transmite;
+- criado roteiro acompanhado para NF-e/NFC-e na Bahia, com evidências, eventos, contingência, recuperação e bloqueios;
+- validação fiscal focada: 170 testes e 10 subtestes aprovados;
+- produção permanece bloqueada e nenhum certificado, banco real, endpoint fiscal ou impressora foi utilizado;
+- a conclusão material da homologação ainda depende de teste online acompanhado com CNPJ credenciado e certificado do contribuinte.
+
 ## Etapa comercial 1 — edição Gestão preparada para liberação
 
 - definido o escopo comercial do NabiCode Gestão sem emissão fiscal oficial;

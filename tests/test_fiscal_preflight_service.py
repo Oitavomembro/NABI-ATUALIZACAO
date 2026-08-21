@@ -35,6 +35,10 @@ class FakeCatalogService:
 class FakeFiscalService:
     TAX_REGIME_CODES = {"SIMPLES_NACIONAL": 1}
     STATE_CODES = {"BA": "29"}
+    HOMOLOGATION_RECIPIENT_NAME = (
+        "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+    )
+    HOMOLOGATION_RECIPIENT_CNPJ = "99999999000191"
 
     def __init__(self):
         self.transmitted = False
@@ -58,6 +62,9 @@ class FakeFiscalService:
     def prepare_sale_items(self, items, **_kwargs): return [{"code": "P1"}]
     def build_document_xml(self, **kwargs):
         self.built_models.append(kwargs["document"]["model"])
+        if kwargs["document"]["model"] == "55":
+            assert kwargs["recipient"]["name"] == self.HOMOLOGATION_RECIPIENT_NAME
+            assert kwargs["recipient"]["document"] == self.HOMOLOGATION_RECIPIENT_CNPJ
         return b"<NFe/>", "1" * 44
     def sign_xml(self, xml, **_kwargs): return b"<NFe signed='1'/>"
     def official_schema_path(self, _kind): return "nfe.xsd"
@@ -125,3 +132,12 @@ def test_pre_voo_respeita_somente_modelo_habilitado():
     assert result.success is True
     assert result.validated_models == ("55",)
     assert fiscal.built_models == ["55"]
+
+
+def test_pre_voo_recusa_configuracao_de_producao():
+    fiscal = FakeFiscalService()
+    fiscal.config["environment"] = "PRODUCAO"
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert any("só pode ser executado" in problem for problem in result.problems)
+    assert fiscal.built_models == []

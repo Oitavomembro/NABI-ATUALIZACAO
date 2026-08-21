@@ -117,6 +117,10 @@ class FiscalService:
     INUTILIZATION_ACCEPTED_STATUS = {"102"}
     ACCEPTED_STATUS = AUTHORIZED_STATUS | EVENT_ACCEPTED_STATUS | INUTILIZATION_ACCEPTED_STATUS
     VALID_ENVIRONMENTS = {"HOMOLOGACAO", "PRODUCAO"}
+    HOMOLOGATION_RECIPIENT_NAME = (
+        "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
+    )
+    HOMOLOGATION_RECIPIENT_CNPJ = "99999999000191"
     VALID_MODELS = {"55", "65"}
     VALID_EVENTS = {"CANCELAMENTO", "CCE"}
     STATE_CODES = STATE_CODES
@@ -1932,20 +1936,37 @@ class FiscalService:
         doc_rec = self._normalize_tax_document(recipient.get("document"))
         foreign_id = str(recipient.get("foreign_id") or "").strip()
         has_recipient = len(doc_rec) in {11, 14} or bool(foreign_id)
+        is_homologation = (
+            str(document.get("environment") or "HOMOLOGACAO").upper()
+            == "HOMOLOGACAO"
+        )
+        if has_recipient and is_homologation:
+            doc_rec = self.HOMOLOGATION_RECIPIENT_CNPJ
+            foreign_id = ""
         if has_recipient:
             dest = etree.SubElement(inf, etree.QName(ns, "dest"))
             if len(doc_rec)==14: el(dest, "CNPJ", doc_rec)
             elif len(doc_rec)==11: el(dest, "CPF", doc_rec)
             else: el(dest, "idEstrangeiro", foreign_id)
-            if recipient.get("name"): el(dest, "xNome", recipient.get("name"))
-            if any(recipient.get(key) for key in ("street", "city_code", "state", "zip_code")):
+            recipient_name = str(recipient.get("name") or "").strip()
+            if is_homologation:
+                recipient_name = self.HOMOLOGATION_RECIPIENT_NAME
+            if recipient_name:
+                el(dest, "xNome", recipient_name)
+            if not is_homologation and any(
+                recipient.get(key) for key in ("street", "city_code", "state", "zip_code")
+            ):
                 address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
                 for name, key_name in (("xLgr","street"),("nro","number"),("xBairro","district"),("cMun","city_code"),("xMun","city"),("UF","state"),("CEP","zip_code")):
                     value = recipient.get(key_name)
                     if value not in (None, ""):
                         el(address, name, self._digits(value) if name in {"cMun", "CEP"} else value)
-            recipient_ie = self._digits(recipient.get("state_registration"))
-            taxpayer_indicator = recipient.get("state_taxpayer_indicator")
+            recipient_ie = "" if is_homologation else self._digits(
+                recipient.get("state_registration")
+            )
+            taxpayer_indicator = 9 if is_homologation else recipient.get(
+                "state_taxpayer_indicator"
+            )
             if taxpayer_indicator in (None, ""):
                 taxpayer_indicator = 1 if recipient_ie else 2 if recipient.get("icms_exempt") else 9
             taxpayer_indicator = int(taxpayer_indicator)
@@ -1956,7 +1977,7 @@ class FiscalService:
             el(dest, "indIEDest", taxpayer_indicator)
             if recipient_ie:
                 el(dest, "IE", recipient_ie)
-            if recipient.get("email"):
+            if not is_homologation and recipient.get("email"):
                 el(dest, "email", str(recipient.get("email")).strip())
         total_products = Decimal("0")
         total_icms_base = Decimal("0")
