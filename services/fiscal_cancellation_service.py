@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Callable
+from xml.etree import ElementTree as ET
 
 from services.fiscal_outbox_service import FiscalOutboxService
 
@@ -103,6 +104,50 @@ class FiscalCancellationService:
             raise ValueError("XML autorizado original falhou na verificação de integridade.")
         return stored
 
+    @classmethod
+    def _official_authorized_at(cls, stored: dict[str, Any]) -> datetime:
+        """Lê exclusivamente o dhRecbto do protocolo contido no XML processado íntegro."""
+        processed = Path(str(stored.get("processed_path") or ""))
+        try:
+            root = ET.parse(processed).getroot()
+        except (ET.ParseError, OSError) as exc:
+            raise ValueError(
+                "Não foi possível determinar com segurança a data/hora oficial "
+                "da autorização SEFAZ no XML autorizado."
+            ) from exc
+
+        def local_name(element: ET.Element) -> str:
+            return str(element.tag).rsplit("}", 1)[-1]
+
+        received_at = ""
+        for protocol in root.iter():
+            if local_name(protocol) != "protNFe":
+                continue
+            info = next(
+                (child for child in protocol if local_name(child) == "infProt"), None
+            )
+            if info is None:
+                continue
+            received = next(
+                (child for child in info if local_name(child) == "dhRecbto"), None
+            )
+            received_at = str(received.text or "").strip() if received is not None else ""
+            if received_at:
+                break
+        try:
+            parsed = datetime.fromisoformat(received_at.replace("Z", "+00:00"))
+        except (TypeError, ValueError) as exc:
+            raise ValueError(
+                "Não foi possível determinar com segurança a data/hora oficial "
+                "da autorização SEFAZ (dhRecbto ausente ou inválido)."
+            ) from exc
+        if parsed.tzinfo is None or parsed.utcoffset() is None:
+            raise ValueError(
+                "Não foi possível determinar com segurança a data/hora oficial "
+                "da autorização SEFAZ (dhRecbto sem timezone/offset)."
+            )
+        return parsed.astimezone(timezone.utc)
+
     def eligibility(
         self, sale_id: int, *, user_has_permission: bool, now: datetime | None = None
     ) -> dict[str, Any]:
@@ -133,7 +178,7 @@ class FiscalCancellationService:
         rule = self.resolve_rule(
             state=state, model=str(document["model"]), environment=str(document["environment"])
         )
-        authorized_at = self._aware(stored.get("created_at"))
+        authorized_at = self._official_authorized_at(stored)
         current = self._aware(now or datetime.now(timezone.utc))
         deadline = authorized_at + rule.normal_deadline
         remaining = deadline - current

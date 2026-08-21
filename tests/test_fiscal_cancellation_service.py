@@ -61,9 +61,9 @@ class FiscalCancellationServiceTests(unittest.TestCase):
         self.folder = Path(self.tmp.name)
         self.database = self.folder / "cancel.db"
         self.xml = self.folder / "autorizado.xml"
-        self.xml.write_bytes(b"<nfeProc/>")
         self.key65 = "29260812345678000195650010000000011123456780"
         self.authorized_at = datetime(2026, 8, 21, 12, 0, tzinfo=timezone.utc)
+        self.write_authorized_xml(self.authorized_at.isoformat())
         self.stored = {
             "access_key": self.key65, "model": "65", "environment": "HOMOLOGACAO",
             "status": "AUTORIZADO", "protocol": "123456789012345",
@@ -106,6 +106,15 @@ class FiscalCancellationServiceTests(unittest.TestCase):
     def now(self, minutes=10):
         return self.authorized_at + timedelta(minutes=minutes)
 
+    def write_authorized_xml(self, dh_recbto: str | None):
+        received = f"<dhRecbto>{dh_recbto}</dhRecbto>" if dh_recbto is not None else ""
+        self.xml.write_text(
+            '<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe">'
+            f'<protNFe><infProt><chNFe>{self.key65}</chNFe>{received}'
+            '<nProt>123456789012345</nProt></infProt></protNFe></nfeProc>',
+            encoding="utf-8",
+        )
+
     def request(self, **overrides):
         data = dict(
             sale_id=1, password="senha", actor="gerente",
@@ -128,6 +137,49 @@ class FiscalCancellationServiceTests(unittest.TestCase):
         self.assertEqual(result["model"], "65")
         self.assertEqual(result["authorized_at"], self.authorized_at.isoformat())
 
+    def test_prazo_usa_dh_recbto_e_ignora_created_at_local(self):
+        self.stored["created_at"] = (self.authorized_at + timedelta(days=90)).isoformat()
+        self.update_document(
+            created_at=(self.authorized_at - timedelta(days=90)).isoformat()
+        )
+        result = self.service.eligibility(1, user_has_permission=True, now=self.now(10))
+        self.assertEqual(result["authorized_at"], self.authorized_at.isoformat())
+        self.assertEqual(result["remaining_seconds"], 20 * 60)
+
+    def test_dh_recbto_preserva_offset_no_calculo(self):
+        self.write_authorized_xml("2026-08-21T09:00:00-03:00")
+        result = self.service.eligibility(1, user_has_permission=True, now=self.now(10))
+        self.assertEqual(result["authorized_at"], self.authorized_at.isoformat())
+        self.assertEqual(result["remaining_seconds"], 20 * 60)
+
+    def test_dh_recbto_ausente_bloqueia_sem_fallback(self):
+        self.write_authorized_xml(None)
+        with self.assertRaisesRegex(ValueError, "dhRecbto ausente ou inválido"):
+            self.service.eligibility(1, user_has_permission=True, now=self.now())
+
+    def test_dh_recbto_invalido_bloqueia_sem_fallback(self):
+        self.write_authorized_xml("horario-invalido")
+        with self.assertRaisesRegex(ValueError, "dhRecbto ausente ou inválido"):
+            self.service.eligibility(1, user_has_permission=True, now=self.now())
+
+    def test_dh_recbto_sem_offset_bloqueia(self):
+        self.write_authorized_xml("2026-08-21T12:00:00")
+        with self.assertRaisesRegex(ValueError, "timezone/offset"):
+            self.service.eligibility(1, user_has_permission=True, now=self.now())
+
+    def test_nfce_limites_de_trinta_minutos(self):
+        before = self.service.eligibility(
+            1, user_has_permission=True,
+            now=self.authorized_at + timedelta(minutes=30) - timedelta(microseconds=1),
+        )
+        self.assertEqual(before["remaining_seconds"], 0)
+        for moment in (
+            self.authorized_at + timedelta(minutes=30),
+            self.authorized_at + timedelta(minutes=30, microseconds=1),
+        ):
+            with self.assertRaisesRegex(ValueError, "Prazo normal"):
+                self.service.eligibility(1, user_has_permission=True, now=moment)
+
     def test_nfce_ba_fora_do_prazo(self):
         with self.assertRaisesRegex(ValueError, "Prazo normal"):
             self.service.eligibility(1, user_has_permission=True, now=self.now(31))
@@ -140,6 +192,11 @@ class FiscalCancellationServiceTests(unittest.TestCase):
             1, user_has_permission=True, now=self.authorized_at + timedelta(hours=23)
         )
         self.assertEqual(result["remaining_seconds"], 3600)
+        with self.assertRaisesRegex(ValueError, "Prazo normal"):
+            self.service.eligibility(
+                1, user_has_permission=True,
+                now=self.authorized_at + timedelta(hours=24, microseconds=1),
+            )
 
     def test_uf_sem_regra_versionada_nao_inventa_prazo(self):
         key = "35" + self.key65[2:]

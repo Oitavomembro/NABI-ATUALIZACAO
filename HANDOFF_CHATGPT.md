@@ -1,5 +1,28 @@
 # HANDOFF NABICODE
 
+## CORREÇÃO CIRÚRGICA — PRAZO PELO `dhRecbto` DA SEFAZ
+
+O prazo de cancelamento não usa mais `created_at` do índice local. O
+`FiscalCancellationService` verifica primeiro a integridade já registrada e lê
+exclusivamente `nfeProc/protNFe/infProt/dhRecbto` (ou o mesmo protocolo sob a
+raiz processada) do XML autorizado original. O offset do XML é obrigatório e a
+comparação é timezone-aware em UTC. XML sem `dhRecbto`, com valor inválido ou
+sem offset bloqueia o cancelamento com erro explícito; não existe fallback para
+data da venda, emissão, persistência ou relógio local.
+
+As regras permanecem inalteradas: BA/NFC-e 65/HOMOLOGAÇÃO por 30 minutos e
+BA/NF-e 55/HOMOLOGAÇÃO por 24 horas. O instante exatamente no limite já está
+fora do prazo. PRODUÇÃO, outras UFs não versionadas, 110112, extemporâneo, SAT e
+MFe continuam bloqueados/fora do escopo. Não houve migration, mudança de XML,
+outbox, worker ou estorno comercial.
+
+Foram adicionadas regressões para divergência e alteração de `created_at`,
+offset válido, `dhRecbto` ausente/inválido/sem offset, bordas de 30 minutos e
+prazo independente de 24 horas. Testes diretos: 28 aprovados. Na suíte completa,
+os dois testes temporariamente instáveis passaram na repetição; a única falha
+remanescente é o teste DPAPI no token restrito do runtime Codex, limitação
+ambiental preexistente e não relacionada a esta correção.
+
 ## ATUALIZAÇÃO — MISSÃO FISCAL 05 / CANCELAMENTO FISCAL SEGURO
 
 Base `81520ed`, branch `dev/nabicode-2.5.1`. A arquitetura anterior já possuía
