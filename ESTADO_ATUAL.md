@@ -1516,3 +1516,12 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - o calendário deixa de disparar consulta durante a escolha da data;
 - regressão específica impede o retorno do posicionamento inválido `before=filters`;
 - 16 testes focados, compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.10 — consulta fiscal reconstruída como componente isolado
+
+- a área de consulta da Central Fiscal deixou de espalhar período, filtros, tabela, barras e ações diretamente pela janela;
+- um único `document_workspace` agora contém todo o fluxo de entradas e saídas, sem disputar geometria com o painel operacional ou com a antiga implementação de Compras;
+- o novo `FiscalDocumentWorkspaceController` concentra abertura, confirmação de resultados e fechamento do painel;
+- os cards abrem somente o espaço de seleção; a grade permanece oculta até `Mostrar resultados`;
+- referências abertas do ERPNext e Odoo orientaram a separação entre documentos de entrada/saída e ações contextuais, sem copiar regras tributárias externas;
+- 37 regressões fiscais, de navegação, relatórios e importação XML aprovadas em `NABICODE_PROFILE=TESTE`; compilação e `git diff --check` aprovados.

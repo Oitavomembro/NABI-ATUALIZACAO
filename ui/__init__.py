@@ -6,6 +6,7 @@ Este pacote não contém regras de negócio nem acesso a dados.
 from .background_manager import BackgroundManager, BackgroundSettings, RenderMetrics
 from .layout_manager import LayoutManager, LayoutViewport
 from .date_picker import open_date_picker
+from .fiscal_center_layout import FiscalDocumentWorkspaceController
 from .window_reveal import (
     prepare_hidden_toplevel,
     reveal_prepared_toplevel,

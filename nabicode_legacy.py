@@ -54,6 +54,7 @@ from ui import (
     configure_ttk,
     apply_responsive_geometry,
     open_date_picker,
+    FiscalDocumentWorkspaceController,
 )
 from ui.keyboard_navigation import install_global_arrow_navigation
 from managers import SystemInfrastructureManager, AdminOperationsManager
@@ -11292,7 +11293,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=lambda: show_document_view("ENTRADAS"),
         ).pack(fill="x", padx=14, pady=(0, 10))
         view_mode = {"value": ""}
-        filters = ctk.CTkFrame(frame, fg_color="transparent")
+        # Consulta documental isolada em um único contêiner. A versão anterior
+        # espalhava filtros, período, grade e barras diretamente na janela e os
+        # reposicionava com ``before``/``after`` a cada clique.
+        document_workspace = ctk.CTkFrame(frame, fg_color="#0d1117", corner_radius=10)
+        filters = ctk.CTkFrame(document_workspace, fg_color="transparent")
         filters.pack(fill="x", padx=12, pady=(0, 8))
         document_search = ctk.CTkEntry(
             filters, placeholder_text="Buscar por chave, protocolo, status, modelo ou ambiente...", height=34
@@ -11305,11 +11310,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         output_filter.set("Todos os movimentos")
         output_filter.pack(side="left", padx=(0, 8))
         columns = ("tipo", "chave", "status", "protocolo", "data", "ambiente")
-        tree = ttk.Treeview(frame, columns=columns, show="headings", height=18)
+        result_frame = ctk.CTkFrame(document_workspace, fg_color="transparent")
+        tree = ttk.Treeview(result_frame, columns=columns, show="headings", height=18)
         for col, title, width in (("tipo","Tipo",100),("chave","Chave / referência",300),("status","Status",120),("protocolo","Protocolo",130),("data","Data",150),("ambiente","Ambiente",110)):
             tree.heading(col, text=title); tree.column(col, width=width, anchor="w")
-        yscroll = ttk.Scrollbar(frame, orient="vertical", command=tree.yview)
-        xscroll = ttk.Scrollbar(frame, orient="horizontal", command=tree.xview)
+        yscroll = ttk.Scrollbar(result_frame, orient="vertical", command=tree.yview)
+        xscroll = ttk.Scrollbar(result_frame, orient="horizontal", command=tree.xview)
         tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
         tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24)); yscroll.place(relx=1.0, rely=0.12, relheight=0.76, anchor="ne"); xscroll.pack(fill="x", padx=12, pady=(0, 6))
         rows = {}
@@ -11457,17 +11463,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 messagebox.showerror("Central Fiscal", f"Não foi possível carregar os movimentos.\n\n{exc}", parent=janela)
 
         def apply_document_filters():
-            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)
-            xscroll.pack(fill="x", padx=12, pady=(0, 6), after=tree)
+            document_layout.show_results()
+            tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24))
+            xscroll.pack(fill="x", padx=12, pady=(0, 6))
             yscroll.place(relx=1.0, rely=0.12, relheight=0.52, anchor="ne")
             load()
 
         def hide_document_results():
             """Mantém a grade oculta até o usuário confirmar os filtros."""
-            context_actions.pack_forget()
-            tree.pack_forget()
-            xscroll.pack_forget()
-            yscroll.place_forget()
+            document_layout.hide_results()
 
         def select_period_date(variable, value):
             variable.set(value)
@@ -11542,7 +11546,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 self.mostrar_notificacao("DANFE oficial gerado", output, nivel="success")
             except Exception as exc: messagebox.showerror("DANFE", str(exc), parent=janela)
         today = datetime.now().date()
-        period = ctk.CTkFrame(frame, fg_color="transparent")
+        period = ctk.CTkFrame(document_workspace, fg_color="transparent")
         ctk.CTkLabel(period, text="Período contábil:").pack(side="left", padx=(4, 6))
         start_var = tk.StringVar(value=today.replace(day=1).isoformat())
         end_var = tk.StringVar(value=today.isoformat())
@@ -12302,7 +12306,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         # O painel precisa reservar espaço antes da grade expansível. Quando era
         # empacotado depois dela, o Treeview consumia toda a altura disponível e
         # os comandos fiscais existiam, porém ficavam fora da janela.
-        action_panel.pack(fill="x", padx=12, pady=(0, 10), before=tree)
+        action_panel.pack(fill="x", padx=12, pady=(0, 10))
         primary_actions = ctk.CTkFrame(action_panel, fg_color="transparent")
         primary_actions.pack(fill="x", pady=(0, 8))
         ctk.CTkButton(
@@ -12338,7 +12342,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             command=open_inutilization, fg_color="#da3633",
         ).pack(side="left", fill="x", expand=True, padx=4)
 
-        context_actions = ctk.CTkFrame(frame, fg_color="#0d1117", corner_radius=8)
+        context_actions = ctk.CTkFrame(result_frame, fg_color="#0d1117", corner_radius=8)
         context_label = ctk.CTkLabel(
             context_actions, text="Ações do documento selecionado",
             font=ctk.CTkFont(size=12, weight="bold"), text_color="#c9d1d9",
@@ -12359,6 +12363,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         retry_button = context_buttons["retry"]
         receipt_button = context_buttons["retry"]
         cancel_button = context_buttons["cancel"]
+        document_layout = FiscalDocumentWorkspaceController(
+            workspace=document_workspace,
+            result_frame=result_frame,
+            context_actions=context_actions,
+            action_panel=action_panel,
+        )
 
         def refresh_context_actions(_event=None):
             for button in context_buttons.values():
@@ -12395,20 +12405,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             }[mode]
             output_filter.configure(values=choices)
             output_filter.set(choices[0])
-            # Os dois painéis estavam ocultos. Referenciar ``before=filters``
-            # enquanto filters ainda não estava empacotado fazia o Tcl rejeitar
-            # o clique e os cards pareciam não funcionar.
-            period.pack(fill="x", padx=12, pady=(2, 4), before=action_panel)
-            filters.pack(fill="x", padx=12, pady=(0, 8), before=action_panel)
-            hide_document_results()
+            document_layout.show_filters()
 
         # A abertura mostra primeiro as escolhas e ações. A grade, que antes
         # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
-        filters.pack_forget()
-        period.pack_forget()
-        tree.pack_forget()
-        xscroll.pack_forget()
-        yscroll.place_forget()
+        period.pack(fill="x", padx=12, pady=(2, 4), before=filters)
+        document_layout.hide()
         load()
         reveal_prepared_toplevel_when_idle(janela, maximize=True)
 
