@@ -1,5 +1,21 @@
 # NabiCode — Estado Atual
 
+## Etapa comercial 1 — edição Gestão preparada para liberação
+
+- definido o escopo comercial do NabiCode Gestão sem emissão fiscal oficial;
+- login permanece opcional no modo não fiscal, conforme decisão do produto;
+- senha administrativa do cliente e senha mestra universal de suporte permanecem separadas;
+- a senha mestra fica documentada como credencial técnica, não como login cotidiano, e seu uso continua auditável;
+- criado checklist impeditivo para entrega comercial, cobrindo instalador, atualização, desinstalação, backup/restauração, segregação TESTE/PRODUÇÃO e ausência de dados reais;
+- criados modelos de Política de Privacidade e Termos de Licença/Suporte, que precisam receber os dados da empresa e revisão jurídica antes da primeira venda;
+- criado roteiro operacional para incidentes, com preservação de evidências, backup prévio, causa raiz e teste de regressão;
+- emissão fiscal de produção permanece deliberadamente bloqueada e fora desta etapa;
+- validação focada: 86 testes e 8 subtestes aprovados;
+- suíte completa: 1.338 testes, 1 ignorado e 32 subtestes aprovados usando temporários internos ao workspace;
+- proteção DPAPI do Windows aprovada isoladamente com segredo fictício;
+- nenhuma interface, impressora, banco real, certificado ou endpoint fiscal foi utilizado;
+- liberação material ao primeiro cliente ainda exige preencher/revisar os documentos e validar o instalador em máquina limpa.
+
 ## Checkpoint fiscal — fechamento monetário do documento
 
 - o XML bloqueia soma de pagamentos inferior ao total fiscal;
