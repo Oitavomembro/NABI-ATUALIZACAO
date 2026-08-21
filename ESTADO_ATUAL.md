@@ -1,5 +1,21 @@
 # NabiCode — Estado Atual
 
+## Missão Fiscal 01 — outbox transacional
+
+- schema 20 cria `fiscal_outbox`, vinculada à venda e ao documento fiscal do PDV;
+- venda, documento fiscal e item inicial da outbox são gravados na mesma transação SQLite;
+- falha em qualquer etapa provoca rollback integral da venda, estoque, financeiro, documento e outbox;
+- venda em modo `COMERCIAL` não cria documento, chave, reserva ou outbox fiscal;
+- instalação nova persiste explicitamente `modo_operacao=COMERCIAL` sem alterar escolhas existentes;
+- índices únicos impedem duplicidade por documento, autorização/chave e registro legado;
+- operações atômicas de claim/lease, recuperação de lease vencido, reagendamento, conclusão e `RESPOSTA_DESCONHECIDA` estão preparadas sem worker automático;
+- fila legada `fiscal.fila_transmissao.v1` é copiada de forma idempotente e permanece preservada;
+- Central Fiscal continua acionando o processamento manualmente por uma camada compatível;
+- produção continua bloqueada e nenhuma regra tributária, XML, XSD, QR Code, DANFE, certificado ou endpoint foi alterado;
+- validação focada: 158 testes e 10 subtestes aprovados;
+- suíte completa funcional: 1.352 testes, 1 ignorado e 32 subtestes aprovados; o único teste DPAPI foi excluído nessa repetição porque o runtime isolado do Windows recusou a proteção da credencial;
+- `compileall` dos fontes e `git diff --check` aprovados.
+
 ## Etapa comercial 2 — Fiscal preparado para homologação controlada
 
 - o pré-voo fiscal local agora se recusa a executar quando a configuração está em produção;

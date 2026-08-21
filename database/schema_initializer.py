@@ -800,6 +800,50 @@ def initialize_database(
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_fiscal_sale_status ON fiscal_sale_documents(status,created_at)")
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fiscal_outbox (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sale_id INTEGER,
+            fiscal_document_id INTEGER,
+            access_key TEXT NOT NULL DEFAULT '',
+            environment TEXT NOT NULL CHECK(environment IN ('HOMOLOGACAO','PRODUCAO')),
+            operation TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDENTE'
+                CHECK(status IN ('PENDENTE','PROCESSANDO','ERRO','RESPOSTA_DESCONHECIDA','CONCLUIDO','CANCELADO','FALHA')),
+            attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+            max_attempts INTEGER NOT NULL DEFAULT 5 CHECK(max_attempts > 0),
+            retry_minutes INTEGER NOT NULL DEFAULT 5 CHECK(retry_minutes > 0),
+            next_attempt_at TEXT,
+            worker_id TEXT NOT NULL DEFAULT '',
+            claimed_at TEXT,
+            lease_until TEXT,
+            receipt TEXT NOT NULL DEFAULT '',
+            last_error_code TEXT NOT NULL DEFAULT '',
+            last_error_message TEXT NOT NULL DEFAULT '',
+            model TEXT NOT NULL DEFAULT '55' CHECK(model IN ('55','65')),
+            reservation_id TEXT NOT NULL DEFAULT '',
+            xml_b64 TEXT NOT NULL DEFAULT '',
+            original_xml_b64 TEXT NOT NULL DEFAULT '',
+            actor TEXT NOT NULL DEFAULT '',
+            contingency INTEGER NOT NULL DEFAULT 0 CHECK(contingency IN (0,1)),
+            contingency_deadline_at TEXT NOT NULL DEFAULT '',
+            legacy_id TEXT NOT NULL DEFAULT '',
+            metadata_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL,
+            FOREIGN KEY(sale_id) REFERENCES movimentacoes(id),
+            FOREIGN KEY(fiscal_document_id) REFERENCES fiscal_sale_documents(id)
+        )
+    """)
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_fiscal_outbox_document ON fiscal_outbox(fiscal_document_id) WHERE fiscal_document_id IS NOT NULL")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_fiscal_outbox_legacy ON fiscal_outbox(legacy_id) WHERE legacy_id != ''")
+    cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS uq_fiscal_outbox_authorization_key ON fiscal_outbox(access_key) WHERE access_key != '' AND operation IN ('autorizacao','recibo')")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fiscal_outbox_claim ON fiscal_outbox(status,next_attempt_at,lease_until,created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_fiscal_outbox_sale ON fiscal_outbox(sale_id,fiscal_document_id)")
+    # A fila JSON antiga permanece intacta. A cópia para a outbox é idempotente
+    # e ocorre dentro da mesma transação da atualização do schema.
+    from services.fiscal_outbox_service import FiscalOutboxService
+    FiscalOutboxService.migrate_legacy_in_transaction(conn)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS fiscal_tax_rules (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             name TEXT NOT NULL,
@@ -860,6 +904,7 @@ def initialize_database(
     configs_padrao = [
         ("nome_loja", "NabiCode — Gerenciador de Crediário"),
         ("db_schema_version", str(DB_SCHEMA_VERSION)),
+        ("modo_operacao", "COMERCIAL"),
         ("proxima_ficha", "5500"),
         ("cnpj", "00.000.000/0001-00"),
         ("telefone", "(74) 99805-5735"),

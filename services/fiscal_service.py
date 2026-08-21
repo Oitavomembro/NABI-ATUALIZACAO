@@ -17,6 +17,7 @@ from typing import Any, Callable, Mapping, Sequence
 from urllib.parse import urlsplit
 
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
+from services.fiscal_outbox_service import FiscalOutboxService
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
@@ -2947,16 +2948,10 @@ class FiscalService:
         return etree.tostring(root, xml_declaration=True, encoding="utf-8")
 
     def list_transmission_queue(self, *, status: str = "") -> list[dict[str, Any]]:
-        raw = self._get_setting(self.TRANSMISSION_QUEUE_KEY)
-        try:
-            rows = json.loads(raw) if raw else []
-        except (TypeError, ValueError):
-            rows = []
-        result = [dict(row) for row in rows if isinstance(row, dict)]
-        wanted = str(status or "").strip().upper()
-        if wanted:
-            result = [row for row in result if str(row.get("status", "")).upper() == wanted]
-        return sorted(result, key=lambda row: str(row.get("created_at", "")))
+        return FiscalOutboxService(self.connection_factory).list_items(status=status)
+
+    def _save_transmission_queue(self, rows: list[Mapping[str, Any]]) -> None:
+        FiscalOutboxService(self.connection_factory).save_records(rows)
 
     @staticmethod
     def _xml_emission_type(xml: bytes | str) -> int:
@@ -3036,9 +3031,7 @@ class FiscalService:
             ),
             "contingency_overdue": False,
         }
-        rows.append(record)
-        self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
-        return dict(record)
+        return FiscalOutboxService(self.connection_factory).enqueue_record(record)
 
     def process_transmission_queue(
         self,
@@ -3209,7 +3202,7 @@ class FiscalService:
                     record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
                     self._sync_sale_document(record, status="PENDENTE", error=str(exc))
             processed.append(dict(record))
-        self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
+        self._save_transmission_queue(rows)
         return processed
 
     def _sale_document_cancelled(self, access_key: Any) -> bool:
@@ -3271,7 +3264,7 @@ class FiscalService:
             "retried_at": datetime.now(timezone.utc).isoformat(),
             "last_error": "",
         })
-        self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
+        self._save_transmission_queue(rows)
         return dict(target)
 
     def force_receipt_check(self, queue_id: str, *, actor: str) -> dict[str, Any]:
@@ -3290,10 +3283,7 @@ class FiscalService:
             "receipt_check_requested_by": str(actor or "").strip(),
             "receipt_check_requested_at": now, "last_error": "",
         })
-        self._set_setting(
-            self.TRANSMISSION_QUEUE_KEY,
-            json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True),
-        )
+        self._save_transmission_queue(rows)
         return dict(target)
 
     def retry_contingency_batch(self, *, actor: str) -> dict[str, Any]:
@@ -3324,10 +3314,7 @@ class FiscalService:
             })
             selected.append(str(target.get("id") or ""))
         if selected:
-            self._set_setting(
-                self.TRANSMISSION_QUEUE_KEY,
-                json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True),
-            )
+            self._save_transmission_queue(rows)
         return {"scheduled": len(selected), "queue_ids": selected, "requested_at": now}
 
     def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
@@ -3342,7 +3329,7 @@ class FiscalService:
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
             "cancel_reason": str(reason or "").strip(), "next_attempt_at": "",
         })
-        self._set_setting(self.TRANSMISSION_QUEUE_KEY, json.dumps(rows[-5000:], ensure_ascii=False, sort_keys=True))
+        self._save_transmission_queue(rows)
         return dict(target)
 
     def authorize_document(

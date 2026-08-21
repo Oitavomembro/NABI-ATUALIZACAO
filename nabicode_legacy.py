@@ -285,7 +285,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 19
+DB_SCHEMA_VERSION = 20
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")
@@ -7570,7 +7570,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 user=usuario_venda,
                 after_sale_in_transaction=(
                     (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
-                        connection, sale_id, rascunho_fiscal
+                        connection, sale_id, rascunho_fiscal, actor=usuario_venda
                     )) if rascunho_fiscal is not None else None
                 ),
             )
@@ -7588,16 +7588,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         aviso_fiscal = ""
         if rascunho_fiscal is not None:
-            try:
-                self.fiscal_sale_service.enqueue_pending(
-                    sale_id=resultado.sale_id, actor=usuario_venda
-                )
-                aviso_fiscal = " Documento fiscal colocado na fila segura de transmissão."
-            except Exception as exc:
-                logger.exception("Venda salva com documento fiscal pendente", exc_info=exc)
-                aviso_fiscal = (
-                    " Documento fiscal preservado como pendente e será reenviado pela Central Fiscal."
-                )
+            aviso_fiscal = " Documento fiscal colocado na fila segura de transmissão."
             if rascunho_fiscal.contingency:
                 try:
                     folder = self.fiscal_service.storage_dir / "contingencia" / datetime.now().strftime("%Y-%m")

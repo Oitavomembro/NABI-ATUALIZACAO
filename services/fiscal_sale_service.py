@@ -4,9 +4,11 @@ import base64
 import hashlib
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Mapping, Sequence
+
+from services.fiscal_outbox_service import FiscalOutboxService
 
 
 @dataclass(frozen=True)
@@ -271,22 +273,38 @@ class FiscalSaleService:
         return details
 
     @staticmethod
-    def persist_draft(connection: Any, sale_id: int, draft: FiscalSaleDraft) -> None:
+    def persist_draft(connection: Any, sale_id: int, draft: FiscalSaleDraft, *, actor: str = "") -> dict[str, Any]:
         now = datetime.now().astimezone().isoformat()
-        connection.execute(
+        cursor = connection.execute(
             """INSERT INTO fiscal_sale_documents
                (sale_id,reservation_id,access_key,model,environment,status,xml_b64,created_at,updated_at)
                VALUES(?,?,?,?,?,'PENDENTE',?,?,?)""",
             (int(sale_id), draft.reservation_id, draft.access_key, draft.model,
              draft.environment, base64.b64encode(draft.xml).decode("ascii"), now, now),
         )
+        document_id = int(cursor.lastrowid)
+        xml_b64 = base64.b64encode(draft.xml).decode("ascii")
+        return FiscalOutboxService.enqueue_in_transaction(
+            connection, sale_id=int(sale_id), fiscal_document_id=document_id,
+            access_key=draft.access_key, environment=draft.environment,
+            operation="autorizacao", model=draft.model,
+            reservation_id=draft.reservation_id, xml_b64=xml_b64,
+            original_xml_b64=xml_b64, actor=actor, contingency=draft.contingency,
+            contingency_deadline_at=(
+                (datetime.now().astimezone() + timedelta(hours=24)).isoformat()
+                if draft.contingency and draft.model == "65" else ""
+            ),
+        )
 
     def enqueue_pending(self, *, sale_id: int, actor: str) -> dict[str, Any]:
         connection = self.fiscal_service.connection_factory()
         try:
             row = connection.execute(
-                """SELECT id,access_key,model,xml_b64,queue_id,status
-                     FROM fiscal_sale_documents WHERE sale_id=?""", (int(sale_id),)
+                """SELECT d.id,d.access_key,d.model,d.xml_b64,d.queue_id,d.status,d.environment,
+                          d.reservation_id,o.id,o.status
+                     FROM fiscal_sale_documents d
+                     LEFT JOIN fiscal_outbox o ON o.fiscal_document_id=d.id
+                    WHERE d.sale_id=?""", (int(sale_id),)
             ).fetchone()
         finally:
             connection.close()
@@ -297,20 +315,21 @@ class FiscalSaleService:
             return {"id": str(row[4]), "status": str(row[5]), "access_key": str(row[1])}
         if status in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
             raise ValueError("Documento cancelado não pode ser colocado novamente na fila fiscal.")
-        queued = self.fiscal_service.enqueue_transmission(
-            operation="autorizacao", xml=base64.b64decode(row[3]), actor=actor,
-            access_key=str(row[1]), model=str(row[2]), reservation_id=str(
-                self._reservation_for_sale(int(sale_id))
-            ),
-        )
+        if row[8] is not None:
+            return {"id": str(row[8]), "status": str(row[9]), "access_key": str(row[1])}
         connection = self.fiscal_service.connection_factory()
         try:
-            connection.execute(
-                """UPDATE fiscal_sale_documents SET queue_id=?,status='ENFILEIRADO',
-                          last_error='',updated_at=? WHERE id=?""",
-                (str(queued["id"]), datetime.now().astimezone().isoformat(), int(row[0])),
+            connection.execute("BEGIN IMMEDIATE")
+            queued = FiscalOutboxService.enqueue_in_transaction(
+                connection, sale_id=int(sale_id), fiscal_document_id=int(row[0]),
+                access_key=str(row[1]), environment=str(row[6]), operation="autorizacao",
+                model=str(row[2]), reservation_id=str(row[7]), xml_b64=str(row[3]),
+                original_xml_b64=str(row[3]), actor=actor,
             )
             connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
         finally:
             connection.close()
         return queued

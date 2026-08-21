@@ -47,9 +47,12 @@ class FakeFiscalService:
         self.released.append(reservation_id)
 
     def cancel_transmission(self, queue_id, **_kwargs):
-        row = next(item for item in self.queued if item["id"] == queue_id)
-        row["status"] = "CANCELADO"
-        return row
+        connection = self.connection_factory()
+        connection.execute("UPDATE fiscal_outbox SET status='CANCELADO' WHERE id=?", (int(queue_id),))
+        connection.commit()
+        row = connection.execute("SELECT id,status FROM fiscal_outbox WHERE id=?", (int(queue_id),)).fetchone()
+        connection.close()
+        return {"id": str(row[0]), "status": row[1]}
 
     def send_event(self, **_kwargs):
         return SimpleNamespace(success=True, protocol="PROTO-CANCEL", status_code="135", message="Evento registrado"), {"event": "CANCELAMENTO"}
@@ -199,7 +202,9 @@ class FiscalSaleServiceTests(unittest.TestCase):
         first = self.service.enqueue_pending(sale_id=10, actor="caixa")
         second = self.service.enqueue_pending(sale_id=10, actor="caixa")
         self.assertEqual(first["id"], second["id"])
-        self.assertEqual(len(self.fiscal.queued), 1)
+        connection = sqlite3.connect(self.db)
+        self.assertEqual(connection.execute("SELECT COUNT(*) FROM fiscal_outbox").fetchone()[0], 1)
+        connection.close()
         self.assertEqual(self.service.list_pending()[0]["status"], "ENFILEIRADO")
         self.assertEqual(
             self.service.summary(),
@@ -232,7 +237,9 @@ class FiscalSaleServiceTests(unittest.TestCase):
         status = connection.execute("SELECT status FROM fiscal_sale_documents WHERE sale_id=20").fetchone()[0]
         connection.close()
         self.assertEqual(status, "CANCELADO")
-        self.assertEqual(self.fiscal.queued[0]["status"], "CANCELADO")
+        connection = sqlite3.connect(self.db)
+        self.assertEqual(connection.execute("SELECT status FROM fiscal_outbox").fetchone()[0], "CANCELADO")
+        connection.close()
         self.assertEqual(self.fiscal.released, ["RES-1"])
         self.assertEqual(self.service.list_pending(), [])
         self.assertEqual(

@@ -6,6 +6,7 @@ from pathlib import Path
 
 from services.pdv_service import PDVService
 from services.pdv_transaction_service import PDVTransactionService
+from services.fiscal_outbox_service import FiscalOutboxService
 
 
 class FakeStockService:
@@ -110,6 +111,22 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM financeiro_titulos").fetchone()[0], 0)
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 10)
         self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 0)
+        conn.close()
+
+    def test_venda_comercial_nao_cria_documento_nem_outbox(self):
+        conn = sqlite3.connect(self.db)
+        FiscalOutboxService.ensure_schema(conn)
+        conn.commit(); conn.close()
+        self.service.finalize_sale(
+            customer_id=1, customer_name="CLIENTE", items=[self.item],
+            payments=[{"forma": "DINHEIRO", "valor": 10}],
+            received=10, change=0, user="admin",
+        )
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM fiscal_outbox").fetchone()[0], 0)
+        self.assertFalse(conn.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+        ).fetchone())
         conn.close()
 
     def test_lista_somente_vendas_do_dia_com_estado_fiscal(self):

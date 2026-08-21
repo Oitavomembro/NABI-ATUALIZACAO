@@ -72,6 +72,7 @@ class SchemaInitializerTests(unittest.TestCase):
             self.assertIn("produtos", tables)
             self.assertIn("movimentacoes", tables)
             self.assertIn("configuracoes", tables)
+            self.assertIn("fiscal_outbox", tables)
             product_columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(produtos)")
             }
@@ -96,6 +97,12 @@ class SchemaInitializerTests(unittest.TestCase):
                 "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
             ).fetchone()[0]
             self.assertEqual("32", version)
+            self.assertEqual(
+                "COMERCIAL",
+                connection.execute(
+                    "SELECT valor FROM configuracoes WHERE chave='modo_operacao'"
+                ).fetchone()[0],
+            )
         finally:
             connection.close()
         self.assertEqual([], self.backups)
