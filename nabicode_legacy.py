@@ -11738,7 +11738,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if queue.get("status") == "CANCELADO" or row.get("status") in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
                     messagebox.showinfo("Central fiscal", "Este documento foi cancelado e não pode ser reenviado.", parent=janela)
                     return
-                if queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
+                if queue.get("id") and queue.get("status") == "RESPOSTA_DESCONHECIDA":
+                    self.fiscal_service.reconcile_unknown(
+                        str(queue["id"]), actor=self._usuario_financeiro()
+                    )
+                elif queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
                     self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
                 else:
                     self.fiscal_sale_service.enqueue_pending(
@@ -12402,7 +12406,14 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 names.extend(["danfe", "status", "cce", "email"])
             elif kind == "VENDA" and status_value == "AUTORIZADO":
                 names.extend(["status", "cancel"])
-            elif kind == "VENDA" and status_value in {"FALHA", "PENDENTE", "ENFILEIRADO"}:
+            elif kind == "VENDA" and status_value in {
+                "FALHA", "PENDENTE", "ENFILEIRADO", "RESPOSTA_DESCONHECIDA"
+            }:
+                queue_status = str(dict(row.get("_queue") or {}).get("status") or "").upper()
+                context_buttons["retry"].configure(
+                    text=("Consultar resultado" if queue_status == "RESPOSTA_DESCONHECIDA"
+                          else "Tentar novamente")
+                )
                 names.append("retry")
             elif kind == "DFE":
                 names.append("manifest")

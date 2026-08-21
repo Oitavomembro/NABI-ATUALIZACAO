@@ -1,5 +1,18 @@
 # NabiCode — Estado Atual
 
+## Missão Fiscal 02 — numeração e resposta desconhecida
+
+- timeout ou falha ocorrida depois do início da comunicação fiscal deixa de voltar para retransmissão comum;
+- o estado `RESPOSTA_DESCONHECIDA` exige consulta segura por recibo ou chave de acesso;
+- reinício ou lease vencido depois do início da transmissão não reenviam automaticamente o documento;
+- reconciliação por chave/recibo reaproveita o XML assinado já preservado e nunca cria nova autorização;
+- reserva vencida vinculada a documento fiscal não é liberada automaticamente;
+- cancelamento local, liberação de número e retransmissão em lote ficam bloqueados enquanto o resultado fiscal for desconhecido;
+- a Central Fiscal troca a ação por `Consultar resultado` nesse estado;
+- nenhum worker automático foi criado e produção continua bloqueada;
+- validação focada: 153 testes e 10 subtestes aprovados;
+- suíte completa funcional: 1.357 testes, 1 ignorado e 32 subtestes aprovados; o teste DPAPI foi excluído pelo mesmo limite conhecido do runtime isolado do Windows.
+
 ## Missão Fiscal 01 — outbox transacional
 
 - schema 20 cria `fiscal_outbox`, vinculada à venda e ao documento fiscal do PDV;

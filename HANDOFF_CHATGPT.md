@@ -1,5 +1,25 @@
 # HANDOFF NABICODE
 
+## ATUALIZAÇÃO — MISSÃO FISCAL 02
+
+A proteção posterior à outbox foi implementada. Transmissões que terminam sem
+resposta conclusiva passam a `RESPOSTA_DESCONHECIDA` e não são reenviadas.
+Reinício e lease vencido preservam esse bloqueio. A Central Fiscal pode agendar
+somente consulta por recibo ou chave, reutilizando o XML assinado armazenado.
+Numeração vinculada a documento não expira automaticamente, e cancelamento,
+liberação ou retransmissão em lote são recusados enquanto houver risco de a
+SEFAZ já ter recebido o documento. Não foi criado worker automático e produção
+continua bloqueada.
+
+Validação: 153 testes focados e 10 subtestes; suíte completa funcional com
+1.357 testes aprovados, 1 ignorado e 32 subtestes. O teste DPAPI permaneceu
+excluído pelo limite já documentado do runtime isolado do Windows.
+
+Arquivos centrais desta missão: `services/fiscal_service.py`,
+`services/fiscal_outbox_service.py`, `services/fiscal_sale_service.py` e
+`nabicode_legacy.py`. Regressões estão em `tests/test_fiscal_service.py` e
+`tests/test_fiscal_sale_service.py`/`tests/test_fiscal_outbox_service.py`.
+
 ## 1. MISSÃO EXECUTADA
 
 Implementar somente a fundação persistente da fila fiscal do NabiCode, substituindo a separação insegura entre o commit da venda/documento e a gravação posterior da fila JSON por uma outbox SQLite transacional.

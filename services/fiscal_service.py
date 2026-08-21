@@ -80,6 +80,10 @@ class InvalidCertificatePasswordError(ValueError):
     """Senha incorreta ou conteúdo PKCS#12 que não pôde ser aberto com segurança."""
 
 
+class FiscalTransmissionUnknownError(RuntimeError):
+    """A requisição pode ter chegado à SEFAZ, mas não houve resposta conclusiva."""
+
+
 @dataclass(frozen=True)
 class FiscalResponse:
     success: bool
@@ -507,7 +511,7 @@ class FiscalService:
         try:
             conn.execute("BEGIN IMMEDIATE")
             data = self._load_numbering_conn(conn)
-            self._recover_expired_reservations(data, now=now)
+            self._recover_expired_reservations(data, now=now, connection=conn)
             scope = f"{environment}:{model}:{series}"
             scopes = data.setdefault("scopes", {})
             last_number = int(scopes.get(scope, 0))
@@ -599,6 +603,11 @@ class FiscalService:
             if record.get("status") == "LIBERADO":
                 conn.commit()
                 return dict(record)
+            if self._reservation_has_transmission_risk(conn, str(reservation_id)):
+                raise ValueError(
+                    "A numeração está vinculada a uma transmissão iniciada ou de resposta "
+                    "desconhecida. Consulte a SEFAZ antes de qualquer liberação."
+                )
             record.update({
                 "status": "LIBERADO",
                 "released_at": datetime.now(timezone.utc).isoformat(),
@@ -1068,7 +1077,10 @@ class FiscalService:
             return self.parse_response(response.content)
         except Exception as exc:
             if requests is not None and isinstance(exc, requests.RequestException):
-                raise RuntimeError(f"Falha de comunicação com a SEFAZ: {exc}") from exc
+                message = f"Falha de comunicação com a SEFAZ: {exc}"
+                if str(operation).lower() in {"autorizacao", "evento", "inutilizacao"}:
+                    raise FiscalTransmissionUnknownError(message) from exc
+                raise RuntimeError(message) from exc
             raise
         finally:
             for temp_path in (pem_cert, pem_key):
@@ -3055,6 +3067,19 @@ class FiscalService:
                 continue
             if selected_ids and str(record.get("id") or "") not in selected_ids:
                 continue
+            if record.get("transmission_started_at") and not record.get("reconciliation_for"):
+                record["status"] = "RESPOSTA_DESCONHECIDA"
+                record["unknown_since"] = str(record.get("transmission_started_at"))
+                record["last_error"] = (
+                    "O processo foi interrompido após iniciar a comunicação com a SEFAZ. "
+                    "Consulte o resultado antes de reenviar."
+                )
+                record["next_attempt_at"] = ""
+                self._sync_sale_document(
+                    record, status="RESPOSTA_DESCONHECIDA", error=record["last_error"]
+                )
+                processed.append(dict(record))
+                continue
             deadline_text = str(record.get("contingency_deadline_at") or "")
             if deadline_text:
                 try:
@@ -3126,6 +3151,11 @@ class FiscalService:
                         xml = self._authorization_envelope(
                             signed, environment=str(config.get("environment", "HOMOLOGACAO"))
                         )
+                if operation in {"autorizacao", "evento", "inutilizacao"}:
+                    record["transmission_started_at"] = datetime.now(timezone.utc).isoformat()
+                    # Persistir antes da chamada de rede é intencional: se o processo cair,
+                    # a próxima abertura sabe que não pode retransmitir cegamente.
+                    self._save_transmission_queue(rows)
                 response = self.transmit(
                     operation=operation,
                     model=str(record.get("model") or config.get("default_model") or "65"),
@@ -3133,6 +3163,8 @@ class FiscalService:
                     pfx_path=config.get("certificate_path", ""),
                     password=password,
                 )
+                record.pop("transmission_started_at", None)
+                record["transmission_resolved_at"] = datetime.now(timezone.utc).isoformat()
                 record["last_status_code"] = response.status_code
                 record["last_message"] = response.message
                 record["last_error"] = ""
@@ -3156,7 +3188,11 @@ class FiscalService:
                     record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
                     record["last_error"] = ""
                 elif response.success:
-                    if operation in {"autorizacao", "recibo"}:
+                    is_authorization_result = operation in {"autorizacao", "recibo"} or (
+                        operation == "consulta"
+                        and str(record.get("reconciliation_for") or "") == "autorizacao"
+                    )
+                    if is_authorization_result:
                         response_key = self._normalize_access_key(response.access_key)
                         if len(queued_key) != 44:
                             raise ValueError("Item de autorização sem chave de acesso válida.")
@@ -3190,8 +3226,34 @@ class FiscalService:
                     self._sync_sale_document(record, status="AUTORIZADO", protocol=response.protocol)
                 else:
                     raise ValueError(f"{response.status_code}: {response.message}")
+            except FiscalTransmissionUnknownError as exc:
+                record["status"] = "RESPOSTA_DESCONHECIDA"
+                record["unknown_since"] = current.isoformat()
+                record["last_error"] = str(exc)
+                record["next_attempt_at"] = ""
+                self._sync_sale_document(
+                    record, status="RESPOSTA_DESCONHECIDA", error=str(exc)
+                )
             except Exception as exc:
                 record["last_error"] = str(exc)
+                if record.get("transmission_started_at") and not record.get("reconciliation_for"):
+                    record["status"] = "RESPOSTA_DESCONHECIDA"
+                    record["unknown_since"] = current.isoformat()
+                    record["next_attempt_at"] = ""
+                    self._sync_sale_document(
+                        record, status="RESPOSTA_DESCONHECIDA", error=str(exc)
+                    )
+                    processed.append(dict(record))
+                    continue
+                if record.get("reconciliation_for"):
+                    record["status"] = "RESPOSTA_DESCONHECIDA"
+                    record["next_attempt_at"] = ""
+                    record["last_reconciliation_at"] = current.isoformat()
+                    self._sync_sale_document(
+                        record, status="RESPOSTA_DESCONHECIDA", error=str(exc)
+                    )
+                    processed.append(dict(record))
+                    continue
                 if int(record["attempts"]) >= int(record.get("max_attempts", 1)):
                     record["status"] = "FALHA"
                     record["failed_at"] = current.isoformat()
@@ -3257,6 +3319,10 @@ class FiscalService:
             raise ValueError("Item da fila fiscal não encontrado.")
         if target.get("status") in {"CONCLUIDO", "CANCELADO"}:
             raise ValueError("Transmissão concluída ou cancelada não pode ser reenviada.")
+        if target.get("status") == "RESPOSTA_DESCONHECIDA" or target.get("transmission_started_at"):
+            raise ValueError(
+                "O resultado da transmissão precisa ser consultado na SEFAZ antes de reenviar."
+            )
         target.update({
             "status": "PENDENTE",
             "next_attempt_at": datetime.now(timezone.utc).isoformat(),
@@ -3286,6 +3352,36 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
+    def reconcile_unknown(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+        """Agenda somente consulta por recibo/chave; nunca retransmite a autorização."""
+        rows = self.list_transmission_queue()
+        target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
+        if target is None:
+            raise ValueError("Item da fila fiscal não encontrado.")
+        if str(target.get("status") or "").upper() != "RESPOSTA_DESCONHECIDA":
+            raise ValueError("Somente respostas desconhecidas exigem reconciliação segura.")
+        key = self._normalize_access_key(target.get("access_key", ""))
+        receipt = self._digits(target.get("receipt", ""))
+        environment = str(target.get("environment") or "HOMOLOGACAO")
+        if receipt:
+            target["operation"] = "recibo"
+            query_xml = self.build_receipt_query_xml(receipt=receipt, environment=environment)
+        elif len(key) == 44:
+            target["operation"] = "consulta"
+            query_xml = self.build_query_xml(access_key=key, environment=environment)
+        else:
+            raise ValueError("Não há recibo nem chave válida para consultar a SEFAZ.")
+        now = datetime.now(timezone.utc).isoformat()
+        target.update({
+            "status": "PENDENTE", "next_attempt_at": now,
+            "xml_b64": base64.b64encode(query_xml).decode("ascii"),
+            "reconciliation_for": "autorizacao",
+            "reconciliation_requested_by": str(actor or "").strip(),
+            "reconciliation_requested_at": now, "last_error": "",
+        })
+        self._save_transmission_queue(rows)
+        return dict(target)
+
     def retry_contingency_batch(self, *, actor: str) -> dict[str, Any]:
         """Reagenda em lote somente documentos NFC-e emitidos em contingência."""
         rows = self.list_transmission_queue()
@@ -3294,7 +3390,9 @@ class FiscalService:
         for target in rows:
             if str(target.get("model") or "") != "65":
                 continue
-            if target.get("status") in {"CONCLUIDO", "CANCELADO"}:
+            if target.get("status") in {"CONCLUIDO", "CANCELADO", "RESPOSTA_DESCONHECIDA"}:
+                continue
+            if target.get("transmission_started_at"):
                 continue
             if str(target.get("operation") or "").lower() not in {"autorizacao", "recibo"}:
                 continue
@@ -3324,6 +3422,11 @@ class FiscalService:
             raise ValueError("Item da fila fiscal não encontrado.")
         if target.get("status") == "CONCLUIDO":
             raise ValueError("Transmissão concluída não pode ser cancelada localmente.")
+        if target.get("status") == "RESPOSTA_DESCONHECIDA" or target.get("transmission_started_at"):
+            raise ValueError(
+                "Transmissão com resultado desconhecido não pode ser cancelada localmente. "
+                "Consulte a SEFAZ primeiro."
+            )
         target.update({
             "status": "CANCELADO", "cancelled_by": str(actor or "").strip(),
             "cancelled_at": datetime.now(timezone.utc).isoformat(),
@@ -3684,8 +3787,9 @@ class FiscalService:
             (self.NUMBERING_KEY, json.dumps(dict(data), ensure_ascii=False, sort_keys=True)),
         )
 
-    @staticmethod
-    def _recover_expired_reservations(data: dict[str, Any], *, now: datetime) -> None:
+    def _recover_expired_reservations(
+        self, data: dict[str, Any], *, now: datetime, connection: Any | None = None
+    ) -> None:
         for record in data.get("records", {}).values():
             if record.get("status") != "RESERVADO":
                 continue
@@ -3696,12 +3800,56 @@ class FiscalService:
             if expires_at.tzinfo is None:
                 expires_at = expires_at.replace(tzinfo=timezone.utc)
             if expires_at <= now:
+                if connection is not None and self._reservation_is_linked(
+                    connection, str(record.get("id") or "")
+                ):
+                    record["expiration_blocked_at"] = now.isoformat()
+                    record["expiration_blocked_reason"] = "Documento fiscal vinculado."
+                    continue
                 record.update({
                     "status": "LIBERADO",
                     "released_at": now.isoformat(),
                     "released_by": "SISTEMA",
                     "release_reason": "Reserva expirada automaticamente.",
                 })
+
+    @staticmethod
+    def _reservation_is_linked(connection: Any, reservation_id: str) -> bool:
+        if not reservation_id:
+            return False
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_sale_documents'"
+        ).fetchone()
+        return bool(table and connection.execute(
+            "SELECT 1 FROM fiscal_sale_documents WHERE reservation_id=? LIMIT 1",
+            (reservation_id,),
+        ).fetchone())
+
+    @staticmethod
+    def _reservation_has_transmission_risk(connection: Any, reservation_id: str) -> bool:
+        table = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_outbox'"
+        ).fetchone()
+        if not table:
+            return False
+        row = connection.execute(
+            """SELECT status,attempts,metadata_json FROM fiscal_outbox
+                 WHERE reservation_id=? ORDER BY id DESC LIMIT 1""",
+            (reservation_id,),
+        ).fetchone()
+        if not row:
+            return False
+        try:
+            metadata = json.loads(str(row[2] or "{}"))
+        except (TypeError, ValueError):
+            metadata = {}
+        return bool(
+            int(row[1] or 0) > 0
+            or str(row[0] or "").upper() in {
+                "PROCESSANDO", "RESPOSTA_DESCONHECIDA", "CONCLUIDO"
+            }
+            or metadata.get("transmission_started_at")
+        )
 
     def _get_setting(self, key: str) -> str | None:
         conn = self.connection_factory()

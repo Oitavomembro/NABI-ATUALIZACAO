@@ -23,6 +23,7 @@ from lxml import etree
 from services.fiscal_service import (
     FiscalResponse,
     FiscalService,
+    FiscalTransmissionUnknownError,
     InvalidCertificatePasswordError,
 )
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -1650,6 +1651,34 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(records[1]["status"], "LIBERADO")
         self.assertEqual(records[2]["status"], "RESERVADO")
 
+    def test_reserva_expirada_vinculada_a_documento_nao_e_liberada(self):
+        reservation = self.service.reserve_number(model="55", series=8, actor="admin", ttl_minutes=1)
+        conn = self.connect()
+        conn.execute("CREATE TABLE movimentacoes (id INTEGER PRIMARY KEY)")
+        conn.execute("INSERT INTO movimentacoes VALUES(1)")
+        conn.execute("""CREATE TABLE fiscal_sale_documents (
+            id INTEGER PRIMARY KEY, sale_id INTEGER, reservation_id TEXT, access_key TEXT,
+            model TEXT, environment TEXT, status TEXT, xml_b64 TEXT, queue_id TEXT,
+            protocol TEXT, last_error TEXT, created_at TEXT, updated_at TEXT)""")
+        conn.execute(
+            "INSERT INTO fiscal_sale_documents VALUES(1,1,?,?,?,?,?,?,?,?,?,?,?)",
+            (reservation["id"], "1" * 44, "55", "HOMOLOGACAO", "ENFILEIRADO", "", "1", "", "", "", ""),
+        )
+        data = json.loads(conn.execute(
+            "SELECT valor FROM configuracoes WHERE chave=?", (FiscalService.NUMBERING_KEY,)
+        ).fetchone()[0])
+        data["records"][reservation["id"]]["expires_at"] = (
+            datetime.now(timezone.utc) - timedelta(minutes=1)
+        ).isoformat()
+        conn.execute("UPDATE configuracoes SET valor=? WHERE chave=?", (
+            json.dumps(data), FiscalService.NUMBERING_KEY,
+        ))
+        conn.commit(); conn.close()
+        self.service.reserve_number(model="55", series=8, actor="admin")
+        records = {row["number"]: row for row in self.service.numbering_status(model="55", series=8)}
+        self.assertEqual(records[1]["status"], "RESERVADO")
+        self.assertIn("Documento fiscal", records[1]["expiration_blocked_reason"])
+
     def test_fila_transmissao_conclui_item_com_sucesso(self):
         self.service.save_config({
             "enabled": True,
@@ -1674,7 +1703,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(processed[0]["status"], "CONCLUIDO")
         self.assertEqual(self.service.list_transmission_queue(status="CONCLUIDO")[0]["last_status_code"], "100")
 
-    def test_fila_transmissao_reagenda_e_falha_apos_limite(self):
+    def test_fila_timeout_generico_tambem_exige_reconciliacao(self):
         self.service.save_config({
             "enabled": True,
             "environment": "HOMOLOGACAO",
@@ -1693,14 +1722,12 @@ class FiscalServiceTests(unittest.TestCase):
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(TimeoutError("timeout"))
         try:
             first = self.service.process_transmission_queue(password=self.password)[0]
-            self.assertEqual(first["status"], "ERRO")
-            later = datetime.fromisoformat(first["next_attempt_at"]) + timedelta(seconds=1)
-            second = self.service.process_transmission_queue(password=self.password, now=later)[0]
         finally:
             self.service.transmit = original
-        self.assertEqual(second["id"], item["id"])
-        self.assertEqual(second["status"], "FALHA")
-        self.assertEqual(second["attempts"], 2)
+        self.assertEqual(first["id"], item["id"])
+        self.assertEqual(first["status"], "RESPOSTA_DESCONHECIDA")
+        self.assertEqual(first["attempts"], 1)
+        self.assertEqual(self.service.process_transmission_queue(password=self.password), [])
 
     def test_fila_autorizacao_rejeita_xml_sem_chave(self):
         with self.assertRaisesRegex(ValueError, "chave de acesso"):
@@ -1866,6 +1893,49 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(forced["operation"], "recibo")
         self.assertEqual(forced["receipt_check_requested_by"], "gerente")
         self.assertLessEqual(datetime.fromisoformat(forced["next_attempt_at"]), datetime.now(timezone.utc))
+
+    def test_timeout_inconclusivo_nao_e_retransmitido_e_agenda_consulta(self):
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12345678000195",
+            "state": "BA", "tax_regime": "SIMPLES", "certificate_path": str(self.pfx_path),
+            "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid"}, "PRODUCAO": {}},
+        })
+        key = "3" * 44
+        xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin")
+        original = self.service.transmit
+        self.service.transmit = lambda **_: (_ for _ in ()).throw(
+            FiscalTransmissionUnknownError("timeout após envio")
+        )
+        try:
+            unknown = self.service.process_transmission_queue(password=self.password)[0]
+        finally:
+            self.service.transmit = original
+        self.assertEqual(unknown["status"], "RESPOSTA_DESCONHECIDA")
+        with self.assertRaisesRegex(ValueError, "consultado"):
+            self.service.retry_transmission(item["id"], actor="gerente")
+        reconciled = self.service.reconcile_unknown(item["id"], actor="gerente")
+        self.assertEqual(reconciled["operation"], "consulta")
+        self.assertEqual(reconciled["reconciliation_for"], "autorizacao")
+
+    def test_reinicio_apos_inicio_de_envio_exige_reconciliacao(self):
+        key = "4" * 44
+        item = self.service.enqueue_transmission(
+            operation="autorizacao",
+            xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
+            actor="admin",
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0]["transmission_started_at"] = datetime.now(timezone.utc).isoformat()
+        self.service._save_transmission_queue(rows)
+        original = self.service.transmit
+        self.service.transmit = lambda **_: self.fail("não deve retransmitir após reinício")
+        try:
+            recovered = self.service.process_transmission_queue(password=self.password)[0]
+        finally:
+            self.service.transmit = original
+        self.assertEqual(recovered["id"], item["id"])
+        self.assertEqual(recovered["status"], "RESPOSTA_DESCONHECIDA")
 
     def test_consulta_forcada_nao_reenvia_autorizacao_sem_recibo(self):
         item = self.service.enqueue_transmission(

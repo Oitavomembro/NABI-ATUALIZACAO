@@ -199,13 +199,29 @@ class FiscalOutboxService:
         try:
             connection.execute("BEGIN IMMEDIATE")
             self.ensure_schema(connection)
-            connection.execute(
-                """UPDATE fiscal_outbox
-                      SET status='PENDENTE',worker_id='',claimed_at=NULL,lease_until=NULL,
-                          updated_at=?
-                    WHERE status='PROCESSANDO' AND lease_until IS NOT NULL AND lease_until<=?""",
-                (current.isoformat(), current.isoformat()),
-            )
+            expired = connection.execute(
+                """SELECT id,metadata_json FROM fiscal_outbox
+                     WHERE status='PROCESSANDO' AND lease_until IS NOT NULL AND lease_until<=?""",
+                (current.isoformat(),),
+            ).fetchall()
+            for item_id, metadata_json in expired:
+                try:
+                    metadata = json.loads(str(metadata_json or "{}"))
+                except (TypeError, ValueError):
+                    metadata = {}
+                uncertain = bool(metadata.get("transmission_started_at"))
+                connection.execute(
+                    """UPDATE fiscal_outbox
+                          SET status=?,worker_id='',claimed_at=NULL,lease_until=NULL,
+                              next_attempt_at=?,last_error_message=?,updated_at=? WHERE id=?""",
+                    (
+                        "RESPOSTA_DESCONHECIDA" if uncertain else "PENDENTE",
+                        "" if uncertain else current.isoformat(),
+                        ("Lease venceu após início da transmissão; reconciliação obrigatória."
+                         if uncertain else ""),
+                        current.isoformat(), int(item_id),
+                    ),
+                )
             row = connection.execute(
                 """SELECT id FROM fiscal_outbox
                     WHERE status IN ('PENDENTE','ERRO')

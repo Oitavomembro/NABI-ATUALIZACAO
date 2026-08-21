@@ -123,6 +123,18 @@ class FiscalOutboxServiceTests(unittest.TestCase):
         recovered = self.service.claim_next(worker_id="w2", lease_seconds=60, now=now + timedelta(seconds=2))
         self.assertEqual(recovered["worker_id"], "w2")
 
+    def test_lease_vencido_apos_inicio_de_transmissao_nao_e_reivindicado(self):
+        self._enqueue(); now = datetime.now(timezone.utc) + timedelta(seconds=1)
+        claimed = self.service.claim_next(worker_id="w1", lease_seconds=1, now=now)
+        rows = self.service.list_items()
+        rows[0]["transmission_started_at"] = now.isoformat()
+        self.service.save_records(rows)
+        recovered = self.service.claim_next(
+            worker_id="w2", lease_seconds=60, now=now + timedelta(seconds=2)
+        )
+        self.assertIsNone(recovered)
+        self.assertEqual(self.service.list_items()[0]["status"], "RESPOSTA_DESCONHECIDA")
+
     def test_concluido_nao_e_reivindicado_novamente(self):
         self._enqueue(); claimed = self.service.claim_next(worker_id="w1")
         self.service.complete(int(claimed["id"]), worker_id="w1", receipt="123")

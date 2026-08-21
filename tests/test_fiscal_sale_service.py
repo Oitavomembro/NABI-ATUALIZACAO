@@ -259,6 +259,18 @@ class FiscalSaleServiceTests(unittest.TestCase):
             self.service.prepare_local_cancellation(connection, 21)
         connection.close()
 
+    def test_cancelamento_local_bloqueia_resposta_fiscal_desconhecida(self):
+        draft = FiscalSaleDraft("RES-U", "29" + "4" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 23, draft)
+        connection.execute(
+            "UPDATE fiscal_outbox SET status='RESPOSTA_DESCONHECIDA',attempts=1"
+        )
+        connection.commit()
+        with self.assertRaisesRegex(ValueError, "Consulte a SEFAZ"):
+            self.service.prepare_local_cancellation(connection, 23)
+        connection.close()
+
     def test_cancelamento_autorizado_registra_evento_antes_da_reversao(self):
         draft = FiscalSaleDraft("RES-3", "29" + "2" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
         connection = sqlite3.connect(self.db)

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import base64
 import hashlib
+import json
 import xml.etree.ElementTree as ET
 from dataclasses import dataclass
 from datetime import datetime, timedelta
@@ -386,17 +387,42 @@ class FiscalSaleService:
         if not exists:
             return
         row = connection.execute(
-            "SELECT status FROM fiscal_sale_documents WHERE sale_id=?", (int(sale_id),)
+            "SELECT id,status FROM fiscal_sale_documents WHERE sale_id=?", (int(sale_id),)
         ).fetchone()
         if not row:
             return
-        status = str(row[0] or "").upper()
+        document_id, status = int(row[0]), str(row[1] or "").upper()
         if status == "AUTORIZADO":
             raise ValueError(
                 "Esta venda possui documento autorizado. Cancele pela Central Fiscal antes de reverter estoque e financeiro."
             )
         if status == "CANCELADO":
             raise ValueError("O documento fiscal desta venda já está cancelado.")
+        outbox_exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_outbox'"
+        ).fetchone()
+        if outbox_exists:
+            queued = connection.execute(
+                """SELECT status,attempts,metadata_json FROM fiscal_outbox
+                     WHERE fiscal_document_id=? ORDER BY id DESC LIMIT 1""",
+                (document_id,),
+            ).fetchone()
+            if queued:
+                try:
+                    metadata = json.loads(str(queued[2] or "{}"))
+                except (TypeError, ValueError):
+                    metadata = {}
+                if (
+                    int(queued[1] or 0) > 0
+                    or str(queued[0] or "").upper() in {
+                        "PROCESSANDO", "RESPOSTA_DESCONHECIDA", "CONCLUIDO"
+                    }
+                    or metadata.get("transmission_started_at")
+                ):
+                    raise ValueError(
+                        "A venda possui transmissão fiscal iniciada ou de resposta desconhecida. "
+                        "Consulte a SEFAZ antes de cancelar."
+                    )
         new_status = "CANCELADO" if status == "CANCELADO_FISCAL" else "CANCELADO_LOCAL"
         connection.execute(
             "UPDATE fiscal_sale_documents SET status=?,updated_at=? WHERE sale_id=?",
