@@ -35,6 +35,7 @@ from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
 from services.fiscal_onboarding_service import FiscalOnboardingService
+from services.fiscal_outbox_worker import FiscalOutboxWorker
 from services.license_service import LicenseService
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -316,6 +317,7 @@ CORE_CONFIG.set("aplicacao.schema", DB_SCHEMA_VERSION)
 EVENT_BUS = EventBus(logger)
 TASK_MANAGER = TaskManager(max_workers=2, event_bus=EVENT_BUS, logger=logger)
 _RUNTIME_SHUTDOWN_DONE = False
+_RUNTIME_FISCAL_WORKERS = []
 
 
 def shutdown_runtime_resources() -> None:
@@ -325,6 +327,11 @@ def shutdown_runtime_resources() -> None:
     if _RUNTIME_SHUTDOWN_DONE:
         return
     _RUNTIME_SHUTDOWN_DONE = True
+    for worker in list(_RUNTIME_FISCAL_WORKERS):
+        try:
+            worker.stop(timeout=55.0)
+        except Exception:
+            logger.exception("Falha ao encerrar worker fiscal")
     TASK_MANAGER.shutdown(wait=True, cancel_pending=True)
 COBRANCA_SERVICE = CobrancaService(DatabaseManager(DB_NAME, network_mode=MODO_REDE, logger=logger))
 NFE_IMPORT_SERVICE = NFeImportService(NFeImportRepository(DatabaseManager(DB_NAME, network_mode=MODO_REDE, logger=logger)))
@@ -732,6 +739,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
+        self.fiscal_outbox_worker = FiscalOutboxWorker(
+            self.fiscal_service, logger=logger
+        )
+        _RUNTIME_FISCAL_WORKERS.append(self.fiscal_outbox_worker)
         self.fiscal_email_service = FiscalEmailService(
             Path(APP_DIR) / "fiscal" / "email"
         )
@@ -903,9 +914,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.security.start_session_without_password("admin")
         self._janela_abertura_caixa = None
         self._janela_formulario_abertura_caixa = None
+        self.after_idle(self._iniciar_worker_fiscal)
         # Confirma o primeiro frame válido sem revelar a raiz. O entrypoint
         # mantém a splash até receber esse readiness gate.
         self.after_idle(self._confirmar_main_window_ready)
+
+    def _iniciar_worker_fiscal(self):
+        """Inicia após schema/configuração, sem aguardar rede na thread da interface."""
+        try:
+            self.fiscal_outbox_worker.start()
+        except Exception:
+            logger.exception("Não foi possível iniciar o worker fiscal")
 
     def _confirmar_main_window_ready(self):
         """Confirma layout mínimo calculado, mantendo a janela oculta."""
@@ -7588,7 +7607,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         aviso_fiscal = ""
         if rascunho_fiscal is not None:
-            aviso_fiscal = " Documento fiscal colocado na fila segura de transmissão."
+            aviso_fiscal = " Documento fiscal em processamento automático."
+            self.fiscal_outbox_worker.wake()
             if rascunho_fiscal.contingency:
                 try:
                     folder = self.fiscal_service.storage_dir / "contingencia" / datetime.now().strftime("%Y-%m")
@@ -11350,6 +11370,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return False
             refresh_summary_cards()
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
+            queue_by_key = {
+                str(item.get("access_key") or ""): item
+                for item in queue_by_id.values() if str(item.get("access_key") or "")
+            }
             if view_mode["value"] in {"SAIDAS", "TODOS"}:
                 for row in self.pdv_transaction_service.list_sales_for_period(
                     start_date=start_date, end_date=end_date
@@ -11361,13 +11385,29 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         continue
                     if output_choice == "Orçamentos":
                         continue
-                    merged = dict(row, _kind="VENDA", sale_id=row.get("id"))
+                    queue = dict(queue_by_key.get(str(row.get("access_key") or "")) or {})
+                    queue_code = str(queue.get("last_status_code") or "").upper()
+                    queue_status = str(queue.get("status") or "").upper()
+                    if queue_code == "AGUARDANDO_CREDENCIAL":
+                        display_status = "AÇÃO NECESSÁRIA — CREDENCIAL A1"
+                    elif queue_status == "PROCESSANDO":
+                        display_status = "PROCESSANDO"
+                    elif queue_status == "RESPOSTA_DESCONHECIDA":
+                        display_status = "AÇÃO NECESSÁRIA — RESPOSTA DESCONHECIDA"
+                    elif str(queue.get("operation") or "") == "recibo" and queue_status == "PENDENTE":
+                        display_status = "AGUARDANDO RECIBO"
+                    else:
+                        display_status = row.get("fiscal_status", "") or row.get("status_pagamento", "") or "NÃO FISCAL"
+                    merged = dict(
+                        row, _kind="VENDA", sale_id=row.get("id"),
+                        _queue=queue, _display_status=display_status,
+                    )
                     searchable = " ".join(str(merged.get(field, "")) for field in ("id", "access_key", "protocol", "fiscal_status", "data", "descricao")).casefold()
                     if query and query not in searchable:
                         continue
                     item = tree.insert("", "end", values=(
                         f"VENDA #{row.get('id')}", row.get("access_key", "") or "SEM DOCUMENTO FISCAL",
-                        row.get("fiscal_status", "") or row.get("status_pagamento", "") or "NÃO FISCAL",
+                        display_status,
                         row.get("protocol", ""), row.get("data", ""),
                         "FISCAL" if is_fiscal else "NÃO FISCAL",
                     ))
@@ -12396,7 +12436,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 context_actions.pack_forget()
                 return
             kind = str(row.get("_kind") or "")
-            status_value = str(row.get("status") or row.get("fiscal_status") or "").upper()
+            status_value = str(
+                row.get("_display_status") or row.get("status") or row.get("fiscal_status") or ""
+            ).upper()
             names = ["details"]
             if row.get("processed_path") or row.get("arquivo_origem") or row.get("path"):
                 names.append("open")
@@ -12406,9 +12448,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 names.extend(["danfe", "status", "cce", "email"])
             elif kind == "VENDA" and status_value == "AUTORIZADO":
                 names.extend(["status", "cancel"])
-            elif kind == "VENDA" and status_value in {
-                "FALHA", "PENDENTE", "ENFILEIRADO", "RESPOSTA_DESCONHECIDA"
-            }:
+            elif kind == "VENDA" and (
+                status_value in {"FALHA", "PENDENTE", "ENFILEIRADO", "RESPOSTA_DESCONHECIDA"}
+                or status_value.startswith("AÇÃO NECESSÁRIA")
+                or status_value == "AGUARDANDO RECIBO"
+            ):
                 queue_status = str(dict(row.get("_queue") or {}).get("status") or "").upper()
                 context_buttons["retry"].configure(
                     text=("Consultar resultado" if queue_status == "RESPOSTA_DESCONHECIDA"

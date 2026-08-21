@@ -1,5 +1,75 @@
 # HANDOFF NABICODE
 
+## ATUALIZAÇÃO — MISSÃO FISCAL 03 / WORKER AUTOMÁTICO
+
+### Arquitetura anterior
+
+A Central Fiscal chamava manualmente `process_transmission_queue()`. O método
+lia todos os registros, não reivindicava o item e ao final salvava a lista
+inteira. A outbox já possuía claim/lease, mas o processador não os utilizava.
+Não existia ciclo automático depois do commit fiscal.
+
+### Worker criado e ciclo de vida
+
+`FiscalOutboxWorker` é uma thread Python interna, sem executável auxiliar. Ela é
+construída depois das migrations e dos serviços fiscais, iniciada por
+`after_idle`, espera por evento/intervalo controlado e nunca executa rede na
+thread da interface. No shutdown central, sua parada ocorre antes do
+`TaskManager` e antes da liberação de `DatabaseUsageLock`. Não existe busy-loop.
+
+Cada ciclo reivindica no máximo um pequeno lote. O worker usa claim atômico,
+lease e identificação única por host/PID/UUID. O processador manual da Central
+Fiscal também passou a reivindicar o item. A persistência final exige que o
+mesmo `worker_id` ainda seja proprietário do claim, evitando atualização antiga
+sobre estado mais novo.
+
+### Estados automáticos e intervenção
+
+- `PENDENTE` de autorização: prepara, adiciona QR Code existente quando
+  aplicável, assina, valida XSD e transmite;
+- operação `recibo`: consulta automaticamente sem reenviar a autorização;
+- `RESPOSTA_DESCONHECIDA`: é reivindicada exclusivamente para consulta por
+  recibo ou chave;
+- `CONCLUIDO`, `CANCELADO` e `FALHA`: não são reivindicados novamente;
+- rejeição conclusiva fica em `FALHA`, sem retry cego;
+- erro local anterior à rede recebe backoff progressivo limitado;
+- credencial ausente usa código `AGUARDANDO_CREDENCIAL` e exige ação humana;
+- produção usa `PRODUCAO_BLOQUEADA` antes de qualquer comunicação.
+
+### Credencial, concorrência e recuperação
+
+A senha nunca é escrita em log, outbox ou configuração em texto puro. O worker
+usa somente a senha de sessão ou o cofre DPAPI já existente. Sem cofre válido,
+o documento permanece preservado. Lease vencido antes da transmissão pode ser
+recuperado; depois do marcador de início ele vira resposta desconhecida e só
+pode ser reconciliado. Duas instâncias/processadores não transmitem o mesmo
+item, e a Central Fiscal não contorna claim ativo.
+
+### Isolamentos e limitações
+
+Venda `COMERCIAL` sem outbox nunca é vista pelo worker. Alterar o modo atual
+para comercial não apaga nem paralisa obrigação fiscal histórica já criada.
+Produção continua bloqueada. Não foram alterados tributos, XMLDSIG, XSD, QR
+Code, DANFE, contingência normativa, cancelamento no PDV, devolução, DF-e ou
+inutilização. Homologação online real continua dependente de certificado e
+credenciamento do contribuinte.
+
+### Arquivos e testes
+
+Arquivos centrais: `services/fiscal_outbox_worker.py`,
+`services/fiscal_outbox_service.py`, `services/fiscal_service.py` e
+`nabicode_legacy.py`. Regressões: `tests/test_fiscal_outbox_worker.py`, além das
+suítes preexistentes de outbox, fiscal, PDV e schema.
+
+Resultado focado: 190 testes aprovados e 10 subtestes. Suíte completa funcional:
+1.375 testes aprovados, 1 ignorado e 32 subtestes; o teste DPAPI foi excluído
+pelo limite conhecido do runtime isolado do Windows. Compilação e verificação
+de diferenças aprovadas. Branch: `dev/nabicode-2.5.1`.
+
+Checkpoint Git: `fix: automatiza processamento seguro da outbox fiscal`.
+Push: `origin/dev/nabicode-2.5.1`, executado somente após as validações; o hash
+efetivo consta no histórico Git e no relatório final desta missão.
+
 ## ATUALIZAÇÃO — MISSÃO FISCAL 02
 
 A proteção posterior à outbox foi implementada. Transmissões que terminam sem

@@ -1,5 +1,20 @@
 # NabiCode — Estado Atual
 
+## Missão Fiscal 03 — worker automático seguro
+
+- criado worker Python interno, iniciado somente após schema e serviços fiscais estarem prontos;
+- a interface não aguarda assinatura, XSD, rede ou SEFAZ;
+- processamento automático lê exclusivamente `fiscal_outbox`, sem consultar vendas comerciais;
+- obrigações fiscais antigas continuam elegíveis mesmo após mudança posterior para modo comercial;
+- worker e Central Fiscal usam o mesmo claim/lease SQLite, impedindo processamento concorrente;
+- gravações do processador passaram a ser restritas ao item e ao worker proprietário do claim;
+- autorização e consulta de recibo são automáticas; resposta desconhecida executa somente consulta segura por recibo/chave;
+- credencial A1 é obtida da sessão ou do cofre DPAPI existente; ausência gera ação necessária sem persistir senha;
+- produção permanece bloqueada no worker antes de qualquer transmissão;
+- shutdown solicita parada e aguarda a operação limitada pelo timeout de rede, antes de liberar o lock do banco;
+- validação focada: 190 testes e 10 subtestes aprovados;
+- suíte completa funcional: 1.375 testes, 1 ignorado e 32 subtestes aprovados; o teste DPAPI foi excluído pelo limite conhecido do runtime isolado do Windows.
+
 ## Missão Fiscal 02 — numeração e resposta desconhecida
 
 - timeout ou falha ocorrida depois do início da comunicação fiscal deixa de voltar para retransmissão comum;

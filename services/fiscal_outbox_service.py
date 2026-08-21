@@ -190,8 +190,53 @@ class FiscalOutboxService:
         finally:
             connection.close()
 
+    def save_claimed_record(self, record: Mapping[str, Any], *, worker_id: str,
+                            finish: bool) -> dict[str, Any]:
+        """Salva somente se o claim ainda pertence ao worker informado."""
+        connection = self.connection_factory()
+        now = datetime.now(timezone.utc).isoformat()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self.ensure_schema(connection)
+            changed = connection.execute(
+                """UPDATE fiscal_outbox SET operation=?,status=?,attempts=?,max_attempts=?,
+                       retry_minutes=?,next_attempt_at=?,worker_id=?,claimed_at=?,lease_until=?,
+                       receipt=?,last_error_code=?,last_error_message=?,xml_b64=?,
+                       original_xml_b64=?,contingency=?,contingency_deadline_at=?,
+                       metadata_json=?,updated_at=?
+                     WHERE id=? AND status='PROCESSANDO' AND worker_id=?""",
+                (
+                    str(record.get("operation") or ""),
+                    (str(record.get("status") or "PROCESSANDO").upper() if finish else "PROCESSANDO"),
+                    int(record.get("attempts") or 0), int(record.get("max_attempts") or 5),
+                    int(record.get("retry_minutes") or 5), str(record.get("next_attempt_at") or ""),
+                    "" if finish else str(worker_id),
+                    None if finish else record.get("claimed_at"),
+                    None if finish else record.get("lease_until"),
+                    str(record.get("receipt") or ""),
+                    str(record.get("last_status_code") or record.get("last_error_code") or ""),
+                    str(record.get("last_error") or record.get("last_error_message") or record.get("last_message") or ""),
+                    str(record.get("xml_b64") or ""), str(record.get("original_xml_b64") or ""),
+                    1 if record.get("contingency") else 0,
+                    str(record.get("contingency_deadline_at") or ""),
+                    json.dumps(dict(record), ensure_ascii=False, sort_keys=True, default=str),
+                    now, int(record["id"]), str(worker_id),
+                ),
+            ).rowcount
+            if changed != 1:
+                raise ValueError("O claim fiscal não pertence mais a este worker.")
+            result = self._by_id(connection, int(record["id"]))
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
     def claim_next(self, *, worker_id: str, lease_seconds: int = 120,
-                   now: datetime | None = None) -> dict[str, Any] | None:
+                   now: datetime | None = None,
+                   operations: tuple[str, ...] = ("autorizacao", "recibo")) -> dict[str, Any] | None:
         if not str(worker_id or "").strip():
             raise ValueError("Identificação do worker é obrigatória.")
         current = self._utc(now)
@@ -222,12 +267,18 @@ class FiscalOutboxService:
                         current.isoformat(), int(item_id),
                     ),
                 )
+            allowed = tuple(str(value).lower() for value in operations if str(value).strip())
+            if not allowed:
+                connection.commit()
+                return None
+            placeholders = ",".join("?" for _ in allowed)
             row = connection.execute(
-                """SELECT id FROM fiscal_outbox
+                f"""SELECT id FROM fiscal_outbox
                     WHERE status IN ('PENDENTE','ERRO')
+                      AND operation IN ({placeholders})
                       AND (next_attempt_at IS NULL OR next_attempt_at='' OR next_attempt_at<=?)
                     ORDER BY created_at,id LIMIT 1""",
-                (current.isoformat(),),
+                (*allowed, current.isoformat()),
             ).fetchone()
             if row is None:
                 connection.commit()
@@ -253,6 +304,98 @@ class FiscalOutboxService:
             raise
         finally:
             connection.close()
+
+    def claim_item(self, item_id: int, *, worker_id: str, lease_seconds: int = 120,
+                   now: datetime | None = None) -> dict[str, Any] | None:
+        """Reivindica um item específico sem permitir furar claim de outra instância."""
+        if not str(worker_id or "").strip():
+            raise ValueError("Identificação do worker é obrigatória.")
+        current = self._utc(now)
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self.ensure_schema(connection)
+            lease_until = (current + timedelta(seconds=max(1, int(lease_seconds)))).isoformat()
+            changed = connection.execute(
+                """UPDATE fiscal_outbox
+                      SET status='PROCESSANDO',worker_id=?,claimed_at=?,lease_until=?,
+                          attempts=attempts+1,updated_at=?
+                    WHERE id=? AND status IN ('PENDENTE','ERRO')
+                      AND (next_attempt_at IS NULL OR next_attempt_at='' OR next_attempt_at<=?)""",
+                (str(worker_id).strip(), current.isoformat(), lease_until,
+                 current.isoformat(), int(item_id), current.isoformat()),
+            ).rowcount
+            if changed != 1:
+                connection.rollback()
+                return None
+            result = self._by_id(connection, int(item_id))
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def claim_unknown(self, *, worker_id: str, lease_seconds: int = 120,
+                      now: datetime | None = None) -> dict[str, Any] | None:
+        """Reivindica incerteza somente para consulta, nunca para retransmissão."""
+        if not str(worker_id or "").strip():
+            raise ValueError("Identificação do worker é obrigatória.")
+        current = self._utc(now)
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            self.ensure_schema(connection)
+            row = connection.execute(
+                """SELECT id FROM fiscal_outbox
+                    WHERE status='RESPOSTA_DESCONHECIDA'
+                      AND operation IN ('autorizacao','recibo','consulta')
+                      AND (next_attempt_at IS NULL OR next_attempt_at='' OR next_attempt_at<=?)
+                    ORDER BY updated_at,id LIMIT 1""",
+                (current.isoformat(),),
+            ).fetchone()
+            if row is None:
+                connection.commit()
+                return None
+            item_id = int(row[0])
+            lease_until = (current + timedelta(seconds=max(1, int(lease_seconds)))).isoformat()
+            changed = connection.execute(
+                """UPDATE fiscal_outbox
+                      SET status='PROCESSANDO',worker_id=?,claimed_at=?,lease_until=?,
+                          attempts=attempts+1,updated_at=?
+                    WHERE id=? AND status='RESPOSTA_DESCONHECIDA'""",
+                (str(worker_id).strip(), current.isoformat(), lease_until,
+                 current.isoformat(), item_id),
+            ).rowcount
+            if changed != 1:
+                connection.rollback()
+                return None
+            result = self._by_id(connection, item_id)
+            connection.commit()
+            return result
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+
+    def await_credential(self, item_id: int, *, worker_id: str,
+                         retry_at: datetime, preserve_unknown: bool = False) -> dict[str, Any]:
+        return self._finish_claim(
+            item_id, worker_id=worker_id,
+            status="RESPOSTA_DESCONHECIDA" if preserve_unknown else "ERRO",
+            next_attempt_at=self._utc(retry_at).isoformat(),
+            error_code="AGUARDANDO_CREDENCIAL",
+            error_message="Certificado A1 aguarda credencial segura do Windows.",
+        )
+
+    def block_production(self, item_id: int, *, worker_id: str) -> dict[str, Any]:
+        return self._finish_claim(
+            item_id, worker_id=worker_id, status="FALHA", next_attempt_at="",
+            error_code="PRODUCAO_BLOQUEADA",
+            error_message="Produção fiscal permanece bloqueada nesta versão.",
+        )
 
     def reschedule(self, item_id: int, *, worker_id: str, next_attempt_at: datetime,
                    error_code: str = "", error_message: str = "") -> dict[str, Any]:

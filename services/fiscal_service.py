@@ -8,6 +8,7 @@ import os
 import re
 import sys
 import tempfile
+import uuid
 import zipfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
@@ -3052,6 +3053,7 @@ class FiscalService:
         limit: int = 20,
         now: datetime | None = None,
         queue_ids: Sequence[str] | None = None,
+        claimed_worker_id: str | None = None,
     ) -> list[dict[str, Any]]:
         current = now or datetime.now(timezone.utc)
         if current.tzinfo is None:
@@ -3059,14 +3061,30 @@ class FiscalService:
         rows = self.list_transmission_queue()
         processed: list[dict[str, Any]] = []
         count = 0
+        outbox = FiscalOutboxService(self.connection_factory)
+        worker_id = str(claimed_worker_id or f"central-{uuid.uuid4().hex}")
         selected_ids = {str(value) for value in queue_ids or () if str(value)}
-        for record in rows:
+        for snapshot in rows:
             if count >= max(1, int(limit)):
                 break
-            if record.get("status") not in {"PENDENTE", "ERRO"}:
+            if selected_ids and str(snapshot.get("id") or "") not in selected_ids:
                 continue
-            if selected_ids and str(record.get("id") or "") not in selected_ids:
-                continue
+            if claimed_worker_id:
+                if (
+                    snapshot.get("status") != "PROCESSANDO"
+                    or str(snapshot.get("worker_id") or "") != worker_id
+                ):
+                    continue
+                record = dict(snapshot)
+            else:
+                if snapshot.get("status") not in {"PENDENTE", "ERRO"}:
+                    continue
+                claimed = outbox.claim_item(
+                    int(snapshot["id"]), worker_id=worker_id, lease_seconds=180, now=current
+                )
+                if claimed is None:
+                    continue
+                record = claimed
             if record.get("transmission_started_at") and not record.get("reconciliation_for"):
                 record["status"] = "RESPOSTA_DESCONHECIDA"
                 record["unknown_since"] = str(record.get("transmission_started_at"))
@@ -3098,7 +3116,6 @@ class FiscalService:
             if next_attempt > current:
                 continue
             count += 1
-            record["attempts"] = int(record.get("attempts", 0)) + 1
             record["last_attempt_at"] = current.isoformat()
             try:
                 config = self.load_config()
@@ -3155,7 +3172,7 @@ class FiscalService:
                     record["transmission_started_at"] = datetime.now(timezone.utc).isoformat()
                     # Persistir antes da chamada de rede é intencional: se o processo cair,
                     # a próxima abertura sabe que não pode retransmitir cegamente.
-                    self._save_transmission_queue(rows)
+                    outbox.save_claimed_record(record, worker_id=worker_id, finish=False)
                 response = self.transmit(
                     operation=operation,
                     model=str(record.get("model") or config.get("default_model") or "65"),
@@ -3225,7 +3242,10 @@ class FiscalService:
                     record["completed_at"] = current.isoformat()
                     self._sync_sale_document(record, status="AUTORIZADO", protocol=response.protocol)
                 else:
-                    raise ValueError(f"{response.status_code}: {response.message}")
+                    record["status"] = "FALHA"
+                    record["failed_at"] = current.isoformat()
+                    record["last_error"] = f"{response.status_code}: {response.message}"
+                    self._sync_sale_document(record, status="FALHA", error=record["last_error"])
             except FiscalTransmissionUnknownError as exc:
                 record["status"] = "RESPOSTA_DESCONHECIDA"
                 record["unknown_since"] = current.isoformat()
@@ -3247,7 +3267,8 @@ class FiscalService:
                     continue
                 if record.get("reconciliation_for"):
                     record["status"] = "RESPOSTA_DESCONHECIDA"
-                    record["next_attempt_at"] = ""
+                    retry = min(60, max(1, int(record.get("retry_minutes", 5))) * 2 ** min(4, int(record.get("attempts", 1)) - 1))
+                    record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
                     record["last_reconciliation_at"] = current.isoformat()
                     self._sync_sale_document(
                         record, status="RESPOSTA_DESCONHECIDA", error=str(exc)
@@ -3260,12 +3281,39 @@ class FiscalService:
                     self._sync_sale_document(record, status="FALHA", error=str(exc))
                 else:
                     record["status"] = "ERRO"
-                    retry = max(1, int(record.get("retry_minutes", 5)))
+                    retry = min(60, max(1, int(record.get("retry_minutes", 5))) * 2 ** min(4, int(record.get("attempts", 1)) - 1))
                     record["next_attempt_at"] = (current + timedelta(minutes=retry)).isoformat()
                     self._sync_sale_document(record, status="PENDENTE", error=str(exc))
             processed.append(dict(record))
-        self._save_transmission_queue(rows)
+        for record in processed:
+            outbox.save_claimed_record(record, worker_id=worker_id, finish=True)
         return processed
+
+    def prepare_claimed_reconciliation(
+        self, record: Mapping[str, Any], *, worker_id: str
+    ) -> dict[str, Any]:
+        """Transforma claim desconhecido em consulta segura, preservando sua propriedade."""
+        target = dict(record)
+        if target.get("status") != "PROCESSANDO" or str(target.get("worker_id") or "") != str(worker_id):
+            raise ValueError("A resposta desconhecida não pertence a este worker.")
+        key = self._normalize_access_key(target.get("access_key", ""))
+        receipt = self._digits(target.get("receipt", ""))
+        environment = str(target.get("environment") or "HOMOLOGACAO")
+        if receipt:
+            target["operation"] = "recibo"
+            query_xml = self.build_receipt_query_xml(receipt=receipt, environment=environment)
+        elif len(key) == 44:
+            target["operation"] = "consulta"
+            query_xml = self.build_query_xml(access_key=key, environment=environment)
+        else:
+            raise ValueError("Não há recibo nem chave válida para reconciliar o documento.")
+        target["xml_b64"] = base64.b64encode(query_xml).decode("ascii")
+        target["reconciliation_for"] = "autorizacao"
+        target["reconciliation_started_at"] = datetime.now(timezone.utc).isoformat()
+        FiscalOutboxService(self.connection_factory).save_claimed_record(
+            target, worker_id=worker_id, finish=False
+        )
+        return target
 
     def _sale_document_cancelled(self, access_key: Any) -> bool:
         key = self._normalize_access_key(access_key)
