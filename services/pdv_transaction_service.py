@@ -237,7 +237,17 @@ class PDVTransactionService:
 
     def list_sales_for_day(self, *, day: datetime | None = None) -> list[dict[str, Any]]:
         """Lista todas as vendas do dia, inclusive canceladas, com estado fiscal."""
-        wanted = (day or datetime.now()).strftime("%d/%m/%Y")
+        selected = day or datetime.now()
+        return self.list_sales_for_period(
+            start_date=selected.date().isoformat(), end_date=selected.date().isoformat()
+        )
+
+    def list_sales_for_period(self, *, start_date: str, end_date: str) -> list[dict[str, Any]]:
+        """Lista vendas fiscais e não fiscais no período, aceitando datas legadas."""
+        start = datetime.strptime(str(start_date)[:10], "%Y-%m-%d").date().isoformat()
+        end = datetime.strptime(str(end_date)[:10], "%Y-%m-%d").date().isoformat()
+        if start > end:
+            raise ValueError("A data inicial não pode ser posterior à data final.")
         conn = self.connection_factory()
         try:
             movement_columns = {
@@ -259,10 +269,13 @@ class PDVTransactionService:
                        COALESCE(m.status_pagamento,''),{fiscal_fields}
                   FROM movimentacoes m
                   {fiscal_join}
-                 WHERE m.tipo='COMPRA' AND substr(COALESCE(m.data,''),1,10)=?
+                 WHERE m.tipo='COMPRA' AND
+                       (CASE WHEN substr(COALESCE(m.data,''),3,1)='/'
+                             THEN substr(m.data,7,4)||'-'||substr(m.data,4,2)||'-'||substr(m.data,1,2)
+                             ELSE substr(COALESCE(m.data,''),1,10) END) BETWEEN ? AND ?
                  ORDER BY m.id DESC
                 """,
-                (wanted,),
+                (start, end),
             ).fetchall()
         finally:
             conn.close()

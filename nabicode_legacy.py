@@ -53,6 +53,7 @@ from ui import (
     configure_ctk,
     configure_ttk,
     apply_responsive_geometry,
+    open_date_picker,
 )
 from ui.keyboard_navigation import install_global_arrow_navigation
 from managers import SystemInfrastructureManager, AdminOperationsManager
@@ -11312,11 +11313,27 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         tree.configure(yscrollcommand=yscroll.set, xscrollcommand=xscroll.set)
         tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24)); yscroll.place(relx=1.0, rely=0.12, relheight=0.76, anchor="ne"); xscroll.pack(fill="x", padx=12, pady=(0, 6))
         rows = {}
-        def load():
+        def _load_rows():
             for item in tree.get_children(): tree.delete(item)
             rows.clear()
             query = document_search.get().strip().casefold()
             output_choice = output_filter.get()
+            start_date = start_var.get()
+            end_date = end_var.get()
+            start_value = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_value = datetime.strptime(end_date, "%Y-%m-%d").date()
+            if start_value > end_value:
+                raise ValueError("A data inicial não pode ser posterior à data final.")
+
+            def in_period(raw_value):
+                raw = str(raw_value or "").strip()[:10]
+                for pattern in ("%Y-%m-%d", "%d/%m/%Y"):
+                    try:
+                        value = datetime.strptime(raw, pattern).date()
+                        return start_value <= value <= end_value
+                    except ValueError:
+                        continue
+                return False
             summary = self.fiscal_sale_service.summary()
             sales_summary_value.configure(text=f"{summary['total']} documento(s)")
             entries_summary_value.configure(
@@ -11324,7 +11341,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
             queue_by_id = {str(item.get("id")): item for item in self.fiscal_service.list_transmission_queue()}
             if view_mode["value"] in {"SAIDAS", "TODOS"}:
-                for row in self.pdv_transaction_service.list_sales_for_day():
+                for row in self.pdv_transaction_service.list_sales_for_period(
+                    start_date=start_date, end_date=end_date
+                ):
                     is_fiscal = bool(str(row.get("fiscal_status") or "").strip())
                     if output_choice == "Vendas fiscais" and not is_fiscal:
                         continue
@@ -11344,9 +11363,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     ))
                     rows[item] = merged
                 if output_choice in {"Todas as saídas", "Orçamentos", "Todos os movimentos"}:
-                    today_iso = datetime.now().date().isoformat()
                     for document in self.pdv_service.listar_documentos("ORCAMENTO"):
-                        if not str(document.criada_em or "").startswith(today_iso):
+                        if not in_period(document.criada_em):
                             continue
                         searchable = f"{document.id} {document.cliente_nome} {document.criada_em}".casefold()
                         if query and query not in searchable:
@@ -11358,6 +11376,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         rows[item] = {"_kind": "ORCAMENTO", "document": document}
             if view_mode["value"] in {"SAIDAS", "TODOS"} and output_choice not in {"Vendas não fiscais", "Orçamentos"}:
                 for row in self.fiscal_service.list_documents():
+                    if not in_period(row.get("created_at")):
+                        continue
                     searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status", "model", "environment", "created_at")).casefold()
                     if query and query not in searchable:
                         continue
@@ -11365,7 +11385,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     rows[item] = dict(row, _kind="DOCUMENTO")
             if view_mode["value"] in {"ENTRADAS", "TODOS"}:
                 if output_choice in {"Todas as entradas", "NF-e de compras", "Todos os movimentos"}:
-                    for row in NFE_IMPORT_SERVICE.listar_importacoes():
+                    for row in NFE_IMPORT_SERVICE.listar_importacoes(start_date, end_date):
                         searchable = " ".join(str(row.get(field, "")) for field in ("chave", "numero", "fornecedor_cnpj", "fornecedor_nome", "status", "data_importacao")).casefold()
                         if query and query not in searchable:
                             continue
@@ -11375,6 +11395,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         ))
                         rows[item] = dict(row, _kind="ENTRADA_NFE")
                     for row in self.fiscal_dfe_service.list_documents():
+                        if not in_period(row.get("issued_at")):
+                            continue
                         searchable = " ".join(
                             str(row.get(field, ""))
                             for field in ("access_key", "issuer", "document", "nsu", "issued_at")
@@ -11388,7 +11410,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         rows[item] = dict(row, _kind="DFE", processed_path=row.get("path", ""))
                 if output_choice in {"Todas as entradas", "Compras não fiscais", "Todos os movimentos"}:
                     purchases = REPORT_SERVICE.generate(
-                        "compras", start_date=start_entry.get(), end_date=end_entry.get(),
+                        "compras", start_date=start_date, end_date=end_date,
                         actor=self._usuario_relatorios(),
                     )
                     purchase_columns = {name: index for index, name in enumerate(purchases.columns)}
@@ -11404,7 +11426,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         rows[item] = dict(row, _kind="COMPRA_NAO_FISCAL")
                 if output_choice in {"Todas as entradas", "Recebimentos de fichas", "Todos os movimentos"}:
                     receipts = REPORT_SERVICE.generate(
-                        "recebimentos", start_date=start_entry.get(), end_date=end_entry.get(),
+                        "recebimentos", start_date=start_date, end_date=end_date,
                         actor=self._usuario_relatorios(),
                     )
                     receipt_columns = {name: index for index, name in enumerate(receipts.columns)}
@@ -11420,11 +11442,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         rows[item] = dict(row, _kind="RECEBIMENTO_FICHA")
             if view_mode["value"] in {"SAIDAS", "TODOS"} and output_choice not in {"Vendas não fiscais", "Orçamentos"}:
                 for row in self.fiscal_service.list_events():
+                    if not in_period(row.get("created_at")):
+                        continue
                     searchable = " ".join(str(row.get(field, "")) for field in ("access_key", "protocol", "status_code", "event_type", "environment", "created_at")).casefold()
                     if query and query not in searchable:
                         continue
                     item = tree.insert("", "end", values=(row.get("event_type","EVENTO"), row.get("access_key",""), row.get("status_code",""), row.get("protocol",""), row.get("created_at",""), ""))
                     rows[item] = dict(row, _kind="EVENTO")
+        def load():
+            try:
+                _load_rows()
+            except Exception as exc:
+                logger.exception("Falha ao carregar entradas e saídas da Central Fiscal")
+                messagebox.showerror("Central Fiscal", f"Não foi possível carregar os movimentos.\n\n{exc}", parent=janela)
+
         document_search.bind("<Return>", lambda _event: load())
         ctk.CTkButton(filters, text="Buscar", width=90, command=load).pack(side="left")
         def selected():
@@ -11492,14 +11523,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except Exception as exc: messagebox.showerror("DANFE", str(exc), parent=janela)
         today = datetime.now().date()
         period = ctk.CTkFrame(frame, fg_color="transparent")
-        period.pack(fill="x", padx=12, pady=(2, 4))
         ctk.CTkLabel(period, text="Período contábil:").pack(side="left", padx=(4, 6))
-        ctk.CTkLabel(period, text="De").pack(side="left", padx=(2, 0))
-        start_entry = ctk.CTkEntry(period, width=115)
-        start_entry.pack(side="left", padx=4); start_entry.insert(0, today.replace(day=1).isoformat())
-        ctk.CTkLabel(period, text="até").pack(side="left", padx=(2, 0))
-        end_entry = ctk.CTkEntry(period, width=115)
-        end_entry.pack(side="left", padx=4); end_entry.insert(0, today.isoformat())
+        start_var = tk.StringVar(value=today.replace(day=1).isoformat())
+        end_var = tk.StringVar(value=today.isoformat())
+        ctk.CTkButton(
+            period, textvariable=start_var, width=125, fg_color="#30363d",
+            command=lambda: open_date_picker(janela, initial=start_var.get(), on_select=lambda value: (start_var.set(value), load()), title="Data inicial"),
+        ).pack(side="left", padx=4)
+        ctk.CTkLabel(period, text="até").pack(side="left", padx=(4, 0))
+        ctk.CTkButton(
+            period, textvariable=end_var, width=125, fg_color="#30363d",
+            command=lambda: open_date_picker(janela, initial=end_var.get(), on_select=lambda value: (end_var.set(value), load()), title="Data final"),
+        ).pack(side="left", padx=4)
         include_homologation = tk.BooleanVar(value=False)
         ctk.CTkCheckBox(
             period, text="Incluir homologação (teste)", variable=include_homologation
@@ -11508,13 +11543,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             output = filedialog.asksaveasfilename(
                 parent=janela, title="Salvar pacote fiscal para a contabilidade",
                 defaultextension=".zip", filetypes=[("Pacote ZIP", "*.zip")],
-                initialfile=f"NabiCode_Fiscal_{start_entry.get()}_{end_entry.get()}.zip",
+                initialfile=f"NabiCode_Fiscal_{start_var.get()}_{end_var.get()}.zip",
             )
             if not output:
                 return
             try:
                 result = self.fiscal_service.export_accounting_package(
-                    start_date=start_entry.get(), end_date=end_entry.get(), output_path=output,
+                    start_date=start_var.get(), end_date=end_var.get(), output_path=output,
                     include_homologation=include_homologation.get(),
                     received_documents=self.fiscal_dfe_service.list_documents(),
                 )
@@ -11539,18 +11574,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             output = filedialog.asksaveasfilename(
                 parent=janela, title="Salvar relatório fiscal",
                 defaultextension=".csv", filetypes=[("Planilha CSV", "*.csv")],
-                initialfile=f"NabiCode_Relatorio_Fiscal_{start_entry.get()}_{end_entry.get()}.csv",
+                initialfile=f"NabiCode_Relatorio_Fiscal_{start_var.get()}_{end_var.get()}.csv",
             )
             if not output:
                 return
             try:
                 result = self.fiscal_service.export_fiscal_report_csv(
-                    start_date=start_entry.get(), end_date=end_entry.get(),
+                    start_date=start_var.get(), end_date=end_var.get(),
                     output_path=output, include_homologation=include_homologation.get(),
                 )
                 registrar_auditoria(
                     self._usuario_financeiro(), "EXPORTAR_RELATORIO_FISCAL", "Fiscal",
-                    f"{start_entry.get()} a {end_entry.get()}", "SUCESSO",
+                    f"{start_var.get()} a {end_var.get()}", "SUCESSO",
                 )
                 self.mostrar_notificacao(
                     "Relatório fiscal gerado",
@@ -12340,6 +12375,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             }[mode]
             output_filter.configure(values=choices)
             output_filter.set(choices[0])
+            period.pack(fill="x", padx=12, pady=(2, 4), before=filters)
             filters.pack(fill="x", padx=12, pady=(0, 8), before=action_panel)
             tree.pack(fill="both", expand=True, padx=(12, 28), pady=(0, 24), after=action_panel)
             xscroll.pack(fill="x", padx=12, pady=(0, 6), after=tree)
@@ -12349,6 +12385,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         # A abertura mostra primeiro as escolhas e ações. A grade, que antes
         # dominava a tela mesmo vazia, só ocupa espaço após uma seleção explícita.
         filters.pack_forget()
+        period.pack_forget()
         tree.pack_forget()
         xscroll.pack_forget()
         yscroll.place_forget()

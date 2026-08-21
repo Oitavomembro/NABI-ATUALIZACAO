@@ -34,7 +34,9 @@ def test_central_fiscal_mostra_escolhas_antes_da_grade():
     assert 'view_mode["value"] in {"ENTRADAS", "TODOS"}' in block
     assert '["Todas as saídas", "Vendas fiscais", "Vendas não fiscais", "Orçamentos"]' in block
     assert '["Todas as entradas", "NF-e de compras", "Compras não fiscais", "Recebimentos de fichas"]' in block
-    assert 'self.pdv_transaction_service.list_sales_for_day()' in block
+    assert 'self.pdv_transaction_service.list_sales_for_period(' in block
+    assert "period.pack_forget()" in block
+    assert "open_date_picker" in block
     assert '"FISCAL" if is_fiscal else "NÃO FISCAL"' in block
     assert 'REPORT_SERVICE.generate(\n                        "recebimentos"' in block
 

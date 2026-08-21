@@ -5,6 +5,7 @@ Este pacote não contém regras de negócio nem acesso a dados.
 
 from .background_manager import BackgroundManager, BackgroundSettings, RenderMetrics
 from .layout_manager import LayoutManager, LayoutViewport
+from .date_picker import open_date_picker
 from .window_reveal import (
     prepare_hidden_toplevel,
     reveal_prepared_toplevel,
@@ -27,6 +28,7 @@ __all__ = [
     "RenderMetrics",
     "LayoutManager",
     "LayoutViewport",
+    "open_date_picker",
     "prepare_hidden_toplevel",
     "reveal_prepared_toplevel",
     "reveal_prepared_toplevel_smooth",

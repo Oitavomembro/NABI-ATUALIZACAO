@@ -1488,3 +1488,13 @@ Uma sessão de caixa pertence ao terminal ou caixa físico. Cada operação regi
 - editar destinatário, dia ou ativação preserva a senha já protegida quando o campo de senha fica vazio;
 - falhas permanecem auditáveis e podem ser tentadas novamente no próximo ciclo sem travar a interface;
 - 41 testes focados aprovados em `NABICODE_PROFILE=TESTE`, incluindo período anterior, não repetição, validação do dia, anexo ZIP, Central Fiscal e agendamentos; compilação e `git diff --check` aprovados.
+
+## Checkpoint 43.07 — entradas e saídas por período com calendário
+
+- `Ver saídas` deixou de consultar somente as vendas do dia e passou a listar o intervalo escolhido, incluindo vendas fiscais, não fiscais e orçamentos;
+- `Ver entradas` aplica o mesmo intervalo a NF-e importadas, DF-e recebidos, compras não fiscais e recebimentos de fichas;
+- datas legadas em `DD/MM/AAAA` e datas ISO continuam reconhecidas pela consulta de vendas;
+- o período fica oculto na abertura da Central Fiscal e aparece somente depois que o usuário escolhe Entradas ou Saídas;
+- os campos digitáveis foram substituídos por um calendário visual em português, com navegação por mês e seleção de dia e ano;
+- falhas de consulta agora são registradas e exibidas ao usuário, em vez de o clique parecer não funcionar;
+- 25 testes focados aprovados em `NABICODE_PROFILE=TESTE`; compilação e `git diff --check` aprovados.

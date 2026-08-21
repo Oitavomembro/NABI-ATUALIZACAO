@@ -160,6 +160,15 @@ class PDVTransactionServiceTests(unittest.TestCase):
         )
         conn.close()
 
+    def test_lista_vendas_por_periodo_em_datas_iso_e_legada(self):
+        conn = sqlite3.connect(self.db)
+        conn.execute("INSERT INTO movimentacoes(tipo,descricao,valor,data,status_pagamento) VALUES('COMPRA','ISO',10,'2026-08-10 12:00','PAGO')")
+        conn.execute("INSERT INTO movimentacoes(tipo,descricao,valor,data,status_pagamento) VALUES('COMPRA','LEGADA',20,'11/08/2026 13:00','PAGO')")
+        conn.execute("INSERT INTO movimentacoes(tipo,descricao,valor,data,status_pagamento) VALUES('COMPRA','FORA',30,'12/08/2026 13:00','PAGO')")
+        conn.commit(); conn.close()
+        rows = self.service.list_sales_for_period(start_date="2026-08-10", end_date="2026-08-11")
+        self.assertEqual({row["descricao"] for row in rows}, {"ISO", "LEGADA"})
+
     def test_falha_ao_vincular_documento_fiscal_reverte_venda_inteira(self):
         def fail_link(_connection, _sale_id):
             raise RuntimeError("falha no vínculo fiscal")
