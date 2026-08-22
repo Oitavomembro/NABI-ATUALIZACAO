@@ -235,6 +235,19 @@ class PDVTransactionService:
             for row in rows
         ]
 
+    @staticmethod
+    def consume_committed_cart(
+        cart: list[dict[str, Any]], *, history_callback: Callable[[], None]
+    ) -> tuple[list[dict[str, Any]], Exception | None]:
+        """Invalida o carrinho confirmado antes de executar efeitos secundários."""
+        committed_items = [dict(item) for item in cart]
+        cart.clear()
+        try:
+            history_callback()
+        except Exception as exc:  # a venda principal já foi confirmada
+            return committed_items, exc
+        return committed_items, None
+
     def list_sales_for_day(self, *, day: datetime | None = None) -> list[dict[str, Any]]:
         """Lista todas as vendas do dia, inclusive canceladas, com estado fiscal."""
         selected = day or datetime.now()

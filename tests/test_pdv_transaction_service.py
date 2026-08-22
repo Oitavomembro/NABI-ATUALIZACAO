@@ -72,6 +72,39 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT status FROM financeiro_titulos WHERE origem_id=?", (result.sale_id,)).fetchone()[0], "ABERTO")
         conn.close()
 
+    def test_falha_do_historico_pos_commit_consume_carrinho_sem_duplicar_venda(self):
+        cart = [dict(self.item)]
+        result = self.service.finalize_sale(
+            customer_id=1, customer_name="CLIENTE", items=cart,
+            payments=[{"forma": "CREDIARIO", "valor": 10}],
+            received=10, change=0, user="admin",
+        )
+        committed, error = self.service.consume_committed_cart(
+            cart,
+            history_callback=lambda: (_ for _ in ()).throw(RuntimeError("histórico indisponível")),
+        )
+        self.assertEqual(committed, [self.item])
+        self.assertIsInstance(error, RuntimeError)
+        self.assertEqual(cart, [])
+        with self.assertRaisesRegex(ValueError, "carrinho.*vazio"):
+            self.service.finalize_sale(
+                customer_id=1, customer_name="CLIENTE", items=cart,
+                payments=[{"forma": "CREDIARIO", "valor": 10}],
+                received=10, change=0, user="admin",
+            )
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM parcelas").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM financeiro_titulos").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 10)
+            self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 8)
+            self.assertEqual(
+                conn.execute("SELECT id FROM movimentacoes").fetchone()[0], result.sale_id
+            )
+        finally:
+            conn.close()
+
     def test_falha_no_estoque_reverte_toda_venda(self):
         class BrokenStock(FakeStockService):
             def baixar_itens_venda_na_transacao(self, *args, **kwargs):
@@ -200,6 +233,39 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 0)
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 10)
         conn.close()
+
+    def test_falha_pre_commit_preserva_objeto_original_do_carrinho(self):
+        class BrokenAfterStock(FakeStockService):
+            def baixar_itens_venda_na_transacao(self, conn, items, *, venda_id, usuario):
+                super().baixar_itens_venda_na_transacao(
+                    conn, items, venda_id=venda_id, usuario=usuario
+                )
+                raise RuntimeError("falha antes do commit")
+
+        service = PDVTransactionService(
+            lambda: sqlite3.connect(self.db), estoque_service=BrokenAfterStock(),
+            financeiro_service=FakeFinanceService(), pdv_service=self.pdv,
+        )
+        cart = [dict(self.item)]
+        original = [dict(self.item)]
+        with self.assertRaisesRegex(RuntimeError, "antes do commit"):
+            service.finalize_sale(
+                customer_id=1, customer_name="CLIENTE", items=cart,
+                payments=[{"forma": "CREDIARIO", "valor": 10}],
+                received=10, change=0, user="admin",
+            )
+        self.assertEqual(cart, original)
+        self.assertEqual(cart[0]["qtd"], 2)
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM parcelas").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM financeiro_titulos").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM estoque_movimentacoes").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], 10)
+        finally:
+            conn.close()
 
     def test_falha_depois_do_movimento_financeiro_reverte_saldo_e_venda(self):
         class BrokenAfterFinance(FakeFinanceService):

@@ -94,6 +94,49 @@ class CustomerRegistrationService:
             self.history_callback(cliente_id, "CADASTRO", "Cadastro criado.")
         return cliente_id
 
+    def editar(
+        self,
+        cliente_id: int,
+        *,
+        nome: str,
+        codigo: str = "",
+        numero_ficha: int | str | None = None,
+        cpf: str = "",
+        rg: str = "",
+        telefone: str = "",
+        endereco: str = "",
+        observacoes: str = "",
+        limite: Decimal | float | str = Decimal("0"),
+    ) -> None:
+        normalized_id = int(cliente_id)
+        if normalized_id <= 0:
+            raise ValueError("Cliente inválido.")
+        dados = {
+            "numero_ficha": CustomerValidator.parse_record_number(numero_ficha),
+            "codigo": str(codigo or "").strip(),
+            "nome": CustomerValidator.normalize_name(nome),
+            "cpf": str(cpf or "").strip(),
+            "rg": str(rg or "").strip(),
+            "telefone": str(telefone or "").strip(),
+            "endereco": str(endereco or "").strip(),
+            "observacoes": str(observacoes or "").strip(),
+            "limite": CustomerValidator.parse_credit_limit(limite),
+        }
+        with self.repository.transaction() as connection:
+            if dados["numero_ficha"] is not None and self.repository.ficha_existe(
+                dados["numero_ficha"],
+                ignorar_cliente_id=normalized_id,
+                connection=connection,
+            ):
+                raise ValueError("Esta ficha já existe. Escolha outro número.")
+            self.repository.atualizar_cadastro(normalized_id, dados, connection=connection)
+
+        atual = int(self.get_config("proxima_ficha") or 5500)
+        if dados["numero_ficha"] is not None and dados["numero_ficha"] >= atual:
+            self.set_config("proxima_ficha", str(dados["numero_ficha"] + 1))
+        if self.history_callback:
+            self.history_callback(normalized_id, "EDIÇÃO", "Dados cadastrais atualizados.")
+
     def atualizar_perfil_fiscal(self, customer_id: int, **values: Any) -> None:
         data = {
             "email": str(values.get("email") or "").strip(),

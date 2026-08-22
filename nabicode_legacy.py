@@ -7685,13 +7685,30 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     logger.exception("NFC-e em contingência salva, mas DANFE não foi gerado", exc_info=exc)
                     aviso_fiscal += " NFC-e offline preservada; gere o DANFE pela Central Fiscal."
 
-        registrar_historico(
-            int(cliente_id),
-            "COMPRA",
-            f"Compra de R$ {resultado.total:.2f}: " + " | ".join(
-                f"{item['qtd']}x {item['item']} (R$ {item['subtotal']:.2f})" for item in itens_finalizados
+        _itens_consumidos, erro_historico = self.pdv_transaction_service.consume_committed_cart(
+            self.carrinho_venda,
+            history_callback=lambda: registrar_historico(
+                int(cliente_id),
+                "COMPRA",
+                f"Compra de R$ {resultado.total:.2f}: " + " | ".join(
+                    f"{item['qtd']}x {item['item']} (R$ {item['subtotal']:.2f})"
+                    for item in itens_finalizados
+                ),
             ),
         )
+        if erro_historico is not None:
+            logger.error(
+                "Venda %s confirmada, mas o histórico secundário do cliente falhou",
+                resultado.sale_id,
+                exc_info=(type(erro_historico), erro_historico, erro_historico.__traceback__),
+            )
+            messagebox.showwarning(
+                "Venda registrada",
+                "A venda foi registrada com sucesso e o carrinho foi encerrado, "
+                "mas o evento secundário do histórico do cliente não pôde ser gravado.\n\n"
+                f"Venda #{resultado.sale_id}. Não finalize novamente este carrinho.",
+                parent=getattr(self, "pdv_window", self),
+            )
         itens_impressao = [dict(item) for item in itens_finalizados]
         aviso_impressao = ""
         try:
@@ -7715,7 +7732,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             f"{aviso_fiscal}{aviso_impressao}",
             nivel="success", duracao_ms=7000,
         )
-        self.carrinho_venda.clear()
         self._pdv_contingency_reason = ""
         self._atualizar_botoes_contingencia_pdv()
         for row in self.tabela_carrinho.get_children():
@@ -8123,23 +8139,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             e=ctk.CTkEntry(win, height=34, fg_color="#161b22", text_color="#ffffff"); e.pack(fill="x", padx=25, pady=(1,6)); e.insert(0, "" if valor is None else str(valor)); entradas.append(e)
         def salvar():
             try:
-                ficha = int(entradas[0].get()) if entradas[0].get().strip() else None
-                limite = tratar_numero(entradas[7].get())
-            except ValueError:
-                messagebox.showerror("Erro", "Ficha ou limite inválido."); return
-            conn=conectar_banco(); cur=conn.cursor()
-            cur.execute("SELECT limite, observacoes FROM clientes WHERE id=?", (cliente_id,)); antigo=cur.fetchone()
-            try:
-                cur.execute("""UPDATE clientes SET numero_ficha=?,codigo=?,nome=?,cpf=?,rg=?,telefone=?,endereco=?,limite=?,observacoes=? WHERE id=?""",
-                    (ficha, entradas[1].get().strip(), entradas[2].get().strip(), entradas[3].get().strip(), entradas[4].get().strip(), entradas[5].get().strip(), entradas[6].get().strip(), limite, entradas[8].get().strip(), cliente_id))
-                conn.commit(); conn.close()
-            except sqlite3.IntegrityError:
-                conn.close(); messagebox.showerror("Erro", "Código já utilizado por outro cliente."); return
-            registrar_historico(cliente_id, "EDIÇÃO", "Dados cadastrais atualizados.")
-            if antigo and float(antigo[0] or 0) != limite:
-                registrar_historico(cliente_id, "LIMITE", f"Limite alterado de R$ {float(antigo[0] or 0):.2f} para R$ {limite:.2f}.")
-            if antigo and (antigo[1] or "") != entradas[8].get().strip():
-                registrar_historico(cliente_id, "OBSERVAÇÃO", "Observações do cliente atualizadas.")
+                CUSTOMER_REGISTRATION_SERVICE.editar(
+                    cliente_id,
+                    numero_ficha=entradas[0].get(), codigo=entradas[1].get(),
+                    nome=entradas[2].get(), cpf=entradas[3].get(), rg=entradas[4].get(),
+                    telefone=entradas[5].get(), endereco=entradas[6].get(),
+                    limite=entradas[7].get(), observacoes=entradas[8].get(),
+                )
+            except (ValueError, sqlite3.IntegrityError) as exc:
+                mensagem = str(exc) if isinstance(exc, ValueError) else "Código já utilizado por outro cliente."
+                messagebox.showerror("Erro", mensagem, parent=win)
+                return
             win.destroy(); self.filtrar_tabela_clientes(); self.atualizar_resumo_lateral(); messagebox.showinfo("Sucesso", "Cliente atualizado.")
         botoes = ctk.CTkFrame(win, fg_color="transparent")
         botoes.pack(fill="x", padx=25, pady=12)

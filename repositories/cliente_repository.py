@@ -188,6 +188,8 @@ class ClienteRepository:
     def transaction(self):
         """Expõe uma única transação para operações coordenadas de clientes."""
         with self.database.session(write=True) as connection:
+            if not connection.in_transaction:
+                connection.execute("BEGIN IMMEDIATE")
             yield connection
 
     def ficha_existe(
@@ -226,6 +228,24 @@ class ClienteRepository:
         if connection is not None:
             return int(connection.execute(sql, params).lastrowid)
         return self.database.execute(sql, params)
+
+    def atualizar_cadastro(
+        self, cliente_id: int, dados: dict[str, Any], *, connection
+    ) -> None:
+        cursor = connection.execute(
+            """UPDATE clientes
+                  SET numero_ficha=?,codigo=?,nome=?,cpf=?,rg=?,telefone=?,endereco=?,
+                      limite=?,observacoes=?
+                WHERE id=?""",
+            (
+                dados.get("numero_ficha"), dados.get("codigo", ""), dados.get("nome", ""),
+                dados.get("cpf", ""), dados.get("rg", ""), dados.get("telefone", ""),
+                dados.get("endereco", ""), dados.get("limite", 0),
+                dados.get("observacoes", ""), int(cliente_id),
+            ),
+        )
+        if cursor.rowcount != 1:
+            raise ValueError("Cliente não encontrado.")
 
     def get_or_create_final_consumer(self) -> int:
         with self.database.session(write=True) as connection:

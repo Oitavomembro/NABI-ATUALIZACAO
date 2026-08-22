@@ -15,7 +15,7 @@ class CustomerValidator:
 
     @staticmethod
     def parse_record_number(value: int | str | None) -> int | None:
-        text = str(value or "").strip()
+        text = str("" if value is None else value).strip()
         if not text:
             return None
         try:
