@@ -57,6 +57,22 @@ O extrato não fabrica saldo histórico por lançamento. Ele fornece débitos,
 créditos e efeitos comprováveis, mais o saldo consolidado atual, marcando
 `historical_running_balance_available=False`.
 
+## Financeiro e cobranças
+
+`FinancialQueryService` separa títulos `RECEBER`, títulos `PAGAR`, cobranças de
+clientes e baixas efetivas. Cobrança é derivada exclusivamente de parcelas de
+clientes; contas da empresa não entram nessa projeção. O resumo financeiro é de
+caixa/títulos comprováveis e não pretende ser DRE contábil.
+
+`FinancialActionService` exige `ActionContext` e confirmação para criar ou
+baixar títulos. Cancelamento e estorno individual são críticos. Títulos
+integrados não podem ser cancelados isoladamente: a operação permanece no
+módulo de origem. Eventos financeiros são emitidos apenas depois do commit e
+sua falha não autoriza repetir a mutação.
+
+Uma futura IA poderá consultar essas fachadas e solicitar ações por elas, mas
+não poderá importar `FinanceiroService`, repositórios nem abrir SQLite.
+
 Fluxo mínimo de uma futura interface:
 
 ```python

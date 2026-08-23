@@ -14,6 +14,11 @@ from .customer_dto import (
     CustomerDetails, CustomerInstallment, CustomerReceiptCommand,
     CustomerReceiptSummary, CustomerStatement, PersistedCustomerReceipt,
 )
+from .financial_dto import (
+    CashFlowEntry, CreateFinancialTitleCommand, CustomerCollectionSummary,
+    FinancialSummary, PayableSummary, PersistedFinancialAction,
+    ReceivableSummary, SettleFinancialTitleCommand,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,3 +99,25 @@ class CustomerReceiptPort(Protocol):
     """Retorno significa recebimento confirmado integralmente na transação."""
 
     def receive(self, command: CustomerReceiptCommand, *, user: str) -> PersistedCustomerReceipt: ...
+
+
+@runtime_checkable
+class FinancialReadPort(Protocol):
+    def receivables(self, **filters) -> tuple[ReceivableSummary, ...]: ...
+    def payables(self, **filters) -> tuple[PayableSummary, ...]: ...
+    def customer_collections(self, customer_id: int | None = None) -> tuple[CustomerCollectionSummary, ...]: ...
+    def financial_summary(self, start_date, end_date) -> FinancialSummary: ...
+    def cash_flow(self, start_date, end_date) -> tuple[CashFlowEntry, ...]: ...
+
+
+@runtime_checkable
+class FinancialActionPort(Protocol):
+    def create_title(self, title_type: str, command: CreateFinancialTitleCommand, *, user: str) -> PersistedFinancialAction: ...
+    def settle(self, title_type: str, command: SettleFinancialTitleCommand, *, user: str) -> PersistedFinancialAction: ...
+    def cancel(self, title_id: int, *, user: str) -> PersistedFinancialAction: ...
+    def reverse_payment(self, payment_id: int, *, user: str) -> PersistedFinancialAction: ...
+
+
+@runtime_checkable
+class FinancialEventPort(Protocol):
+    def financial_event(self, event) -> None: ...

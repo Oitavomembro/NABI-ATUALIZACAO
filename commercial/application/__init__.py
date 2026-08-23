@@ -22,6 +22,13 @@ from .customer_dto import (
     CustomerStatement, CustomerStatementEntry, CustomerUpdateCommand,
     PersistedCustomerReceipt,
 )
+from .financial_action_service import FinancialActionService
+from .financial_query_service import FinancialQueryService
+from .financial_dto import (
+    CashFlowEntry, CreateFinancialTitleCommand, CustomerCollectionSummary,
+    FinancialActionResult, FinancialEvent, FinancialSummary, PayableSummary,
+    ReceivableSummary, SettleFinancialTitleCommand,
+)
 
 __all__ = [
     "CheckoutCommand",
@@ -51,4 +58,15 @@ __all__ = [
     "PersistedCancellation",
     "PersistedCustomerReceipt",
     "SaleCancelled",
+    "FinancialActionService",
+    "FinancialQueryService",
+    "CashFlowEntry",
+    "CreateFinancialTitleCommand",
+    "CustomerCollectionSummary",
+    "FinancialActionResult",
+    "FinancialEvent",
+    "FinancialSummary",
+    "PayableSummary",
+    "ReceivableSummary",
+    "SettleFinancialTitleCommand",
 ]

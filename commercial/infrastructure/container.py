@@ -6,6 +6,8 @@ from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.commercial_action_service import CommercialActionService
 from commercial.application.commercial_query_service import CommercialQueryService
 from commercial.application.customer_application_service import CustomerApplicationService
+from commercial.application.financial_action_service import FinancialActionService
+from commercial.application.financial_query_service import FinancialQueryService
 from commercial.application.ports import CommercialEventPort
 
 from .cancellation_gateway import NabiCodeSaleCancellationGateway
@@ -15,6 +17,7 @@ from .product_gateway import NabiCodeProductGateway
 from .read_gateway import NabiCodeCommercialReadGateway
 from .customer_account_gateway import NabiCodeCustomerAccountGateway
 from .customer_receipt_gateway import NabiCodeCustomerReceiptGateway
+from .financial_gateway import NabiCodeFinancialGateway
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +31,8 @@ class CommercialContainer:
     query: CommercialQueryService | None = None
     actions: CommercialActionService | None = None
     customer_application: CustomerApplicationService | None = None
+    financial_query: FinancialQueryService | None = None
+    financial_actions: FinancialActionService | None = None
 
     @classmethod
     def from_existing(
@@ -42,6 +47,7 @@ class CommercialContainer:
         cobranca_service=None,
         dashboard_repository=None,
         action_events=None,
+        financial_events=None,
         customer_registration_service=None,
         database=None,
         financeiro_service=None,
@@ -89,7 +95,15 @@ class CommercialContainer:
                 customers=customers,
                 accounts=accounts,
             )
+        financial_query = None
+        financial_actions = None
+        if all(item is not None for item in (financeiro_service, financeiro_repository, cobranca_service)):
+            financial_gateway = NabiCodeFinancialGateway(
+                financeiro_service, financeiro_repository, cobranca_service
+            )
+            financial_query = FinancialQueryService(financial_gateway)
+            financial_actions = FinancialActionService(financial_gateway, financial_events)
         return cls(
             application, customers, products, checkout, query, actions,
-            customer_application,
+            customer_application, financial_query, financial_actions,
         )
