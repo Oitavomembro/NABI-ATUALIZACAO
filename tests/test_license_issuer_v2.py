@@ -318,6 +318,79 @@ def test_interface_exige_revisao_e_invalida_apos_alteracao(monkeypatch):
     app.processEvents()
 
 
+def test_interface_facil_descobre_chaves_e_configura_fichario(tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    import base64
+    import json
+    from PySide6.QtWidgets import QApplication
+    from license_issuer.ui_qt import LicenseIssuerWindow
+
+    keys = tmp_path / "segredos"; keys.mkdir()
+    private = keys / "nabicode-prod-2026-01-private.pem"
+    private.write_text("ARQUIVO EXTERNO SIMULADO", encoding="utf-8")
+    catalog = keys / "trusted_public_keys.json"
+    catalog.write_text(json.dumps({
+        "schema": 1,
+        "keys": {"nabicode-prod-2026-01": base64.b64encode(b"p" * 32).decode("ascii")},
+    }), encoding="utf-8")
+    output = tmp_path / "licencas"
+    app = QApplication.instance() or QApplication([])
+    window = LicenseIssuerWindow(key_directory=keys, output_directory=output)
+
+    assert window.private_key.text() == str(private)
+    assert window.public_catalog.text() == str(catalog)
+    assert window.key_id.text() == "nabicode-prod-2026-01"
+    assert window.edition.currentText() == "FICHARIO"
+    assert window.features.text() == "commercial,fichario,financial,qt"
+    assert window.features.isReadOnly()
+    assert window.advanced_panel.isHidden()
+    window.advanced_button.click()
+    assert not window.advanced_panel.isHidden()
+    assert window.advanced_button.text() == "Ocultar opções avançadas"
+    assert window.output.text().endswith("fichario-cliente-" + window.valid_until.date().toString("yyyyMMdd") + ".nabilic")
+    window.close(); app.processEvents()
+
+
+def test_interface_facil_usuario_escolhe_edicao_periodo_e_nome(tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtCore import QDate
+    from PySide6.QtWidgets import QApplication
+    from license_issuer.ui_qt import LicenseIssuerWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = LicenseIssuerWindow(key_directory=tmp_path / "sem-chave", output_directory=tmp_path)
+    window.customer.setText("Pedro Miranda")
+    window.edition.setCurrentText("COMERCIAL")
+    window.duration.setCurrentIndex(window.duration.findData(3))
+    assert window.features.text() == "commercial,legacy,qt"
+    assert window.valid_until.date() == QDate.currentDate().addMonths(3)
+    assert "comercial-pedro-miranda" in window.output.text()
+    window.edition.setCurrentText("AVALIACAO")
+    assert not window.duration.isEnabled()
+    assert window.valid_until.date() == QDate.currentDate().addDays(29)
+    window.close(); app.processEvents()
+
+
+def test_interface_facil_usa_maquina_local_e_minimiza(tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from license_issuer import ui_qt
+    from license_issuer.ui_qt import LicenseIssuerWindow
+
+    fingerprint = "f" * 64
+    monkeypatch.setattr(ui_qt, "current_machine_fingerprint", lambda: fingerprint)
+    app = QApplication.instance() or QApplication([])
+    window = LicenseIssuerWindow(key_directory=tmp_path, output_directory=tmp_path)
+    window.local_machine_button.click()
+    assert window.machine_fingerprint.text() == fingerprint
+    assert window.machine_code.text() != "—"
+    window.show(); app.processEvents()
+    window.minimize_button.click()
+    app.processEvents()
+    assert window.isMinimized()
+    window.close(); app.processEvents()
+
+
 def test_cli_cancela_antes_de_pedir_senha_e_nao_cria_arquivo(tmp_path, monkeypatch):
     private, public, _password = create_keys(tmp_path)
     output = tmp_path / "cancelada.nabilic"
