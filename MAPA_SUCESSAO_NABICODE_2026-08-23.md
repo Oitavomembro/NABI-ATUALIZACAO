@@ -1237,6 +1237,16 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - validação final: `45 passed`, `compileall` e `git diff --check` aprovados;
 - nenhum push e nenhum instalador foram realizados.
 
+#### Legibilidade dos cabeçalhos
+
+- correção: `2a3c53c` — `fix: torna cabecalhos de atrasos legiveis`;
+- títulos longos foram divididos em duas linhas: Compras/sem atraso,
+  Compras/com atraso e Parcelas/atrasadas;
+- larguras mínimas, alinhamento central e altura do cabeçalho impedem o corte
+  observado manualmente; cada título possui dica com a definição da métrica;
+- validação: `25 passed`, `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
+
 ### Requisito obrigatório antes do EXE final — atualização segura
 
 - o executável FICHÁRIO deve expor uma porta de atualização assinada e validada,
