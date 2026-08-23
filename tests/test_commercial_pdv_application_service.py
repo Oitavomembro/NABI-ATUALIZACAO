@@ -9,7 +9,7 @@ import unittest
 from commercial.application.dto import CheckoutCommand, CheckoutResult, CustomerRecord, ProductRecord
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import CheckoutState, PDVSession
-from commercial.application.ports import PersistedCheckout
+from commercial.application.ports import PersistedCheckout, ProductLookupPort
 from commercial.domain.payments import Payment, PaymentMethod
 
 
@@ -53,6 +53,30 @@ class FakeProducts:
 
     def get(self, product_id):
         return self.records.get(int(product_id))
+
+
+class LookupOnlyProducts(FakeProducts):
+    """Double que falha se o PDV tentar escrever em catálogo ou estoque."""
+
+    def __init__(self):
+        super().__init__()
+        self.write_calls = []
+
+    def create(self, *args, **kwargs):
+        self.write_calls.append(("create", args, kwargs))
+        raise AssertionError("O PDV não pode criar produtos.")
+
+    def update(self, *args, **kwargs):
+        self.write_calls.append(("update", args, kwargs))
+        raise AssertionError("O PDV não pode editar produtos.")
+
+    def delete(self, *args, **kwargs):
+        self.write_calls.append(("delete", args, kwargs))
+        raise AssertionError("O PDV não pode excluir produtos.")
+
+    def move_stock(self, *args, **kwargs):
+        self.write_calls.append(("move_stock", args, kwargs))
+        raise AssertionError("Item avulso não pode movimentar estoque.")
 
 
 class FakeCheckoutGateway:
@@ -106,6 +130,35 @@ def prepared_cash_session(application):
 
 
 class PDVApplicationSessionTests(unittest.TestCase):
+    def test_fronteira_de_produtos_do_pdv_e_somente_consulta(self):
+        public_operations = {
+            name for name in ProductLookupPort.__dict__ if not name.startswith("_")
+        }
+        self.assertEqual(public_operations, {"search", "get"})
+        self.assertFalse(
+            public_operations & {"create", "update", "delete", "save", "stock"}
+        )
+
+    def test_item_avulso_nao_escreve_catalogo_nem_movimenta_estoque(self):
+        products = LookupOnlyProducts()
+        application = PDVApplicationService(
+            customers=FakeCustomers(),
+            products=products,
+            checkout_gateway=FakeCheckoutGateway(),
+        )
+        session = application.new_session()
+
+        loose = application.add_loose_item(
+            session,
+            description="SERVIÇO FORA DO CATÁLOGO",
+            quantity="2",
+            unit_price="15,00",
+        )
+
+        self.assertIsNone(loose.product_id)
+        self.assertTrue(loose.is_loose)
+        self.assertEqual(products.write_calls, [])
+
     def test_ajustes_por_valor_percentual_e_limites(self):
         app = make_application()
         self.assertEqual(
