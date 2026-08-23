@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from decimal import Decimal
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -16,7 +17,7 @@ try:
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
 except (ImportError, OSError) as qt_error:
@@ -89,6 +90,23 @@ def make_view_model(error=None):
         customers=FakeCustomers(), products=FakeProducts(), checkout_gateway=gateway
     )
     return PDVViewModel(application), gateway
+
+
+class FakeCheckoutDialog:
+    DialogCode = QDialog.DialogCode if QT_AVAILABLE else None
+    result = QDialog.DialogCode.Rejected if QT_AVAILABLE else None
+    exec_calls = 0
+
+    def __init__(self, total, parent=None):
+        self.total = total
+        self.parent = parent
+
+    def exec(self):
+        type(self).exec_calls += 1
+        return type(self).result
+
+    def checkout_input(self):
+        raise AssertionError("Diálogo cancelado não pode preparar checkout")
 
 
 class PDVViewModelTests(unittest.TestCase):
@@ -218,6 +236,11 @@ class PDVQtTests(unittest.TestCase):
         item = self.window.customer_results.item(0)
         self.window._select_customer(item)
 
+    def _cart_with_customer(self):
+        self._select_customer()
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+
     def test_window_opens_and_customer_id_is_source_of_truth(self):
         self.assertTrue(self.window.isVisible())
         self.assertIn("NABI VENDAS", self.window.windowTitle())
@@ -266,12 +289,38 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("CONSUMIDOR FINAL", self.window.customer_selected.text())
         self.assertTrue(self.window.product_search.hasFocus())
 
+    def test_empty_customer_enter_with_cart_focuses_checkout(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window.customer_search.setFocus()
+        QTest.keyClick(self.window.customer_search, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.view_model.session.customer_id, 1)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
     def test_selected_customer_enter_preserves_real_id(self):
         self._select_customer()
         self.window.customer_search.setFocus()
         QTest.keyClick(self.window.customer_search, Qt.Key.Key_Return)
         self.assertEqual(self.view_model.session.customer_id, 7)
         self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_registered_customer_with_cart_focuses_checkout(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self._select_customer()
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_customer_selected_before_item_focuses_active_item_input(self):
+        self._select_customer()
+        self.assertTrue(self.window.product_search.hasFocus())
+
+        self.window._clear_customer()
+        self.window.loose_item.setChecked(True)
+        self.window.customer_search.setText("sete")
+        self.window._select_customer(self.window.customer_results.item(0))
+        self.assertTrue(self.window.description.hasFocus())
 
     def test_editing_selected_customer_text_invalidates_previous_id(self):
         self._select_customer()
@@ -312,7 +361,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.window.description.text(), "")
         self.assertEqual(self.window.quantity.text(), "1")
         self.assertEqual(self.window.price.value(), Decimal("0.00"))
-        self.assertTrue(self.window.description.hasFocus())
+        self.assertTrue(self.window.customer_search.hasFocus())
 
     def test_enter_never_adds_invalid_loose_item(self):
         self.window.loose_item.setChecked(True)
@@ -352,7 +401,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.window.cart.rowCount(), 1)
         self.assertEqual(self.view_model.total, Decimal("30.00"))
         self.assertEqual(self.view_model.session.cart.items[0].product_id, 9)
-        self.assertTrue(self.window.product_search.hasFocus())
+        self.assertTrue(self.window.customer_search.hasFocus())
 
     def test_each_enter_performs_only_one_transition(self):
         self.window.product_search.setText("P9")
@@ -413,9 +462,21 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.view_model.session.customer_id, 1)
         self.assertEqual(self.window.cart.rowCount(), 1)
         self.assertEqual(self.view_model.total, Decimal("20.00"))
-        self.assertTrue(self.window.product_search.hasFocus())
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_item_included_with_customer_already_selected_focuses_checkout(self):
+        self._select_customer()
+        self.window.product_search.setText("P9")
+        self.window.product_search.setFocus()
+        QTest.keyClick(self.window.product_search, Qt.Key.Key_Return)
+        QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+        QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.window.cart.rowCount(), 1)
+        self.assertTrue(self.window.checkout_button.hasFocus())
 
     def test_multiple_registered_items_return_to_search_each_time(self):
+        self._select_customer()
         for expected_rows in (1, 2, 3):
             self.window.product_search.setText("789")
             self.window.product_search.setFocus()
@@ -424,7 +485,54 @@ class PDVQtTests(unittest.TestCase):
             QTest.keyClick(self.window.price, Qt.Key.Key_Return)
             QApplication.processEvents()
             self.assertEqual(self.window.cart.rowCount(), expected_rows)
-            self.assertTrue(self.window.product_search.hasFocus())
+            self.assertTrue(self.window.checkout_button.hasFocus())
+            self.window.product_search.setFocus()
+
+    def test_enter_on_checkout_opens_dialog_once_without_persisting(self):
+        self._cart_with_customer()
+        FakeCheckoutDialog.exec_calls = 0
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window.checkout_button.setFocus()
+            QTest.keyClick(self.window.checkout_button, Qt.Key.Key_Return)
+            QApplication.processEvents()
+        self.assertEqual(FakeCheckoutDialog.exec_calls, 1)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_f9_opens_same_dialog(self):
+        self._cart_with_customer()
+        FakeCheckoutDialog.exec_calls = 0
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            QTest.keyClick(self.window, Qt.Key.Key_F9)
+            QApplication.processEvents()
+        self.assertEqual(FakeCheckoutDialog.exec_calls, 1)
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_cancel_checkout_preserves_session_and_focus(self):
+        self._cart_with_customer()
+        original_items = self.view_model.session.cart.items
+        original_total = self.view_model.total
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window._checkout()
+        self.assertEqual(self.view_model.session.cart.items, original_items)
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.total, original_total)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_empty_cart_blocks_checkout_and_focuses_active_item(self):
+        FakeCheckoutDialog.exec_calls = 0
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window._checkout()
+        self.assertEqual(FakeCheckoutDialog.exec_calls, 0)
+        self.assertIn("Inclua ao menos um item", self.window.statusBar().currentMessage())
+        self.assertTrue(self.window.product_search.hasFocus())
+
+        self.window.loose_item.setChecked(True)
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window._checkout()
+        self.assertEqual(FakeCheckoutDialog.exec_calls, 0)
+        self.assertTrue(self.window.description.hasFocus())
 
     def test_enter_does_not_invoke_checkout(self):
         calls = []

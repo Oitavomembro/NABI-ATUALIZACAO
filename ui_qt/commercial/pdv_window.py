@@ -318,6 +318,7 @@ class PDVWindow(QMainWindow):
             self.customer_search, self.customer_results,
             self.product_search, self.product_results,
             self.description, self.quantity, self.price, self.add_button,
+            self.checkout_button,
         )
         for widget in self._enter_widgets:
             widget.installEventFilter(self)
@@ -401,6 +402,28 @@ class PDVWindow(QMainWindow):
             return
         if focus in {self.price, self.add_button}:
             self._add_item()
+            return
+        if focus is self.checkout_button:
+            self._checkout()
+
+    def _active_item_input(self) -> QLineEdit:
+        return self.description if self.loose_item.isChecked() else self.product_search
+
+    def _focus_after_customer(self) -> None:
+        target = (
+            self.checkout_button
+            if not self.view_model.session.cart.is_empty
+            else self._active_item_input()
+        )
+        target.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _focus_after_item(self) -> None:
+        target = (
+            self.checkout_button
+            if self.view_model.selected_customer is not None
+            else self.customer_search
+        )
+        target.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _field_error(self, field: QWidget, message: str) -> None:
         self.statusBar().showMessage(message, 3500)
@@ -466,7 +489,7 @@ class PDVWindow(QMainWindow):
             self.customer_search.blockSignals(False)
             self.customer_results.clear()
             self.customer_results.hide()
-            self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_customer()
         except Exception as error:
             self._show_error(error)
 
@@ -479,7 +502,7 @@ class PDVWindow(QMainWindow):
             self.customer_search.blockSignals(False)
             self.customer_results.clear()
             self.customer_results.hide()
-            self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_customer()
         except Exception as error:
             self._show_error(error)
 
@@ -591,10 +614,7 @@ class PDVWindow(QMainWindow):
                 self.product_search.clear()
             self.quantity.setText("1")
             self.refresh_cart()
-            if self.loose_item.isChecked():
-                self.description.setFocus(Qt.FocusReason.OtherFocusReason)
-            else:
-                self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_item()
             return True
         except Exception as error:
             self._show_error(error)
@@ -634,13 +654,21 @@ class PDVWindow(QMainWindow):
             self._show_error(error)
 
     def _checkout(self) -> None:
+        if self.view_model.session.cart.is_empty:
+            self.statusBar().showMessage(
+                "Inclua ao menos um item antes de abrir Pagamentos.", 3500
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
         dialog = CheckoutDialog(self.view_model.total, self)
         if dialog.exec() != CheckoutDialog.DialogCode.Accepted:
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         try:
             result = self.view_model.checkout(dialog.checkout_input(), user="Sistema")
         except Exception as error:
             self._show_error(error)
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         if result.committed:
             title = "Venda confirmada"
@@ -654,3 +682,4 @@ class PDVWindow(QMainWindow):
             self.refresh_cart()
         else:
             QMessageBox.warning(self, "Venda recusada", result.message)
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
