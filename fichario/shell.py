@@ -253,7 +253,10 @@ class FicharioWindow(QMainWindow):
             QMessageBox.critical(self, "Backup", str(error)); return
         QMessageBox.information(
             self, "Backup concluido",
-            f"Backup integro criado em:\n{target}\n\nSchema: {report.schema_version}",
+            f"Backup íntegro criado em:\n{target}\n\nSchema: {report.schema_version}\n\n"
+            "Conteúdo preservado: clientes, fichas, endereços, telefones, saldos, "
+            "vendas, recebimentos, parcelas, históricos e configurações do banco.\n\n"
+            "A pasta de backup e o tamanho das letras são preferências deste computador.",
         )
 
     def restore_backup(self) -> None:
@@ -283,7 +286,10 @@ class FicharioWindow(QMainWindow):
             ); return
         QMessageBox.information(
             self, "Restauracao concluida",
-            f"Dados restaurados e validados.\nSchema: {report.schema_version}\n"
+            f"Dados restaurados e validados.\nSchema: {report.schema_version}\n\n"
+            "Restaurados: clientes, fichas, endereços, telefones, saldos, vendas, "
+            "recebimentos, parcelas, históricos e configurações do banco.\n"
+            "As preferências locais de pasta e tamanho das letras foram preservadas.\n\n"
             f"Copia anterior preservada em:\n{safety}\n\nReinicie o programa.",
         )
         self.close()

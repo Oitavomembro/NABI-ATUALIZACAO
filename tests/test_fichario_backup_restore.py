@@ -105,3 +105,11 @@ def test_backup_contem_so_banco_e_nao_licenca_ou_segredos(maintenance):
     names = {path.name.casefold() for path in backup.parent.iterdir()}
     assert "current.nabilic" not in names
     assert not any("private" in name or "certificate" in name for name in names)
+
+
+def test_backup_preserva_escopo_operacional_completo_do_fichario(maintenance):
+    before = snapshot(maintenance.database_path)
+    backup, report = maintenance.create_backup(prefix="escopo_fichario")
+    assert report.valid
+    assert snapshot(backup) == before
+    assert set(before) == {"cliente", "produto", "venda", "parcela", "historico", "config"}

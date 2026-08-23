@@ -147,6 +147,13 @@ class CustomerStatementDialog(QDialog):
         title = QLabel(f"FICHA {customer.record_number or '—'} — {customer.name}")
         title.setStyleSheet("font-size:21px;font-weight:800;color:#00d084")
         layout.addWidget(title)
+        contact = QLabel(
+            f"Endereço: {customer.address or '—'}   •   "
+            f"Telefone: {customer.phone or '—'}"
+        )
+        contact.setWordWrap(True)
+        contact.setStyleSheet("font-size:15px;font-weight:700;color:#c9d1d9")
+        layout.addWidget(contact)
         summary = QLabel(
             f"Saldo devedor: {_money(customer.debt_balance)}   •   "
             f"Limite: {_money(customer.credit_limit)}   •   "
@@ -210,15 +217,16 @@ class CustomerManagementDialog(QDialog):
         search_row.addWidget(QLabel("Letras")); search_row.addWidget(self.font_size)
         search_row.addWidget(self.refresh_button)
         layout.addLayout(search_row)
-        self.table = QTableWidget(0, 6)
+        self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
-            ["Ficha", "Nome", "Telefone", "Saldo", "Limite", "Disponível"]
+            ["Ficha", "Nome", "Saldo devedor", "Endereço", "Telefone"]
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(self.open_statement)
         self.table.installEventFilter(self)
         self.search.installEventFilter(self)
@@ -289,12 +297,18 @@ class CustomerManagementDialog(QDialog):
         for customer in customers:
             row = self.table.rowCount(); self.table.insertRow(row)
             values = (
-                customer.record_number or "—", customer.name, customer.phone or "—",
-                _money(customer.debt_balance), _money(customer.credit_limit),
-                _money(customer.available_credit),
+                customer.record_number or "—", customer.name,
+                _money(customer.debt_balance), customer.address or "—",
+                customer.phone or "—",
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
+                if column in {1, 3}:
+                    item.setToolTip(
+                        f"Ficha {customer.record_number or '—'} — {customer.name}\n"
+                        f"Endereço: {customer.address or '—'}\n"
+                        f"Telefone: {customer.phone or '—'}"
+                    )
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, customer.customer_id)
                     font = item.font(); font.setBold(True); font.setPointSize(font.pointSize() + 2)

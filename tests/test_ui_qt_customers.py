@@ -57,8 +57,13 @@ def test_lista_transporta_id_real_e_exibe_saldos(app):
     service = Service(); dialog = CustomerManagementDialog(service)
     assert dialog.table.rowCount() == 1
     assert dialog.selected_customer_id() == 7
-    assert dialog.table.item(0, 3).text() == "R$ 125,00"
-    assert dialog.table.item(0, 5).text() == "R$ 375,00"
+    assert [dialog.table.horizontalHeaderItem(index).text() for index in range(5)] == [
+        "Ficha", "Nome", "Saldo devedor", "Endereço", "Telefone",
+    ]
+    assert dialog.table.item(0, 2).text() == "R$ 125,00"
+    assert dialog.table.item(0, 3).text() == "RUA A"
+    assert dialog.table.item(0, 4).text() == "71999990000"
+    assert "RUA A" in dialog.table.item(0, 1).toolTip()
     dialog.close()
 
 
