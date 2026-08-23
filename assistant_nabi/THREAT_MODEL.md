@@ -53,7 +53,8 @@ apenas solicitar o fluxo oficial e relatar o estado comprovado pelo pipeline.
 
 - runtime preferencial: `llama.cpp/llama-server`, sob MIT;
 - API: OpenAI-compatible exclusivamente em loopback;
-- modelo-base candidato: Qwen3-4B, sob Apache 2.0;
+- modelo-base inicial: Qwen3-1.7B Instruct em GGUF Q4; Qwen3-4B permanece
+  somente candidato posterior, condicionado à homologação de memória e velocidade;
 - nenhum peso de modelo é incorporado ou baixado automaticamente nesta fase;
 - origem, licença, hash e quantização do arquivo GGUF deverão ser registrados
   antes de distribuição;

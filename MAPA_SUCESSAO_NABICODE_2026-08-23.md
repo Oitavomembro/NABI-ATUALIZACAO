@@ -106,6 +106,8 @@ Legenda:
 - [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
 - [x] composição da Nabi somente leitura preparada com fábrica explícita: exige provedor local, fachada Commercial de consultas, `SecurityService`, auditoria administrativa e identificador de sessão; sem sessão o modelo não é chamado, e sem permissão nenhuma consulta é executada; validação ampliada com 200 testes e 326 subtestes aprovada;
 - [!] ativação real no `main_qt.py` permanece bloqueada até o Qt possuir login autenticado legítimo e o modelo local possuir origem, licença, hash e homologação física; é proibido usar `start_session_without_password` ou fabricar sessão para habilitar a Nabi;
+- [x] portão local de artefato GGUF implementado: manifesto exige modelo, arquivo, quantização, URL HTTPS sem credenciais, revisão imutável, licença, tamanho e SHA-256; ausência, truncamento ou adulteração falham fechados e nenhum download é realizado; validação ampliada com 204 testes e 336 subtestes aprovada;
+- [~] o portão de artefato ainda não contém origem/revisão/hash reais do Qwen baseline e não equivale a homologação do peso ou do `llama-server`;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.

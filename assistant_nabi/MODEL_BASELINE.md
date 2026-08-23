@@ -31,3 +31,14 @@ Data da avaliação: 23/08/2026.
 6. manter opção de remover ou substituir o modelo sem alterar o núcleo.
 
 O modelo não será incorporado ao instalador até essa evidência existir.
+
+## Verificação implementada antes da homologação física
+
+O NabiCode já possui um verificador local que exige manifesto com identificador,
+arquivo GGUF simples, quantização, origem HTTPS sem credenciais, revisão
+imutável, licença declarada, tamanho e SHA-256. O peso somente é aceito dentro
+da pasta autorizada e quando tamanho e conteúdo coincidem exatamente.
+
+Esse verificador não escolhe a origem, não baixa o arquivo e não transforma um
+peso ainda não testado em modelo homologado. A revisão e o SHA-256 reais serão
+registrados somente depois da seleção explícita do artefato oficial.
