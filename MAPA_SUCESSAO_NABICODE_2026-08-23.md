@@ -89,7 +89,7 @@ Legenda:
 - [x] decisão: operar por serviços internos, não por cliques livres na GUI;
 - [x] texto primeiro e porta de voz futura definidos;
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
-- [ ] Fase 0: ameaça, permissões, portas e schemas;
+- [~] Fase 0: modelo de ameaças, níveis, portas e registro fail-closed somente leitura implementados na branch `codex/ia-nabi-fase0`; integração com `SecurityService`, schemas fechados de ferramentas reais e auditoria persistente ainda pendentes;
 - [ ] Fase 1: mascote e assistente escrita somente leitura;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;
