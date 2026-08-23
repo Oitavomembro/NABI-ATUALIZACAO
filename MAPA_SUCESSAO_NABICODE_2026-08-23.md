@@ -1220,3 +1220,32 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - validação final: `32 passed`, `compileall` e `git diff --check` aprovados,
   incluindo regressão específica para CPF ou telefone ausente;
 - nenhum push e nenhum instalador foram realizados.
+
+### Comportamento de compras na lista de clientes
+
+- implementação: `7d7bb72` — `feat: exibe comportamento de compras dos clientes`;
+- cabeçalho `NABICODE FICHARIO` e subtítulo foram centralizados;
+- a lista mantém Ficha, Nome e Saldo devedor e usa o espaço restante para
+  Compras sem atraso, Compras com atraso e Quantidade de atrasos;
+- a regra é a mesma do Legacy: uma compra confiável sem parcela atrasada entra
+  em sem atraso; compra com pelo menos uma parcela paga atrasada ou vencida em
+  aberto entra em com atraso; quantidade soma essas parcelas atrasadas;
+- compras antigas sem datas confiáveis não são inventadas em uma categoria e
+  permanecem indicadas por dica explicativa;
+- cálculo em lote evita N+1: 60 clientes no banco físico de teste foram
+  classificados em aproximadamente `0,013 s`;
+- validação final: `45 passed`, `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
+
+### Requisito obrigatório antes do EXE final — atualização segura
+
+- o executável FICHÁRIO deve expor uma porta de atualização assinada e validada,
+  reutilizando os serviços de pacote já existentes, sem edição manual de código;
+- a atualização deve substituir somente arquivos imutáveis do programa, criar
+  backup validado antes da troca e preservar banco, licença, PDFs, logs e backups
+  na área persistente fora de `Program Files`;
+- falha de assinatura, versão, integridade, backup ou aplicação deve cancelar ou
+  reverter a atualização; nenhum atualizador final deve ser publicado antes dos
+  testes físicos de reinstalação e atualização no Windows;
+- este requisito está planejado, mas ainda não foi declarado concluído nem deve
+  ser confundido com a geração atual do EXE de homologação.
