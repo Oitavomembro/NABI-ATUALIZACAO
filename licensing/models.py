@@ -18,6 +18,7 @@ class LicenseState(str, Enum):
 
 class LicenseEdition(str, Enum):
     COMMERCIAL = "COMERCIAL"
+    FICHARIO = "FICHARIO"
     EVALUATION = "AVALIACAO"
 
 
