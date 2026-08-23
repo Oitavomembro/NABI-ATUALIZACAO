@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from commercial.application.dto import CheckoutResult, CustomerRecord, ProductRecord
+from commercial.application.dto import BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import PDVSession
 from commercial.domain.money import MoneyCodec
@@ -114,6 +114,30 @@ class PDVViewModel:
             unit_price=unit_price,
             discount_percent=discount_percent,
         )
+
+    def save_budget(self) -> BudgetDocument:
+        budget = self.application.save_budget(self.session)
+        self.selected_customer = None
+        self.selected_product = None
+        return budget
+
+    def list_budgets(self) -> tuple[BudgetDocument, ...]:
+        return self.application.list_budgets()
+
+    def load_budget(self, budget_id: str, *, replace: bool = False) -> BudgetDocument:
+        budget = self.application.load_budget(self.session, budget_id, replace=replace)
+        self.selected_customer = self.application.get_customer(budget.customer_id)
+        self.selected_product = None
+        return budget
+
+    def budget_preview_text(self, budget: BudgetDocument) -> str:
+        return self.application.budget_preview_text(budget)
+
+    def print_budget(self, budget: BudgetDocument) -> str:
+        return self.application.print_budget(budget)
+
+    def generate_budget_pdf(self, budget: BudgetDocument) -> str:
+        return self.application.generate_budget_pdf(budget)
 
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:
