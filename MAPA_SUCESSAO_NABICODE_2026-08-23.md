@@ -922,3 +922,16 @@ Evidências:
 - `compileall` e `git diff --check`: aprovados.
 
 Próxima etapa coerente da IA: ampliar consultas orientativas somente onde houver fachada oficial e necessidade comprovada; ações de Caixa/Financeiro continuam proibidas até possuírem rascunho, confirmação reforçada, idempotência e auditoria próprios.
+
+### Porta Nabi → pesquisa acessível de produtos
+
+- implementação: `dab5624` — `feat: conecta Nabi a pesquisa segura de produtos`;
+- a ferramenta tipada `interface.abrir_pesquisa_produtos` produz somente a intenção `OPEN_PRODUCT_SEARCH` e um termo opcional limitado a 100 caracteres;
+- a intenção exige `produtos/view`, não recebe `product_id`, não consulta banco e não seleciona produto;
+- o painel Qt, já de volta à thread da GUI, chama uma porta explícita do PDV exatamente uma vez;
+- a janela acessível continua sendo a única responsável pela busca e somente uma seleção humana aceita transporta `product_id` real ao fluxo oficial;
+- cancelamento não cria identidade; modo Produto avulso recusa a abertura; texto ambíguo nunca é promovido a produto;
+- F2, botão manual, lista rápida e fluxo Quantidade → Preço permanecem preservados;
+- validação focada: `48 passed`, `7 subtests passed`;
+- regressão consolidada Nabi + pesquisa + PDV: `232 passed`, `37 subtests passed`, zero falhas;
+- `compileall` e `git diff --check`: aprovados.
