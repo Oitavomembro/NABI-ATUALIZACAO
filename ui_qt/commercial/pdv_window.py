@@ -399,7 +399,7 @@ class PDVWindow(QMainWindow):
                 event.accept()
                 return True
         if (
-            watched in self._enter_widgets
+            watched in getattr(self, "_enter_widgets", ())
             and event.type() == QEvent.Type.KeyPress
             and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
         ):
