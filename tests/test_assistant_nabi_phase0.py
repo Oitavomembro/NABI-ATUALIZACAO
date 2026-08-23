@@ -14,7 +14,11 @@ from assistant_nabi import (
     ToolKind,
     ToolRequest,
     ToolSchema,
+    register_commercial_read_tools,
 )
+from commercial.application.dto import CustomerRecord, ProductRecord
+from commercial.application.product_dto import ProductStockSummary
+from decimal import Decimal
 
 
 class Permissions:
@@ -116,6 +120,15 @@ class NabiPhaseZeroTests(unittest.TestCase):
         request = ToolRequest("produtos.pesquisar", {"term": "cafe"})
         with self.assertRaises(TypeError):
             request.parameters["term"] = "alterado"
+
+    def test_resultado_estruturado_e_recursivamente_imutavel(self):
+        from assistant_nabi import ToolResult
+
+        result = ToolResult("req", "produtos.pesquisar", True, {
+            "items": [{"product_id": 1}]
+        })
+        with self.assertRaises(TypeError):
+            result.payload["items"][0]["product_id"] = 2
 
     def test_definicao_inconsistente_e_rejeitada(self):
         with self.assertRaisesRegex(ValueError, "capacidade READ"):
@@ -264,6 +277,77 @@ class NabiAdapterTests(unittest.TestCase):
             True,
             {"customer_name": "resultado sensível"},
         )
+
+
+class CommercialQueries:
+    def __init__(self):
+        self.calls = []
+
+    def search_products(self, term, *, limit):
+        self.calls.append(("products", term, limit))
+        return (ProductRecord(7, "P7", "789", "Café", Decimal("12.50"), True),)
+
+    def product_stock(self, product_id):
+        self.calls.append(("stock", product_id))
+        return ProductStockSummary(
+            product_id, Decimal("8"), Decimal("2"), True, "DISPONIVEL", False
+        )
+
+    def search_customers(self, term, *, limit):
+        self.calls.append(("customers", term, limit))
+        return (CustomerRecord(9, "C9", "Maria", 91, Decimal("100"), Decimal("0")),)
+
+
+class NabiCommercialReadToolsTests(unittest.TestCase):
+    def setUp(self):
+        self.permissions = Permissions()
+        self.audit = Audit()
+        self.registry = ReadOnlyToolRegistry(
+            permissions=self.permissions, audit=self.audit
+        )
+        self.queries = CommercialQueries()
+        register_commercial_read_tools(self.registry, self.queries)
+        self.actor = AssistantActor("operador", "OPERADOR", "sessao-1")
+
+    def test_pesquisa_produto_devolve_dto_minimo_sem_objeto_interno(self):
+        result = self.registry.execute(
+            ToolRequest("produtos.pesquisar", {"term": "cafe"}), actor=self.actor
+        )
+        self.assertTrue(result.success)
+        self.assertEqual(result.payload["items"][0]["sale_price"], "12.50")
+        self.assertEqual(
+            set(result.payload["items"][0]),
+            {"product_id", "code", "description", "sale_price", "active"},
+        )
+        self.assertEqual(self.queries.calls, [("products", "cafe", 20)])
+
+    def test_estoque_usa_id_inteiro_e_dto_minimo(self):
+        result = self.registry.execute(
+            ToolRequest("produtos.consultar_estoque", {"product_id": 7}),
+            actor=self.actor,
+        )
+        self.assertTrue(result.success)
+        self.assertEqual(result.payload["current_quantity"], "8.0000")
+        self.assertNotIn("movements", result.payload)
+
+    def test_pesquisa_cliente_minimiza_dados_pessoais(self):
+        result = self.registry.execute(
+            ToolRequest("clientes.pesquisar", {"term": "maria"}), actor=self.actor
+        )
+        self.assertTrue(result.success)
+        customer = result.payload["items"][0]
+        self.assertEqual(customer["customer_id"], 9)
+        self.assertEqual(set(customer), {"customer_id", "code", "record_number", "name"})
+        for sensitive in ("cpf", "rg", "phone", "address", "credit_limit"):
+            self.assertNotIn(sensitive, customer)
+
+    def test_ferramentas_reais_continuam_sujeitas_a_permissao(self):
+        self.permissions.allowed = False
+        result = self.registry.execute(
+            ToolRequest("clientes.pesquisar", {"term": "maria"}), actor=self.actor
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(self.queries.calls, [])
 
 
 if __name__ == "__main__":

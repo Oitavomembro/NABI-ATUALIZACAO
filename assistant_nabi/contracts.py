@@ -36,12 +36,22 @@ def _required_text(value: object, field_name: str) -> str:
     return normalized
 
 
+def _immutable_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return MappingProxyType({str(key): _immutable_value(item) for key, item in value.items()})
+    if isinstance(value, (list, tuple)):
+        return tuple(_immutable_value(item) for item in value)
+    if isinstance(value, (str, int, bool, type(None))):
+        return value
+    raise TypeError("Ferramentas aceitam somente dados estruturados simples.")
+
+
 def _immutable_mapping(value: Mapping[str, Any] | None) -> Mapping[str, Any]:
     if value is None:
         return MappingProxyType({})
     if not isinstance(value, Mapping):
         raise TypeError("Os parâmetros da ferramenta devem formar um mapeamento.")
-    return MappingProxyType(dict(value))
+    return _immutable_value(value)
 
 
 @dataclass(frozen=True, slots=True)

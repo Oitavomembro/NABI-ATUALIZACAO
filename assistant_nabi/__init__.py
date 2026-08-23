@@ -13,6 +13,7 @@ from .contracts import (
 )
 from .registry import ReadOnlyToolRegistry
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
+from .read_tools import register_commercial_read_tools
 
 __all__ = [
     "AssistantActor",
@@ -27,4 +28,5 @@ __all__ = [
     "ToolRequest",
     "ToolResult",
     "ToolSchema",
+    "register_commercial_read_tools",
 ]
