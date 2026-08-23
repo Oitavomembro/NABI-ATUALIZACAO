@@ -921,6 +921,22 @@ Evidências:
 - suíte consolidada IA + fachadas relacionadas: `123 passed`, `35 subtests passed`, zero falhas;
 - `compileall` e `git diff --check`: aprovados.
 
+## Checkpoint Fichário — separação assinada entre Nabi e Fiscal
+
+- implementação: `ff672b0` — `feat: separa Nabi e Fiscal por licença`;
+- criada a capacidade assinada `assistant`, independente de `fiscal`;
+- uma licença com `qt + commercial + financial + assistant`, mas sem `fiscal`, permite PDV/Fichário e Nabi, mantendo workers e escritas fiscais bloqueados;
+- sem `assistant`, o Qt não compõe ativação, runtime, painel ou modelo da Nabi;
+- com `assistant` e sem `fiscal`, não são construídos `NFeImportRepository`, `NFeImportService`, rascunho XML ou botão de revisão de NF-e;
+- revisão local de NF-e só é composta quando `assistant` e `fiscal` estão ambos assinados;
+- alteração dos recursos assinados durante a execução encerra a Nabi e força reinício seguro, impedindo reativação acidental por troca de licença;
+- código e tabelas fiscais podem permanecer instalados, mas não são inicializados pela composição Fichário;
+- validação focada: `21 passed`;
+- regressão consolidada de licenciamento + emissor + Nabi + PDV: `267 passed`, `37 subtests passed`, zero falhas;
+- `compileall` e `git diff --check`: aprovados.
+
+Trilha paralela autorizada: concluir a edição Fichário com entrada/menu Qt próprios, Clientes, Ficha, crediário, Recebimentos, comprovantes e pacote, sem alterar a implementação da Nabi deste checkpoint.
+
 Próxima etapa coerente da IA: ampliar consultas orientativas somente onde houver fachada oficial e necessidade comprovada; ações de Caixa/Financeiro continuam proibidas até possuírem rascunho, confirmação reforçada, idempotência e auditoria próprios.
 
 ### Porta Nabi → pesquisa acessível de produtos
