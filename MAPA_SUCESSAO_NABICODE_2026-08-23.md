@@ -93,11 +93,12 @@ Legenda:
 - [x] decisão de reconstrução integral autorizada;
 - [x] arquitetura escolhida: licença offline Ed25519 assinada e vinculada à máquina;
 - [x] tolerância normativa de dez dias definida;
-- [x] pesquisa preliminar de tecnologias e licenças abertas concluída;
+- [x] pesquisa primária de referências Ed25519/offline concluída e documentada, sem incorporar nova dependência;
 - [x] formato canônico `.nabilic`, schema estrito e assinatura Ed25519 implementados em `8cc9990`;
 - [x] portão único para Legacy, Qt e auxiliares implementado em `1254a27` e endurecido em `a242f71`;
 - [x] verificador fail-closed, monitoramento contínuo e modo restrito de ativação/diagnóstico/backup/exportação implementados;
 - [x] Emissor de Licenças separado do runtime e excluído do pacote distribuído;
+- [x] ferramenta externa Qt/CLI concluída com revisão imutável antes da assinatura, renovação, revogação, verificação, prevenção de sobrescrita e empacotamento administrativo separado;
 - [ ] proteger e fazer backup da chave privada fora do repositório;
 - [x] edição AVALIAÇÃO vinculada à máquina e limitada a trinta dias implementada;
 - [x] adulteração, expiração, tolerância, retrocesso de relógio, revogação, rollback e máquina divergente cobertos por testes automatizados;
@@ -121,6 +122,21 @@ Legenda:
 - regressão integral inicial: 1.717 testes e 385 subtestes aprovados, com quatro falhas diagnosticadas; o contrato do empacotamento foi corrigido, o teste textual obsoleto do MoneyEdit foi atualizado e a dependência bloqueada já declarada `BrazilFiscalReport==1.0.1` foi restaurada no Python de testes;
 - regressão integral final: 1.721 testes e 385 subtestes aprovados, 1 teste previamente marcado como ignorado e zero falhas;
 - pendências físicas/materiais: cerimônia da chave real pelo proprietário, duas cópias privadas criptografadas em locais separados, hash do catálogo público, revisão jurídica, teste físico em segunda máquina, reinstalação/atualização e homologação dos estados visuais no Windows;
+- nenhum push realizado.
+
+#### Checkpoint do Emissor externo — branch `codex/emissor-licencas-v2`
+
+- base preservada: `07b7f748ca0b8e2a3e2b44f0083d029992c458a1`;
+- ferramenta, workflow seguro, CLI, interface Qt, empacotamento e testes: `35b3b80`;
+- operação, cerimônia e pesquisa de proveniência: `84c0d49`;
+- a revisão é separada da assinatura; qualquer edição posterior invalida a revisão;
+- senha é solicitada somente depois da confirmação e nunca passa pela linha de comando;
+- a chave privada precisa corresponder ao catálogo público escolhido; catálogo, licença e segredo não entram no executável;
+- emissão, renovação e revogação criam novo arquivo e recusam sobrescrita;
+- nenhuma chave privada real foi criada, versionada, logada ou empacotada;
+- referências Minisign (ISC), exemplo Keygen (MIT) e PyCA `cryptography` foram avaliadas somente por fontes primárias; nenhum código externo foi copiado e nenhuma nova dependência foi incorporada;
+- validação: 15 testes próprios do emissor aprovados; regressão relacionada com 104 testes e 11 subtestes aprovada; `compileall` e `git diff --check` aprovados;
+- pendências físicas: cerimônia da chave real, cópias criptografadas e teste de restauração, hash do catálogo, build administrativo reproduzível/SBOM, validação em segunda máquina Windows, revisão de versão da `cryptography` e revisão jurídica;
 - nenhum push realizado.
 
 ### IA Nabi
