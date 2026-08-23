@@ -165,7 +165,7 @@ class PDVWindow(QMainWindow):
         clear = QPushButton("×")
         clear.setToolTip("Limpar cliente selecionado")
         clear.setFixedWidth(42)
-        self.customer_search.textChanged.connect(self._search_customers)
+        self.customer_search.textChanged.connect(self._customer_text_changed)
         self.customer_results.itemActivated.connect(self._select_customer)
         self.customer_results.itemClicked.connect(self._select_customer)
         clear.clicked.connect(self._clear_customer)
@@ -213,7 +213,7 @@ class PDVWindow(QMainWindow):
         loose_hint = QLabel("Descrição livre, sem baixa de estoque")
         loose_hint.setObjectName("muted")
         self.loose_item.toggled.connect(self._toggle_loose)
-        self.product_search.textChanged.connect(self._search_products)
+        self.product_search.textChanged.connect(self._product_text_changed)
         self.product_results.itemActivated.connect(self._select_product)
         self.product_results.itemClicked.connect(self._select_product)
         self.add_button.clicked.connect(self._add_item)
@@ -339,6 +339,9 @@ class PDVWindow(QMainWindow):
             and event.type() == QEvent.Type.KeyPress
             and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
         ):
+            if event.isAutoRepeat():
+                event.accept()
+                return True
             self._enter_action(watched)
             event.accept()
             return True
@@ -433,6 +436,12 @@ class PDVWindow(QMainWindow):
         if self.customer_results.count():
             self.customer_results.setCurrentRow(0)
 
+    def _customer_text_changed(self, term: str) -> None:
+        if self.view_model.selected_customer is not None:
+            self.view_model.clear_customer()
+            self.customer_selected.setText("Nenhum cliente selecionado")
+        self._search_customers(term)
+
     def _unique_customer_result(self, term: str) -> QListWidgetItem | None:
         if self.customer_results.count() == 1:
             return self.customer_results.item(0)
@@ -452,6 +461,9 @@ class PDVWindow(QMainWindow):
             customer = self.view_model.select_customer(int(item.data(Qt.ItemDataRole.UserRole)))
             reference = customer.record_number if customer.record_number is not None else customer.code
             self.customer_selected.setText(f"Selecionado: {reference} — {customer.name}")
+            self.customer_search.blockSignals(True)
+            self.customer_search.setText(f"{reference} — {customer.name}")
+            self.customer_search.blockSignals(False)
             self.customer_results.clear()
             self.customer_results.hide()
             self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -462,6 +474,9 @@ class PDVWindow(QMainWindow):
         try:
             customer = self.view_model.select_final_consumer()
             self.customer_selected.setText(customer.name)
+            self.customer_search.blockSignals(True)
+            self.customer_search.setText(customer.name)
+            self.customer_search.blockSignals(False)
             self.customer_results.clear()
             self.customer_results.hide()
             self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -492,6 +507,12 @@ class PDVWindow(QMainWindow):
         self.product_results.setVisible(self.product_results.count() > 0)
         if self.product_results.count():
             self.product_results.setCurrentRow(0)
+
+    def _product_text_changed(self, term: str) -> None:
+        if self.view_model.selected_product is not None:
+            self.view_model.clear_product()
+            self.price.clear_value()
+        self._search_products(term)
 
     def _unique_product_result(self, term: str) -> QListWidgetItem | None:
         if self.product_results.count() == 1:
