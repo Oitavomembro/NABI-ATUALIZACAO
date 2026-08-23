@@ -28,6 +28,12 @@ class NabiCodeCommercialReadGateway:
                 description=row.get("descricao", ""), total=row["valor"],
                 occurred_at=row.get("data", ""), status=row.get("status_pagamento", ""),
                 cancelled=str(row.get("status_pagamento", "")).upper() == "CANCELADO",
+                fiscal_status=str(row.get("fiscal_status") or ""),
+                fiscal_model=str(row.get("fiscal_model") or ""),
+                access_key=str(row.get("access_key") or ""),
+                protocol=str(row.get("protocol") or ""),
+                fiscal_environment=str(row.get("fiscal_environment") or ""),
+                fiscal_authorized_at=str(row.get("fiscal_authorized_at") or ""),
             )
             for row in rows
         )

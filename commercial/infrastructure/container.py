@@ -13,6 +13,7 @@ from commercial.application.stock_action_service import StockActionService
 from commercial.application.ports import (
     BudgetOutputPort, BudgetPort, CommercialEventPort, SaleReceiptOutputPort,
     SuspendedSalePort,
+    DailySalesPort,
 )
 
 from .cancellation_gateway import NabiCodeSaleCancellationGateway
@@ -55,6 +56,7 @@ class CommercialContainer:
         budgets: BudgetPort | None = None,
         budget_output: BudgetOutputPort | None = None,
         suspended_sales: SuspendedSalePort | None = None,
+        daily_sales: DailySalesPort | None = None,
         financeiro_repository=None,
         cobranca_service=None,
         dashboard_repository=None,
@@ -78,6 +80,7 @@ class CommercialContainer:
             budgets=budgets,
             budget_output=budget_output,
             suspended_sales=suspended_sales,
+            daily_sales=daily_sales,
         )
         cancellation = NabiCodeSaleCancellationGateway(pdv_transaction_service)
         accounts = None

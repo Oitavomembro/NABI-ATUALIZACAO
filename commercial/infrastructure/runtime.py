@@ -24,6 +24,7 @@ from .container import CommercialContainer
 from .sale_receipt_gateway import NabiCodeSaleReceiptGateway
 from .budget_gateway import NabiCodeBudgetGateway
 from .suspended_sale_gateway import NabiCodeSuspendedSaleGateway
+from .daily_sales_gateway import NabiCodeDailySalesGateway
 
 
 def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> CommercialContainer:
@@ -54,6 +55,7 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
     )
     receipt_output = None
     budget_gateway = None
+    daily_sales_gateway = None
     if pdf_dir is not None:
         documents = EmittedDocumentService(database.connect)
         receipt_output = NabiCodeSaleReceiptGateway(
@@ -81,6 +83,18 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
             final_consumer_id=final_consumer_id,
             config_getter=system.get_config,
         )
+        daily_sales_gateway = NabiCodeDailySalesGateway(
+            transaction_service=transaction,
+            receipts=ReceiptService(database, config_getter=system.get_config),
+            printing=PrintingService(system.get_config),
+            pdf=PDFDocumentService(
+                connection_factory=database.connect,
+                config_getter=system.get_config,
+                pdf_dir=pdf_dir,
+                document_registrar=documents.register,
+            ),
+            config_getter=system.get_config,
+        )
     return CommercialContainer.from_existing(
         cliente_repository=customers,
         produto_service=products,
@@ -97,4 +111,5 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
         budgets=budget_gateway,
         budget_output=budget_gateway,
         suspended_sales=NabiCodeSuspendedSaleGateway(pdv),
+        daily_sales=daily_sales_gateway,
     )

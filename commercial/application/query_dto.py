@@ -43,9 +43,24 @@ class DailySaleSummary:
     occurred_at: str
     status: str
     cancelled: bool
+    fiscal_status: str = ""
+    fiscal_model: str = ""
+    access_key: str = ""
+    protocol: str = ""
+    fiscal_environment: str = ""
+    fiscal_authorized_at: str = ""
 
     def __post_init__(self) -> None:
+        if int(self.sale_id) <= 0:
+            raise ValueError("Venda inválida.")
+        object.__setattr__(self, "sale_id", int(self.sale_id))
+        if self.customer_id is not None:
+            object.__setattr__(self, "customer_id", int(self.customer_id))
         object.__setattr__(self, "total", _money(self.total, "total da venda"))
+
+    @property
+    def has_fiscal_document(self) -> bool:
+        return bool(str(self.fiscal_status).strip())
 
 
 @dataclass(frozen=True, slots=True)

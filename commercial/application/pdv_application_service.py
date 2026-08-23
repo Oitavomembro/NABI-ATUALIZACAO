@@ -17,8 +17,9 @@ from .dto import (
 from .pdv_session import PDVSession
 from .ports import (
     BudgetOutputPort, BudgetPort, CheckoutPort, CommercialEventPort, CustomerLookupPort,
-    ProductLookupPort, SaleReceiptOutputPort, SuspendedSalePort,
+    DailySalesPort, ProductLookupPort, SaleReceiptOutputPort, SuspendedSalePort,
 )
+from .query_dto import DailySaleSummary
 
 
 class PDVApplicationService:
@@ -35,6 +36,7 @@ class PDVApplicationService:
         budgets: BudgetPort | None = None,
         budget_output: BudgetOutputPort | None = None,
         suspended_sales: SuspendedSalePort | None = None,
+        daily_sales: DailySalesPort | None = None,
     ) -> None:
         self.customers = customers
         self.products = products
@@ -44,6 +46,29 @@ class PDVApplicationService:
         self.budgets = budgets
         self.budget_output = budget_output
         self.suspended_sales = suspended_sales
+        self.daily_sales = daily_sales
+
+    def _daily_sales_port(self) -> DailySalesPort:
+        if self.daily_sales is None:
+            raise RuntimeError("O serviço de vendas do dia não está configurado.")
+        return self.daily_sales
+
+    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
+        return self._daily_sales_port().list_today()
+
+    def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
+        return self._daily_sales_port().preview_text(sale)
+
+    def print_daily_sale(self, sale: DailySaleSummary) -> str:
+        return self._daily_sales_port().print_thermal(sale)
+
+    def generate_daily_sale_pdf(self, sale: DailySaleSummary) -> str:
+        path = self._daily_sales_port().generate_pdf(sale)
+        self._daily_sales_port().open_file(path)
+        return path
+
+    def cancel_daily_sale(self, sale_id: int, *, user: str) -> None:
+        self._daily_sales_port().cancel_local(sale_id, user=user)
 
     def _suspended_sale_port(self) -> SuspendedSalePort:
         if self.suspended_sales is None:

@@ -8,6 +8,7 @@ from .cancellation_gateway import NabiCodeSaleCancellationGateway
 from .read_gateway import NabiCodeCommercialReadGateway
 from .customer_account_gateway import NabiCodeCustomerAccountGateway
 from .customer_receipt_gateway import NabiCodeCustomerReceiptGateway
+from .daily_sales_gateway import NabiCodeDailySalesGateway
 from .financial_gateway import NabiCodeFinancialGateway
 from .stock_gateway import NabiCodeProductStockGateway
 
@@ -17,6 +18,7 @@ __all__ = [
     "NabiCodeCustomerGateway",
     "NabiCodeProductGateway",
     "NabiCodeSaleCancellationGateway",
+    "NabiCodeDailySalesGateway",
     "NabiCodeCommercialReadGateway",
     "NabiCodeCustomerAccountGateway",
     "NabiCodeCustomerReceiptGateway",
