@@ -64,6 +64,8 @@ class LicenseV2Service:
         payload = verify_envelope(raw, self.public_keys)
         current = self._current()
         fingerprint, code = self._fingerprint()
+        if payload.issued_at > current + self.CLOCK_ROLLBACK_TOLERANCE:
+            return LicenseDecision(LicenseState.INVALID, "LICENSE_NOT_YET_VALID", code)
         if not hmac.compare_digest(payload.machine_fingerprint, fingerprint):
             return LicenseDecision(LicenseState.INVALID, "MACHINE_MISMATCH", code)
 
@@ -100,6 +102,12 @@ class LicenseV2Service:
         if not hmac.compare_digest(payload.machine_fingerprint, fingerprint):
             return self._invalid("MACHINE_MISMATCH", code)
         try:
+            current = self._current()
+        except Exception:
+            return self._invalid("CLOCK_INVALID", code)
+        if payload.issued_at > current + self.CLOCK_ROLLBACK_TOLERANCE:
+            return self._invalid("LICENSE_NOT_YET_VALID", code)
+        try:
             state = self.state_store.read()
         except FileNotFoundError:
             return self._invalid("PROTECTED_STATE_MISSING", code)
@@ -111,7 +119,6 @@ class LicenseV2Service:
         ):
             return self._invalid("PROTECTED_STATE_MISMATCH", code)
         try:
-            current = self._current()
             last_seen = datetime.fromisoformat(str(state["last_seen"]).replace("Z", "+00:00"))
             highest_issued = datetime.fromisoformat(
                 str(state["highest_issued_at"]).replace("Z", "+00:00")

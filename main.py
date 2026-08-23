@@ -372,6 +372,11 @@ def main() -> int:
     mark_startup("runtime_profile_imported")
 
     runtime_profile = configure_profile_environment("TESTE")
+    from licensing.restricted_commands import handle_restricted_command
+
+    restricted_result = handle_restricted_command(sys.argv[1:], runtime_profile)
+    if restricted_result is not None:
+        return restricted_result
     from licensing.gate import Capability
     from licensing.runtime import evaluate_runtime_gate, startup_block_message
 

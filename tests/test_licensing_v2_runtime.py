@@ -9,6 +9,9 @@ from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from license_issuer.emitter import generate_key_pair, issue_license, load_private_key
 from licensing.models import LicenseEdition
 from licensing.runtime import load_trusted_public_keys
+from licensing.restricted_commands import handle_restricted_command
+from licensing.models import LicenseDecision, LicenseState
+from licensing.legacy_adapter import LegacyLicenseV2Adapter
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -80,3 +83,76 @@ def test_licenciamento_nao_importa_modulos_fiscais_ia_ou_banco():
         "assistant_nabi", "fiscal_service", "fiscal_outbox", "database import", "sqlite3",
     ):
         assert forbidden not in sources
+
+
+def test_comandos_restritos_nao_inicializam_aplicacao_e_preservam_backup(tmp_path, capsys):
+    decision = LicenseDecision(LicenseState.BLOCKED, "EXPIRED", "NABI2-TESTE")
+
+    class Service:
+        def evaluate(self):
+            return decision
+
+    class Paths:
+        database = tmp_path / "dados.db"
+        backups = tmp_path / "backups"
+
+    class Profile:
+        app_dir = tmp_path
+        paths = Paths()
+
+        @staticmethod
+        def validate_database(path):
+            return path
+
+    class Backup:
+        def __init__(self, **_kwargs):
+            pass
+
+        def create(self, destination, prefix):
+            assert prefix == "backup_modo_restrito"
+            return str(Path(destination) / "preservado.db")
+
+    assert handle_restricted_command(
+        ["--restricted-backup", str(tmp_path / "destino")], Profile(),
+        service_factory=lambda _app_dir: Service(), backup_factory=Backup,
+    ) == 0
+    assert "preservado.db" in capsys.readouterr().out
+
+
+def test_build_inclui_somente_catalogo_publico_e_exclui_emissor():
+    spec = (ROOT / "build_tools" / "pyinstaller" / "nabicode.spec").read_text(encoding="utf-8")
+    assert "trusted_public_keys.json" in spec
+    assert '"license_issuer"' in spec
+    assert "private" not in (ROOT / "licensing" / "trusted_public_keys.json").read_text(
+        encoding="utf-8"
+    ).casefold()
+
+
+def test_adaptador_legacy_usa_somente_decisao_v2_e_recusa_senha_mestre():
+    class Service:
+        @staticmethod
+        def evaluate():
+            return LicenseDecision(LicenseState.BLOCKED, "EXPIRED", "NABI2-TESTE")
+
+    adapter = LegacyLicenseV2Adapter(service=Service())
+    status = adapter.evaluate()
+    assert status.blocked
+    assert status.reason == "BLOQUEADA:EXPIRED"
+    assert adapter.attempt_admin_unlock("qualquer", lambda _value: True) is False
+    import pytest
+    with pytest.raises(PermissionError, match=".nabilic"):
+        adapter.unlock_for_days(30)
+
+
+def test_monitoramento_continuo_existe_no_legacy_e_no_qt():
+    legacy = (ROOT / "nabicode_legacy.py").read_text(encoding="utf-8")
+    qt = (ROOT / "main_qt.py").read_text(encoding="utf-8")
+    monitor = legacy.split("def _monitorar_licenca", 1)[1].split(
+        "def forcar_tela_bloqueio_inadimplencia", 1
+    )[0]
+    assert "shutdown_runtime_resources()" in monitor
+    assert "forcar_tela_bloqueio_inadimplencia()" in monitor
+    assert "QTimer(qt)" in qt
+    assert "evaluate_runtime_gate(profile.app_dir)" in qt
+    assert "license_timer.stop()" in qt
+    assert "qt.quit()" in qt

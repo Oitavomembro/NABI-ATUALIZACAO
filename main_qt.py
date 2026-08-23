@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QTimer
 
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
@@ -75,6 +76,11 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
 def main(argv=None) -> int:
     qt = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     profile = configure_profile_environment("PRODUCAO")
+    from licensing.restricted_commands import handle_restricted_command
+
+    restricted_result = handle_restricted_command(list(argv or sys.argv)[1:], profile)
+    if restricted_result is not None:
+        return restricted_result
     license_gate = evaluate_runtime_gate(profile.app_dir)
     if not license_gate.allows(Capability.QT):
         QMessageBox.warning(
@@ -94,6 +100,22 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
+        license_timer = QTimer(qt)
+        license_timer.setInterval(60_000)
+
+        def monitor_license() -> None:
+            current_gate = evaluate_runtime_gate(profile.app_dir)
+            if current_gate.allows(Capability.QT):
+                return
+            license_timer.stop()
+            QMessageBox.warning(
+                None, "Licença NabiCode V2",
+                startup_block_message(current_gate, Capability.QT),
+            )
+            qt.quit()
+
+        license_timer.timeout.connect(monitor_license)
+        license_timer.start()
         return run(
             container.application,
             argv,

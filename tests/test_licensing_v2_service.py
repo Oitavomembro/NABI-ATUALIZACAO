@@ -109,7 +109,7 @@ def test_revogacao_assinada_e_atualizacao_sem_rollback(tmp_path):
     activate(service, tmp_path, document(private, license_id=license_id))
     revoked = document(
         private, license_id=license_id, revoked=True,
-        issued_at=datetime(2026, 8, 21, tzinfo=timezone.utc),
+        issued_at=datetime(2026, 8, 20, 11, tzinfo=timezone.utc),
     )
     assert activate(service, tmp_path, revoked).state is LicenseState.REVOKED
     older = document(
@@ -148,3 +148,30 @@ def test_senha_local_nao_existe_na_api_de_ativacao(tmp_path):
     service, _private, _clock = setup_service(tmp_path)
     with pytest.raises(TypeError):
         service.activate(tmp_path / "x.nabilic", password="senha-mestre")
+
+
+def test_documento_emitido_no_futuro_falha_fechado(tmp_path):
+    service, private, _clock = setup_service(tmp_path)
+    future = document(
+        private,
+        issued_at=datetime(2026, 8, 21, tzinfo=timezone.utc),
+    )
+    decision = activate(service, tmp_path, future)
+    assert (decision.state, decision.reason) == (
+        LicenseState.INVALID, "LICENSE_NOT_YET_VALID",
+    )
+    assert not service.license_path.exists()
+
+
+def test_falha_ao_atualizar_estado_protegido_bloqueia_operacao(tmp_path):
+    service, private, _clock = setup_service(tmp_path)
+    assert activate(service, tmp_path, document(private)).state is LicenseState.ACTIVE
+
+    def fail_closed(_state):
+        raise OSError("disco indisponível")
+
+    service.state_store.write = fail_closed
+    decision = service.evaluate()
+    assert (decision.state, decision.reason) == (
+        LicenseState.INVALID, "PROTECTED_STATE_UNWRITABLE",
+    )

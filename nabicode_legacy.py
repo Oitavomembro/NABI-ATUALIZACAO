@@ -38,7 +38,7 @@ from services.fiscal_onboarding_service import FiscalOnboardingService
 from services.fiscal_outbox_worker import FiscalOutboxWorker
 from services.fiscal_cancellation_service import FiscalCancellationService
 from services.installation_authorization_service import InstallationAuthorizationService
-from services.license_service import LicenseService
+from licensing.legacy_adapter import LegacyLicenseV2Adapter
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
 from services.windows_file_opener import WindowsFileOpener, WindowsFileOpenError
@@ -1331,7 +1331,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         return "break"
 
     def _servico_licenca(self):
-        return cached_instance(self, "_license_service", lambda: LicenseService(obter_config, salvar_config))
+        return cached_instance(self, "_license_service", LegacyLicenseV2Adapter)
 
     def verificar_autorizacao_instalacao(self):
         status = self.installation_authorization_service.evaluate()
@@ -1511,6 +1511,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if status.invalid_value:
             logger.warning("Expiração exata inválida foi removida da configuração.")
         if status.blocked:
+            shutdown_runtime_resources()
             with startup_modal_scope():
                 self.forcar_tela_bloqueio_inadimplencia()
         try:
@@ -1560,14 +1561,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         lbl_aviso = ctk.CTkLabel(bloqueio_win, text="🔒 SISTEMA BLOQUEADO", font=ctk.CTkFont(size=20, weight="bold"), text_color="#ff6b6b")
         lbl_aviso.pack(pady=(25, 10))
 
-        lbl_desc = ctk.CTkLabel(bloqueio_win, text="O período da sua assinatura expirou.\nPara continuar usando o NabiCode, efetue o pagamento\nou digite a senha mestre para liberar o acesso.", font=ctk.CTkFont(size=13), justify="center", text_color="#c9d1d9")
+        lbl_desc = ctk.CTkLabel(bloqueio_win, text="A licença assinada não permite continuar.\nImporte uma licença .nabilic válida pelo modo restrito\ne reinicie o NabiCode.", font=ctk.CTkFont(size=13), justify="center", text_color="#c9d1d9")
         lbl_desc.pack(padx=20, pady=5)
 
-        entry_senha_bloqueio = ctk.CTkEntry(bloqueio_win, placeholder_text="Digite a senha mestre do suporte...", show="*", height=38)
-        entry_senha_bloqueio.pack(padx=30, pady=15, fill="x")
-        entry_senha_bloqueio.focus()
-
-        resultado = {"liberado": False, "fechar": False}
+        resultado = {"fechar": False}
 
         def encerrar_modal():
             try:
@@ -1579,29 +1576,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             except tk.TclError:
                 pass
 
-        def tentar_desbloquear():
-            if self._servico_licenca().attempt_admin_unlock(
-                entry_senha_bloqueio.get(),
-                self.security.verify_master_password,
-                days=30,
-            ):
-                resultado["liberado"] = True
-                messagebox.showinfo(
-                    "Sucesso",
-                    "Assinatura renovada com sucesso por 30 dias!",
-                    parent=bloqueio_win,
-                )
-                encerrar_modal()
-            else:
-                messagebox.showerror("Erro", "Senha incorreta!", parent=bloqueio_win)
-                entry_senha_bloqueio.focus_set()
-
-        btn_liberar = ctk.CTkButton(bloqueio_win, text="🔓 Desbloquear com Senha", fg_color="#2ea043", hover_color="#238636", height=40, font=ctk.CTkFont(weight="bold"), command=tentar_desbloquear)
-        btn_liberar.pack(padx=30, pady=5, fill="x")
-
         def fechar_aplicacao_total():
             resultado["fechar"] = True
             encerrar_modal()
+
+        btn_fechar = ctk.CTkButton(bloqueio_win, text="Fechar NabiCode", fg_color="#da3633", hover_color="#b62324", height=40, font=ctk.CTkFont(weight="bold"), command=fechar_aplicacao_total)
+        btn_fechar.pack(padx=30, pady=20, fill="x")
 
         bloqueio_win.protocol("WM_DELETE_WINDOW", fechar_aplicacao_total)
         try:
@@ -1612,7 +1592,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         reveal_prepared_toplevel_smooth(
             bloqueio_win,
             grab=True,
-            focus_widget=entry_senha_bloqueio,
+            focus_widget=btn_fechar,
             duration_ms=300,
         )
 
@@ -1626,22 +1606,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if resultado["fechar"]:
             self._license_exit_requested = True
             self.destroy()
-            return False
-
-        if resultado["liberado"]:
-            if self._startup_reveal_complete:
-                try:
-                    self.deiconify()
-                    self.attributes("-alpha", 1.0)
-                    self.lift()
-                    self.after(80, self.focus_force)
-                except tk.TclError:
-                    pass
-            elif parent_was_withdrawn:
-                try:
-                    self.withdraw()
-                except tk.TclError:
-                    pass
             return False
 
         if parent_was_withdrawn and not self._startup_reveal_complete:

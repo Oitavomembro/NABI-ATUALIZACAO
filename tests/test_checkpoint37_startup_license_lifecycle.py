@@ -161,15 +161,14 @@ class Checkpoint37StartupLicenseLifecycleTests(unittest.TestCase):
         self.assertNotIn("bloqueio_win.mainloop()", block)
         self.assertIn("grab_release()", block)
 
-    def test_08_successful_unlock_restores_same_instance_and_clears_dialog_state(self):
+    def test_08_v2_block_has_no_master_password_unlock_and_closes_same_instance(self):
         block = LEGACY_SOURCE.split("def forcar_tela_bloqueio_inadimplencia", 1)[1].split(
             "def ativar_modo_panico", 1
         )[0]
-        self.assertIn("attempt_admin_unlock", block)
+        self.assertNotIn("attempt_admin_unlock", block)
+        self.assertNotIn("senha mestre", block.casefold())
+        self.assertIn(".nabilic", block)
         self.assertIn('self._license_dialog_active = False', block)
-        self.assertIn("self.deiconify()", block)
-        self.assertIn('self.attributes("-alpha", 1.0)', block)
-        self.assertIn("self.after(80, self.focus_force)", block)
         self.assertNotIn("raise SystemExit", block)
         self.assertIn("self.destroy()", block)
 
