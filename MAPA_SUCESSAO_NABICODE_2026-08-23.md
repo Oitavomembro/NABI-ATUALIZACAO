@@ -81,6 +81,9 @@ Legenda:
 - [x] filtro do PDV ficou seguro durante montagem/destruição da janela no commit `2f17ab0`, sem mudar regra comercial;
 - [x] validação: 139 testes e 2 subtestes focados, depois 269 testes e 338 subtestes Qt/Commercial/backend relacionados, todos aprovados; teste de lock afetado pela execução concorrente foi repetido isoladamente e aprovado;
 - [~] homologação manual pendente com catálogo real: legibilidade de nome/preço/estoque, F2, botão, seta/lista rápida, busca por nome/código/barras, Enter/Shift+Enter/Esc, mouse e retorno à Quantidade;
+- [x] checkpoint isolado de Caixa Qt implementado em `codex/caixa-qt` no commit `e000b8c`: porta `CashApplicationService` fixa terminal e usuário fora da GUI e expõe sessão/resumo tipados; a janela Qt cobre abertura com/sem saldo, suprimento, sangria, valores por forma, histórico e fechamento pelo `CashService` transacional, sem SQL ou persistência direta na interface;
+- [x] validação de Caixa Qt: 32 testes focados e regressão relacionada com 243 testes e 341 subtestes aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do Caixa no shell Qt permanece pendente porque `main_qt.py`, `ui_qt/app.py` e `pdv_window.py` estão temporariamente reservados à trilha IA; conectar depois pela porta pronta, preservando permissões e identidade real do operador;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
