@@ -90,7 +90,7 @@ Legenda:
 - [x] texto primeiro e porta de voz futura definidos;
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
 - [~] Fase 0: fundação segura, consultas e adaptador local loopback implementados na branch `codex/ia-nabi-fase0`; `llama.cpp/llama-server` (MIT) e Qwen3-4B (Apache 2.0) são candidatos documentados, mas pesos não foram baixados e a homologação física do modelo ainda está pendente;
-- [ ] Fase 1: mascote e assistente escrita somente leitura;
+- [~] Fase 1: painel Qt escrito, mascote provisório leve, consultas renderizadas deterministicamente, voz desativada e botão `Parar Nabi` implementados isoladamente na branch da IA; integração ao shell principal e homologação visual ainda pendentes;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
