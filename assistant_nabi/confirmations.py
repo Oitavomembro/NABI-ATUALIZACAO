@@ -7,7 +7,6 @@ from datetime import datetime, timedelta, timezone
 from threading import Lock
 
 from .contracts import AssistantActor
-from .sale_drafts import SaleDraft
 
 
 @dataclass(frozen=True, slots=True)
@@ -39,8 +38,8 @@ class DraftConfirmationService:
         self._session_token: dict[str, str] = {}
         self._lock = Lock()
 
-    def issue(self, draft: SaleDraft, *, actor: AssistantActor) -> ConfirmationChallenge:
-        if not isinstance(draft, SaleDraft) or not isinstance(actor, AssistantActor):
+    def issue(self, draft, *, actor: AssistantActor) -> ConfirmationChallenge:
+        if not self._is_confirmable(draft) or not isinstance(actor, AssistantActor):
             raise TypeError("Rascunho e operador autenticado são obrigatórios.")
         now = self._clock()
         challenge = ConfirmationChallenge(
@@ -60,7 +59,7 @@ class DraftConfirmationService:
         return challenge
 
     def confirm(
-        self, *, token: str, draft: SaleDraft, actor: AssistantActor
+        self, *, token: str, draft, actor: AssistantActor
     ) -> ConfirmedDraftAuthorization:
         token = str(token or "")
         with self._lock:
@@ -86,9 +85,19 @@ class DraftConfirmationService:
             confirmed_at=now,
         )
 
+    @staticmethod
+    def _is_confirmable(draft) -> bool:
+        return (
+            isinstance(getattr(draft, "draft_id", None), str)
+            and bool(draft.draft_id)
+            and isinstance(getattr(draft, "fingerprint", None), str)
+            and len(draft.fingerprint) == 64
+            and isinstance(getattr(draft, "operation_kind", None), str)
+            and bool(draft.operation_kind)
+        )
+
     def invalidate_session(self, session_id: str) -> None:
         with self._lock:
             token = self._session_token.pop(str(session_id or ""), None)
             if token:
                 self._pending.pop(token, None)
-

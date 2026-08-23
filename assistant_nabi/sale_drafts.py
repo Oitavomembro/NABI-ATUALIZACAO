@@ -58,6 +58,7 @@ class SaleDraft:
     payment_method: str
     items: tuple[SaleDraftItem, ...]
     total: Decimal
+    operation_kind: str = "SALE"
 
 
 class SaleDraftService:
