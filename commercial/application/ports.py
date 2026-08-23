@@ -19,6 +19,11 @@ from .financial_dto import (
     FinancialSummary, PayableSummary, PersistedFinancialAction,
     ReceivableSummary, SettleFinancialTitleCommand,
 )
+from .product_dto import (
+    LowStockProductSummary, PersistedStockAction, ProductCreateCommand,
+    ProductDetails, ProductStockSummary, ProductUpdateCommand,
+    StockAdjustmentCommand, StockMovementCommand, StockMovementSummary,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -121,3 +126,31 @@ class FinancialActionPort(Protocol):
 @runtime_checkable
 class FinancialEventPort(Protocol):
     def financial_event(self, event) -> None: ...
+
+
+@runtime_checkable
+class ProductCatalogPort(Protocol):
+    def create(self, command: ProductCreateCommand) -> ProductDetails: ...
+    def update(self, command: ProductUpdateCommand) -> ProductDetails: ...
+    def get_details(self, product_id: int) -> ProductDetails | None: ...
+    def search_details(self, term: str, *, limit: int = 30) -> tuple[ProductDetails, ...]: ...
+    def get_by_barcode(self, barcode: str) -> ProductDetails | None: ...
+
+
+@runtime_checkable
+class StockReadPort(Protocol):
+    def stock(self, product_id: int) -> ProductStockSummary: ...
+    def movements(self, product_id: int, *, limit: int = 200) -> tuple[StockMovementSummary, ...]: ...
+    def low_stock(self) -> tuple[LowStockProductSummary, ...]: ...
+
+
+@runtime_checkable
+class StockActionPort(Protocol):
+    def receive(self, command: StockMovementCommand, *, user: str) -> PersistedStockAction: ...
+    def remove(self, command: StockMovementCommand, *, user: str) -> PersistedStockAction: ...
+    def adjust(self, command: StockAdjustmentCommand, *, user: str) -> PersistedStockAction: ...
+
+
+@runtime_checkable
+class StockEventPort(Protocol):
+    def stock_event(self, event) -> None: ...

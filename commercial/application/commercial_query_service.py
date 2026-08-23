@@ -22,11 +22,13 @@ class CommercialQueryService:
         products: ProductLookupPort,
         reporting: CommercialReadPort,
         customer_accounts: CustomerAccountPort | None = None,
+        product_application=None,
     ) -> None:
         self._customers = customers
         self._products = products
         self._reporting = reporting
         self._customer_accounts = customer_accounts
+        self._product_application = product_application
 
     def _accounts(self) -> CustomerAccountPort:
         if self._customer_accounts is None:
@@ -87,3 +89,20 @@ class CommercialQueryService:
 
     def customer_receipts(self, customer_id: int):
         return self._accounts().receipts(customer_id)
+
+    def _product_app(self):
+        if self._product_application is None:
+            raise RuntimeError("Consultas detalhadas de produto não estão configuradas.")
+        return self._product_application
+
+    def product_details(self, product_id: int):
+        return self._product_app().get_product(product_id)
+
+    def product_stock(self, product_id: int):
+        return self._product_app().product_stock(product_id)
+
+    def product_movements(self, product_id: int, *, limit: int = 200):
+        return self._product_app().product_movements(product_id, limit=limit)
+
+    def low_stock_products(self):
+        return self._product_app().low_stock_products()

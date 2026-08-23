@@ -29,6 +29,14 @@ from .financial_dto import (
     FinancialActionResult, FinancialEvent, FinancialSummary, PayableSummary,
     ReceivableSummary, SettleFinancialTitleCommand,
 )
+from .product_application_service import ProductApplicationService
+from .stock_action_service import StockActionService
+from .product_dto import (
+    LowStockProductSummary, ProductCreateCommand, ProductDetails,
+    ProductStockSummary, ProductUpdateCommand, StockActionResult,
+    StockAdjustmentCommand, StockEvent, StockMovementCommand,
+    StockMovementSummary,
+)
 
 __all__ = [
     "CheckoutCommand",
@@ -69,4 +77,16 @@ __all__ = [
     "PayableSummary",
     "ReceivableSummary",
     "SettleFinancialTitleCommand",
+    "ProductApplicationService",
+    "StockActionService",
+    "LowStockProductSummary",
+    "ProductCreateCommand",
+    "ProductDetails",
+    "ProductStockSummary",
+    "ProductUpdateCommand",
+    "StockActionResult",
+    "StockAdjustmentCommand",
+    "StockEvent",
+    "StockMovementCommand",
+    "StockMovementSummary",
 ]

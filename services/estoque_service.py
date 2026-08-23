@@ -116,6 +116,9 @@ class EstoqueService:
         usuario: str = "Sistema",
     ) -> ResultadoMovimentacaoEstoque:
         with self.database.session(write=True) as connection:
+            # Reserva a escrita antes de ler o saldo. Sem isso, duas conexões
+            # podem ler o mesmo valor e confirmar um lost update.
+            connection.execute("BEGIN IMMEDIATE")
             return self.ajustar_na_transacao(
                 connection, produto_id, novo_saldo, motivo=motivo, usuario=usuario
             )
@@ -408,6 +411,9 @@ class EstoqueService:
     ) -> ResultadoMovimentacaoEstoque:
         qtd = self._quantidade(quantidade)
         with self.database.session(write=True) as connection:
+            # A leitura e a atualização do saldo formam uma única operação
+            # serializada, inclusive quando duas ações manuais concorrem.
+            connection.execute("BEGIN IMMEDIATE")
             produto = self.repository.buscar_produto(int(produto_id), connection)
             self._validar_produto(produto)
             saldo_anterior = Decimal(str(produto["estoque_atual"]))

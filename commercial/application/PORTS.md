@@ -73,6 +73,18 @@ sua falha não autoriza repetir a mutação.
 Uma futura IA poderá consultar essas fachadas e solicitar ações por elas, mas
 não poderá importar `FinanceiroService`, repositórios nem abrir SQLite.
 
+## Produtos e estoque
+
+`ProductApplicationService` oferece cadastro, consulta inequívoca por
+`product_id`/código de barras, saldo, estoque mínimo e histórico comprovável.
+`StockActionService` atende somente entradas, saídas e ajustes manuais; vendas e
+cancelamentos continuam no fluxo transacional do PDV.
+
+Estoque negativo respeita `permite_estoque_negativo` do produto. A autorização
+excepcional do PDV continua explícita no checkout e não é oferecida pelas ações
+manuais. Entradas e saídas são sensíveis; ajuste absoluto é crítico. Eventos são
+posteriores ao commit e falhas neles nunca autorizam repetir a movimentação.
+
 Fluxo mínimo de uma futura interface:
 
 ```python

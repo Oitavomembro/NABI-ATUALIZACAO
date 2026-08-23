@@ -8,6 +8,8 @@ from commercial.application.commercial_query_service import CommercialQueryServi
 from commercial.application.customer_application_service import CustomerApplicationService
 from commercial.application.financial_action_service import FinancialActionService
 from commercial.application.financial_query_service import FinancialQueryService
+from commercial.application.product_application_service import ProductApplicationService
+from commercial.application.stock_action_service import StockActionService
 from commercial.application.ports import CommercialEventPort
 
 from .cancellation_gateway import NabiCodeSaleCancellationGateway
@@ -18,6 +20,7 @@ from .read_gateway import NabiCodeCommercialReadGateway
 from .customer_account_gateway import NabiCodeCustomerAccountGateway
 from .customer_receipt_gateway import NabiCodeCustomerReceiptGateway
 from .financial_gateway import NabiCodeFinancialGateway
+from .stock_gateway import NabiCodeProductStockGateway
 
 
 @dataclass(frozen=True, slots=True)
@@ -33,6 +36,8 @@ class CommercialContainer:
     customer_application: CustomerApplicationService | None = None
     financial_query: FinancialQueryService | None = None
     financial_actions: FinancialActionService | None = None
+    product_application: ProductApplicationService | None = None
+    stock_actions: StockActionService | None = None
 
     @classmethod
     def from_existing(
@@ -51,6 +56,8 @@ class CommercialContainer:
         customer_registration_service=None,
         database=None,
         financeiro_service=None,
+        estoque_service=None,
+        stock_events=None,
     ) -> "CommercialContainer":
         customers = NabiCodeCustomerGateway(cliente_repository)
         products = NabiCodeProductGateway(produto_service)
@@ -75,6 +82,12 @@ class CommercialContainer:
             pdv=application, cancellation=cancellation, events=action_events,
             customer_receipts=receipt_gateway,
         )
+        product_application = None
+        stock_actions = None
+        if estoque_service is not None:
+            stock_gateway = NabiCodeProductStockGateway(produto_service, estoque_service)
+            product_application = ProductApplicationService(stock_gateway, stock_gateway)
+            stock_actions = StockActionService(stock_gateway, stock_events)
         query = None
         if all(item is not None for item in (
             financeiro_repository, cobranca_service, dashboard_repository
@@ -87,7 +100,7 @@ class CommercialContainer:
             )
             query = CommercialQueryService(
                 customers=customers, products=products, reporting=reporting,
-                customer_accounts=accounts,
+                customer_accounts=accounts, product_application=product_application,
             )
         if customer_registration_service is not None and accounts is not None:
             customer_application = CustomerApplicationService(
@@ -106,4 +119,5 @@ class CommercialContainer:
         return cls(
             application, customers, products, checkout, query, actions,
             customer_application, financial_query, financial_actions,
+            product_application, stock_actions,
         )

@@ -56,4 +56,5 @@ def create_commercial_container(database: DatabaseManager) -> CommercialContaine
         customer_registration_service=registration,
         database=database,
         financeiro_service=finance,
+        estoque_service=stock,
     )
