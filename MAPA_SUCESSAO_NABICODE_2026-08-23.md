@@ -81,6 +81,9 @@ Legenda:
 - [x] filtro do PDV ficou seguro durante montagem/destruição da janela no commit `2f17ab0`, sem mudar regra comercial;
 - [x] validação: 139 testes e 2 subtestes focados, depois 269 testes e 338 subtestes Qt/Commercial/backend relacionados, todos aprovados; teste de lock afetado pela execução concorrente foi repetido isoladamente e aprovado;
 - [~] homologação manual pendente com catálogo real: legibilidade de nome/preço/estoque, F2, botão, seta/lista rápida, busca por nome/código/barras, Enter/Shift+Enter/Esc, mouse e retorno à Quantidade;
+- [x] checkpoint isolado de Financeiro Qt implementado em `codex/financeiro-qt` no commit `03e80a8`: contas a receber/pagar separadas, resumo, IDs reais, criação e baixa usam exclusivamente `FinancialQueryService`/`FinancialActionService`, `ActionContext` de UI e confirmação humana explícita; nenhuma persistência direta ou importação Fiscal na GUI;
+- [x] validação de Financeiro Qt: 51 testes focados e regressão relacionada com 243 testes e 333 subtestes aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do Financeiro no shell Qt permanece pendente enquanto os arquivos de composição estão reservados à trilha IA; checkpoint suspenso limpo por prioridade da edição FICHÁRIO;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
