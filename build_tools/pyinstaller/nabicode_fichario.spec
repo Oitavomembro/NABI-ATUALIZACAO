@@ -25,10 +25,8 @@ hiddenimports = [
 ]
 excludes = [
     "pytest", "tests", "benchmark_tests", "stress_tests", "soak_tests",
+    "tkinter", "_tkinter", "customtkinter",
     "assistant_nabi", "ui_qt.assistant_nabi", "license_issuer",
-    "services.fiscal_service", "services.fiscal_worker",
-    "services.fiscal_outbox_worker", "services.sefaz_service",
-    "brazilfiscalreport", "lxml", "requests",
 ]
 
 a = Analysis(

@@ -63,6 +63,8 @@ def test_composicao_e_pacote_nao_iniciam_componentes_proibidos():
     assert "resources/fiscal" not in spec
     assert "main_fichario_qt.py" in spec
     assert "assistant_nabi" in spec  # exclusao explicita do pacote
+    assert all(name in spec for name in ("tkinter", "_tkinter", "customtkinter"))
+    assert "services.fiscal_service" not in spec  # pode ficar dormente; nao excluir import quebravel
 
 
 def test_instalador_preserva_dados_em_appdata():
