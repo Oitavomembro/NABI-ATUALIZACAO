@@ -35,7 +35,8 @@ def create_application(
         )
         dock.setWidget(
             NabiAssistantPanel(
-                assistant_service, dock, activation_manager=assistant_activation
+                assistant_service, dock, activation_manager=assistant_activation,
+                draft_transfer=window.load_assistant_draft,
             )
         )
         window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)

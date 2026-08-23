@@ -42,6 +42,11 @@ class CheckoutDialog(QDialog):
         self.method = QComboBox()
         for label, method in self.METHODS:
             self.method.addItem(label, method)
+        suggested_method = getattr(view_model, "assistant_payment_method", None)
+        if suggested_method is not None:
+            suggested_index = self.method.findData(suggested_method)
+            if suggested_index >= 0:
+                self.method.setCurrentIndex(suggested_index)
         self.amount = MoneyEdit()
         self.amount.set_value(view_model.total)
         self.authorization = QLineEdit()

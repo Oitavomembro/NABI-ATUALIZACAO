@@ -207,7 +207,12 @@ class NabiAssistantPanelTests(unittest.TestCase):
 
     def test_rascunho_exige_revisao_e_confirmacao_humana_separadas(self):
         service = DraftService()
-        panel = NabiAssistantPanel(service)
+        transferred = []
+        panel = NabiAssistantPanel(
+            service, draft_transfer=lambda draft, authorization: transferred.append(
+                (draft, authorization)
+            )
+        )
         self.addCleanup(panel.close)
         panel._generation = 5
         panel._complete(5, AssistantTurn("Rascunho", (ToolResult(
@@ -224,6 +229,7 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertFalse(panel.confirm_draft_button.isHidden())
         panel.confirm_draft()
         self.assertEqual(service.confirmations[0][0], "token-seguro")
+        self.assertEqual(len(transferred), 1)
         self.assertIn("Nenhuma venda foi registrada", panel.history.toPlainText())
 
 

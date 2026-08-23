@@ -80,7 +80,8 @@ class NabiAssistantPanel(QWidget):
     """Painel escrito opcional; não possui acesso direto a banco, GUI ou Fiscal."""
 
     def __init__(
-        self, service, parent=None, *, thread_pool=None, activation_manager=None
+        self, service, parent=None, *, thread_pool=None, activation_manager=None,
+        draft_transfer=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -88,6 +89,7 @@ class NabiAssistantPanel(QWidget):
         self._generation = 0
         self._busy = False
         self._activation_manager = activation_manager
+        self._draft_transfer = draft_transfer
         self._workers: set[_AskWorker] = set()
         self._pending_draft = None
         self._confirmation_token = None
@@ -366,19 +368,23 @@ class NabiAssistantPanel(QWidget):
             return
         draft_id, fingerprint = self._pending_draft
         try:
-            self._service.confirm_draft(
+            draft, authorization = self._service.confirm_draft(
                 self._confirmation_token, draft_id, fingerprint
             )
+            if self._draft_transfer is None:
+                raise RuntimeError("A transferência ao PDV não está configurada.")
+            self._draft_transfer(draft, authorization)
         except Exception:
             self._set_state("blocked", "Confirmação recusada")
             self.history.append("<b>Nabi:</b> A confirmação expirou ou o rascunho mudou.")
             return
         self._confirmation_token = None
         self.confirm_draft_button.setVisible(False)
-        self._set_state("completed", "Rascunho autorizado")
+        self._pending_draft = None
+        self._set_state("completed", "Rascunho carregado no PDV")
         self.history.append(
-            "<b>Nabi:</b> Rascunho autorizado. Nenhuma venda foi registrada; "
-            "a transferência segura ao PDV é a próxima etapa."
+            "<b>Nabi:</b> Rascunho carregado no PDV. Nenhuma venda foi registrada; "
+            "revise o carrinho e finalize pelo fluxo oficial de Pagamentos."
         )
 
     def stop_nabi(self) -> None:

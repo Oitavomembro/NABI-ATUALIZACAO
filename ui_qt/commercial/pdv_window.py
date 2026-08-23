@@ -455,6 +455,28 @@ class PDVWindow(QMainWindow):
     def _show_error(self, error: Exception) -> None:
         QMessageBox.warning(self, "NabiCode", str(error) or "Operação não concluída.")
 
+    def load_assistant_draft(self, draft, _authorization=None) -> None:
+        self.view_model.load_assistant_draft(draft)
+        customer = self.view_model.selected_customer
+        reference = (
+            customer.record_number
+            if customer is not None and customer.record_number is not None
+            else (customer.code if customer is not None else "")
+        )
+        customer_text = (
+            f"{reference} — {customer.name}" if reference else customer.name
+        )
+        self.customer_search.blockSignals(True)
+        self.customer_search.setText(customer_text)
+        self.customer_search.blockSignals(False)
+        self.customer_selected.setText(f"Selecionado: {customer_text}")
+        self.refresh_cart()
+        self.statusBar().showMessage(
+            "Rascunho da Nabi carregado. Revise e finalize pelo fluxo oficial do PDV.",
+            5000,
+        )
+        self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _search_customers(self, term: str) -> None:
         self.customer_results.clear()
         if not term.strip():

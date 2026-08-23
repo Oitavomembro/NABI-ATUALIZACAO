@@ -35,6 +35,39 @@ class PDVViewModel:
         self.session = application.new_session()
         self.selected_customer: CustomerRecord | None = None
         self.selected_product: ProductRecord | None = None
+        self.assistant_payment_method: PaymentMethod | None = None
+
+    def load_assistant_draft(self, draft) -> None:
+        """Transfere rascunho para uma sessão nova, sem checkout ou persistência."""
+        if not self.session.cart.is_empty:
+            raise ValueError("Esvazie ou suspenda a venda atual antes de carregar o rascunho da Nabi.")
+        temporary = self.application.new_session()
+        customer = (
+            self.application.select_customer(temporary, draft.customer_id)
+            if draft.customer_id is not None
+            else self.application.select_final_consumer(temporary)
+        )
+        for item in draft.items:
+            current = self.application.get_product(item.product_id)
+            if current is None or not current.active or current.unit_price != item.unit_price:
+                raise ValueError(
+                    f"O produto {item.code} mudou depois do rascunho. Revise novamente."
+                )
+            self.application.add_product(
+                temporary, item.product_id, quantity=item.quantity
+            )
+        methods = {
+            "DINHEIRO": PaymentMethod.CASH,
+            "PIX": PaymentMethod.PIX,
+            "DEBITO": PaymentMethod.DEBIT,
+            "CREDITO": PaymentMethod.CREDIT_CARD,
+            "CREDIARIO": PaymentMethod.STORE_CREDIT,
+            "OUTROS": PaymentMethod.OTHER,
+        }
+        self.session = temporary
+        self.selected_customer = customer
+        self.selected_product = None
+        self.assistant_payment_method = methods[draft.payment_method]
 
     @property
     def total(self) -> Decimal:
@@ -158,4 +191,5 @@ class PDVViewModel:
         if result.session_consumed:
             self.selected_customer = None
             self.selected_product = None
+            self.assistant_payment_method = None
         return result

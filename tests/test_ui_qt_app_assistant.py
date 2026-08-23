@@ -27,6 +27,9 @@ class FakeWindow(QMainWindow):
     def addDockWidget(self, area, dock):
         self.docks.append((area, dock))
 
+    def load_assistant_draft(self, draft, authorization=None):
+        return None
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class QtApplicationAssistantTests(unittest.TestCase):
