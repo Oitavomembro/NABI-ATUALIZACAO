@@ -900,6 +900,29 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 
 Não confundir automação inteligente com autoridade. A Nabi poderá planejar, consultar e operar ferramentas autorizadas, mas o NabiCode continuará sendo a fonte de verdade. Backend, permissões, validações, confirmação humana, transações e auditoria decidem o que realmente pode acontecer.
 
+## Checkpoint FICHÁRIO — chave pública e ativação física
+
+Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
+
+- correção do runtime Tcl/Tk do portátil: `3db90b3`;
+- tela restrita de ativação anterior ao banco/serviços comerciais: `33fc095`;
+- cópia explícita do código da máquina: `61bb414`;
+- teste de segredos distingue certificado público de chave privada: `e4af32c`;
+- catálogo público incorporado: `a7d5386`, identificador `nabicode-prod-2026-01`,
+  SHA-256 `D6E58A832213E7A0079113AD5B3B3F0FC50D4C411B36FCF6DF315FC599913718`;
+- licença externa de homologação verificada para edição `FICHARIO`, máquina real,
+  recursos `commercial`, `fichario`, `financial` e `qt`, sem capacidade fiscal,
+  validade até `2033-08-01` e tolerância de dez dias;
+- regressão conjunta: `183 passed`, `4 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- portátil reconstruído e inspecionado: catálogo público, Tcl/Tk e
+  `qwindows.dll` presentes; nenhuma chave privada, segredo ou licença embutida;
+- SHA-256 do executável: `1CA9E7417DD021B272F886FD94A99B0BC45F9B283FDB24ABA1B68C7197D02BC6`;
+- ativação física retornou código 0 e a reabertura avançou para
+  `Entrar no NabiCode Fichario`, comprovando licença ativa;
+- chave privada e pasta externa de segredos não foram lidas, copiadas,
+  versionadas ou empacotadas; nenhum instalador e nenhum push foram realizados.
+
 ## Checkpoint IA — consultas operacionais seguras ampliadas
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
