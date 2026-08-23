@@ -5,6 +5,8 @@ import json
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from uuid import uuid4
+from collections import OrderedDict
+from threading import Lock
 
 
 _CENT = Decimal("0.01")
@@ -66,6 +68,8 @@ class SaleDraftService:
             raise ValueError("O serviço oficial de consultas é obrigatório.")
         self._queries = query_service
         self._max_items = max(1, min(int(max_items), 100))
+        self._drafts: OrderedDict[str, SaleDraft] = OrderedDict()
+        self._lock = Lock()
 
     def create(
         self,
@@ -104,7 +108,7 @@ class SaleDraftService:
         if total <= 0:
             raise ValueError("O total do rascunho deve ser maior que zero.")
         fingerprint = self._fingerprint(customer_id, method, items, total)
-        return SaleDraft(
+        draft = SaleDraft(
             draft_id=uuid4().hex,
             fingerprint=fingerprint,
             customer_id=customer_id,
@@ -112,6 +116,22 @@ class SaleDraftService:
             items=items,
             total=total,
         )
+        with self._lock:
+            self._drafts[draft.draft_id] = draft
+            while len(self._drafts) > 20:
+                self._drafts.popitem(last=False)
+        return draft
+
+    def get(self, draft_id: str) -> SaleDraft:
+        with self._lock:
+            draft = self._drafts.get(str(draft_id or ""))
+        if draft is None:
+            raise ValueError("Rascunho não encontrado ou descartado.")
+        return draft
+
+    def discard(self, draft_id: str) -> None:
+        with self._lock:
+            self._drafts.pop(str(draft_id or ""), None)
 
     def _resolve_item(self, request: SaleDraftItemRequest) -> SaleDraftItem:
         product = self._queries.get_product(request.product_id)
@@ -157,4 +177,3 @@ class SaleDraftService:
             payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
         ).encode("utf-8")
         return hashlib.sha256(canonical).hexdigest()
-

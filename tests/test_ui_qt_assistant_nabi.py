@@ -34,6 +34,24 @@ class Activation:
         self.stops += 1
 
 
+class DraftService(Service):
+    def __init__(self):
+        self.invalidations = 0
+        self.reviews = []
+        self.confirmations = []
+
+    def invalidate_confirmations(self):
+        self.invalidations += 1
+
+    def review_draft(self, draft_id, fingerprint):
+        self.reviews.append((draft_id, fingerprint))
+        return type("Challenge", (), {"token": "token-seguro"})()
+
+    def confirm_draft(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        return object(), object()
+
+
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
     @classmethod
@@ -186,6 +204,27 @@ class NabiAssistantPanelTests(unittest.TestCase):
         panel.reactivate()
         self.assertFalse(panel.send.isEnabled())
         self.assertEqual(panel.status.text(), "Autenticação necessária")
+
+    def test_rascunho_exige_revisao_e_confirmacao_humana_separadas(self):
+        service = DraftService()
+        panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 5
+        panel._complete(5, AssistantTurn("Rascunho", (ToolResult(
+            "req", "vendas.criar_rascunho", True,
+            {
+                "draft_id": "draft-1", "fingerprint": "a" * 64,
+                "items": [], "total": "10.00", "payment_method": "PIX",
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        self.assertTrue(panel.confirm_draft_button.isHidden())
+        panel.review_draft()
+        self.assertEqual(service.reviews, [("draft-1", "a" * 64)])
+        self.assertFalse(panel.confirm_draft_button.isHidden())
+        panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][0], "token-seguro")
+        self.assertIn("Nenhuma venda foi registrada", panel.history.toPlainText())
 
 
 if __name__ == "__main__":

@@ -7,6 +7,7 @@ from .registry import ReadOnlyToolRegistry
 from .registry import DraftToolRegistry
 from .draft_tools import register_sale_draft_tools
 from .sale_drafts import SaleDraftService
+from .confirmations import DraftConfirmationService
 
 
 def create_read_only_assistant(
@@ -63,7 +64,10 @@ def create_draft_assistant(
     )
     registry = DraftToolRegistry(permissions=permissions, audit=audit)
     register_commercial_read_tools(registry, query_service)
-    register_sale_draft_tools(registry, SaleDraftService(query_service))
+    drafts = SaleDraftService(query_service)
+    confirmations = DraftConfirmationService()
+    register_sale_draft_tools(registry, drafts)
     return AssistantApplicationService(
-        model=model, registry=registry, permissions=permissions
+        model=model, registry=registry, permissions=permissions,
+        draft_service=drafts, confirmation_service=confirmations,
     )

@@ -28,12 +28,16 @@ class AssistantApplicationService:
         permissions,
         max_tool_calls: int = 4,
         max_message_length: int = 2000,
+        draft_service=None,
+        confirmation_service=None,
     ) -> None:
         self._model = model
         self._registry = registry
         self._permissions = permissions
         self._max_tool_calls = max(1, min(int(max_tool_calls), 10))
         self._max_message_length = max(100, min(int(max_message_length), 10_000))
+        self._drafts = draft_service
+        self._confirmations = confirmation_service
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -58,6 +62,36 @@ class AssistantApplicationService:
             for request in reply.tool_requests
         )
         return AssistantTurn(reply.message, results)
+
+    def review_draft(self, draft_id: str, fingerprint: str):
+        if self._drafts is None or self._confirmations is None:
+            raise RuntimeError("Confirmação de rascunho não está configurada.")
+        actor = self._permissions.current_actor()
+        draft = self._drafts.get(draft_id)
+        if draft.fingerprint != str(fingerprint or ""):
+            raise PermissionError("O rascunho mudou antes da revisão.")
+        return self._confirmations.issue(draft, actor=actor)
+
+    def confirm_draft(self, token: str, draft_id: str, fingerprint: str):
+        if self._drafts is None or self._confirmations is None:
+            raise RuntimeError("Confirmação de rascunho não está configurada.")
+        actor = self._permissions.current_actor()
+        draft = self._drafts.get(draft_id)
+        if draft.fingerprint != str(fingerprint or ""):
+            raise PermissionError("O rascunho mudou depois da revisão.")
+        authorization = self._confirmations.confirm(
+            token=token, draft=draft, actor=actor
+        )
+        return draft, authorization
+
+    def invalidate_confirmations(self) -> None:
+        if self._confirmations is None:
+            return
+        try:
+            actor = self._permissions.current_actor()
+        except PermissionError:
+            return
+        self._confirmations.invalidate_session(actor.session_id)
 
     @staticmethod
     def _failure(message: str) -> AssistantTurn:

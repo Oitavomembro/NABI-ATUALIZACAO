@@ -89,6 +89,8 @@ class NabiAssistantPanel(QWidget):
         self._busy = False
         self._activation_manager = activation_manager
         self._workers: set[_AskWorker] = set()
+        self._pending_draft = None
+        self._confirmation_token = None
         self.setObjectName("nabiAssistantPanel")
         self.setMinimumWidth(320)
 
@@ -135,6 +137,15 @@ class NabiAssistantPanel(QWidget):
         root.addLayout(entry)
         root.addWidget(self.voice)
 
+        confirmation = QHBoxLayout()
+        self.review_draft_button = QPushButton("REVISAR RASCUNHO")
+        self.confirm_draft_button = QPushButton("CONFIRMAR RASCUNHO")
+        self.review_draft_button.setVisible(False)
+        self.confirm_draft_button.setVisible(False)
+        confirmation.addWidget(self.review_draft_button)
+        confirmation.addWidget(self.confirm_draft_button)
+        root.addLayout(confirmation)
+
         self.activate_button = QPushButton("ATIVAR NABI")
         self.activate_button.setObjectName("activateNabi")
         self.activate_button.setVisible(activation_manager is not None)
@@ -151,6 +162,8 @@ class NabiAssistantPanel(QWidget):
         self.send.clicked.connect(self.submit)
         self.message.returnPressed.connect(self.submit)
         self.activate_button.clicked.connect(self.request_activation)
+        self.review_draft_button.clicked.connect(self.review_draft)
+        self.confirm_draft_button.clicked.connect(self.confirm_draft)
         self.stop.clicked.connect(self.stop_nabi)
         self._apply_style()
         self._set_state("available", "Disponível")
@@ -319,12 +332,65 @@ class NabiAssistantPanel(QWidget):
             detail = self._result_text(result)
             if detail:
                 self.history.append(f"<pre>{self._escape(detail)}</pre>")
+            if result.success and result.tool_name == "vendas.criar_rascunho":
+                self._service.invalidate_confirmations()
+                self._pending_draft = (
+                    result.payload["draft_id"], result.payload["fingerprint"]
+                )
+                self._confirmation_token = None
+                self.review_draft_button.setVisible(True)
+                self.confirm_draft_button.setVisible(False)
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def review_draft(self) -> None:
+        if self._pending_draft is None:
+            return
+        draft_id, fingerprint = self._pending_draft
+        try:
+            challenge = self._service.review_draft(draft_id, fingerprint)
+        except Exception:
+            self._set_state("blocked", "Revisão inválida")
+            self.history.append("<b>Nabi:</b> O rascunho não pôde ser revisado com segurança.")
+            return
+        self._confirmation_token = challenge.token
+        self.review_draft_button.setVisible(False)
+        self.confirm_draft_button.setVisible(True)
+        self._set_state("warning", "Aguardando confirmação")
+        self.history.append(
+            "<b>Nabi:</b> Confira itens, total, cliente e pagamento. "
+            "A confirmação é temporária e vale somente para este conteúdo."
+        )
+
+    def confirm_draft(self) -> None:
+        if self._pending_draft is None or self._confirmation_token is None:
+            return
+        draft_id, fingerprint = self._pending_draft
+        try:
+            self._service.confirm_draft(
+                self._confirmation_token, draft_id, fingerprint
+            )
+        except Exception:
+            self._set_state("blocked", "Confirmação recusada")
+            self.history.append("<b>Nabi:</b> A confirmação expirou ou o rascunho mudou.")
+            return
+        self._confirmation_token = None
+        self.confirm_draft_button.setVisible(False)
+        self._set_state("completed", "Rascunho autorizado")
+        self.history.append(
+            "<b>Nabi:</b> Rascunho autorizado. Nenhuma venda foi registrada; "
+            "a transferência segura ao PDV é a próxima etapa."
+        )
 
     def stop_nabi(self) -> None:
         self._generation += 1
         self._busy = False
         self._set_controls(False)
+        if hasattr(self._service, "invalidate_confirmations"):
+            self._service.invalidate_confirmations()
+        self._pending_draft = None
+        self._confirmation_token = None
+        self.review_draft_button.setVisible(False)
+        self.confirm_draft_button.setVisible(False)
         if self._activation_manager is not None:
             self._activation_manager.stop()
             self.activate_button.setVisible(True)

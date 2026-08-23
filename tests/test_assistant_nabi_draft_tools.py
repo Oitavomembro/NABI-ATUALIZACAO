@@ -67,6 +67,17 @@ class DraftToolTests(unittest.TestCase):
         self.assertFalse(result.payload["persisted"])
         self.assertTrue(result.payload["requires_confirmation"])
         self.assertEqual(len(audit.events), 1)
+        challenge = service.review_draft(
+            result.payload["draft_id"], result.payload["fingerprint"]
+        )
+        draft, authorization = service.confirm_draft(
+            challenge.token, result.payload["draft_id"], result.payload["fingerprint"]
+        )
+        self.assertEqual(draft.fingerprint, authorization.fingerprint)
+        with self.assertRaises(PermissionError):
+            service.confirm_draft(
+                challenge.token, result.payload["draft_id"], result.payload["fingerprint"]
+            )
 
     def test_registry_fase2_recusa_mutacao(self):
         from assistant_nabi import CapabilityLevel, ToolDefinition, ToolKind

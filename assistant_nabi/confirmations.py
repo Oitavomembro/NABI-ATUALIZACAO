@@ -1,0 +1,94 @@
+from __future__ import annotations
+
+import hmac
+import secrets
+from dataclasses import dataclass
+from datetime import datetime, timedelta, timezone
+from threading import Lock
+
+from .contracts import AssistantActor
+from .sale_drafts import SaleDraft
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmationChallenge:
+    token: str
+    draft_id: str
+    fingerprint: str
+    username: str
+    session_id: str
+    expires_at: datetime
+
+
+@dataclass(frozen=True, slots=True)
+class ConfirmedDraftAuthorization:
+    draft_id: str
+    fingerprint: str
+    username: str
+    session_id: str
+    confirmed_at: datetime
+
+
+class DraftConfirmationService:
+    """Confirmação humana curta, de uso único e vinculada ao conteúdo exato."""
+
+    def __init__(self, *, ttl_seconds: int = 120, clock=None) -> None:
+        self._ttl = max(15, min(int(ttl_seconds), 300))
+        self._clock = clock or (lambda: datetime.now(timezone.utc))
+        self._pending: dict[str, ConfirmationChallenge] = {}
+        self._session_token: dict[str, str] = {}
+        self._lock = Lock()
+
+    def issue(self, draft: SaleDraft, *, actor: AssistantActor) -> ConfirmationChallenge:
+        if not isinstance(draft, SaleDraft) or not isinstance(actor, AssistantActor):
+            raise TypeError("Rascunho e operador autenticado são obrigatórios.")
+        now = self._clock()
+        challenge = ConfirmationChallenge(
+            token=secrets.token_urlsafe(32),
+            draft_id=draft.draft_id,
+            fingerprint=draft.fingerprint,
+            username=actor.username,
+            session_id=actor.session_id,
+            expires_at=now + timedelta(seconds=self._ttl),
+        )
+        with self._lock:
+            previous = self._session_token.get(actor.session_id)
+            if previous:
+                self._pending.pop(previous, None)
+            self._pending[challenge.token] = challenge
+            self._session_token[actor.session_id] = challenge.token
+        return challenge
+
+    def confirm(
+        self, *, token: str, draft: SaleDraft, actor: AssistantActor
+    ) -> ConfirmedDraftAuthorization:
+        token = str(token or "")
+        with self._lock:
+            challenge = self._pending.pop(token, None)
+            if challenge is not None:
+                self._session_token.pop(challenge.session_id, None)
+        if challenge is None:
+            raise PermissionError("A confirmação não existe ou já foi utilizada.")
+        now = self._clock()
+        if now >= challenge.expires_at:
+            raise PermissionError("A confirmação expirou.")
+        if actor.username != challenge.username or actor.session_id != challenge.session_id:
+            raise PermissionError("A confirmação pertence a outro usuário ou sessão.")
+        if draft.draft_id != challenge.draft_id or not hmac.compare_digest(
+            draft.fingerprint, challenge.fingerprint
+        ):
+            raise PermissionError("O rascunho mudou depois da revisão.")
+        return ConfirmedDraftAuthorization(
+            draft_id=draft.draft_id,
+            fingerprint=draft.fingerprint,
+            username=actor.username,
+            session_id=actor.session_id,
+            confirmed_at=now,
+        )
+
+    def invalidate_session(self, session_id: str) -> None:
+        with self._lock:
+            token = self._session_token.pop(str(session_id or ""), None)
+            if token:
+                self._pending.pop(token, None)
+

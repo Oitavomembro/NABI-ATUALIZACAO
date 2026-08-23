@@ -21,6 +21,9 @@ from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_draft_assistant, create_read_only_assistant
 from .activation import AuthenticatedAssistantActivation
 from .sale_drafts import SaleDraft, SaleDraftItem, SaleDraftItemRequest, SaleDraftService
+from .confirmations import (
+    ConfirmationChallenge, ConfirmedDraftAuthorization, DraftConfirmationService,
+)
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -37,6 +40,9 @@ __all__ = [
     "SaleDraftItem",
     "SaleDraftItemRequest",
     "SaleDraftService",
+    "ConfirmationChallenge",
+    "ConfirmedDraftAuthorization",
+    "DraftConfirmationService",
     "AssistantApplicationService",
     "AssistantTurn",
     "UnavailableAssistantService",
