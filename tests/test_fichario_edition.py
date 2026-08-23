@@ -43,6 +43,11 @@ def test_licenca_ausente_abre_ativacao_antes_do_banco():
     source = (Path(__file__).parents[1] / "main_fichario_qt.py").read_text(encoding="utf-8")
     assert source.index("FicharioLicenseDialog(") < source.index("DatabaseUsageLock(")
     assert source.index("activation.exec()") < source.index("lock.acquire()")
+    dialog = (Path(__file__).parents[1] / "fichario/license_dialog.py").read_text(
+        encoding="utf-8"
+    )
+    assert "Copiar código da máquina" in dialog
+    assert "QApplication.clipboard().setText(self._machine_code_value)" in dialog
 
 
 def test_perfil_fichario_isola_dados_fora_do_programa(tmp_path, monkeypatch):

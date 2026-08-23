@@ -2,8 +2,10 @@ from __future__ import annotations
 
 from pathlib import Path
 
+from PySide6.QtCore import Qt
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout,
+    QApplication, QDialog, QFileDialog, QHBoxLayout, QLabel, QMessageBox,
+    QPushButton, QVBoxLayout,
 )
 
 from .license_policy import FicharioLicensePolicy
@@ -20,11 +22,14 @@ class FicharioLicenseDialog(QDialog):
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.machine_code = QLabel()
+        self.machine_code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.copy_button = QPushButton("Copiar código da máquina")
         self.activate_button = QPushButton("Selecionar licença .nabilic")
         self.close_button = QPushButton("Fechar")
         buttons = QHBoxLayout()
         buttons.addWidget(self.close_button)
         buttons.addStretch(1)
+        buttons.addWidget(self.copy_button)
         buttons.addWidget(self.activate_button)
         layout = QVBoxLayout(self)
         layout.addWidget(QLabel("<h2>Licença do NabiCode Fichário</h2>"))
@@ -36,6 +41,7 @@ class FicharioLicenseDialog(QDialog):
         layout.addWidget(self.machine_code)
         layout.addLayout(buttons)
         self.activate_button.clicked.connect(self._select_and_activate)
+        self.copy_button.clicked.connect(self._copy_machine_code)
         self.close_button.clicked.connect(self.reject)
         self._refresh(policy)
 
@@ -44,6 +50,11 @@ class FicharioLicenseDialog(QDialog):
         self.machine_code.setText(
             f"Código desta máquina: <b>{policy.decision.machine_code}</b>"
         )
+        self._machine_code_value = policy.decision.machine_code
+
+    def _copy_machine_code(self) -> None:
+        QApplication.clipboard().setText(self._machine_code_value)
+        self.copy_button.setText("Código copiado!")
 
     def _select_and_activate(self) -> None:
         selected, _filter = QFileDialog.getOpenFileName(
