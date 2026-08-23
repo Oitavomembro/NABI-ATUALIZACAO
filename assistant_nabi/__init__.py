@@ -21,6 +21,11 @@ from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_draft_assistant, create_read_only_assistant
 from .activation import AuthenticatedAssistantActivation
 from .sale_drafts import SaleDraft, SaleDraftItem, SaleDraftItemRequest, SaleDraftService
+from .purchase_drafts import (
+    PurchaseReceiptDraft, PurchaseReceiptDraftItem, PurchaseReceiptDraftService,
+    PurchaseReceiptItemRequest,
+)
+from .purchase_gateway import NabiCodePurchaseAssistantGateway
 from .confirmations import (
     ConfirmationChallenge, ConfirmedDraftAuthorization, DraftConfirmationService,
 )
@@ -40,6 +45,11 @@ __all__ = [
     "SaleDraftItem",
     "SaleDraftItemRequest",
     "SaleDraftService",
+    "PurchaseReceiptDraft",
+    "PurchaseReceiptDraftItem",
+    "PurchaseReceiptDraftService",
+    "PurchaseReceiptItemRequest",
+    "NabiCodePurchaseAssistantGateway",
     "ConfirmationChallenge",
     "ConfirmedDraftAuthorization",
     "DraftConfirmationService",
