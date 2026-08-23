@@ -95,6 +95,62 @@ class DashboardRepository:
             alert_value=DecimalStorage.to_decimal(values[4] or 0, field="total de clientes em alerta"),
         )
 
+    def client_segment_ids(
+        self, segment: str, term: str = "", *, limit: int = 200,
+        now: datetime | None = None,
+    ) -> tuple[int, ...]:
+        normalized = str(segment or "").strip().lower()
+        conditions = {
+            "all": "1=1",
+            "current": "COALESCE(c.saldo_devedor,0) <= 0",
+            "owing": (
+                "COALESCE(c.saldo_devedor,0) > 0 AND "
+                "(pv.vencimento IS NULL OR pv.vencimento > ?)"
+            ),
+            "alert": (
+                "COALESCE(c.saldo_devedor,0) > 0 AND pv.vencimento IS NOT NULL "
+                "AND pv.vencimento <= ?"
+            ),
+            "debt": "COALESCE(c.saldo_devedor,0) > 0",
+        }
+        if normalized not in conditions:
+            raise ValueError("Segmento de clientes inválido.")
+        clean_term = " ".join(str(term or "").strip().casefold().split())
+        params: list[Any] = []
+        reference = now or datetime.now()
+        if normalized in {"owing", "alert"}:
+            params.append((reference - timedelta(days=60)).strftime("%Y-%m-%d"))
+        where = conditions[normalized]
+        if clean_term:
+            search = f"%{clean_term}%"
+            where += """ AND (
+                LOWER(CAST(c.numero_ficha AS TEXT)) LIKE ? OR LOWER(COALESCE(c.codigo,'')) LIKE ?
+                OR LOWER(COALESCE(c.nome,'')) LIKE ? OR LOWER(COALESCE(c.cpf,'')) LIKE ?
+                OR LOWER(COALESCE(c.rg,'')) LIKE ? OR LOWER(COALESCE(c.telefone,'')) LIKE ?
+                OR LOWER(COALESCE(c.endereco,'')) LIKE ?)
+            """
+            params.extend([search] * 7)
+            order = """CASE
+                WHEN CAST(COALESCE(c.numero_ficha,'') AS TEXT)=? THEN 0
+                WHEN LOWER(TRIM(COALESCE(c.nome,'')))=? THEN 1
+                WHEN LOWER(TRIM(COALESCE(c.nome,''))) LIKE ? THEN 2
+                WHEN INSTR(' ' || LOWER(TRIM(COALESCE(c.nome,''))), ' ' || ?) > 0 THEN 3
+                ELSE 4 END, c.nome COLLATE NOCASE, c.numero_ficha"""
+            params.extend([clean_term, clean_term, f"{clean_term}%", clean_term])
+        else:
+            order = "CASE WHEN c.numero_ficha IS NULL THEN 1 ELSE 0 END, c.numero_ficha, c.nome COLLATE NOCASE"
+        rows = self.database.fetch_all(
+            f"""WITH primeiro_vencimento AS (
+                    SELECT cliente_id, MIN(NULLIF(vencimento,'')) AS vencimento
+                    FROM movimentacoes WHERE status_pagamento='PENDENTE' GROUP BY cliente_id
+                )
+                SELECT c.id FROM clientes c
+                LEFT JOIN primeiro_vencimento pv ON pv.cliente_id=c.id
+                WHERE {where} ORDER BY {order} LIMIT ?""",
+            (*params, max(1, min(int(limit), 500))),
+        )
+        return tuple(int(row[0]) for row in rows)
+
     def indicators(self, *, now: datetime | None = None) -> DashboardIndicators:
         reference = now or datetime.now()
         today = reference.strftime("%Y-%m-%d")

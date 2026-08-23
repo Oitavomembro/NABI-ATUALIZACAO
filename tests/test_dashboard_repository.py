@@ -20,7 +20,13 @@ class DashboardRepositoryTests(unittest.TestCase):
             """
             CREATE TABLE clientes (
                 id INTEGER PRIMARY KEY,
+                codigo TEXT,
+                numero_ficha INTEGER,
                 nome TEXT,
+                cpf TEXT,
+                rg TEXT,
+                telefone TEXT,
+                endereco TEXT,
                 saldo_devedor REAL DEFAULT 0
             );
             CREATE TABLE movimentacoes (
@@ -41,8 +47,13 @@ class DashboardRepositoryTests(unittest.TestCase):
             """
         )
         conn.executemany(
-            "INSERT INTO clientes(id,nome,saldo_devedor) VALUES(?,?,?)",
-            [(1, "EM DIA", 0), (2, "DEVENDO", 100), (3, "ALERTA", 200), (4, "FUTURO", 312)],
+            "INSERT INTO clientes(id,codigo,numero_ficha,nome,saldo_devedor) VALUES(?,?,?,?,?)",
+            [
+                (1, "C1", 101, "EM DIA", 0),
+                (2, "C2", 102, "DEVENDO", 100),
+                (3, "C3", 103, "ALERTA", 200),
+                (4, "C4", 104, "FUTURO", 312),
+            ],
         )
         conn.executemany(
             """INSERT INTO movimentacoes
@@ -72,6 +83,24 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertIsInstance(summary.owing_value, Decimal)
         self.assertEqual(summary.alert_count, 1)
         self.assertEqual(summary.alert_value, 200)
+
+    def test_cards_return_only_clients_from_the_selected_situation(self) -> None:
+        reference = datetime(2026, 8, 2)
+        self.assertEqual(self.repo.client_segment_ids("all", now=reference), (1, 2, 3, 4))
+        self.assertEqual(self.repo.client_segment_ids("current", now=reference), (1,))
+        self.assertEqual(self.repo.client_segment_ids("owing", now=reference), (2, 4))
+        self.assertEqual(self.repo.client_segment_ids("alert", now=reference), (3,))
+        self.assertEqual(self.repo.client_segment_ids("debt", now=reference), (2, 3, 4))
+
+    def test_card_search_preserves_exact_record_and_name_filter(self) -> None:
+        reference = datetime(2026, 8, 2)
+        self.assertEqual(self.repo.client_segment_ids("debt", "103", now=reference), (3,))
+        self.assertEqual(self.repo.client_segment_ids("debt", "fut", now=reference), (4,))
+        self.assertEqual(self.repo.client_segment_ids("current", "alerta", now=reference), ())
+
+    def test_invalid_card_segment_is_rejected(self) -> None:
+        with self.assertRaises(ValueError):
+            self.repo.client_segment_ids("inventado")
 
     def test_indicators_include_overdue_and_active_products(self) -> None:
         indicators = self.repo.indicators(now=datetime(2026, 8, 2))

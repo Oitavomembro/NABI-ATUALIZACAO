@@ -73,26 +73,26 @@ class FicharioWindow(QMainWindow):
         system_menu.addAction("Informações da instalação", self.show_settings)
         self._summary_labels = {}
         summary = QGridLayout()
-        for index, (key, title_text, color) in enumerate((
-            ("total", "TOTAL DE FICHAS", "#58a6ff"),
-            ("current", "CLIENTES EM DIA", "#3fb950"),
-            ("owing", "CLIENTES DEVENDO", "#ffd33d"),
-            ("alert", "ATRASADOS +60 DIAS", "#ff7b72"),
-            ("receivable", "TOTAL A RECEBER", "#00d084"),
+        for index, (key, title_text, color, segment) in enumerate((
+            ("total", "TOTAL DE FICHAS", "#58a6ff", "all"),
+            ("current", "CLIENTES EM DIA", "#3fb950", "current"),
+            ("owing", "CLIENTES DEVENDO", "#ffd33d", "owing"),
+            ("alert", "ATRASADOS +60 DIAS", "#ff7b72", "alert"),
+            ("receivable", "TOTAL A RECEBER", "#00d084", "debt"),
         )):
-            card = QFrame(); card.setObjectName("summaryCard")
+            card = QPushButton(title_text); card.setObjectName("summaryCard")
             card.setStyleSheet(
-                "QFrame#summaryCard{background:#161b22;border:1px solid #30363d;"
-                "border-radius:10px;}"
+                f"QPushButton#summaryCard{{background:#161b22;border:1px solid #30363d;"
+                f"border-radius:10px;color:{color};text-align:left;padding:12px;"
+                "font-size:14px;font-weight:900;min-height:68px;}"
+                "QPushButton#summaryCard:hover{border:2px solid #58a6ff;background:#21262d;}"
             )
-            card_layout = QVBoxLayout(card)
-            heading = QLabel(title_text)
-            heading.setStyleSheet(f"font-size:12px;font-weight:800;color:{color}")
-            value = QLabel("Carregando...")
-            value.setStyleSheet("font-size:18px;font-weight:900;color:#f0f6fc")
-            value.setWordWrap(True)
-            card_layout.addWidget(heading); card_layout.addWidget(value)
-            self._summary_labels[key] = value
+            card.setToolTip("Clique para ver os clientes desta situação")
+            card.clicked.connect(
+                lambda _checked=False, current_segment=segment, current_title=title_text:
+                self.open_customer_segment(current_segment, current_title)
+            )
+            self._summary_labels[key] = (card, title_text)
             summary.addWidget(card, index // 3, index % 3)
         layout.addLayout(summary)
         actions = QGridLayout()
@@ -168,22 +168,26 @@ class FicharioWindow(QMainWindow):
         try:
             result = DashboardRepository(self.database).client_summary()
         except Exception as error:
-            for label in self._summary_labels.values():
+            for label, title in self._summary_labels.values():
                 label.setText("Indisponível")
                 label.setToolTip(str(error))
             return
         receivable = result.owing_value + result.alert_value
-        self._summary_labels["total"].setText(f"{result.total_records} clientes")
-        self._summary_labels["current"].setText(
-            f"{result.current_count} clientes  •  R$ 0,00"
+        self._summary_labels["total"][0].setText(
+            f"TOTAL DE FICHAS\n{result.total_records} clientes"
         )
-        self._summary_labels["owing"].setText(
-            f"{result.owing_count} clientes  •  R$ {result.owing_value:.2f}"
+        self._summary_labels["current"][0].setText(
+            f"CLIENTES EM DIA\n{result.current_count} clientes  •  R$ 0,00"
         )
-        self._summary_labels["alert"].setText(
-            f"{result.alert_count} clientes  •  R$ {result.alert_value:.2f}"
+        self._summary_labels["owing"][0].setText(
+            f"CLIENTES DEVENDO\n{result.owing_count} clientes  •  R$ {result.owing_value:.2f}"
         )
-        self._summary_labels["receivable"].setText(f"R$ {receivable:.2f}")
+        self._summary_labels["alert"][0].setText(
+            f"ATRASADOS +60 DIAS\n{result.alert_count} clientes  •  R$ {result.alert_value:.2f}"
+        )
+        self._summary_labels["receivable"][0].setText(
+            f"TOTAL A RECEBER\nR$ {receivable:.2f}"
+        )
 
     def showEvent(self, event) -> None:
         super().showEvent(event)
@@ -207,6 +211,20 @@ class FicharioWindow(QMainWindow):
     def open_customers(self) -> None:
         if not self._allowed("clientes", "view"): return
         CustomerManagementDialog(self.container.customer_application, self).exec()
+        self.refresh_summary()
+
+    def open_customer_segment(self, segment: str, title: str) -> None:
+        if not self._allowed("clientes", "view"): return
+        repository = DashboardRepository(self.database)
+
+        def provider(term: str, limit: int):
+            ids = repository.client_segment_ids(segment, term, limit=limit)
+            return self.container.customer_application.list_customers_by_ids(ids)
+
+        CustomerManagementDialog(
+            self.container.customer_application, self,
+            customer_provider=provider, filter_title=title,
+        ).exec()
         self.refresh_summary()
 
     def open_receipt(self) -> None:

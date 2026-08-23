@@ -92,6 +92,25 @@ def test_enter_na_tabela_abre_ficha_uma_vez_com_id_real(app, monkeypatch):
     dialog.close()
 
 
+def test_filtro_do_card_usa_provedor_limitado_ao_segmento(app):
+    service = Service(); calls = []
+
+    def provider(term, limit):
+        calls.append((term, limit))
+        return (customer(name="CLIENTE DO GRUPO"),)
+
+    dialog = CustomerManagementDialog(
+        service, customer_provider=provider, filter_title="CLIENTES DEVENDO",
+    )
+    assert calls == [("", 60)]
+    assert service.calls == []
+    assert dialog.table.item(0, 1).text() == "CLIENTE DO GRUPO"
+    dialog.search.setText("maria")
+    dialog.reload()
+    assert calls[-1] == ("maria", 200)
+    dialog.close()
+
+
 def test_editor_enter_avanca_shift_volta_e_salva_sem_sql(app):
     service = Service(); dialog = CustomerEditorDialog(service)
     dialog.show(); app.processEvents()

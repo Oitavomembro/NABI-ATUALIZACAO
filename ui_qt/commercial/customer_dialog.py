@@ -178,9 +178,10 @@ class CustomerStatementDialog(QDialog):
 
 
 class CustomerManagementDialog(QDialog):
-    def __init__(self, service, parent=None) -> None:
+    def __init__(self, service, parent=None, *, customer_provider=None, filter_title="") -> None:
         super().__init__(parent)
         self.service = service
+        self.customer_provider = customer_provider
         self.setWindowTitle("Clientes e fichas")
         self.resize(1100, 700)
         self.setMinimumSize(820, 540)
@@ -189,6 +190,10 @@ class CustomerManagementDialog(QDialog):
         title = QLabel("CLIENTES E FICHAS")
         title.setStyleSheet("font-size:23px;font-weight:800;color:#00d084")
         layout.addWidget(title)
+        if filter_title:
+            active_filter = QLabel(f"Filtro ativo: {filter_title}")
+            active_filter.setStyleSheet("font-size:16px;font-weight:800;color:#ffd33d")
+            layout.addWidget(active_filter)
         search_row = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText(
@@ -272,7 +277,12 @@ class CustomerManagementDialog(QDialog):
     def reload(self) -> None:
         try:
             term = self.search.text().strip()
-            customers = self.service.list_customers(term, limit=200 if term else 60)
+            limit = 200 if term else 60
+            customers = (
+                self.customer_provider(term, limit)
+                if self.customer_provider is not None
+                else self.service.list_customers(term, limit=limit)
+            )
         except Exception as exc:
             QMessageBox.warning(self, "Clientes", str(exc)); return
         self.table.setRowCount(0)

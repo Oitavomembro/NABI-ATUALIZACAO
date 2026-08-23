@@ -51,6 +51,13 @@ class CustomerApplicationService:
             return tuple(bulk(tuple(record.customer_id for record in records)))
         return tuple(self.get_customer(record.customer_id) for record in records)
 
+    def list_customers_by_ids(self, customer_ids) -> tuple[CustomerDetails, ...]:
+        ids = tuple(dict.fromkeys(int(value) for value in customer_ids if int(value) > 0))
+        bulk = getattr(self._accounts, "details_many", None)
+        if callable(bulk):
+            return tuple(bulk(ids))
+        return tuple(self.get_customer(customer_id) for customer_id in ids)
+
     def customer_statement(self, customer_id: int) -> CustomerStatement:
         return self._accounts.statement(customer_id)
 
