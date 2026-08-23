@@ -253,6 +253,53 @@ class CheckoutDialogTests(unittest.TestCase):
         preview = self.view_model.preview_checkout(self.dialog._candidate_input())
         self.assertEqual(preview[1].change, Decimal("0.00"))
 
+    def test_enter_no_botao_adiciona_exatamente_um_pagamento(self):
+        self.dialog.add_payment.setFocus()
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(len(self.dialog._payments), 1)
+        self.assertEqual(self.dialog._payments[0].amount, Decimal("100.00"))
+        self.assertTrue(self.dialog.method.hasFocus())
+
+    def test_auto_repeat_no_botao_nao_adiciona_pagamento(self):
+        self.dialog.add_payment.setFocus()
+        event = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "\r", True, 2,
+        )
+        QApplication.sendEvent(self.dialog.add_payment, event)
+        QApplication.processEvents()
+        self.assertEqual(self.dialog._payments, [])
+        self.assertTrue(self.dialog.add_payment.hasFocus())
+
+    def test_erro_ao_adicionar_mantem_foco_no_valor(self):
+        self.dialog.amount.clear_value()
+        self.dialog.add_payment.setFocus()
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+        self.assertEqual(self.dialog._payments, [])
+        self.assertTrue(self.dialog.amount.hasFocus())
+
+    def test_pagamento_misto_inteiro_pode_ser_montado_pelo_teclado(self):
+        self.dialog.method.setFocus()
+        QTest.keyClick(self.dialog.method, Qt.Key.Key_Down)  # PIX
+        QTest.keyClick(self.dialog.method, Qt.Key.Key_Return)
+        self.dialog.amount.set_value("40")
+        QTest.keyClick(self.dialog.amount, Qt.Key.Key_Return)
+        self.assertTrue(self.dialog.add_payment.hasFocus())
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+
+        QTest.keyClick(self.dialog.method, Qt.Key.Key_Home)  # DINHEIRO
+        QTest.keyClick(self.dialog.method, Qt.Key.Key_Return)
+        self.dialog.amount.set_value("60")
+        QTest.keyClick(self.dialog.amount, Qt.Key.Key_Return)
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+        self.assertEqual(
+            tuple(payment.method for payment in self.dialog._payments),
+            (PaymentMethod.PIX, PaymentMethod.CASH),
+        )
+        preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(preview[1].received, Decimal("100.00"))
+
     def test_dinheiro_acima_gera_troco_e_pix_insuficiente_bloqueia(self):
         self.dialog.amount.set_value("120")
         preview = self.view_model.preview_checkout(self.dialog._candidate_input())
@@ -271,6 +318,27 @@ class CheckoutDialogTests(unittest.TestCase):
         )
         preview = self.view_model.preview_checkout(self.dialog._candidate_input())
         self.assertEqual(preview[1].received, Decimal("100.00"))
+
+    def test_trocar_credito_por_pix_limpa_autorizacao_oculta(self):
+        self.dialog.method.setCurrentIndex(
+            self.dialog.method.findData(PaymentMethod.CREDIT_CARD)
+        )
+        self.dialog.authorization.setText("NSU-ANTIGO")
+        self.dialog.method.setCurrentIndex(self.dialog.method.findData(PaymentMethod.PIX))
+        self.assertEqual(self.dialog.authorization.text(), "")
+        self.assertFalse(self.dialog.authorization.isVisible())
+
+        payment = self.dialog._current_payment()
+        self.assertEqual(payment.method, PaymentMethod.PIX)
+        self.assertEqual(payment.card_authorization, "")
+        self.assertEqual(
+            self.view_model.preview_checkout(self.dialog._candidate_input())[1].change,
+            Decimal("0.00"),
+        )
+        self.dialog.method.setCurrentIndex(
+            self.dialog.method.findData(PaymentMethod.CREDIT_CARD)
+        )
+        self.assertEqual(self.dialog.authorization.text(), "")
 
     def test_ajustes_percentuais_recalculam_total(self):
         self.dialog.discount_type.setCurrentIndex(1)

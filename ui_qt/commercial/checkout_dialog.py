@@ -127,6 +127,9 @@ class CheckoutDialog(QDialog):
             event.accept()
             if event.isAutoRepeat():
                 return True
+            if watched is self.add_payment:
+                self._add_payment()
+                return True
             flow = self._visible_navigation()
             index = flow.index(watched)
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
@@ -140,7 +143,10 @@ class CheckoutDialog(QDialog):
 
     def _sync_method(self) -> None:
         method = self.method.currentData()
-        self.authorization.setVisible(method in {PaymentMethod.DEBIT, PaymentMethod.CREDIT_CARD})
+        is_card = method in {PaymentMethod.DEBIT, PaymentMethod.CREDIT_CARD}
+        if not is_card:
+            self.authorization.clear()
+        self.authorization.setVisible(is_card)
         self.credit_box.setVisible(method is PaymentMethod.STORE_CREDIT or any(
             payment.method is PaymentMethod.STORE_CREDIT for payment in self._payments
         ))
@@ -148,15 +154,19 @@ class CheckoutDialog(QDialog):
     def _current_payment(self) -> Payment:
         return Payment(self.method.currentData(), self.amount.value(), self.authorization.text())
 
-    def _add_payment(self) -> None:
+    def _add_payment(self) -> bool:
         try:
             self._payments.append(self._current_payment())
         except ValueError as error:
             self.error_label.setText(str(error))
-            return
+            self.amount.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.amount.selectAll()
+            return False
         self.authorization.clear()
         self._render_payments()
         self._refresh_totals()
+        self.method.setFocus(Qt.FocusReason.OtherFocusReason)
+        return True
 
     def _remove_payment(self) -> None:
         row = self.payment_table.currentRow()
