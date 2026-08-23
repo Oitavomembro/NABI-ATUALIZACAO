@@ -217,9 +217,9 @@ class CustomerManagementDialog(QDialog):
         search_row.addWidget(QLabel("Letras")); search_row.addWidget(self.font_size)
         search_row.addWidget(self.refresh_button)
         layout.addLayout(search_row)
-        self.table = QTableWidget(0, 5)
+        self.table = QTableWidget(0, 3)
         self.table.setHorizontalHeaderLabels(
-            ["Ficha", "Nome", "Saldo devedor", "CPF", "Telefone"]
+            ["Ficha", "Nome", "Saldo devedor"]
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -240,7 +240,7 @@ class CustomerManagementDialog(QDialog):
         self.selected_details.setWordWrap(True)
         self.selected_details.setStyleSheet(
             "background:#161b22;border:1px solid #30363d;border-radius:7px;"
-            "padding:9px;color:#f0f6fc;font-weight:700;"
+            "padding:12px;color:#f0f6fc;font-size:18px;font-weight:800;"
         )
         layout.addWidget(self.selected_details)
         self.table.itemSelectionChanged.connect(self._show_selected_details)
@@ -301,12 +301,13 @@ class CustomerManagementDialog(QDialog):
         except Exception as exc:
             QMessageBox.warning(self, "Clientes", str(exc)); return
         self.table.setRowCount(0)
+        self._customers_by_id = {}
         for customer in customers:
+            self._customers_by_id[customer.customer_id] = customer
             row = self.table.rowCount(); self.table.insertRow(row)
             values = (
                 customer.record_number or "—", customer.name,
-                _money(customer.debt_balance), customer.cpf or "—",
-                customer.phone or "—",
+                _money(customer.debt_balance),
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
@@ -335,9 +336,16 @@ class CustomerManagementDialog(QDialog):
         if row < 0:
             self.selected_details.setText("Selecione um cliente para ver o endereço.")
             return
-        name_item = self.table.item(row, 1)
-        tooltip = name_item.toolTip() if name_item is not None else ""
-        self.selected_details.setText(tooltip.replace("\n", "   •   "))
+        customer_id = self.selected_customer_id()
+        customer = self._customers_by_id.get(customer_id)
+        if customer is None:
+            self.selected_details.setText("Selecione um cliente para ver os dados.")
+            return
+        parts = [f"Ficha {customer.record_number or '—'} — {customer.name}"]
+        if customer.address.strip(): parts.append(f"Endereço: {customer.address.strip()}")
+        if customer.cpf.strip(): parts.append(f"CPF: {customer.cpf.strip()}")
+        if customer.phone.strip(): parts.append(f"Telefone: {customer.phone.strip()}")
+        self.selected_details.setText("   •   ".join(parts))
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:

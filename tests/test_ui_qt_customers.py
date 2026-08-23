@@ -57,14 +57,14 @@ def test_lista_transporta_id_real_e_exibe_saldos(app):
     service = Service(); dialog = CustomerManagementDialog(service)
     assert dialog.table.rowCount() == 1
     assert dialog.selected_customer_id() == 7
-    assert [dialog.table.horizontalHeaderItem(index).text() for index in range(5)] == [
-        "Ficha", "Nome", "Saldo devedor", "CPF", "Telefone",
+    assert [dialog.table.horizontalHeaderItem(index).text() for index in range(3)] == [
+        "Ficha", "Nome", "Saldo devedor",
     ]
     assert dialog.table.item(0, 2).text() == "R$ 125,00"
-    assert dialog.table.item(0, 3).text() == "—"
-    assert dialog.table.item(0, 4).text() == "71999990000"
     assert "RUA A" in dialog.table.item(0, 1).toolTip()
     assert "Endereço: RUA A" in dialog.selected_details.text()
+    assert "CPF:" not in dialog.selected_details.text()
+    assert "Telefone: 71999990000" in dialog.selected_details.text()
     assert dialog.width() >= 1180 and dialog.height() >= 720
     dialog.close()
 
@@ -115,6 +115,23 @@ def test_filtro_do_card_usa_provedor_limitado_ao_segmento(app):
     dialog.search.setText("maria")
     dialog.reload()
     assert calls[-1] == ("maria", 200)
+    dialog.close()
+
+
+def test_dados_ausentes_sao_omitidos_sem_deixar_espaco_vazio(app):
+    service = Service()
+    base = customer()
+    service.rows = [CustomerDetails(
+        base.customer_id, base.code, base.record_number, base.name,
+        "123.456.789-00", base.rg, "", base.address, base.notes,
+        base.credit_limit, base.debt_balance, base.available_credit,
+    )]
+    dialog = CustomerManagementDialog(service)
+    details = dialog.selected_details.text()
+    assert "Endereço: RUA A" in details
+    assert "CPF: 123.456.789-00" in details
+    assert "Telefone:" not in details
+    assert "  •     •  " not in details
     dialog.close()
 
 
