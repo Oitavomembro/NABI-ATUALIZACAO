@@ -4,7 +4,9 @@ import unittest
 
 from assistant_nabi import (
     AssistantActor,
+    AdminAssistantAuditAdapter,
     CapabilityLevel,
+    CurrentSessionPermissionAdapter,
     ParameterDefinition,
     ParameterType,
     ReadOnlyToolRegistry,
@@ -165,6 +167,103 @@ class NabiPhaseZeroTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaisesRegex(ValueError, "decimal"):
                     parameter.validate(invalid)
+
+
+class SecurityUser:
+    def __init__(self, username="operador", profile="OPERADOR", active=True):
+        self.username = username
+        self.profile = profile
+        self.active = active
+
+
+class SecuritySession:
+    def __init__(self, user=None):
+        self.user = user or SecurityUser()
+
+
+class Security:
+    def __init__(self):
+        self.session = SecuritySession()
+        self.expired = False
+        self.allowed = True
+        self.require_calls = []
+
+    def is_expired(self):
+        return self.expired
+
+    def require(self, module, action):
+        self.require_calls.append((module, action))
+        return self.allowed
+
+
+class ExistingAuditService:
+    def __init__(self):
+        self.events = []
+
+    def record_event(self, *args, **kwargs):
+        self.events.append((args, kwargs))
+
+
+class NabiAdapterTests(unittest.TestCase):
+    def test_identidade_e_derivada_da_sessao_real(self):
+        security = Security()
+        adapter = CurrentSessionPermissionAdapter(security, session_id="sessao-qt-1")
+        actor = adapter.current_actor()
+        self.assertEqual(actor, AssistantActor("operador", "OPERADOR", "sessao-qt-1"))
+        self.assertTrue(adapter.allows(actor, "produtos", "view"))
+        self.assertEqual(security.require_calls, [("produtos", "view")])
+
+    def test_identidade_forjada_sessao_expirada_e_usuario_inativo_falham_fechado(self):
+        security = Security()
+        adapter = CurrentSessionPermissionAdapter(security, session_id="sessao-real")
+        forged = AssistantActor("admin", "ADMIN", "sessao-falsa")
+        self.assertFalse(adapter.allows(forged, "produtos", "view"))
+        self.assertEqual(security.require_calls, [])
+
+        security.expired = True
+        self.assertFalse(
+            adapter.allows(
+                AssistantActor("operador", "OPERADOR", "sessao-real"),
+                "produtos",
+                "view",
+            )
+        )
+        security.expired = False
+        security.session.user.active = False
+        with self.assertRaisesRegex(PermissionError, "inativo"):
+            adapter.current_actor()
+
+    def test_negacao_do_security_service_e_respeitada(self):
+        security = Security()
+        security.allowed = False
+        adapter = CurrentSessionPermissionAdapter(security, session_id="sessao-real")
+        self.assertFalse(adapter.allows(adapter.current_actor(), "clientes", "view"))
+
+    def test_auditoria_nao_grava_parametros_payload_ou_segredos(self):
+        service = ExistingAuditService()
+        adapter = AdminAssistantAuditAdapter(service)
+        actor = AssistantActor("operador", "OPERADOR", "sessao-1")
+        request = ToolRequest(
+            "clientes.pesquisar", {"term": "CPF-SECRETO"}, "req-10"
+        )
+        result = self._result(request)
+        adapter.record(actor=actor, request=request, result=result)
+        args, kwargs = service.events[0]
+        serialized = repr((args, kwargs))
+        self.assertIn("req-10", serialized)
+        self.assertNotIn("CPF-SECRETO", serialized)
+        self.assertNotIn("resultado sensível", serialized)
+
+    @staticmethod
+    def _result(request):
+        from assistant_nabi import ToolResult
+
+        return ToolResult(
+            request.request_id,
+            request.tool_name,
+            True,
+            {"customer_name": "resultado sensível"},
+        )
 
 
 if __name__ == "__main__":

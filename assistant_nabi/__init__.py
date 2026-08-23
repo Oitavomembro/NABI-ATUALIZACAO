@@ -12,13 +12,16 @@ from .contracts import (
     ToolSchema,
 )
 from .registry import ReadOnlyToolRegistry
+from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 
 __all__ = [
     "AssistantActor",
+    "AdminAssistantAuditAdapter",
     "CapabilityLevel",
     "ParameterDefinition",
     "ParameterType",
     "ReadOnlyToolRegistry",
+    "CurrentSessionPermissionAdapter",
     "ToolDefinition",
     "ToolKind",
     "ToolRequest",
