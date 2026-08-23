@@ -1206,3 +1206,17 @@ importação no banco de produção antes da aprovação visual e de um backup m
   maiores e sem obrigar modo de tela cheia;
 - validação final: `31 passed`, `compileall` e `git diff --check` aprovados;
 - nenhum push e nenhum instalador foram realizados.
+
+### Lista essencial e detalhes adaptáveis do cliente
+
+- implementação: `c19db55` — `feat: simplifica lista e expande dados selecionados`;
+- a tabela foi reduzida aos três campos essenciais para leitura rápida: Ficha,
+  Nome e Saldo devedor;
+- a faixa fixa inferior recebeu fonte maior e apresenta ficha/nome seguidos por
+  Endereço, CPF e Telefone; dados vazios são omitidos e o próximo dado ocupa o
+  espaço imediatamente, sem colunas ou lacunas artificiais;
+- a dica de endereço sobre o nome e a ficha completa por Enter/duplo clique
+  permanecem disponíveis;
+- validação final: `32 passed`, `compileall` e `git diff --check` aprovados,
+  incluindo regressão específica para CPF ou telefone ausente;
+- nenhum push e nenhum instalador foram realizados.
