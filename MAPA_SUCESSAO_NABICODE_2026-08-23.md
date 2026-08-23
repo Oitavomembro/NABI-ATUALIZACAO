@@ -1117,3 +1117,26 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - banco fisicamente marcado TESTE, somente leitura: 4.957 clientes, primeiros
   60 em 0,0054 s, nome parcial em 0,0021 s e integridade aprovada;
 - banco de Produção não foi acessado e nenhum push foi realizado.
+
+### Central do sistema, backup diário e acessibilidade
+
+- implementação: `8598aa1` — `feat: adiciona central de sistema e backup diario`;
+- o card visível `MENU DO SISTEMA` abre uma central com backup imediato,
+  restauração, importação do Fichário antigo, preferências e informações; o menu
+  nativo superior permanece como acesso alternativo;
+- backup diário é opcional, executado uma vez por data e somente grava
+  `backup/last_success` depois que `DatabaseMaintenanceService` cria e valida a
+  cópia SQLite, schema, tabelas e chaves estrangeiras;
+- o proprietário escolhe a pasta de destino por seletor do Windows, inclusive
+  pasta sincronizada pelo OneDrive; backup manual, automático e restauração
+  passam a usar a mesma pasta configurada;
+- falha de escrita ou validação não marca o dia como concluído e apresenta aviso;
+- tamanho global de letras configurável entre 13 e 21, persistido também para
+  Clientes e Fichas;
+- testes concorrentes de cadastro: `6 passed`, `5 subtests passed`; testes Qt,
+  Fichário e manutenção separados: `27 passed`; `compileall` e
+  `git diff --check` aprovados;
+- uma execução monolítica misturando PySide6 e o teste concorrente SQLite
+  abortou no runtime Python 3.14, sem asserção funcional; os mesmos grupos foram
+  repetidos em processos separados e aprovados;
+- nenhum push e nenhum instalador foram realizados.
