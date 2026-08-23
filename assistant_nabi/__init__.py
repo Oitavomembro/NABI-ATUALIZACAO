@@ -27,6 +27,7 @@ from .purchase_drafts import (
 )
 from .purchase_gateway import NabiCodePurchaseAssistantGateway
 from .draft_catalog import AssistantDraftCatalog
+from .purchase_composition import create_purchase_assistant_components
 from .confirmations import (
     ConfirmationChallenge, ConfirmedDraftAuthorization, DraftConfirmationService,
 )
@@ -52,6 +53,7 @@ __all__ = [
     "PurchaseReceiptItemRequest",
     "NabiCodePurchaseAssistantGateway",
     "AssistantDraftCatalog",
+    "create_purchase_assistant_components",
     "ConfirmationChallenge",
     "ConfirmedDraftAuthorization",
     "DraftConfirmationService",

@@ -48,6 +48,7 @@ class CommercialProductStockServicesTests(unittest.TestCase):
         self.products = self.container.product_application
         self.actions = self.container.stock_actions
         self.context = ActionContext("estoque-teste", ActionOrigin.UI)
+        self.assertIsNotNone(self.container.purchase_service)
 
     def tearDown(self):
         self.temp.cleanup()

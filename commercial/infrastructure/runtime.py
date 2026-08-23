@@ -4,6 +4,7 @@ from database import DatabaseManager
 from repositories import (
     CadastroAuxiliarRepository, CategoriaRepository, ClienteRepository,
     EstoqueRepository, ProdutoRepository,
+    CompraRepository,
 )
 from repositories.system_repository import SystemRepository
 from repositories.financeiro_repository import FinanceiroRepository
@@ -19,6 +20,7 @@ from services.emitted_document_service import EmittedDocumentService
 from services.pdf_document_service import PDFDocumentService
 from services.printing_service import PrintingService
 from services.receipt_service import ReceiptService
+from services.compra_service import CompraService
 
 from .container import CommercialContainer
 from .sale_receipt_gateway import NabiCodeSaleReceiptGateway
@@ -35,6 +37,9 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
     stock = EstoqueService(EstoqueRepository(database))
     finance_repository = FinanceiroRepository(database)
     finance = FinanceiroService(finance_repository)
+    purchase = CompraService(
+        CompraRepository(database), EstoqueRepository(database), finance
+    )
     pdv = PDVService(database.connect)
     transaction = PDVTransactionService(
         database.connect,
@@ -78,4 +83,5 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
         financeiro_service=finance,
         estoque_service=stock,
         receipt_output=receipt_output,
+        purchase_service=purchase,
     )
