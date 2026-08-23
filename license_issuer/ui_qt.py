@@ -1,0 +1,291 @@
+from __future__ import annotations
+
+import json
+from datetime import date, datetime, timedelta, timezone
+from pathlib import Path
+
+from PySide6.QtCore import QDate, Qt
+from PySide6.QtWidgets import (
+    QCheckBox, QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout,
+    QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
+    QPlainTextEdit, QInputDialog, QVBoxLayout,
+)
+
+from licensing.models import LicenseEdition
+from licensing.machine import machine_code
+
+from .workflow import (
+    IssuanceRequest, IssuanceReview, parse_machine_request, request_from_existing,
+    review_request, sign_review, verify_license_file,
+)
+
+
+class LicenseIssuerWindow(QDialog):
+    """Ferramenta administrativa externa; nunca é importada pelo NabiCode."""
+
+    def __init__(self, parent=None) -> None:
+        super().__init__(parent)
+        self._review: IssuanceReview | None = None
+        self._source_license: Path | None = None
+        self._source_catalog: Path | None = None
+        self.setWindowTitle("NabiCode — Emissor externo de Licenças V2")
+        self.setMinimumSize(860, 680)
+        self.resize(980, 760)
+
+        layout = QVBoxLayout(self)
+        title = QLabel("EMISSOR EXTERNO DE LICENÇAS NABICODE V2")
+        title.setStyleSheet("font-size: 22px; font-weight: 800; color: #00a86b;")
+        warning = QLabel(
+            "A chave privada permanece fora do NabiCode e só é aberta em memória no momento da assinatura."
+        )
+        warning.setWordWrap(True)
+        layout.addWidget(title)
+        layout.addWidget(warning)
+
+        form = QFormLayout()
+        self.private_key = QLineEdit()
+        self.private_key.setPlaceholderText("Caminho externo da chave privada criptografada")
+        self.public_catalog = QLineEdit()
+        self.public_catalog.setPlaceholderText("Catálogo público correspondente à chave privada")
+        self.key_id = QLineEdit()
+        self.machine_fingerprint = QLineEdit()
+        self.machine_code = QLabel("—")
+        self.customer = QLineEdit()
+        self.edition = QComboBox()
+        self.edition.addItems([item.value for item in LicenseEdition])
+        self.valid_until = QDateEdit(QDate.currentDate().addYears(1))
+        self.valid_until.setCalendarPopup(True)
+        self.valid_until.setDisplayFormat("dd/MM/yyyy")
+        self.features = QLineEdit("commercial,legacy,qt")
+        self.features.setPlaceholderText("commercial, legacy, qt")
+        self.license_id = QLineEdit()
+        self.license_id.setPlaceholderText("Gerado automaticamente em nova licença")
+        self.revoked = QCheckBox("Emitir revogação assinada")
+        self.output = QLineEdit()
+        self.output.setPlaceholderText("Arquivo de saída .nabilic")
+
+        key_row = self._path_row(self.private_key, self._choose_private_key, "Escolher chave")
+        catalog_row = self._path_row(self.public_catalog, self._choose_public_catalog, "Escolher catálogo")
+        request_row = self._path_row(
+            self.machine_fingerprint, self._load_machine_request, "Carregar solicitação"
+        )
+        output_row = self._path_row(self.output, self._choose_output, "Escolher saída")
+        form.addRow("Chave privada:", key_row)
+        form.addRow("Catálogo público:", catalog_row)
+        form.addRow("Identificador da chave:", self.key_id)
+        form.addRow("Fingerprint da máquina:", request_row)
+        form.addRow("Código visual da máquina:", self.machine_code)
+        form.addRow("Cliente/titular:", self.customer)
+        form.addRow("Edição:", self.edition)
+        form.addRow("Validade:", self.valid_until)
+        form.addRow("Recursos:", self.features)
+        form.addRow("ID da licença:", self.license_id)
+        form.addRow("Revogação:", self.revoked)
+        form.addRow("Arquivo portátil:", output_row)
+        layout.addLayout(form)
+
+        auxiliary = QHBoxLayout()
+        self.load_existing_button = QPushButton("Carregar licença para renovar/revogar")
+        self.verify_button = QPushButton("Verificar licença com chave pública")
+        auxiliary.addWidget(self.load_existing_button)
+        auxiliary.addWidget(self.verify_button)
+        layout.addLayout(auxiliary)
+
+        self.review_text = QPlainTextEdit()
+        self.review_text.setReadOnly(True)
+        self.review_text.setPlaceholderText("A revisão imutável aparecerá aqui antes da assinatura.")
+        layout.addWidget(self.review_text, 1)
+
+        actions = QHBoxLayout()
+        self.review_button = QPushButton("1. Revisar")
+        self.sign_button = QPushButton("2. Assinar e gerar .nabilic")
+        self.sign_button.setEnabled(False)
+        self.close_button = QPushButton("Fechar")
+        actions.addStretch()
+        actions.addWidget(self.review_button)
+        actions.addWidget(self.sign_button)
+        actions.addWidget(self.close_button)
+        layout.addLayout(actions)
+
+        self.review_button.clicked.connect(self._review_request)
+        self.sign_button.clicked.connect(self._sign)
+        self.close_button.clicked.connect(self.reject)
+        self.load_existing_button.clicked.connect(self._load_existing)
+        self.verify_button.clicked.connect(self._verify_existing)
+        for widget in (
+            self.private_key, self.public_catalog, self.key_id, self.machine_fingerprint, self.customer,
+            self.edition, self.valid_until, self.features, self.license_id,
+            self.revoked, self.output,
+        ):
+            signal = getattr(widget, "textChanged", None)
+            if signal is None:
+                signal = getattr(widget, "currentTextChanged", None)
+            if signal is None:
+                signal = getattr(widget, "dateChanged", None)
+            if signal is None:
+                signal = getattr(widget, "toggled", None)
+            signal.connect(self._invalidate_review)
+
+    @staticmethod
+    def _path_row(field: QLineEdit, callback, label: str):
+        container = QGridLayout()
+        button = QPushButton(label)
+        button.clicked.connect(callback)
+        container.addWidget(field, 0, 0)
+        container.addWidget(button, 0, 1)
+        return container
+
+    def _invalidate_review(self, *_args) -> None:
+        self._review = None
+        self.sign_button.setEnabled(False)
+        if self.review_text.toPlainText():
+            self.review_text.setPlainText("Dados alterados. Clique em Revisar novamente.")
+
+    def _choose_private_key(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Escolher chave privada", "", "PEM (*.pem);;Todos (*)")
+        if path:
+            self.private_key.setText(path)
+
+    def _choose_output(self) -> None:
+        path, _ = QFileDialog.getSaveFileName(self, "Salvar licença", "", "Licença NabiCode (*.nabilic)")
+        if path:
+            self.output.setText(path if path.lower().endswith(".nabilic") else path + ".nabilic")
+
+    def _choose_public_catalog(self) -> None:
+        path = self._catalog_path()
+        if path is not None:
+            self.public_catalog.setText(str(path))
+
+    def _load_machine_request(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Solicitação da máquina", "", "JSON (*.json);;Todos (*)")
+        if not path:
+            return
+        try:
+            fingerprint, code = parse_machine_request(Path(path).read_bytes())
+        except Exception as error:
+            QMessageBox.critical(self, "Solicitação inválida", str(error))
+            return
+        self.machine_fingerprint.setText(fingerprint)
+        self.machine_code.setText(code)
+
+    def _catalog_path(self) -> Path | None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Catálogo de chaves públicas", "", "JSON (*.json);;Todos (*)"
+        )
+        return Path(path) if path else None
+
+    def _load_existing(self) -> None:
+        license_path, _ = QFileDialog.getOpenFileName(
+            self, "Licença existente", "", "Licença NabiCode (*.nabilic)"
+        )
+        if not license_path:
+            return
+        catalog = self._catalog_path()
+        if catalog is None:
+            return
+        try:
+            payload = verify_license_file(license_path, catalog)
+        except Exception as error:
+            QMessageBox.critical(self, "Licença inválida", str(error))
+            return
+        self._source_license = Path(license_path)
+        self._source_catalog = catalog
+        self.public_catalog.setText(str(catalog))
+        self.machine_fingerprint.setText(payload.machine_fingerprint)
+        self.machine_code.setText(machine_code(payload.machine_fingerprint))
+        self.customer.setText(payload.customer_name)
+        self.edition.setCurrentText(payload.edition.value)
+        self.features.setText(",".join(payload.features))
+        self.license_id.setText(payload.license_id)
+        suggested = max(date.today(), payload.valid_until) + timedelta(days=365)
+        self.valid_until.setDate(QDate(suggested.year, suggested.month, suggested.day))
+        self.revoked.setChecked(False)
+        QMessageBox.information(self, "Licença carregada", "Dados verificados. Ajuste a validade ou marque revogação e clique em Revisar.")
+
+    def _verify_existing(self) -> None:
+        license_path, _ = QFileDialog.getOpenFileName(
+            self, "Verificar licença", "", "Licença NabiCode (*.nabilic)"
+        )
+        if not license_path:
+            return
+        catalog = self._catalog_path()
+        if catalog is None:
+            return
+        try:
+            payload = verify_license_file(license_path, catalog)
+        except Exception as error:
+            QMessageBox.critical(self, "Verificação falhou", str(error))
+            return
+        QMessageBox.information(
+            self, "Assinatura válida",
+            f"Cliente: {payload.customer_name}\nEdição: {payload.edition.value}\n"
+            f"Validade: {payload.valid_until:%d/%m/%Y}\nRevogada: {'SIM' if payload.revoked else 'NÃO'}",
+        )
+
+    def _date(self) -> date:
+        value = self.valid_until.date()
+        return date(value.year(), value.month(), value.day())
+
+    def _build_request(self) -> IssuanceRequest:
+        issued_at = datetime.now(timezone.utc).replace(microsecond=0)
+        if self._source_license is not None and self._source_catalog is not None:
+            return request_from_existing(
+                self._source_license, self._source_catalog,
+                valid_until=self._date(), issued_at=issued_at,
+                revoked=self.revoked.isChecked(),
+            )
+        return IssuanceRequest(
+            key_id=self.key_id.text(),
+            machine_fingerprint=self.machine_fingerprint.text(),
+            customer_name=self.customer.text(),
+            edition=LicenseEdition(self.edition.currentText()),
+            valid_until=self._date(),
+            features=tuple(part.strip() for part in self.features.text().split(",") if part.strip()),
+            license_id=self.license_id.text().strip() or None,
+            revoked=self.revoked.isChecked(),
+            issued_at=issued_at,
+        )
+
+    def _review_request(self) -> None:
+        try:
+            review = review_request(self._build_request())
+        except Exception as error:
+            QMessageBox.critical(self, "Dados inválidos", str(error))
+            return
+        self.machine_code.setText(str(review.summary["codigo_maquina"]))
+        self.license_id.blockSignals(True)
+        self.license_id.setText(str(review.summary["license_id"]))
+        self.license_id.blockSignals(False)
+        lines = ["REVISÃO — NENHUM ARQUIVO FOI ASSINADO", ""]
+        lines.extend(f"{key}: {value}" for key, value in review.summary.items())
+        lines.extend(("", f"Código da revisão: {review.digest}"))
+        self.review_text.setPlainText("\n".join(lines))
+        self._review = review
+        self.sign_button.setEnabled(True)
+
+    def _sign(self) -> None:
+        if self._review is None:
+            QMessageBox.warning(self, "Revisão necessária", "Revise os dados antes de assinar.")
+            return
+        password, accepted = QInputDialog.getText(
+            self, "Senha da chave privada", "Senha:", QLineEdit.EchoMode.Password
+        )
+        if not accepted:
+            return
+        try:
+            artifact = sign_review(
+                self._review,
+                private_key_path=self.private_key.text(),
+                public_catalog_path=self.public_catalog.text(),
+                password=password.encode("utf-8"),
+                output_path=self.output.text(),
+            )
+        except Exception as error:
+            QMessageBox.critical(self, "Emissão não realizada", str(error))
+            return
+        self.sign_button.setEnabled(False)
+        QMessageBox.information(
+            self, "Licença emitida",
+            f"Arquivo: {artifact.path}\nSHA-256: {artifact.sha256}\n"
+            "A chave privada não foi incluída no arquivo.",
+        )
