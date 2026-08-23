@@ -138,9 +138,23 @@ def test_portao_restrito_preserva_backup_exportacao_diagnostico_e_ativacao(tmp_p
     for capability in (
         Capability.LEGACY, Capability.QT, Capability.COMMERCIAL_WRITE,
         Capability.FINANCIAL_WRITE, Capability.ADMIN_WRITE,
+        Capability.ASSISTANT,
         Capability.FISCAL_WORKER, Capability.FISCAL_WRITE,
     ):
         assert not gate.allows(capability)
+    assert gate.must_block_workers
+
+
+def test_assistente_e_fiscal_sao_recursos_independentes(tmp_path):
+    service, private, _clock = setup_service(tmp_path)
+    activate(service, tmp_path, document(
+        private, features=("assistant", "commercial", "financial", "qt")
+    ))
+    gate = LicenseGate(service.evaluate())
+    assert gate.allows(Capability.ASSISTANT)
+    assert gate.allows(Capability.COMMERCIAL_WRITE)
+    assert gate.allows(Capability.FINANCIAL_WRITE)
+    assert not gate.allows(Capability.FISCAL_WRITE)
     assert gate.must_block_workers
 
 

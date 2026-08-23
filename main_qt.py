@@ -86,6 +86,25 @@ def _create_assistant_activation(
     )
 
 
+def _create_licensed_assistant(database, profile, container, license_gate):
+    """Compõe a Nabi e o apoio de NF-e somente quando assinados na licença."""
+
+    if not license_gate.allows(Capability.ASSISTANT):
+        return None, None, None
+    nfe_import_service = nfe_entry_service = None
+    if license_gate.allows(Capability.FISCAL_WRITE):
+        nfe_import_service = NFeImportService(NFeImportRepository(database))
+        nfe_entry_service = NFeEntryDraftService(nfe_import_service)
+    activation = _create_assistant_activation(
+        database, profile, container, nfe_entry_service, nfe_import_service
+    )
+    unavailable = UnavailableAssistantService(
+        "Clique em Ativar Nabi e autentique um usuário autorizado. "
+        "O modelo local somente será iniciado depois da validação."
+    )
+    return unavailable, activation, nfe_entry_service
+
+
 def _network_configuration(profile):
     app_dir = profile.app_dir
     service = NetworkConfigService(
@@ -165,23 +184,43 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
-        nfe_import_service = NFeImportService(NFeImportRepository(database))
-        nfe_entry_service = NFeEntryDraftService(nfe_import_service)
-        assistant_activation = _create_assistant_activation(
-            database, profile, container, nfe_entry_service, nfe_import_service
+        assistant_service, assistant_activation, nfe_entry_service = (
+            _create_licensed_assistant(database, profile, container, license_gate)
         )
-        qt.aboutToQuit.connect(assistant_activation.stop)
+        if assistant_activation is not None:
+            qt.aboutToQuit.connect(assistant_activation.stop)
+        initial_entitlements = (
+            license_gate.allows(Capability.ASSISTANT),
+            license_gate.allows(Capability.FISCAL_WRITE),
+        )
         license_timer = QTimer(qt)
         license_timer.setInterval(60_000)
 
         def monitor_license() -> None:
             current_gate = evaluate_runtime_gate(profile.app_dir)
-            if current_gate.allows(Capability.QT):
+            current_entitlements = (
+                current_gate.allows(Capability.ASSISTANT),
+                current_gate.allows(Capability.FISCAL_WRITE),
+            )
+            if (
+                current_gate.allows(Capability.QT)
+                and current_entitlements == initial_entitlements
+            ):
                 return
             license_timer.stop()
+            if assistant_activation is not None:
+                assistant_activation.stop()
+            message = (
+                startup_block_message(current_gate, Capability.QT)
+                if not current_gate.allows(Capability.QT)
+                else (
+                    "Os recursos assinados da licença foram alterados. "
+                    "O NabiCode será fechado para reaplicar as travas com segurança."
+                )
+            )
             QMessageBox.warning(
                 None, "Licença NabiCode V2",
-                startup_block_message(current_gate, Capability.QT),
+                message,
             )
             qt.quit()
 
@@ -192,10 +231,7 @@ def main(argv=None) -> int:
             argv,
             cash_label="Caixa ativo",
             profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
-            assistant_service=UnavailableAssistantService(
-                "Clique em Ativar Nabi e autentique um usuário autorizado. "
-                "O modelo local somente será iniciado depois da validação."
-            ),
+            assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,
         )

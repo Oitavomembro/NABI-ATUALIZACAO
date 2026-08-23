@@ -15,6 +15,7 @@ class Capability(str, Enum):
     COMMERCIAL_WRITE = "commercial_write"
     FINANCIAL_WRITE = "financial_write"
     ADMIN_WRITE = "admin_write"
+    ASSISTANT = "assistant"
     FISCAL_WORKER = "fiscal_worker"
     FISCAL_WRITE = "fiscal_write"
 
@@ -29,6 +30,7 @@ class LicenseGate:
         Capability.COMMERCIAL_WRITE: "commercial",
         Capability.FINANCIAL_WRITE: "financial",
         Capability.ADMIN_WRITE: "admin",
+        Capability.ASSISTANT: "assistant",
         Capability.FISCAL_WORKER: "fiscal",
         Capability.FISCAL_WRITE: "fiscal",
     }

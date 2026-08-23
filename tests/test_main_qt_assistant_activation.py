@@ -6,9 +6,82 @@ from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
 import main_qt
+from licensing.gate import Capability
 
 
 class MainQtAssistantActivationTests(unittest.TestCase):
+    @staticmethod
+    def gate(*allowed):
+        gate = Mock()
+        gate.allows.side_effect = lambda capability: capability in allowed
+        return gate
+
+    def test_licenca_sem_assistente_nao_compoe_nabi_nem_nfe(self):
+        database = object()
+        profile = object()
+        container = object()
+        gate = self.gate(Capability.QT, Capability.FISCAL_WRITE)
+        with (
+            patch.object(main_qt, "NFeImportRepository") as repository,
+            patch.object(main_qt, "NFeImportService") as importer,
+            patch.object(main_qt, "NFeEntryDraftService") as drafts,
+            patch.object(main_qt, "_create_assistant_activation") as activation,
+        ):
+            result = main_qt._create_licensed_assistant(
+                database, profile, container, gate
+            )
+        self.assertEqual(result, (None, None, None))
+        repository.assert_not_called()
+        importer.assert_not_called()
+        drafts.assert_not_called()
+        activation.assert_not_called()
+
+    def test_assistente_sem_fiscal_nao_compoe_importacao_nfe(self):
+        gate = self.gate(Capability.QT, Capability.ASSISTANT)
+        with (
+            patch.object(main_qt, "NFeImportRepository") as repository,
+            patch.object(main_qt, "NFeImportService") as importer,
+            patch.object(main_qt, "NFeEntryDraftService") as drafts,
+            patch.object(
+                main_qt, "_create_assistant_activation", return_value="ativação"
+            ) as activation,
+        ):
+            service, actual_activation, nfe = main_qt._create_licensed_assistant(
+                "banco", "perfil", "container", gate
+            )
+        self.assertIsInstance(service, main_qt.UnavailableAssistantService)
+        self.assertEqual(actual_activation, "ativação")
+        self.assertIsNone(nfe)
+        activation.assert_called_once_with(
+            "banco", "perfil", "container", None, None
+        )
+        repository.assert_not_called()
+        importer.assert_not_called()
+        drafts.assert_not_called()
+
+    def test_assistente_com_fiscal_compoe_revisao_nfe_sem_sefaz(self):
+        gate = self.gate(
+            Capability.QT, Capability.ASSISTANT, Capability.FISCAL_WRITE
+        )
+        with (
+            patch.object(main_qt, "NFeImportRepository", return_value="repo") as repository,
+            patch.object(main_qt, "NFeImportService", return_value="importador") as importer,
+            patch.object(main_qt, "NFeEntryDraftService", return_value="rascunho") as drafts,
+            patch.object(
+                main_qt, "_create_assistant_activation", return_value="ativação"
+            ) as activation,
+        ):
+            _service, _actual_activation, nfe = main_qt._create_licensed_assistant(
+                "banco", "perfil", "container", gate
+            )
+        self.assertEqual(nfe, "rascunho")
+        repository.assert_called_once_with("banco")
+        importer.assert_called_once_with("repo")
+        drafts.assert_called_once_with("importador")
+        activation.assert_called_once_with(
+            "banco", "perfil", "container", "rascunho", "importador"
+        )
+
     def test_composicao_nao_inicia_modelo_antes_da_autenticacao(self):
         database = SimpleNamespace(connect=Mock())
         profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
