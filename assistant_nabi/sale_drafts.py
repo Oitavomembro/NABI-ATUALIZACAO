@@ -122,6 +122,93 @@ class SaleDraftService:
                 self._drafts.popitem(last=False)
         return draft
 
+    def create_for_target(
+        self,
+        target_amount,
+        *,
+        tolerance_amount,
+        max_units_per_product: int,
+        payment_method: str,
+        customer_id: int | None = None,
+        candidate_limit: int = 20,
+    ) -> SaleDraft:
+        """Planeja por preços/estoques oficiais e só aceita resultado na tolerância."""
+        target = self._positive_money(target_amount, "Valor alvo")
+        tolerance = self._non_negative_money(tolerance_amount, "Tolerância")
+        if target > Decimal("100000.00"):
+            raise ValueError("Valor alvo excede o limite seguro do planejador.")
+        if tolerance > target:
+            raise ValueError("Tolerância não pode superar o valor alvo.")
+        if isinstance(max_units_per_product, bool):
+            raise ValueError("Limite de unidades por produto inválido.")
+        max_units = int(max_units_per_product)
+        if max_units < 1 or max_units > 100:
+            raise ValueError("Limite de unidades por produto deve ficar entre 1 e 100.")
+
+        candidates = tuple(self._queries.high_stock_products(
+            limit=max(1, min(int(candidate_limit), 30))
+        ))
+        prepared = []
+        for product in candidates:
+            price = Decimal(str(product.sale_price)).quantize(_CENT, rounding=ROUND_HALF_UP)
+            stock = Decimal(str(product.current_stock)).quantize(_QUANTITY)
+            available_units = min(max_units, max(0, int(stock)))
+            if bool(product.active) and price > 0 and available_units > 0:
+                prepared.append((product, int(price * 100), available_units))
+        if not prepared:
+            raise ValueError("Não há produtos vendáveis com estoque positivo para o planejamento.")
+
+        target_cents = int(target * 100)
+        tolerance_cents = int(tolerance * 100)
+        ceiling = target_cents + tolerance_cents
+        states: dict[int, tuple[int, ...]] = {0: ()}
+        for _, price_cents, available_units in prepared:
+            next_states: dict[int, tuple[int, ...]] = {}
+            for subtotal, counts in states.items():
+                for amount in range(available_units + 1):
+                    total = subtotal + (price_cents * amount)
+                    if total <= ceiling and total not in next_states:
+                        next_states[total] = counts + (amount,)
+            if len(next_states) > 50000:
+                retained = sorted(
+                    next_states,
+                    key=lambda subtotal: (abs(subtotal - target_cents), subtotal),
+                )[:50000]
+                next_states = {subtotal: next_states[subtotal] for subtotal in retained}
+            states = next_states
+        valid = [
+            (subtotal, counts) for subtotal, counts in states.items()
+            if subtotal > 0 and abs(subtotal - target_cents) <= tolerance_cents
+        ]
+        if not valid:
+            closest = min(
+                (subtotal for subtotal in states if subtotal > 0),
+                key=lambda subtotal: (abs(subtotal - target_cents), subtotal),
+                default=None,
+            )
+            suffix = ""
+            if closest is not None:
+                suffix = f" Combinação mais próxima: R$ {Decimal(closest) / 100:.2f}."
+            raise ValueError("Nenhuma combinação atende à tolerância informada." + suffix)
+
+        def rank(entry):
+            subtotal, counts = entry
+            high_stock_priority = sum(
+                amount * (len(prepared) - index)
+                for index, amount in enumerate(counts)
+            )
+            return (abs(subtotal - target_cents), -high_stock_priority, sum(counts), subtotal)
+
+        _, selected = min(valid, key=rank)
+        requests = tuple(
+            SaleDraftItemRequest(product.product_id, str(amount))
+            for (product, _, _), amount in zip(prepared, selected)
+            if amount > 0
+        )
+        return self.create(
+            requests, payment_method=payment_method, customer_id=customer_id
+        )
+
     def get(self, draft_id: str) -> SaleDraft:
         with self._lock:
             draft = self._drafts.get(str(draft_id or ""))
@@ -132,6 +219,25 @@ class SaleDraftService:
     def discard(self, draft_id: str) -> None:
         with self._lock:
             self._drafts.pop(str(draft_id or ""), None)
+
+    @staticmethod
+    def _positive_money(value, field: str) -> Decimal:
+        result = SaleDraftService._non_negative_money(value, field)
+        if result <= 0:
+            raise ValueError(f"{field} deve ser maior que zero.")
+        return result
+
+    @staticmethod
+    def _non_negative_money(value, field: str) -> Decimal:
+        if isinstance(value, bool) or isinstance(value, float):
+            raise ValueError(f"{field} deve ser informado como texto decimal.")
+        try:
+            result = Decimal(str(value).replace(",", ".")).quantize(_CENT)
+        except (InvalidOperation, ValueError) as error:
+            raise ValueError(f"{field} inválido.") from error
+        if not result.is_finite() or result < 0:
+            raise ValueError(f"{field} inválido.")
+        return result
 
     def _resolve_item(self, request: SaleDraftItemRequest) -> SaleDraftItem:
         product = self._queries.get_product(request.product_id)

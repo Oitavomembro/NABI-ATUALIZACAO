@@ -106,3 +106,6 @@ class CommercialQueryService:
 
     def low_stock_products(self):
         return self._product_app().low_stock_products()
+
+    def high_stock_products(self, *, limit: int = 20):
+        return self._product_app().high_stock_products(limit=limit)

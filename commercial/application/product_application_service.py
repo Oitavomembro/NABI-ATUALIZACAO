@@ -36,3 +36,23 @@ class ProductApplicationService:
 
     def low_stock_products(self):
         return self._stock.low_stock()
+
+    def high_stock_products(self, *, limit: int = 20):
+        """Lista produtos vendáveis priorizando saldo, sem expor persistência."""
+        safe_limit = max(1, min(int(limit), 100))
+        products = self._catalog.search_details("", limit=200)
+        eligible = (
+            product for product in products
+            if product.active
+            and product.sale_price > 0
+            and product.current_stock > 0
+            and str(product.product_type or "").upper() != "SERVICO"
+        )
+        return tuple(sorted(
+            eligible,
+            key=lambda product: (
+                -product.current_stock,
+                product.description.casefold(),
+                product.product_id,
+            ),
+        )[:safe_limit])

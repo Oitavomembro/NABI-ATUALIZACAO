@@ -148,6 +148,13 @@ class CommercialProductStockServicesTests(unittest.TestCase):
         self.assertEqual(self.products.product_stock(product.product_id).current_quantity, Decimal("11.0000"))
         self.assertIn("não repita", result.message)
 
+    def test_consulta_de_maior_estoque_filtra_e_ordena_produtos_vendaveis(self):
+        lower = self._create(code="LOW", description="MENOR", barcode="301", stock="4")
+        higher = self._create(code="HIGH", description="MAIOR", barcode="302", stock="40")
+        result = self.container.query.high_stock_products(limit=1)
+        self.assertEqual([item.product_id for item in result], [higher.product_id])
+        self.assertNotEqual(result[0].product_id, lower.product_id)
+
     def test_operacoes_concorrentes_nao_perdem_atualizacao(self):
         product = self._create(stock="10", minimum="0")
         barrier = threading.Barrier(3)

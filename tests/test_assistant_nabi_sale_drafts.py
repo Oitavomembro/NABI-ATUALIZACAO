@@ -27,6 +27,21 @@ class Queries:
             3: SimpleNamespace(current_quantity=Decimal("5"), allow_negative_stock=False),
         }
 
+    def high_stock_products(self, *, limit):
+        ordered = (
+            SimpleNamespace(
+                product_id=1, code="P1", description="Café",
+                sale_price=Decimal("12.50"), current_stock=Decimal("10"),
+                active=True, product_type="MERCADORIA",
+            ),
+            SimpleNamespace(
+                product_id=2, code="P2", description="Leite",
+                sale_price=Decimal("7.00"), current_stock=Decimal("2"),
+                active=True, product_type="MERCADORIA",
+            ),
+        )
+        return ordered[:limit]
+
     def get_product(self, product_id):
         self.calls.append(("product", product_id))
         return self.products.get(product_id)
@@ -131,6 +146,33 @@ class SaleDraftServiceTests(unittest.TestCase):
             price.fingerprint,
         }
         self.assertEqual(len(hashes), 5)
+
+    def test_planeja_valor_alvo_com_maior_estoque_sem_persistir(self):
+        draft = self.service.create_for_target(
+            "50.00", tolerance_amount="0.00", max_units_per_product=5,
+            payment_method="PIX",
+        )
+        self.assertEqual(draft.total, Decimal("50.00"))
+        self.assertEqual([(item.product_id, item.quantity) for item in draft.items], [
+            (1, Decimal("4.0000")),
+        ])
+        self.assertFalse(hasattr(self.queries, "checkout"))
+
+    def test_planejador_recusa_fora_da_tolerancia_e_limites_inseguros(self):
+        with self.assertRaisesRegex(ValueError, "tolerância"):
+            self.service.create_for_target(
+                "13.00", tolerance_amount="0.10", max_units_per_product=1,
+                payment_method="PIX",
+            )
+        for target, tolerance, units in (
+            ("0", "0", 1), ("10", "11", 1), ("10", "1", 0),
+            ("100000.01", "1", 1),
+        ):
+            with self.subTest((target, tolerance, units)), self.assertRaises(ValueError):
+                self.service.create_for_target(
+                    target, tolerance_amount=tolerance,
+                    max_units_per_product=units, payment_method="PIX",
+                )
 
 
 if __name__ == "__main__":
