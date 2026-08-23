@@ -14,9 +14,14 @@ class _DataBlob(ctypes.Structure):
 
 
 class WindowsDataProtector:
-    """Protege segredos com DPAPI no escopo do usuário atual do Windows."""
+    """Protege dados com DPAPI; o padrão permanece o usuário atual do Windows."""
 
     description = "NabiCode Fiscal A1"
+    CRYPTPROTECT_LOCAL_MACHINE = 0x4
+
+    def __init__(self, *, description: str | None = None, machine_scope: bool = False) -> None:
+        self.description = str(description or self.description)
+        self.machine_scope = bool(machine_scope)
 
     @staticmethod
     def _blob(data: bytes) -> tuple[_DataBlob, object]:
@@ -31,7 +36,8 @@ class WindowsDataProtector:
         crypt32 = ctypes.windll.crypt32
         kernel32 = ctypes.windll.kernel32
         ok = crypt32.CryptProtectData(
-            ctypes.byref(source), self.description, None, None, None, 0,
+            ctypes.byref(source), self.description, None, None, None,
+            self.CRYPTPROTECT_LOCAL_MACHINE if self.machine_scope else 0,
             ctypes.byref(output),
         )
         del source_buffer
