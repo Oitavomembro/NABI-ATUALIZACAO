@@ -400,13 +400,44 @@ class CheckoutDialogTests(unittest.TestCase):
         QApplication.sendEvent(self.dialog.method, event)
         self.assertTrue(self.dialog.method.hasFocus())
 
-    def test_revisao_exige_confirmacao_e_nao_persiste_sozinha(self):
-        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as question:
+    def test_revisao_e_confirmacao_sao_acoes_separadas(self):
+        with patch.object(QMessageBox, "information") as information:
             self.dialog._review()
-        self.assertEqual(question.call_count, 1)
+        self.assertEqual(information.call_count, 1)
+        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Rejected)
+        self.assertTrue(self.dialog.confirm_button.isEnabled())
+        self.assertEqual(self.gateway.commands, [])
+
+        self.dialog._confirm()
         self.assertEqual(self.dialog.result(), QDialog.DialogCode.Accepted)
         self.assertIsNotNone(self.dialog.checkout_input())
         self.assertEqual(self.gateway.commands, [])
+
+    def test_confirmar_sem_revisao_valida_e_impossivel(self):
+        self.dialog._confirm()
+        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Rejected)
+        self.assertIsNone(self.dialog._confirmed_input)
+        self.assertIn("Revise", self.dialog.error_label.text())
+
+    def test_alteracao_posterior_invalida_revisao(self):
+        with patch.object(QMessageBox, "information"):
+            self.dialog._review()
+        self.assertTrue(self.dialog.confirm_button.isEnabled())
+
+        self.dialog.discount.set_value("1")
+
+        self.assertIsNone(self.dialog._reviewed_input)
+        self.assertFalse(self.dialog.confirm_button.isEnabled())
+        self.dialog._confirm()
+        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Rejected)
+
+    def test_dupla_confirmacao_nao_produz_duas_acoes(self):
+        with patch.object(QMessageBox, "information"):
+            self.dialog._review()
+        with patch.object(self.dialog, "accept", wraps=self.dialog.accept) as accept:
+            self.dialog._confirm()
+            self.dialog._confirm()
+        self.assertEqual(accept.call_count, 1)
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")

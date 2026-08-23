@@ -27,7 +27,9 @@ class CheckoutDialog(QDialog):
         super().__init__(parent)
         self.view_model = view_model
         self._payments: list[Payment] = []
+        self._reviewed_input: CheckoutInput | None = None
         self._confirmed_input: CheckoutInput | None = None
+        self._confirming = False
         self.setWindowTitle("Pagamentos")
         self.setModal(True)
         self.resize(820, 680)
@@ -91,18 +93,32 @@ class CheckoutDialog(QDialog):
         self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Revisar e confirmar")
+        self.review_button = self.buttons.addButton(
+            "Revisar", QDialogButtonBox.ButtonRole.ActionRole
+        )
+        self.confirm_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.confirm_button.setText("Confirmar venda")
+        self.confirm_button.setEnabled(False)
         root.addWidget(self.buttons)
 
         self.method.currentIndexChanged.connect(self._sync_method)
         self.add_payment.clicked.connect(self._add_payment)
         self.remove_payment.clicked.connect(self._remove_payment)
-        self.buttons.accepted.connect(self._review)
+        self.review_button.clicked.connect(self._review)
+        self.buttons.accepted.connect(self._confirm)
         self.buttons.rejected.connect(self.reject)
         for widget in (self.amount, self.discount, self.surcharge):
             widget.textChanged.connect(self._refresh_totals)
         for widget in (self.discount_type, self.surcharge_type):
             widget.currentIndexChanged.connect(self._refresh_totals)
+        self.method.currentIndexChanged.connect(self._invalidate_review)
+        self.authorization.textChanged.connect(self._invalidate_review)
+        self.installments.valueChanged.connect(self._invalidate_review)
+        self.first_due.dateChanged.connect(self._invalidate_review)
+        for widget in (self.amount, self.discount, self.surcharge):
+            widget.textChanged.connect(self._invalidate_review)
+        for widget in (self.discount_type, self.surcharge_type):
+            widget.currentIndexChanged.connect(self._invalidate_review)
         self._install_navigation()
         self._sync_method()
         self._refresh_totals()
@@ -113,7 +129,7 @@ class CheckoutDialog(QDialog):
             self.method, self.amount, self.authorization, self.add_payment,
             self.discount_type, self.discount, self.surcharge_type, self.surcharge,
             self.installments, self.first_due,
-            self.buttons.button(QDialogButtonBox.StandardButton.Ok),
+            self.review_button, self.confirm_button,
         )
         for widget in self._navigation:
             widget.installEventFilter(self)
@@ -133,8 +149,10 @@ class CheckoutDialog(QDialog):
                 flow[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
             elif watched is self.add_payment:
                 self._add_payment()
-            elif index == len(flow) - 1:
+            elif watched is self.review_button:
                 self._review()
+            elif watched is self.confirm_button:
+                self._confirm()
             else:
                 flow[index + 1].setFocus(Qt.FocusReason.TabFocusReason)
             return True
@@ -162,6 +180,7 @@ class CheckoutDialog(QDialog):
             self.amount.selectAll()
             return False
         self.authorization.clear()
+        self._invalidate_review()
         self._render_payments()
         self._refresh_totals()
         self.method.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -171,6 +190,7 @@ class CheckoutDialog(QDialog):
         row = self.payment_table.currentRow()
         if row >= 0:
             self._payments.pop(row)
+            self._invalidate_review()
             self._render_payments()
             self._refresh_totals()
 
@@ -242,6 +262,11 @@ class CheckoutDialog(QDialog):
             f"Troco: R$ {MoneyCodec.format_br(validation.change)}{credit}"
         )
 
+    def _invalidate_review(self, *_args) -> None:
+        self._reviewed_input = None
+        self._confirmed_input = None
+        self.confirm_button.setEnabled(False)
+
     def _review(self) -> None:
         try:
             data = self._candidate_input()
@@ -249,14 +274,31 @@ class CheckoutDialog(QDialog):
         except (TypeError, ValueError) as error:
             self.error_label.setText(str(error))
             return
-        answer = QMessageBox.question(
-            self, "Confirmar venda", self._summary(preview),
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No,
-        )
-        if answer is QMessageBox.StandardButton.Yes:
-            self._confirmed_input = data
-            self.accept()
+        self._reviewed_input = data
+        self.confirm_button.setEnabled(True)
+        QMessageBox.information(self, "Revisão da venda", self._summary(preview))
+        self.confirm_button.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _confirm(self) -> None:
+        if self._confirming:
+            return
+        if self._reviewed_input is None:
+            self.error_label.setText("Revise a venda antes de confirmar.")
+            self.review_button.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        try:
+            current = self._candidate_input()
+            if current != self._reviewed_input:
+                self._invalidate_review()
+                raise ValueError("Os dados mudaram. Revise a venda novamente.")
+            self.view_model.preview_checkout(current)
+        except (TypeError, ValueError) as error:
+            self.error_label.setText(str(error))
+            return
+        self._confirming = True
+        self.confirm_button.setEnabled(False)
+        self._confirmed_input = current
+        self.accept()
 
     def checkout_input(self) -> CheckoutInput:
         if self._confirmed_input is None:
