@@ -123,7 +123,7 @@ class MoneyEditTests(unittest.TestCase):
     def setUpClass(cls):
         cls.qt = QApplication.instance() or QApplication([])
 
-    def test_first_key_thousands_millions_backspace_and_delete(self):
+    def test_first_key_thousands_millions_backspace_and_delete_at_end(self):
         edit = MoneyEdit()
         edit.show()
         edit.setFocus()
@@ -133,7 +133,8 @@ class MoneyEditTests(unittest.TestCase):
         QTest.keyClick(edit, Qt.Key.Key_Backspace)
         self.assertEqual(edit.text(), "100.000,00")
         QTest.keyClick(edit, Qt.Key.Key_Delete)
-        self.assertEqual(edit.text(), "0,00")
+        self.assertEqual(edit.text(), "100.000,00")
+        self.assertEqual(edit.cursorPosition(), len(edit.text()))
 
     def test_decimal_ctrl_a_and_replacement(self):
         edit = MoneyEdit()
@@ -142,6 +143,42 @@ class MoneyEditTests(unittest.TestCase):
         QTest.keyClick(edit, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
         QTest.keyClicks(edit, "2000")
         self.assertEqual(edit.text(), "2.000,00")
+
+    def test_partial_selection_delete_removes_only_selected_digits(self):
+        edit = MoneyEdit()
+        QTest.keyClicks(edit, "1234")
+        edit.setSelection(2, 2)  # "23" em "1.234,00"
+        QTest.keyClick(edit, Qt.Key.Key_Delete)
+        self.assertEqual(edit.text(), "14,00")
+        self.assertEqual(edit.value(), Decimal("14.00"))
+
+        edit.set_value("1234")
+        edit.setSelection(2, 2)
+        QTest.keyClicks(edit, "9")
+        self.assertEqual(edit.text(), "194,00")
+
+    def test_ctrl_a_delete_and_ctrl_a_typing(self):
+        edit = MoneyEdit()
+        QTest.keyClicks(edit, "1234")
+        QTest.keyClick(edit, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClick(edit, Qt.Key.Key_Delete)
+        self.assertEqual(edit.text(), "0,00")
+        self.assertEqual(edit.value(), Decimal("0.00"))
+        QTest.keyClick(edit, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
+        QTest.keyClicks(edit, "9876")
+        self.assertEqual(edit.text(), "9.876,00")
+
+    def test_backspace_and_delete_with_cursor_in_middle(self):
+        edit = MoneyEdit()
+        QTest.keyClicks(edit, "1234")
+        edit.setCursorPosition(2)  # após o ponto em "1.234,00"
+        QTest.keyClick(edit, Qt.Key.Key_Backspace)
+        self.assertEqual(edit.text(), "234,00")
+        self.assertEqual(edit.cursorPosition(), 0)
+        edit.setCursorPosition(1)
+        QTest.keyClick(edit, Qt.Key.Key_Delete)
+        self.assertEqual(edit.text(), "24,00")
+        self.assertEqual(edit.cursorPosition(), 1)
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
