@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QLineEdit, QVBoxLayout
 
 from commercial.domain.cart import CartItem
@@ -48,5 +48,40 @@ class CartItemDialog(QDialog):
         self.buttons.accepted.connect(self.accept)
         self.buttons.rejected.connect(self.reject)
         root.addWidget(self.buttons)
+        self.apply_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
+        self.cancel_button = self.buttons.button(QDialogButtonBox.StandardButton.Cancel)
+        self._operational_widgets = tuple(
+            widget for widget in (
+                self.quantity, self.price, self.discount,
+                self.apply_button, self.cancel_button,
+            ) if widget.isEnabled()
+        )
+        for widget in self._operational_widgets:
+            widget.installEventFilter(self)
         self.quantity.setFocus(Qt.FocusReason.OtherFocusReason)
         self.quantity.selectAll()
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            watched in self._operational_widgets
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+        ):
+            if event.isAutoRepeat():
+                event.accept()
+                return True
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                self.focusPreviousChild()
+            elif watched is self.quantity:
+                (self.price if self.price.isEnabled() else self.discount).setFocus(
+                    Qt.FocusReason.ShortcutFocusReason
+                )
+            elif watched is self.price:
+                self.discount.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            elif watched is self.discount:
+                self.apply_button.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            else:
+                watched.click()
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)

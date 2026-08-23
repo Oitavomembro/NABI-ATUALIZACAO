@@ -301,7 +301,7 @@ class PDVWindow(QMainWindow):
         summary_layout.addWidget(future)
         self.checkout_button = QPushButton("FINALIZAR VENDA  [F9]")
         self.checkout_button.setObjectName("checkout")
-        self.checkout_button.clicked.connect(self._checkout)
+        self.checkout_button.clicked.connect(self._conclude_action)
         summary_layout.addWidget(self.checkout_button)
         layout.addWidget(summary)
         return panel
@@ -351,6 +351,15 @@ class PDVWindow(QMainWindow):
         ):
             if not event.isAutoRepeat():
                 self._remove_selected_item()
+            event.accept()
+            return True
+        if (
+            watched is self.cart
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+        ):
+            if not event.isAutoRepeat():
+                self._focus_after_cart_operation()
             event.accept()
             return True
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Down:
@@ -452,6 +461,15 @@ class PDVWindow(QMainWindow):
             if self.view_model.selected_customer is not None
             else self.customer_search
         )
+        target.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _focus_after_cart_operation(self) -> None:
+        if self.view_model.session.cart.is_empty:
+            target = self._active_item_input()
+        elif self.view_model.selected_customer is not None:
+            target = self.checkout_button
+        else:
+            target = self.customer_search
         target.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _field_error(self, field: QWidget, message: str) -> None:
@@ -811,24 +829,15 @@ class PDVWindow(QMainWindow):
                 self._show_error(error)
                 continue
             self.refresh_cart()
-            self.cart.selectRow(
-                next(
-                    index for index, current in enumerate(self.view_model.session.cart.items)
-                    if current.line_id == item.line_id
-                )
-            )
-            self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_cart_operation()
             return
+        self._focus_after_cart_operation()
 
     def _remove_item(self, line_id: str) -> None:
         try:
             self.view_model.remove_item(line_id)
             self.refresh_cart()
-            if self.view_model.session.cart.is_empty:
-                self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
-            else:
-                self.cart.selectRow(min(self.cart.rowCount() - 1, max(0, self.cart.currentRow())))
-                self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_cart_operation()
         except Exception as error:
             self._show_error(error)
 
