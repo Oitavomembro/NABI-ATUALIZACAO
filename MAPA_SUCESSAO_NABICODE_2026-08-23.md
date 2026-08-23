@@ -94,16 +94,34 @@ Legenda:
 - [x] arquitetura escolhida: licença offline Ed25519 assinada e vinculada à máquina;
 - [x] tolerância normativa de dez dias definida;
 - [x] pesquisa preliminar de tecnologias e licenças abertas concluída;
-- [ ] projetar formato canônico `.nabilic` e schemas;
-- [ ] criar portão único para Legacy, Qt e auxiliares;
-- [ ] implementar verificador fail-closed e modo restrito de backup/exportação;
-- [ ] criar Emissor de Licenças separado;
+- [x] formato canônico `.nabilic`, schema estrito e assinatura Ed25519 implementados em `8cc9990`;
+- [x] portão único para Legacy, Qt e auxiliares implementado em `1254a27` e endurecido em `a242f71`;
+- [x] verificador fail-closed, monitoramento contínuo e modo restrito de ativação/diagnóstico/backup/exportação implementados;
+- [x] Emissor de Licenças separado do runtime e excluído do pacote distribuído;
 - [ ] proteger e fazer backup da chave privada fora do repositório;
-- [ ] implementar edição AVALIAÇÃO para o chefe;
-- [ ] testar adulteração, expiração, tolerância e retrocesso de relógio;
+- [x] edição AVALIAÇÃO vinculada à máquina e limitada a trinta dias implementada;
+- [x] adulteração, expiração, tolerância, retrocesso de relógio, revogação, rollback e máquina divergente cobertos por testes automatizados;
 - [ ] testar cópia física para uma segunda máquina;
-- [ ] revisar avisos de terceiros e termos jurídicos;
+- [~] avisos de terceiros e documentação operacional atualizados em `a5b6d97`; revisão jurídica permanece obrigatória;
 - [!] nenhuma cópia comercial/de avaliação deve ser entregue antes desse portão.
+
+#### Checkpoint automatizável do Licenciamento V2 — branch `codex/licenciamento-v2`
+
+- base preservada: `b5bcaa7842d65430ee49642cc28516e69c2e3827`;
+- núcleo criptográfico: `8cc9990`;
+- portão e emissor externo: `1254a27`;
+- modo restrito, monitoramento contínuo Legacy/Qt e empacotamento sem emissor: `a242f71`;
+- operação, cerimônia e avisos de terceiros: `a5b6d97`;
+- contrato histórico de empacotamento preservado em `b846c6c`;
+- catálogo público real permanece intencionalmente vazio, portanto o runtime falha fechado;
+- nenhuma senha mestre fabrica, prolonga ou restaura licença;
+- nenhuma chave privada, PEM ou segredo foi versionado, logado ou incluído no pacote;
+- o portão externo impede inicialização de banco, runtime Legacy/Qt e workers quando bloqueado, sem alterar regras, XML, outbox, transmissão ou cancelamento Fiscal/SEFAZ;
+- validação focada: 94 testes e 8 subtestes aprovados;
+- regressão integral inicial: 1.717 testes e 385 subtestes aprovados, com quatro falhas diagnosticadas; o contrato do empacotamento foi corrigido, o teste textual obsoleto do MoneyEdit foi atualizado e a dependência bloqueada já declarada `BrazilFiscalReport==1.0.1` foi restaurada no Python de testes;
+- regressão integral final: 1.721 testes e 385 subtestes aprovados, 1 teste previamente marcado como ignorado e zero falhas;
+- pendências físicas/materiais: cerimônia da chave real pelo proprietário, duas cópias privadas criptografadas em locais separados, hash do catálogo público, revisão jurídica, teste físico em segunda máquina, reinstalação/atualização e homologação dos estados visuais no Windows;
+- nenhum push realizado.
 
 ### IA Nabi
 
