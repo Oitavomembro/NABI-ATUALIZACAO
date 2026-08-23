@@ -1016,3 +1016,28 @@ Pendências deliberadas:
 - confirmar no artefato instalado, por inspeção de processos e banco de TESTE,
   que nenhum worker/arquivo/fila fiscal é iniciado ou criado;
 - nenhum push foi realizado.
+
+### Simplificação operacional do Emissor FICHÁRIO
+
+Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
+
+- implementação: `8bccecf` — `feat: simplifica emissao de licencas`;
+- o proprietário continua escolhendo a edição, pois ela define o sistema
+  licenciado; `FICHARIO` configura automaticamente
+  `commercial,fichario,financial,qt`;
+- o Emissor descobre no diretório administrativo externo a única chave privada,
+  o catálogo público correspondente e seu `key_id`; nenhuma senha é persistida;
+- o fluxo principal mostra somente máquina, titular, edição, período de
+  1/3/6/9/12 meses, validade calculada e arquivo de saída automático;
+- fingerprint bruto, caminhos, recursos, ID e revogação ficam em
+  `Opções avançadas`, fechadas por padrão;
+- `Usar esta máquina` obtém o fingerprint local; outra máquina continua usando
+  solicitação assinável, sem tentar reverter o código visual;
+- o nome do `.nabilic` é sugerido automaticamente e nunca sobrescreve arquivo
+  existente;
+- a edição AVALIAÇÃO fica limitada automaticamente a trinta dias;
+- botão `Minimizar` e controle nativo de minimizar foram adicionados;
+- regressão focada: `28 passed`; regressão integral de licenciamento/emissor:
+  `51 passed`, `8 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: integrar o commit na trilha conjunta, refazer o pacote externo do
+  Emissor e homologar visualmente no Windows; nenhum push realizado.
