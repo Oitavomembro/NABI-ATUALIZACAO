@@ -99,6 +99,22 @@ class PDVViewModel:
     def remove_item(self, line_id: str) -> None:
         self.application.remove_item(self.session, line_id)
 
+    def edit_item(
+        self,
+        line_id: str,
+        *,
+        quantity: str,
+        unit_price: Decimal,
+        discount_percent: Decimal,
+    ) -> None:
+        self.application.edit_item(
+            self.session,
+            line_id,
+            quantity=self.parse_quantity(quantity),
+            unit_price=unit_price,
+            discount_percent=discount_percent,
+        )
+
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:
         if data.payments:

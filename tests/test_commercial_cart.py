@@ -41,6 +41,30 @@ class CommercialCartTests(unittest.TestCase):
         self.assertEqual(item.net_unit_price, Decimal("9.00"))
         self.assertEqual(item.subtotal, Decimal("27.00"))
 
+    def test_edicao_atomica_preserva_preco_sem_permissao(self):
+        cart = Cart([CartItem("Produto", 1, "10.00", product_id=7)])
+        original = cart.items[0]
+        with self.assertRaises(PermissionError):
+            cart.edit_item(
+                original.line_id,
+                quantity=2,
+                unit_price="12.00",
+                discount_percent=10,
+                allow_price_change=False,
+            )
+        self.assertEqual(cart.items[0], original)
+
+        updated = cart.edit_item(
+            original.line_id,
+            quantity=2,
+            unit_price="10.00",
+            discount_percent=10,
+            allow_price_change=False,
+        )
+        self.assertEqual(updated.quantity, Decimal("2"))
+        self.assertEqual(updated.discount_percent, Decimal("10.00"))
+        self.assertEqual(updated.subtotal, Decimal("18.00"))
+
     def test_validacoes_de_item_e_exposicao_imutavel(self):
         with self.assertRaises(ValueError):
             CartItem("", Decimal("1"), Decimal("1"))

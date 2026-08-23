@@ -251,6 +251,23 @@ class PDVApplicationSessionTests(unittest.TestCase):
         application.change_quantity(session, session.cart.items[0].line_id, 1)
         self.assertIsNone(session.payment_plan)
 
+    def test_edicao_de_item_invalida_pagamento_e_restringe_preco_cadastrado(self):
+        application = make_application()
+        session = prepared_cash_session(application)
+        item = session.cart.items[0]
+        with self.assertRaises(PermissionError):
+            application.edit_item(
+                session, item.line_id, quantity=1, unit_price="60",
+                discount_percent=0,
+            )
+        self.assertIsNotNone(session.payment_plan)
+        application.edit_item(
+            session, item.line_id, quantity=1, unit_price="50",
+            discount_percent=10,
+        )
+        self.assertIsNone(session.payment_plan)
+        self.assertEqual(session.cart.items[0].subtotal, Decimal("45.00"))
+
     def test_preparacao_entrada_crediario_e_checkout_command(self):
         application = make_application()
         session = application.new_session()

@@ -85,6 +85,26 @@ class PDVSession:
         self._invalidate_payment()
         return updated
 
+    def edit_item(
+        self,
+        line_id: str,
+        *,
+        quantity: Decimal | int | str,
+        unit_price: Decimal | int | str,
+        discount_percent: Decimal | int | str,
+        allow_price_change: bool,
+    ) -> CartItem:
+        self._ensure_open()
+        updated = self.cart.edit_item(
+            line_id,
+            quantity=quantity,
+            unit_price=unit_price,
+            discount_percent=discount_percent,
+            allow_price_change=allow_price_change,
+        )
+        self._invalidate_payment()
+        return updated
+
     def set_adjustments(
         self,
         *,

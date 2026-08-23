@@ -20,6 +20,7 @@ try:
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
     from ui_qt.commercial.checkout_dialog import CheckoutDialog
+    from ui_qt.commercial.cart_item_dialog import CartItemDialog
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.post_sale_dialog import PostSaleDialog
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
@@ -135,6 +136,34 @@ class FakePostSaleDialog:
     def exec(self):
         type(self).calls.append(("exec",))
         return QDialog.DialogCode.Accepted
+
+
+class FakeCartItemDialog:
+    DialogCode = QDialog.DialogCode if QT_AVAILABLE else None
+    quantity_value = "2"
+    price_value = Decimal("15.00")
+    discount_value = Decimal("10.00")
+
+    class TextField:
+        def text(self):
+            return FakeCartItemDialog.quantity_value
+
+    class MoneyField:
+        def __init__(self, attribute):
+            self.attribute = attribute
+
+        def value(self):
+            return getattr(FakeCartItemDialog, self.attribute)
+
+    def __init__(self, item, parent=None):
+        self.item = item
+        self.parent = parent
+        self.quantity = self.TextField()
+        self.price = self.MoneyField("price_value")
+        self.discount = self.MoneyField("discount_value")
+
+    def exec(self):
+        return self.DialogCode.Accepted
 
 
 class FakeReceiptOutput:
@@ -611,7 +640,60 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F9"})
+        self.assertEqual(shortcuts, {"Esc", "F4", "F9", "F10"})
+
+    def test_editar_item_avulso_atualiza_linha_e_invalida_pagamento(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.view_model.application.prepare_payments(
+            self.view_model.session, [Payment(PaymentMethod.CASH, Decimal("10"))]
+        )
+        self.window.refresh_cart()
+        self.window.cart.selectRow(0)
+        with patch("ui_qt.commercial.pdv_window.CartItemDialog", FakeCartItemDialog):
+            self.window._edit_selected_item()
+        item = self.view_model.session.cart.items[0]
+        self.assertEqual(item.quantity, Decimal("2"))
+        self.assertEqual(item.unit_price, Decimal("15.00"))
+        self.assertEqual(item.discount_percent, Decimal("10.00"))
+        self.assertEqual(item.subtotal, Decimal("27.00"))
+        self.assertIsNone(self.view_model.session.payment_plan)
+        self.assertTrue(self.window.cart.hasFocus())
+
+    def test_delete_no_carrinho_remove_uma_vez_e_foca_entrada(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window.cart.selectRow(0)
+        self.window.cart.setFocus()
+        QTest.keyClick(self.window.cart, Qt.Key.Key_Delete)
+        QApplication.processEvents()
+        self.assertTrue(self.view_model.session.cart.is_empty)
+        self.assertEqual(self.window.cart.rowCount(), 0)
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_delete_auto_repeat_no_carrinho_nao_remove_item(self):
+        self.view_model.add_loose_item("ITEM 1", "1", Decimal("10"))
+        self.view_model.add_loose_item("ITEM 2", "1", Decimal("5"))
+        self.window.refresh_cart()
+        self.window.cart.selectRow(0)
+        event = QKeyEvent(
+            QEvent.Type.KeyPress,
+            Qt.Key.Key_Delete,
+            Qt.KeyboardModifier.NoModifier,
+            "",
+            True,
+            2,
+        )
+        QApplication.sendEvent(self.window.cart, event)
+        self.assertEqual(len(self.view_model.session.cart.items), 2)
+
+    def test_preco_de_produto_cadastrado_fica_bloqueado_no_editor(self):
+        self.view_model.select_product(FakeProducts.record.product_id)
+        self.view_model.add_selected_product("1")
+        dialog = CartItemDialog(self.view_model.session.cart.items[0], self.window)
+        self.assertFalse(dialog.price.isEnabled())
+        self.assertTrue(dialog.quantity.isEnabled())
+        self.assertTrue(dialog.discount.isEnabled())
+        dialog.close()
 
     def test_empty_customer_enter_selects_final_consumer_and_advances(self):
         self.assertTrue(self.window.customer_search.hasFocus())

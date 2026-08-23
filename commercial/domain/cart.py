@@ -140,5 +140,27 @@ class Cart:
         self._items[index] = updated
         return updated
 
+    def edit_item(
+        self,
+        line_id: str,
+        *,
+        quantity: Decimal | int | str,
+        unit_price: Decimal | int | str,
+        discount_percent: Decimal | int | str,
+        allow_price_change: bool,
+    ) -> CartItem:
+        index = self._index(line_id)
+        current = self._items[index]
+        candidate = replace(
+            current,
+            quantity=quantity,
+            unit_price=unit_price,
+            discount_percent=discount_percent,
+        )
+        if candidate.unit_price != current.unit_price and not allow_price_change:
+            raise PermissionError("A alteração do preço deste produto não está autorizada.")
+        self._items[index] = candidate
+        return candidate
+
     def clear(self) -> None:
         self._items.clear()

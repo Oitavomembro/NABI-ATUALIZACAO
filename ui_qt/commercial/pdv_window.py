@@ -3,7 +3,7 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
+    QAbstractItemView, QCheckBox, QDialog, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
     QPushButton, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from commercial.domain.money import MoneyCodec
 
 from .checkout_dialog import CheckoutDialog
+from .cart_item_dialog import CartItemDialog
 from .post_sale_dialog import PostSaleDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
@@ -34,6 +35,9 @@ class PDVWindow(QMainWindow):
     ) -> None:
         super().__init__()
         self.view_model = view_model
+        # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
+        # montada. O filtro precisa existir em estado válido desde o início.
+        self._enter_widgets = ()
         self.setWindowTitle("NabiCode — NABI VENDAS")
         self.setMinimumSize(960, 620)
         self.resize(1280, 760)
@@ -249,6 +253,8 @@ class PDVWindow(QMainWindow):
         self.cart.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
         self.cart.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
         self.cart.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.cart.doubleClicked.connect(self._edit_selected_item)
+        self.cart.installEventFilter(self)
         layout.addWidget(self.cart)
         return box
 
@@ -275,7 +281,10 @@ class PDVWindow(QMainWindow):
         self.total_label.setObjectName("total")
         self.total_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(self.total_label)
-        remove = QPushButton("Remover item selecionado")
+        edit = QPushButton("Editar item selecionado  [F4]")
+        edit.clicked.connect(self._edit_selected_item)
+        summary_layout.addWidget(edit)
+        remove = QPushButton("Remover item selecionado  [Del]")
         remove.setToolTip("Selecione uma linha em Itens da venda para remover")
         remove.clicked.connect(self._remove_selected_item)
         summary_layout.addWidget(remove)
@@ -296,8 +305,8 @@ class PDVWindow(QMainWindow):
         row = QHBoxLayout(frame)
         row.setContentsMargins(16, 8, 16, 8)
         shortcuts = QLabel(
-            "Enter  Selecionar / adicionar    •    F9  Finalizar venda    •    Esc  Fechar"
-            "    •    F5/F7  Em preparação"
+            "Enter  Selecionar / adicionar    •    F4  Editar item    •    Del  Remover"
+            "    •    F9  Finalizar venda    •    Esc  Fechar"
         )
         shortcuts.setObjectName("muted")
         shortcuts.setStyleSheet("font-size: 12px; font-weight: 700;")
@@ -307,7 +316,8 @@ class PDVWindow(QMainWindow):
     def _install_shortcuts(self) -> None:
         self._shortcuts = []
         for sequence, callback in (
-            ("Esc", self.close), ("F9", self._checkout),
+            ("Esc", self.close), ("F4", self._edit_selected_item),
+            ("F10", self._edit_selected_item), ("F9", self._checkout),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
@@ -325,6 +335,15 @@ class PDVWindow(QMainWindow):
             widget.installEventFilter(self)
 
     def eventFilter(self, watched, event) -> bool:
+        if (
+            watched is self.cart
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() == Qt.Key.Key_Delete
+        ):
+            if not event.isAutoRepeat():
+                self._remove_selected_item()
+            event.accept()
+            return True
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Down:
             if watched is self.customer_search and self.customer_results.count():
                 self.customer_results.setFocus(Qt.FocusReason.ShortcutFocusReason)
@@ -647,10 +666,53 @@ class PDVWindow(QMainWindow):
         if item is not None:
             self._remove_item(str(item.data(Qt.ItemDataRole.UserRole)))
 
+    def _selected_cart_item(self):
+        row = self.cart.currentRow()
+        cell = self.cart.item(row, 0) if row >= 0 else None
+        if cell is None:
+            return None
+        line_id = str(cell.data(Qt.ItemDataRole.UserRole))
+        return next(
+            (item for item in self.view_model.session.cart.items if item.line_id == line_id),
+            None,
+        )
+
+    def _edit_selected_item(self, *_args) -> None:
+        item = self._selected_cart_item()
+        if item is None:
+            self.statusBar().showMessage("Selecione um item da venda para editar.", 2500)
+            return
+        dialog = CartItemDialog(item, self)
+        while dialog.exec() == QDialog.DialogCode.Accepted:
+            try:
+                self.view_model.edit_item(
+                    item.line_id,
+                    quantity=dialog.quantity.text(),
+                    unit_price=dialog.price.value(),
+                    discount_percent=dialog.discount.value(),
+                )
+            except Exception as error:
+                self._show_error(error)
+                continue
+            self.refresh_cart()
+            self.cart.selectRow(
+                next(
+                    index for index, current in enumerate(self.view_model.session.cart.items)
+                    if current.line_id == item.line_id
+                )
+            )
+            self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+
     def _remove_item(self, line_id: str) -> None:
         try:
             self.view_model.remove_item(line_id)
             self.refresh_cart()
+            if self.view_model.session.cart.is_empty:
+                self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            else:
+                self.cart.selectRow(min(self.cart.rowCount() - 1, max(0, self.cart.currentRow())))
+                self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
         except Exception as error:
             self._show_error(error)
 

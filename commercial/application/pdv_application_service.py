@@ -147,6 +147,29 @@ class PDVApplicationService:
         return session.change_unit_price(line_id, unit_price, allowed=allowed)
 
     @staticmethod
+    def edit_item(
+        session: PDVSession,
+        line_id: str,
+        *,
+        quantity: Decimal | int | str,
+        unit_price: Decimal | int | str,
+        discount_percent: Decimal | int | str,
+        allow_registered_price_change: bool = False,
+    ) -> CartItem:
+        current = next(
+            (item for item in session.cart.items if item.line_id == line_id), None
+        )
+        if current is None:
+            raise KeyError("Item não encontrado no carrinho.")
+        return session.edit_item(
+            line_id,
+            quantity=quantity,
+            unit_price=unit_price,
+            discount_percent=discount_percent,
+            allow_price_change=current.is_loose or allow_registered_price_change,
+        )
+
+    @staticmethod
     def set_adjustments(
         session: PDVSession,
         *,
