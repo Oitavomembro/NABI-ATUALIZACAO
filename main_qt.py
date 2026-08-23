@@ -14,6 +14,8 @@ from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database
 from services.network_config_service import NetworkConfigService, NetworkPaths
 from ui_qt.app import run
+from licensing.gate import Capability
+from licensing.runtime import evaluate_runtime_gate, startup_block_message
 
 SCHEMA_VERSION = 20
 
@@ -73,6 +75,13 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
 def main(argv=None) -> int:
     qt = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     profile = configure_profile_environment("PRODUCAO")
+    license_gate = evaluate_runtime_gate(profile.app_dir)
+    if not license_gate.allows(Capability.QT):
+        QMessageBox.warning(
+            None, "Licença NabiCode V2",
+            startup_block_message(license_gate, Capability.QT),
+        )
+        return 3
     configuration = _network_configuration(profile)
     database_path = profile.validate_database(
         configuration.get("db_path") or profile.paths.database
