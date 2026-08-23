@@ -1089,3 +1089,31 @@ Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
 Próximo passo: abrir o FICHÁRIO pelo código atual para homologação visual dos
 cards, clientes, ficha, PDV avulso e prévia do importador. Não executar a
 importação no banco de produção antes da aprovação visual e de um backup manual.
+
+### Otimização de Clientes e Recebimentos
+
+- implementação: `fcb455e` — `perf: acelera clientes e recebimentos do Fichario`;
+- removido o padrão N+1 que consultava detalhes individualmente para centenas
+  de clientes; a projeção agora carrega os IDs ordenados e todos os detalhes em
+  lote, preservando a ordem e os IDs reais;
+- Clientes abre inicialmente 60 registros e pesquisa até 200 após debounce;
+  Receber abre 100 e filtra por ficha ou nome enquanto o operador digita;
+- busca mantém ficha exata como prioridade; prefixo de nome completo e início
+  de qualquer palavra do nome têm precedência sobre ocorrência interna; dentro
+  da mesma faixa de relevância, os nomes permanecem em ordem alfabética;
+- tela principal mantém somente Vendas, Clientes/Fichas e Receber como cards;
+  importação, backup, restauração e informações ficam no menu `Sistema`;
+- card `PDV COMERCIAL / NÃO FISCAL` foi renomeado para `VENDAS`;
+- Clientes ganhou escolha persistente de tamanho de letras entre 13 e 21,
+  mantendo 15 como padrão legível;
+- regressão consolidada: `165 passed`, `7 subtests passed`; validação final da
+  busca/telas: `36 passed`; `compileall` e `git diff --check` aprovados;
+- estresse temporário com 5.000 clientes: cadastro 0,58 s, tela Clientes com 60
+  registros 0,066 s, Receber com 100 registros 0,038 s, ficha exata 0,0095 s e
+  nome parcial 0,0125 s;
+- 100 vendas avulsas vinculadas concluídas em 4,60 s e 100 recebimentos em
+  1,74 s; repetição de checkout não duplicou venda, saldos ficaram exatos e
+  `integrity_check` foi aprovado;
+- banco fisicamente marcado TESTE, somente leitura: 4.957 clientes, primeiros
+  60 em 0,0054 s, nome parcial em 0,0021 s e integridade aprovada;
+- banco de Produção não foi acessado e nenhum push foi realizado.
