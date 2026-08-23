@@ -7,7 +7,7 @@ from typing import Protocol, runtime_checkable
 from .action_dto import ActionContext, PersistedCancellation, SaleCancelled
 from .dto import (
     BudgetDocument, CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord,
-    ProductRecord,
+    ProductRecord, SuspendedSale,
 )
 from .query_dto import (
     CancelledSaleSummary, DailyMovementSummary, DailySaleSummary,
@@ -110,6 +110,19 @@ class BudgetOutputPort(Protocol):
     def generate_pdf(self, budget: BudgetDocument) -> str: ...
 
     def open_file(self, path: str) -> str: ...
+
+
+@runtime_checkable
+class SuspendedSalePort(Protocol):
+    """Preserva carrinhos não concluídos sem registrar venda ou movimentação."""
+
+    def suspend(
+        self, *, customer_id: int | None, customer_name: str, items: tuple
+    ) -> SuspendedSale: ...
+
+    def list_open(self) -> tuple[SuspendedSale, ...]: ...
+
+    def resume(self, suspended_id: str) -> SuspendedSale: ...
 
 
 @runtime_checkable

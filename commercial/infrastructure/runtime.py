@@ -23,6 +23,7 @@ from services.receipt_service import ReceiptService
 from .container import CommercialContainer
 from .sale_receipt_gateway import NabiCodeSaleReceiptGateway
 from .budget_gateway import NabiCodeBudgetGateway
+from .suspended_sale_gateway import NabiCodeSuspendedSaleGateway
 
 
 def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> CommercialContainer:
@@ -95,4 +96,5 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
         receipt_output=receipt_output,
         budgets=budget_gateway,
         budget_output=budget_gateway,
+        suspended_sales=NabiCodeSuspendedSaleGateway(pdv),
     )

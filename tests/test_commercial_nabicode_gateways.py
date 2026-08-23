@@ -14,6 +14,7 @@ from commercial.infrastructure.customer_gateway import NabiCodeCustomerGateway
 from commercial.infrastructure.product_gateway import NabiCodeProductGateway
 from commercial.infrastructure.sale_receipt_gateway import NabiCodeSaleReceiptGateway
 from commercial.infrastructure.budget_gateway import NabiCodeBudgetGateway
+from commercial.infrastructure.suspended_sale_gateway import NabiCodeSuspendedSaleGateway
 
 
 class FakeDatabase:
@@ -135,7 +136,56 @@ class FakeBudgetPDVService:
         return document
 
 
+class FakeSuspendedPDVService:
+    def __init__(self):
+        self.open = []
+
+    def suspender(self, items, *, cliente_id, cliente_nome):
+        suspended = SimpleNamespace(
+            id="S1", criada_em="2026-08-23T15:00:00",
+            cliente_id=cliente_id, cliente_nome=cliente_nome,
+            itens=tuple(items),
+            total=sum(Decimal(str(item["qtd"])) * Decimal(str(item["preco"])) for item in items),
+        )
+        self.open.append(suspended)
+        return suspended
+
+    def listar_suspensas(self):
+        return list(self.open)
+
+    def reabrir(self, suspended_id):
+        suspended = next(item for item in self.open if item.id == suspended_id)
+        self.open.remove(suspended)
+        return suspended
+
+
 class NabiCodeGatewayTests(unittest.TestCase):
+    def test_venda_suspensa_reutiliza_pdv_service_sem_checkout(self):
+        pdv = FakeSuspendedPDVService()
+        gateway = NabiCodeSuspendedSaleGateway(pdv)
+        suspended = gateway.suspend(
+            customer_id=7, customer_name="CLIENTE",
+            items=(CartItem("PRODUTO", 2, "10", product_id=9, discount_percent="10"),),
+        )
+        self.assertEqual(suspended.customer_id, 7)
+        self.assertEqual(suspended.items[0].product_id, 9)
+        self.assertEqual(suspended.items[0].discount_percent, Decimal("10.00"))
+        self.assertEqual(gateway.list_open()[0].suspended_id, "S1")
+        self.assertEqual(gateway.resume("S1").suspended_id, "S1")
+        self.assertEqual(gateway.list_open(), ())
+
+    def test_texto_sem_id_nao_vira_cliente_ao_ler_suspensa_legacy(self):
+        pdv = FakeSuspendedPDVService()
+        stored = pdv.suspender(
+            [{"item": "AVULSO", "qtd": 1, "preco": 5, "subtotal": 5,
+              "item_avulso": True}],
+            cliente_id=None, cliente_nome="TEXTO ANTIGO",
+        )
+        suspended = NabiCodeSuspendedSaleGateway(pdv).list_open()[0]
+        self.assertEqual(stored.cliente_nome, "TEXTO ANTIGO")
+        self.assertIsNone(suspended.customer_id)
+        self.assertEqual(suspended.customer_name, "")
+
     def test_orcamento_reutiliza_servicos_legacy_sem_persistir_venda(self):
         pdv = FakeBudgetPDVService()
         receipts = FakeReceiptService()

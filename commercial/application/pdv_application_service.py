@@ -12,12 +12,12 @@ from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
 from .dto import (
     BudgetDocument, CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord,
-    ProductRecord,
+    ProductRecord, SuspendedSale,
 )
 from .pdv_session import PDVSession
 from .ports import (
     BudgetOutputPort, BudgetPort, CheckoutPort, CommercialEventPort, CustomerLookupPort,
-    ProductLookupPort, SaleReceiptOutputPort,
+    ProductLookupPort, SaleReceiptOutputPort, SuspendedSalePort,
 )
 
 
@@ -34,6 +34,7 @@ class PDVApplicationService:
         receipt_output: SaleReceiptOutputPort | None = None,
         budgets: BudgetPort | None = None,
         budget_output: BudgetOutputPort | None = None,
+        suspended_sales: SuspendedSalePort | None = None,
     ) -> None:
         self.customers = customers
         self.products = products
@@ -42,6 +43,57 @@ class PDVApplicationService:
         self.receipt_output = receipt_output
         self.budgets = budgets
         self.budget_output = budget_output
+        self.suspended_sales = suspended_sales
+
+    def _suspended_sale_port(self) -> SuspendedSalePort:
+        if self.suspended_sales is None:
+            raise RuntimeError("O serviço de vendas suspensas não está configurado.")
+        return self.suspended_sales
+
+    def suspend_sale(self, session: PDVSession) -> SuspendedSale:
+        session.ensure_open()
+        if session.cart.is_empty:
+            raise ValueError("Inclua ao menos um item antes de suspender a venda.")
+        customer = None
+        if session.customer_id is not None:
+            customer = self.get_customer(session.customer_id)
+            if customer is None:
+                raise ValueError("O cliente selecionado não está mais disponível.")
+        suspended = self._suspended_sale_port().suspend(
+            customer_id=customer.customer_id if customer else None,
+            customer_name=customer.name if customer else "",
+            items=session.cart.items,
+        )
+        session.reset()
+        return suspended
+
+    def list_suspended_sales(self) -> tuple[SuspendedSale, ...]:
+        return self._suspended_sale_port().list_open()
+
+    def resume_suspended_sale(
+        self, session: PDVSession, suspended_id: str, *, replace: bool = False
+    ) -> SuspendedSale:
+        session.ensure_open()
+        if not session.cart.is_empty and not replace:
+            raise ValueError("O carrinho atual precisa ser preservado ou substituído explicitamente.")
+        suspended = next(
+            (item for item in self.list_suspended_sales()
+             if item.suspended_id == str(suspended_id)), None
+        )
+        if suspended is None:
+            raise ValueError("Venda suspensa não encontrada.")
+        customer = None
+        if suspended.customer_id is not None:
+            customer = self.get_customer(suspended.customer_id)
+            if customer is None:
+                raise ValueError("O cliente da venda suspensa não está mais disponível.")
+        resumed = self._suspended_sale_port().resume(suspended.suspended_id)
+        session.reset()
+        for item in resumed.items:
+            session.add_item(item)
+        if customer is not None:
+            session.select_customer(customer.customer_id)
+        return resumed
 
     def _budget_port(self) -> BudgetPort:
         if self.budgets is None:
