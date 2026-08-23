@@ -60,7 +60,7 @@ Legenda:
 - [~] repetir a homologação física do Orçamento Qt a partir de `b995784`, incluindo as sequências intermediárias que originaram o defeito;
 - [x] achado manual subsequente de Pagamentos corrigido no commit `fca7bf1`: após cobrir o total, Enter deixa a área de inclusão e segue para ajustes/revisão; nova inclusão é recusada mesmo por clique; pagamento parcial prepara somente o saldo restante; o indicador passou a `TROCO` em fonte grande;
 - [x] regressão dessa correção: 85 testes Qt e 253 testes Qt/Commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
-- [~] homologar fisicamente a não duplicação por Enter e a legibilidade do novo indicador de TROCO;
+- [x] homologação física aprovada pelo operador para a não duplicação por Enter e a legibilidade do indicador grande `TROCO`, na versão de código `fca7bf1`;
 - [ ] vendas suspensas Qt;
 - [ ] vendas do dia, reimpressão e cancelamento Qt;
 - [ ] resolver todos os botões provisórios;
