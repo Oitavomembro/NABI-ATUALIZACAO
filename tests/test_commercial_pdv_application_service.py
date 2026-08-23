@@ -16,6 +16,7 @@ from commercial.domain.payments import Payment, PaymentMethod
 class FakeCustomers:
     def __init__(self):
         self.records = {
+            1: CustomerRecord(1, "CONSUMIDOR_FINAL", "CONSUMIDOR FINAL", 0),
             7: CustomerRecord(7, "C7", "CLIENTE SETE", 70),
             8: CustomerRecord(8, "C8", "CLIENTE OITO", 80),
         }
@@ -29,6 +30,9 @@ class FakeCustomers:
 
     def get(self, customer_id):
         return self.records.get(int(customer_id))
+
+    def get_final_consumer(self):
+        return self.records[1]
 
 
 class FakeProducts:
@@ -102,6 +106,13 @@ def prepared_cash_session(application):
 
 
 class PDVApplicationSessionTests(unittest.TestCase):
+    def test_consumidor_final_e_selecionado_por_id_real(self):
+        application = make_application()
+        session = application.new_session()
+        customer = application.select_final_consumer(session)
+        self.assertEqual(customer.code, "CONSUMIDOR_FINAL")
+        self.assertEqual(session.customer_id, 1)
+
     def test_nova_sessao_e_cliente_inequivoco_por_id(self):
         application = make_application()
         session = application.new_session()
@@ -169,6 +180,20 @@ class PDVApplicationSessionTests(unittest.TestCase):
 
 
 class PDVApplicationCheckoutTests(unittest.TestCase):
+    def test_consumidor_final_permite_venda_comum(self):
+        gateway = FakeCheckoutGateway()
+        application = make_application(gateway=gateway)
+        session = application.new_session()
+        application.select_final_consumer(session)
+        application.add_product(session, 10)
+        application.prepare_payments(
+            session, [Payment(PaymentMethod.CASH, Decimal("50.00"))]
+        )
+        result = application.checkout(session, user="operador")
+        self.assertTrue(result.committed)
+        self.assertEqual(gateway.calls[0][0].customer_id, 1)
+        self.assertEqual(gateway.calls[0][1].code, "CONSUMIDOR_FINAL")
+
     def test_checkout_aprovado_envia_customer_id_correto_e_consumo_sessao(self):
         gateway = FakeCheckoutGateway()
         application = make_application(gateway=gateway)

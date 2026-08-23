@@ -28,12 +28,23 @@ else:
 
 class FakeCustomers:
     record = CustomerRecord(7, "C7", "CLIENTE SETE", 77)
+    other = CustomerRecord(8, "C8", "CLIENTE OITO", 88)
+    final_consumer = CustomerRecord(1, "CONSUMIDOR_FINAL", "CONSUMIDOR FINAL", 0)
 
     def search(self, term, *, limit=30):
+        if term == "varios":
+            return (self.record, self.other)
         return (self.record,) if term else ()
 
     def get(self, customer_id):
-        return self.record if customer_id == self.record.customer_id else None
+        return {
+            self.record.customer_id: self.record,
+            self.other.customer_id: self.other,
+            self.final_consumer.customer_id: self.final_consumer,
+        }.get(customer_id)
+
+    def get_final_consumer(self):
+        return self.final_consumer
 
 
 class FakeProducts:
@@ -238,7 +249,31 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F9", "Return", "Enter"})
+        self.assertEqual(shortcuts, {"Esc", "F9"})
+
+    def test_empty_customer_enter_selects_final_consumer_and_advances(self):
+        self.assertTrue(self.window.customer_search.hasFocus())
+        QTest.keyClick(self.window.customer_search, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.view_model.session.customer_id, 1)
+        self.assertEqual(self.view_model.selected_customer.code, "CONSUMIDOR_FINAL")
+        self.assertIn("CONSUMIDOR FINAL", self.window.customer_selected.text())
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_selected_customer_enter_preserves_real_id(self):
+        self._select_customer()
+        self.window.customer_search.setFocus()
+        QTest.keyClick(self.window.customer_search, Qt.Key.Key_Return)
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_ambiguous_customer_text_does_not_create_identity(self):
+        self.window.customer_search.setText("varios")
+        self.window.customer_search.setFocus()
+        QTest.keyClick(self.window.customer_search, Qt.Key.Key_Return)
+        self.assertIsNone(self.view_model.session.customer_id)
+        self.assertIsNone(self.view_model.selected_customer)
+        self.assertTrue(self.window.customer_search.hasFocus())
 
     def test_loose_item_enter_follows_description_quantity_price_then_adds(self):
         self.window.loose_item.setChecked(True)
@@ -299,6 +334,43 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.view_model.total, Decimal("30.00"))
         self.assertEqual(self.view_model.session.cart.items[0].product_id, 9)
         self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_each_enter_performs_only_one_transition(self):
+        self.window.product_search.setText("P9")
+        self.window.product_search.setFocus()
+        QTest.keyClick(self.window.product_search, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertTrue(self.window.quantity.hasFocus())
+        self.assertEqual(self.window.cart.rowCount(), 0)
+
+        QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertTrue(self.window.price.hasFocus())
+        self.assertEqual(self.window.cart.rowCount(), 0)
+
+        QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.window.cart.rowCount(), 1)
+
+    def test_multiple_registered_items_return_to_search_each_time(self):
+        for expected_rows in (1, 2, 3):
+            self.window.product_search.setText("789")
+            self.window.product_search.setFocus()
+            QTest.keyClick(self.window.product_search, Qt.Key.Key_Enter)
+            QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+            QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+            QApplication.processEvents()
+            self.assertEqual(self.window.cart.rowCount(), expected_rows)
+            self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_enter_does_not_invoke_checkout(self):
+        calls = []
+        self.window._checkout = lambda: calls.append("checkout")
+        for widget in (self.window.customer_search, self.window.product_search):
+            widget.setFocus()
+            QTest.keyClick(widget, Qt.Key.Key_Return)
+            QApplication.processEvents()
+        self.assertEqual(calls, [])
 
     def test_registered_product_and_quantity(self):
         self.window.product_search.setText("P9")

@@ -42,3 +42,10 @@ class NabiCodeCustomerGateway:
             credit_limit=Decimal(str(row[4] or 0)),
             debt_balance=Decimal(str(row[5] or 0)),
         )
+
+    def get_final_consumer(self) -> CustomerRecord:
+        customer_id = self.repository.get_or_create_final_consumer()
+        customer = self.get(customer_id)
+        if customer is None:
+            raise ValueError("Consumidor Final não pôde ser localizado.")
+        return customer

@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
@@ -62,6 +62,8 @@ class PDVWindow(QMainWindow):
         layout.addWidget(content, 1)
         layout.addWidget(self._footer())
         self._install_shortcuts()
+        self._install_enter_filters()
+        self.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
 
     @classmethod
     def _style_sheet(cls) -> str:
@@ -305,20 +307,78 @@ class PDVWindow(QMainWindow):
         self._shortcuts = []
         for sequence, callback in (
             ("Esc", self.close), ("F9", self._checkout),
-            ("Return", self._enter_action), ("Enter", self._enter_action),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
             shortcut.activated.connect(callback)
             self._shortcuts.append(shortcut)
 
-    def _enter_action(self) -> None:
-        focus = self.focusWidget()
+    def _install_enter_filters(self) -> None:
+        self._enter_widgets = (
+            self.customer_search, self.customer_results,
+            self.product_search, self.product_results,
+            self.description, self.quantity, self.price, self.add_button,
+        )
+        for widget in self._enter_widgets:
+            widget.installEventFilter(self)
+
+    def eventFilter(self, watched, event) -> bool:
+        if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Down:
+            if watched is self.customer_search and self.customer_results.count():
+                self.customer_results.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                self.customer_results.setCurrentRow(max(0, self.customer_results.currentRow()))
+                event.accept()
+                return True
+            if watched is self.product_search and self.product_results.count():
+                self.product_results.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                self.product_results.setCurrentRow(max(0, self.product_results.currentRow()))
+                event.accept()
+                return True
+        if (
+            watched in self._enter_widgets
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+        ):
+            self._enter_action(watched)
+            event.accept()
+            return True
+        return super().eventFilter(watched, event)
+
+    def _enter_action(self, focus=None) -> None:
+        focus = focus or self.focusWidget()
+        if focus is self.customer_results and self.customer_results.currentItem():
+            self._select_customer(self.customer_results.currentItem())
+            return
+        if focus is self.customer_search:
+            if self.view_model.selected_customer is not None:
+                self.product_search.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                return
+            term = self.customer_search.text().strip()
+            if not term:
+                self._select_final_consumer()
+                return
+            item = self._unique_customer_result(term)
+            if item is not None:
+                self._select_customer(item)
+                return
+            self._field_error(
+                self.customer_search,
+                "Selecione um cliente da lista ou limpe o campo para Consumidor Final.",
+            )
+            return
         if focus is self.product_results and self.product_results.currentItem():
             self._select_product(self.product_results.currentItem())
             return
-        if focus is self.product_search and self.product_results.count():
-            self._select_product(self.product_results.currentItem() or self.product_results.item(0))
+        if focus is self.product_search:
+            if self.view_model.selected_product is not None:
+                self.quantity.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                self.quantity.selectAll()
+                return
+            item = self._unique_product_result(self.product_search.text())
+            if item is not None:
+                self._select_product(item)
+                return
+            self._field_error(self.product_search, "Selecione um produto cadastrado da lista.")
             return
         if focus is self.description:
             if not self.description.text().strip():
@@ -363,10 +423,29 @@ class PDVWindow(QMainWindow):
             reference = record.record_number if record.record_number is not None else record.code
             item = QListWidgetItem(f"{reference} — {record.name}")
             item.setData(Qt.ItemDataRole.UserRole, record.customer_id)
+            item.setData(int(Qt.ItemDataRole.UserRole) + 1, str(record.code).strip().casefold())
+            item.setData(
+                int(Qt.ItemDataRole.UserRole) + 2,
+                str(record.record_number) if record.record_number is not None else "",
+            )
             self.customer_results.addItem(item)
         self.customer_results.setVisible(self.customer_results.count() > 0)
         if self.customer_results.count():
             self.customer_results.setCurrentRow(0)
+
+    def _unique_customer_result(self, term: str) -> QListWidgetItem | None:
+        if self.customer_results.count() == 1:
+            return self.customer_results.item(0)
+        normalized = str(term).strip().casefold()
+        exact = [
+            self.customer_results.item(index)
+            for index in range(self.customer_results.count())
+            if normalized in {
+                self.customer_results.item(index).data(int(Qt.ItemDataRole.UserRole) + 1),
+                self.customer_results.item(index).data(int(Qt.ItemDataRole.UserRole) + 2),
+            }
+        ]
+        return exact[0] if len(exact) == 1 else None
 
     def _select_customer(self, item: QListWidgetItem) -> None:
         try:
@@ -375,6 +454,17 @@ class PDVWindow(QMainWindow):
             self.customer_selected.setText(f"Selecionado: {reference} — {customer.name}")
             self.customer_results.clear()
             self.customer_results.hide()
+            self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+        except Exception as error:
+            self._show_error(error)
+
+    def _select_final_consumer(self) -> None:
+        try:
+            customer = self.view_model.select_final_consumer()
+            self.customer_selected.setText(customer.name)
+            self.customer_results.clear()
+            self.customer_results.hide()
+            self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
         except Exception as error:
             self._show_error(error)
 
@@ -396,10 +486,26 @@ class PDVWindow(QMainWindow):
         for record in records:
             item = QListWidgetItem(f"{record.code} — {record.description}")
             item.setData(Qt.ItemDataRole.UserRole, record.product_id)
+            item.setData(int(Qt.ItemDataRole.UserRole) + 1, str(record.code).strip().casefold())
+            item.setData(int(Qt.ItemDataRole.UserRole) + 2, str(record.barcode).strip().casefold())
             self.product_results.addItem(item)
         self.product_results.setVisible(self.product_results.count() > 0)
         if self.product_results.count():
             self.product_results.setCurrentRow(0)
+
+    def _unique_product_result(self, term: str) -> QListWidgetItem | None:
+        if self.product_results.count() == 1:
+            return self.product_results.item(0)
+        normalized = str(term).strip().casefold()
+        exact = [
+            self.product_results.item(index)
+            for index in range(self.product_results.count())
+            if normalized in {
+                self.product_results.item(index).data(int(Qt.ItemDataRole.UserRole) + 1),
+                self.product_results.item(index).data(int(Qt.ItemDataRole.UserRole) + 2),
+            }
+        ]
+        return exact[0] if len(exact) == 1 else None
 
     def _select_product(self, item: QListWidgetItem) -> None:
         try:

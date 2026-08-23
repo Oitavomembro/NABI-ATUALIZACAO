@@ -41,6 +41,10 @@ class PDVViewModel:
         self.selected_customer = self.application.select_customer(self.session, customer_id)
         return self.selected_customer
 
+    def select_final_consumer(self) -> CustomerRecord:
+        self.selected_customer = self.application.select_final_consumer(self.session)
+        return self.selected_customer
+
     def clear_customer(self) -> None:
         self.application.clear_customer(self.session)
         self.selected_customer = None

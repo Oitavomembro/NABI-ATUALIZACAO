@@ -42,6 +42,8 @@ class CustomerLookupPort(Protocol):
 
     def get(self, customer_id: int) -> CustomerRecord | None: ...
 
+    def get_final_consumer(self) -> CustomerRecord: ...
+
 
 @runtime_checkable
 class ProductLookupPort(Protocol):

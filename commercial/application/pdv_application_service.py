@@ -47,6 +47,11 @@ class PDVApplicationService:
         session.select_customer(customer.customer_id)
         return customer
 
+    def select_final_consumer(self, session: PDVSession) -> CustomerRecord:
+        customer = self.customers.get_final_consumer()
+        session.select_customer(customer.customer_id)
+        return customer
+
     @staticmethod
     def clear_customer(session: PDVSession) -> None:
         session.clear_customer()
