@@ -104,6 +104,8 @@ Legenda:
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
 - [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
+- [x] composição da Nabi somente leitura preparada com fábrica explícita: exige provedor local, fachada Commercial de consultas, `SecurityService`, auditoria administrativa e identificador de sessão; sem sessão o modelo não é chamado, e sem permissão nenhuma consulta é executada; validação ampliada com 200 testes e 326 subtestes aprovada;
+- [!] ativação real no `main_qt.py` permanece bloqueada até o Qt possuir login autenticado legítimo e o modelo local possuir origem, licença, hash e homologação física; é proibido usar `start_session_without_password` ou fabricar sessão para habilitar a Nabi;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.
