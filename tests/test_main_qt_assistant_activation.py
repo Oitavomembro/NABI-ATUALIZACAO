@@ -48,6 +48,34 @@ class MainQtAssistantActivationTests(unittest.TestCase):
             call["runtime_directory"], Path("C:/NabiCode/Teste/ia/runtime/b10537")
         )
 
+    def test_composicao_injeta_compras_somente_quando_backend_oficial_existe(self):
+        database = SimpleNamespace(connect=Mock())
+        profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
+        purchase = object()
+        container = SimpleNamespace(query=object(), purchase_service=purchase)
+        security = Mock()
+        security.authenticate.return_value = object()
+        system = Mock()
+        system.get_config.return_value = "hash"
+        runtime = Mock()
+        runtime.create_model_adapter.return_value = "modelo"
+        with (
+            patch.object(main_qt, "SystemRepository", return_value=system),
+            patch.object(main_qt, "SecurityService", return_value=security),
+            patch.object(main_qt, "AdminAuditService", return_value="auditoria"),
+            patch.object(main_qt, "LocalLlamaServer", return_value=runtime),
+            patch.object(
+                main_qt, "create_purchase_assistant_components",
+                return_value=("rascunhos-compra", "executor-compra"),
+            ) as purchase_factory,
+            patch.object(main_qt, "create_draft_assistant", return_value="assistente") as factory,
+        ):
+            activation = main_qt._create_assistant_activation(database, profile, container)
+            activation.activate("op", "senha")
+        purchase_factory.assert_called_once_with(container)
+        self.assertEqual(factory.call_args.kwargs["purchase_draft_service"], "rascunhos-compra")
+        self.assertEqual(factory.call_args.kwargs["purchase_executor"], "executor-compra")
+
 
 if __name__ == "__main__":
     unittest.main()

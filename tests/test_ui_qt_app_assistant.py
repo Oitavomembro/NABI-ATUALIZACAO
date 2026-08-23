@@ -77,6 +77,23 @@ class QtApplicationAssistantTests(unittest.TestCase):
         self.assertFalse(panel.send.isEnabled())
         window.close()
 
+    def test_servico_de_revisao_xml_chega_ao_painel_sem_importar(self):
+        service = UnavailableAssistantService("Autenticação necessária.")
+        nfe_entry = object()
+        with (
+            patch.object(qt_app, "PDVWindow", FakeWindow),
+            patch.object(qt_app, "PDVViewModel", lambda application: application),
+        ):
+            _, window = qt_app.create_application(
+                object(), [], assistant_service=service,
+                nfe_entry_service=nfe_entry,
+            )
+        panel = window.nabi_assistant_dock.widget()
+        self.assertIs(panel._nfe_entry_service, nfe_entry)
+        self.assertFalse(panel.prepare_nfe_entry_button.isHidden())
+        self.assertFalse(panel.prepare_nfe_entry_button.isEnabled())
+        window.close()
+
 
 if __name__ == "__main__":
     unittest.main()
