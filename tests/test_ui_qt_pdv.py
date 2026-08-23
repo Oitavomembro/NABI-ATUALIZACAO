@@ -238,17 +238,67 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F9", "Return"})
+        self.assertEqual(shortcuts, {"Esc", "F9", "Return", "Enter"})
 
-    def test_enter_adds_loose_item_from_description(self):
+    def test_loose_item_enter_follows_description_quantity_price_then_adds(self):
         self.window.loose_item.setChecked(True)
         QTest.keyClicks(self.window.description, "Item pelo Enter")
-        self.window.price.set_value("12,50")
-        self.window.description.setFocus()
         QTest.keyClick(self.window.description, Qt.Key.Key_Return)
         QApplication.processEvents()
+        self.assertTrue(self.window.quantity.hasFocus())
+        self.window.quantity.setText("2")
+        QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertTrue(self.window.price.hasFocus())
+        self.window.price.set_value("12,50")
+        QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+        QApplication.processEvents()
         self.assertEqual(self.window.cart.rowCount(), 1)
-        self.assertEqual(self.view_model.total, Decimal("12.50"))
+        self.assertEqual(self.view_model.total, Decimal("25.00"))
+        self.assertEqual(self.window.description.text(), "")
+        self.assertEqual(self.window.quantity.text(), "1")
+        self.assertEqual(self.window.price.value(), Decimal("0.00"))
+        self.assertTrue(self.window.description.hasFocus())
+
+    def test_enter_never_adds_invalid_loose_item(self):
+        self.window.loose_item.setChecked(True)
+        QTest.keyClick(self.window.description, Qt.Key.Key_Return)
+        self.assertEqual(self.window.cart.rowCount(), 0)
+        self.assertTrue(self.window.description.hasFocus())
+
+        QTest.keyClicks(self.window.description, "Item invalido")
+        QTest.keyClick(self.window.description, Qt.Key.Key_Return)
+        for invalid_quantity in ("0", "abc"):
+            with self.subTest(quantity=invalid_quantity):
+                self.window.quantity.setText(invalid_quantity)
+                self.window.quantity.setFocus()
+                QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+                self.assertEqual(self.window.cart.rowCount(), 0)
+                self.assertTrue(self.window.quantity.hasFocus())
+
+        self.window.quantity.setText("1")
+        QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+        self.assertTrue(self.window.price.hasFocus())
+        QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+        self.assertEqual(self.window.cart.rowCount(), 0)
+        self.assertTrue(self.window.price.hasFocus())
+
+    def test_registered_product_enter_follows_selection_quantity_price_and_adds(self):
+        self.window.product_search.setText("P9")
+        self.window.product_search.setFocus()
+        QTest.keyClick(self.window.product_search, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.view_model.selected_product.product_id, 9)
+        self.assertTrue(self.window.quantity.hasFocus())
+        self.window.quantity.setText("3")
+        QTest.keyClick(self.window.quantity, Qt.Key.Key_Return)
+        self.assertTrue(self.window.price.hasFocus())
+        QTest.keyClick(self.window.price, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.window.cart.rowCount(), 1)
+        self.assertEqual(self.view_model.total, Decimal("30.00"))
+        self.assertEqual(self.view_model.session.cart.items[0].product_id, 9)
+        self.assertTrue(self.window.product_search.hasFocus())
 
     def test_registered_product_and_quantity(self):
         self.window.product_search.setText("P9")

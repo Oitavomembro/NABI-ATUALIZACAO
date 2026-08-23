@@ -5,7 +5,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QFrame, QGridLayout, QHBoxLayout, QHeaderView,
     QLabel, QLineEdit, QListWidget, QListWidgetItem, QMainWindow, QMessageBox,
-    QPushButton, QSplitter, QTableWidget, QTableWidgetItem,
+    QPushButton, QSplitter, QStackedWidget, QTableWidget, QTableWidgetItem,
     QVBoxLayout, QWidget,
 )
 
@@ -181,19 +181,23 @@ class PDVWindow(QMainWindow):
         layout.setContentsMargins(16, 11, 14, 11)
         layout.setHorizontalSpacing(7)
         layout.setVerticalSpacing(6)
-        label = QLabel("Produto / código de barras")
-        label.setStyleSheet("font-weight: 700;")
+        self.item_input_label = QLabel("Produto / código")
+        self.item_input_label.setStyleSheet("font-weight: 700;")
         self.product_search = QLineEdit()
         self.product_search.setPlaceholderText("Digite o nome, código interno ou código de barras...")
         self.product_results = QListWidget()
         self.product_results.setMaximumHeight(96)
         self.product_results.hide()
         dropdown = QPushButton("▼")
+        self._dropdown_button = dropdown
         dropdown.setFixedWidth(42)
         dropdown.clicked.connect(lambda: self.product_search.setFocus())
         self.description = QLineEdit()
-        self.description.setPlaceholderText("Produto selecionado")
+        self.description.setPlaceholderText("")
         self.description.setReadOnly(True)
+        self.item_input = QStackedWidget()
+        self.item_input.addWidget(self.product_search)
+        self.item_input.addWidget(self.description)
         self.quantity = QLineEdit("1")
         self.quantity.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.quantity.setMaximumWidth(90)
@@ -211,8 +215,8 @@ class PDVWindow(QMainWindow):
         self.product_results.itemActivated.connect(self._select_product)
         self.product_results.itemClicked.connect(self._select_product)
         self.add_button.clicked.connect(self._add_item)
-        layout.addWidget(label, 0, 0)
-        layout.addWidget(self.product_search, 0, 1)
+        layout.addWidget(self.item_input_label, 0, 0)
+        layout.addWidget(self.item_input, 0, 1)
         layout.addWidget(dropdown, 0, 2)
         layout.addWidget(QLabel("Qtd."), 0, 3)
         layout.addWidget(self.quantity, 0, 4)
@@ -220,7 +224,6 @@ class PDVWindow(QMainWindow):
         layout.addWidget(self.price, 0, 6)
         layout.addWidget(self.add_button, 0, 7)
         layout.addWidget(self.product_results, 1, 1, 1, 2)
-        layout.addWidget(self.description, 1, 3, 1, 5)
         layout.addWidget(self.loose_item, 2, 1, 1, 4)
         layout.addWidget(loose_hint, 2, 5, 1, 3, Qt.AlignmentFlag.AlignRight)
         layout.setColumnStretch(1, 1)
@@ -301,7 +304,8 @@ class PDVWindow(QMainWindow):
     def _install_shortcuts(self) -> None:
         self._shortcuts = []
         for sequence, callback in (
-            ("Esc", self.close), ("F9", self._checkout), ("Return", self._enter_action),
+            ("Esc", self.close), ("F9", self._checkout),
+            ("Return", self._enter_action), ("Enter", self._enter_action),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
@@ -315,10 +319,29 @@ class PDVWindow(QMainWindow):
             return
         if focus is self.product_search and self.product_results.count():
             self._select_product(self.product_results.currentItem() or self.product_results.item(0))
-            self.quantity.setFocus()
             return
-        if focus in {self.description, self.quantity, self.price, self.add_button}:
+        if focus is self.description:
+            if not self.description.text().strip():
+                self._field_error(self.description, "Informe a descrição do item avulso.")
+                return
+            self.quantity.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            self.quantity.selectAll()
+            return
+        if focus is self.quantity:
+            try:
+                self.view_model.parse_quantity(self.quantity.text())
+            except ValueError as error:
+                self._field_error(self.quantity, str(error))
+                return
+            self.price.setFocus(Qt.FocusReason.ShortcutFocusReason)
+            self.price.selectAll()
+            return
+        if focus in {self.price, self.add_button}:
             self._add_item()
+
+    def _field_error(self, field: QWidget, message: str) -> None:
+        self.statusBar().showMessage(message, 3500)
+        field.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _unavailable_action(self) -> None:
         self.statusBar().showMessage("Funcionalidade aguardando desacoplamento comercial.", 3000)
@@ -381,7 +404,9 @@ class PDVWindow(QMainWindow):
     def _select_product(self, item: QListWidgetItem) -> None:
         try:
             product = self.view_model.select_product(int(item.data(Qt.ItemDataRole.UserRole)))
-            self.description.setText(product.description)
+            self.product_search.blockSignals(True)
+            self.product_search.setText(f"{product.code} — {product.description}")
+            self.product_search.blockSignals(False)
             self.price.set_value(product.unit_price)
             self.product_results.clear()
             self.product_results.hide()
@@ -397,15 +422,33 @@ class PDVWindow(QMainWindow):
         self.description.setReadOnly(not enabled)
         self.price.setReadOnly(not enabled)
         self.description.clear()
-        self.description.setPlaceholderText("")
         self.price.clear_value()
         if enabled:
+            self.item_input_label.setText("Descrição do avulso")
+            self.item_input.setCurrentWidget(self.description)
+            self._dropdown_button.setVisible(False)
             self.description.setFocus(Qt.FocusReason.OtherFocusReason)
         else:
-            self.description.setPlaceholderText("Produto selecionado")
+            self.item_input_label.setText("Produto / código")
+            self.item_input.setCurrentWidget(self.product_search)
+            self._dropdown_button.setVisible(True)
             self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _add_item(self) -> None:
+    def _add_item(self) -> bool:
+        if self.loose_item.isChecked() and not self.description.text().strip():
+            self._field_error(self.description, "Informe a descrição do item avulso.")
+            return False
+        if not self.loose_item.isChecked() and self.view_model.selected_product is None:
+            self._field_error(self.product_search, "Selecione um produto cadastrado.")
+            return False
+        try:
+            self.view_model.parse_quantity(self.quantity.text())
+        except ValueError as error:
+            self._field_error(self.quantity, str(error))
+            return False
+        if self.price.value() <= MoneyCodec.ZERO:
+            self._field_error(self.price, "Informe um preço maior que zero.")
+            return False
         try:
             if self.loose_item.isChecked():
                 self.view_model.add_loose_item(
@@ -413,7 +456,6 @@ class PDVWindow(QMainWindow):
                 )
                 self.description.clear()
                 self.price.clear_value()
-                self.description.setFocus(Qt.FocusReason.OtherFocusReason)
             else:
                 self.view_model.add_selected_product(self.quantity.text())
                 self.view_model.clear_product()
@@ -422,8 +464,14 @@ class PDVWindow(QMainWindow):
                 self.product_search.clear()
             self.quantity.setText("1")
             self.refresh_cart()
+            if self.loose_item.isChecked():
+                self.description.setFocus(Qt.FocusReason.OtherFocusReason)
+            else:
+                self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            return True
         except Exception as error:
             self._show_error(error)
+            return False
 
     def refresh_cart(self) -> None:
         items = self.view_model.session.cart.items
