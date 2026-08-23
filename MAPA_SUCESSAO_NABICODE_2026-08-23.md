@@ -1140,3 +1140,24 @@ importação no banco de produção antes da aprovação visual e de um backup m
   abortou no runtime Python 3.14, sem asserção funcional; os mesmos grupos foram
   repetidos em processos separados e aprovados;
 - nenhum push e nenhum instalador foram realizados.
+
+### Recebimento revisado, confirmado e imprimível
+
+- implementação: `d3248ff` — `fix: separa confirmacao e comprovante do recebimento`;
+- `Revisar recebimento` não persiste: cria uma revisão visível com ficha,
+  cliente, valor, forma, data, saldo antes e saldo restante;
+- `CONFIRMAR RECEBIMENTO` é uma segunda ação explícita e é a única que chama o
+  serviço financeiro; alterações posteriores invalidam a revisão e escondem a
+  confirmação;
+- auto-repeat continua bloqueado, Shift+Enter retorna por campos ativos e duplo
+  clique/Enter não pode registrar duas vezes durante a gravação;
+- corrigido o erro manual `tuple.index(x): x not in tuple`, causado pela entrada
+  dinâmica do botão Confirmar no fluxo de teclado;
+- após commit confirmado, o diálogo oficial mostra o recibo e oferece
+  `Imprimir recibo`, `Salvar PDF` e `Fechar`, reutilizando `ReceiptService`,
+  `PrintingService` e `PDFDocumentService`; essas ações documentais não repetem
+  o recebimento;
+- opções de fonte ampliadas de 12 a 30; o controle principal permanece na tela
+  Clientes e Fichas e destaca especialmente pesquisa, número da ficha e tabela;
+- validação final: `31 passed`; `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
