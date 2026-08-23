@@ -939,7 +939,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F9", "F10"})
+        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F7", "F9", "F10"})
         f6 = next(
             shortcut for shortcut in self.window._shortcuts
             if shortcut.key().toString() == "F6"

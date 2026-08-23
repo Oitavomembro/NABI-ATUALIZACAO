@@ -15,6 +15,7 @@ from .checkout_dialog import CheckoutDialog
 from .cart_item_dialog import CartItemDialog
 from .budget_dialog import BudgetListDialog, BudgetPreviewDialog
 from .suspended_sale_dialog import SuspendedSaleListDialog
+from .daily_sales_dialog import DailySalesDialog
 from .post_sale_dialog import PostSaleDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
@@ -140,10 +141,9 @@ class PDVWindow(QMainWindow):
         row = QHBoxLayout(frame)
         row.setContentsMargins(7, 7, 7, 7)
         row.setSpacing(8)
-        sales = QPushButton("Vendas do dia  [F7]")
-        sales.setObjectName("primary")
-        sales.setToolTip("Disponível quando o módulo Vendas do dia for desacoplado")
-        sales.clicked.connect(self._unavailable_action)
+        self.daily_sales_button = QPushButton("Vendas do dia  [F7]")
+        self.daily_sales_button.setObjectName("primary")
+        self.daily_sales_button.clicked.connect(self._open_daily_sales)
         self.budget_button = QPushButton("ORÇAMENTO DESLIGADO  [F5]")
         self.budget_button.setObjectName("inactive")
         self.budget_button.setToolTip("F5 alterna entre venda e orçamento")
@@ -153,7 +153,7 @@ class PDVWindow(QMainWindow):
         self.suspended_sales_button = QPushButton("Vendas suspensas")
         self.suspended_sales_button.clicked.connect(self._open_suspended_sales)
         for button in (
-            sales, self.budget_button, self.saved_budgets_button,
+            self.daily_sales_button, self.budget_button, self.saved_budgets_button,
             self.suspended_sales_button,
         ):
             row.addWidget(button, 1)
@@ -335,6 +335,7 @@ class PDVWindow(QMainWindow):
             ("Esc", self.close), ("F4", self._edit_selected_item),
             ("F5", self._toggle_budget_mode),
             ("F6", self._suspend_sale),
+            ("F7", self._open_daily_sales),
             ("F10", self._edit_selected_item), ("F9", self._conclude_action),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
@@ -352,6 +353,13 @@ class PDVWindow(QMainWindow):
         )
         for widget in self._enter_widgets:
             widget.installEventFilter(self)
+
+    def _open_daily_sales(self) -> None:
+        try:
+            DailySalesDialog(self.view_model, self).exec()
+        except Exception as error:
+            self._show_error(error)
+        self._focus_after_cart_operation()
 
     def eventFilter(self, watched, event) -> bool:
         if (

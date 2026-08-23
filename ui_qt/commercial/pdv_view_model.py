@@ -7,6 +7,7 @@ from decimal import Decimal, InvalidOperation
 from commercial.application.dto import (
     BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord, SuspendedSale,
 )
+from commercial.application.query_dto import DailySaleSummary
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import PDVSession
 from commercial.domain.money import MoneyCodec
@@ -162,6 +163,21 @@ class PDVViewModel:
         )
         self.selected_product = None
         return suspended
+
+    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
+        return self.application.list_daily_sales()
+
+    def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
+        return self.application.daily_sale_preview_text(sale)
+
+    def print_daily_sale(self, sale: DailySaleSummary) -> str:
+        return self.application.print_daily_sale(sale)
+
+    def generate_daily_sale_pdf(self, sale: DailySaleSummary) -> str:
+        return self.application.generate_daily_sale_pdf(sale)
+
+    def cancel_daily_sale(self, sale_id: int, *, user: str = "Sistema") -> None:
+        self.application.cancel_daily_sale(sale_id, user=user)
 
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:
