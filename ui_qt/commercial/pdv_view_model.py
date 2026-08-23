@@ -91,8 +91,8 @@ class PDVViewModel:
         self.application.clear_customer(self.session)
         self.selected_customer = None
 
-    def search_products(self, term: str) -> tuple[ProductRecord, ...]:
-        return self.application.search_products(term)
+    def search_products(self, term: str, *, limit: int = 30) -> tuple[ProductRecord, ...]:
+        return self.application.search_products(term, limit=limit)
 
     def select_product(self, product_id: int) -> ProductRecord:
         product = self.application.get_product(product_id)

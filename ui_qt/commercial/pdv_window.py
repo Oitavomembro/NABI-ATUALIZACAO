@@ -17,6 +17,7 @@ from .budget_dialog import BudgetListDialog, BudgetPreviewDialog
 from .suspended_sale_dialog import SuspendedSaleListDialog
 from .daily_sales_dialog import DailySalesDialog
 from .post_sale_dialog import PostSaleDialog
+from .product_search_dialog import ProductSearchDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
 
@@ -211,7 +212,11 @@ class PDVWindow(QMainWindow):
         dropdown = QPushButton("▼")
         self._dropdown_button = dropdown
         dropdown.setFixedWidth(42)
-        dropdown.clicked.connect(lambda: self.product_search.setFocus())
+        dropdown.setToolTip("Abrir lista rápida de produtos")
+        dropdown.clicked.connect(self._show_quick_product_results)
+        self.expanded_product_search = QPushButton("Pesquisa ampliada  [F2]")
+        self.expanded_product_search.setToolTip("Abrir pesquisa de produtos com letras e linhas maiores")
+        self.expanded_product_search.clicked.connect(self._open_expanded_product_search)
         self.description = QLineEdit()
         self.description.setPlaceholderText("")
         self.description.setReadOnly(True)
@@ -238,14 +243,15 @@ class PDVWindow(QMainWindow):
         layout.addWidget(self.item_input_label, 0, 0)
         layout.addWidget(self.item_input, 0, 1)
         layout.addWidget(dropdown, 0, 2)
-        layout.addWidget(QLabel("Qtd."), 0, 3)
-        layout.addWidget(self.quantity, 0, 4)
-        layout.addWidget(QLabel("Preço"), 0, 5)
-        layout.addWidget(self.price, 0, 6)
-        layout.addWidget(self.add_button, 0, 7)
+        layout.addWidget(self.expanded_product_search, 0, 3)
+        layout.addWidget(QLabel("Qtd."), 0, 4)
+        layout.addWidget(self.quantity, 0, 5)
+        layout.addWidget(QLabel("Preço"), 0, 6)
+        layout.addWidget(self.price, 0, 7)
+        layout.addWidget(self.add_button, 0, 8)
         layout.addWidget(self.product_results, 1, 1, 1, 2)
         layout.addWidget(self.loose_item, 2, 1, 1, 4)
-        layout.addWidget(loose_hint, 2, 5, 1, 3, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(loose_hint, 2, 6, 1, 3, Qt.AlignmentFlag.AlignRight)
         layout.setColumnStretch(1, 1)
         return box
 
@@ -321,7 +327,7 @@ class PDVWindow(QMainWindow):
         row = QHBoxLayout(frame)
         row.setContentsMargins(16, 8, 16, 8)
         shortcuts = QLabel(
-            "Enter  Selecionar / adicionar    •    F4  Editar item    •    Del  Remover"
+            "Enter  Selecionar / adicionar    •    F2  Pesquisa ampliada    •    F4  Editar item    •    Del  Remover"
             "    •    F9  Finalizar venda    •    Esc  Fechar"
         )
         shortcuts.setObjectName("muted")
@@ -333,6 +339,7 @@ class PDVWindow(QMainWindow):
         self._shortcuts = []
         for sequence, callback in (
             ("Esc", self.close), ("F4", self._edit_selected_item),
+            ("F2", self._open_expanded_product_search),
             ("F5", self._toggle_budget_mode),
             ("F6", self._suspend_sale),
             ("F7", self._open_daily_sales),
@@ -363,7 +370,7 @@ class PDVWindow(QMainWindow):
 
     def eventFilter(self, watched, event) -> bool:
         if (
-            watched is self.cart
+            watched is getattr(self, "cart", None)
             and event.type() == QEvent.Type.KeyPress
             and event.key() == Qt.Key.Key_Delete
         ):
@@ -372,7 +379,7 @@ class PDVWindow(QMainWindow):
             event.accept()
             return True
         if (
-            watched is self.cart
+            watched is getattr(self, "cart", None)
             and event.type() == QEvent.Type.KeyPress
             and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
         ):
@@ -392,7 +399,7 @@ class PDVWindow(QMainWindow):
                 event.accept()
                 return True
         if (
-            watched in self._enter_widgets
+            watched in getattr(self, "_enter_widgets", ())
             and event.type() == QEvent.Type.KeyPress
             and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
         ):
@@ -799,6 +806,25 @@ class PDVWindow(QMainWindow):
         if self.product_results.count():
             self.product_results.setCurrentRow(0)
 
+    def _show_quick_product_results(self) -> None:
+        self.product_search.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        if self.product_search.text().strip():
+            self._search_products(self.product_search.text())
+        self.product_results.setVisible(self.product_results.count() > 0)
+
+    def _open_expanded_product_search(self) -> None:
+        if self.loose_item.isChecked():
+            return
+        dialog = ProductSearchDialog(
+            lambda term, limit: self.view_model.search_products(term, limit=limit),
+            self,
+            initial_term=self.product_search.text(),
+        )
+        if dialog.exec() != QDialog.DialogCode.Accepted or dialog.selected_product_id is None:
+            self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        self._select_product_id(dialog.selected_product_id)
+
     def _product_text_changed(self, term: str) -> None:
         if self.view_model.selected_product is not None:
             self.view_model.clear_product()
@@ -820,8 +846,11 @@ class PDVWindow(QMainWindow):
         return exact[0] if len(exact) == 1 else None
 
     def _select_product(self, item: QListWidgetItem) -> None:
+        self._select_product_id(int(item.data(Qt.ItemDataRole.UserRole)))
+
+    def _select_product_id(self, product_id: int) -> None:
         try:
-            product = self.view_model.select_product(int(item.data(Qt.ItemDataRole.UserRole)))
+            product = self.view_model.select_product(int(product_id))
             self.product_search.blockSignals(True)
             self.product_search.setText(f"{product.code} — {product.description}")
             self.product_search.blockSignals(False)
@@ -837,6 +866,7 @@ class PDVWindow(QMainWindow):
         self.product_search.clear()
         self.product_results.hide()
         self.product_search.setEnabled(not enabled)
+        self.expanded_product_search.setVisible(not enabled)
         self.description.setReadOnly(not enabled)
         self.price.setReadOnly(not enabled)
         self.description.clear()

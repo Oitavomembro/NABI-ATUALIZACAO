@@ -941,7 +941,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertNotIn("EM EVOLUÇÃO", labels)
         self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F7", "F9", "F10"})
+        self.assertEqual(shortcuts, {"Esc", "F2", "F4", "F5", "F6", "F7", "F9", "F10"})
         f6 = next(
             shortcut for shortcut in self.window._shortcuts
             if shortcut.key().toString() == "F6"
