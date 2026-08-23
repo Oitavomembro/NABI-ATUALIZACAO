@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from commercial.application.dto import BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord
+from commercial.application.dto import (
+    BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord, SuspendedSale,
+)
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import PDVSession
 from commercial.domain.money import MoneyCodec
@@ -138,6 +140,28 @@ class PDVViewModel:
 
     def generate_budget_pdf(self, budget: BudgetDocument) -> str:
         return self.application.generate_budget_pdf(budget)
+
+    def suspend_sale(self) -> SuspendedSale:
+        suspended = self.application.suspend_sale(self.session)
+        self.selected_customer = None
+        self.selected_product = None
+        return suspended
+
+    def list_suspended_sales(self) -> tuple[SuspendedSale, ...]:
+        return self.application.list_suspended_sales()
+
+    def resume_suspended_sale(
+        self, suspended_id: str, *, replace: bool = False
+    ) -> SuspendedSale:
+        suspended = self.application.resume_suspended_sale(
+            self.session, suspended_id, replace=replace
+        )
+        self.selected_customer = (
+            self.application.get_customer(suspended.customer_id)
+            if suspended.customer_id is not None else None
+        )
+        self.selected_product = None
+        return suspended
 
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:

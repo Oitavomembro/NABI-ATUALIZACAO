@@ -8,9 +8,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from commercial.application.dto import BudgetDocument, CustomerRecord, ProductRecord
+from commercial.application.dto import (
+    BudgetDocument, CustomerRecord, ProductRecord, SuspendedSale,
+)
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.ports import PersistedCheckout
+from commercial.domain.cart import CartItem
 from commercial.domain.payments import Payment, PaymentMethod
 from ui_qt.commercial.pdv_view_model import CheckoutInput, PDVViewModel
 
@@ -22,6 +25,7 @@ try:
     from ui_qt.commercial.checkout_dialog import CheckoutDialog
     from ui_qt.commercial.cart_item_dialog import CartItemDialog
     from ui_qt.commercial.budget_dialog import BudgetListDialog, BudgetPreviewDialog
+    from ui_qt.commercial.suspended_sale_dialog import SuspendedSaleListDialog
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.post_sale_dialog import PostSaleDialog
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
@@ -131,13 +135,44 @@ class FakeBudgets:
         return path
 
 
-def make_view_model(error=None, receipt_output=None, budgets=None):
+class FakeSuspendedSales:
+    def __init__(self):
+        self.open = []
+
+    def suspend(self, *, customer_id, customer_name, items):
+        suspended = SuspendedSale(
+            suspended_id=f"S{len(self.open) + 1}",
+            created_at="2026-08-23T15:00:00",
+            customer_id=customer_id,
+            customer_name=customer_name,
+            items=items,
+            total=sum(item.subtotal for item in items),
+        )
+        self.open.append(suspended)
+        return suspended
+
+    def list_open(self):
+        return tuple(self.open)
+
+    def resume(self, suspended_id):
+        suspended = next(
+            item for item in self.open if item.suspended_id == suspended_id
+        )
+        self.open.remove(suspended)
+        return suspended
+
+
+def make_view_model(
+    error=None, receipt_output=None, budgets=None, suspended_sales=None
+):
     gateway = FakeCheckout(error)
     budgets = budgets or FakeBudgets()
+    suspended_sales = suspended_sales or FakeSuspendedSales()
     application = PDVApplicationService(
         customers=FakeCustomers(), products=FakeProducts(), checkout_gateway=gateway,
         receipt_output=receipt_output,
         budgets=budgets, budget_output=budgets,
+        suspended_sales=suspended_sales,
     )
     return PDVViewModel(application), gateway
 
@@ -201,6 +236,18 @@ class FakeBudgetListDialog:
         self.budgets = budgets
         self.parent = parent
         self.selected_budget_id = type(self).selected_budget_id
+
+    def exec(self):
+        return QDialog.DialogCode.Accepted
+
+
+class FakeSuspendedSaleListDialog:
+    selected_suspended_id = None
+
+    def __init__(self, suspended_sales, parent=None):
+        self.suspended_sales = suspended_sales
+        self.parent = parent
+        self.selected_suspended_id = type(self).selected_suspended_id
 
     def exec(self):
         return QDialog.DialogCode.Accepted
@@ -781,6 +828,56 @@ class BudgetDialogTests(unittest.TestCase):
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
+class SuspendedSaleDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.view_model, _gateway = make_view_model()
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.suspended = self.view_model.suspend_sale()
+
+    def test_enter_reabre_uma_vez_e_auto_repeat_nao_reabre(self):
+        dialog = SuspendedSaleListDialog((self.suspended,))
+        dialog.show()
+        QApplication.processEvents()
+        repeat = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "", True, 2,
+        )
+        QApplication.sendEvent(dialog.table, repeat)
+        self.assertIsNone(dialog.selected_suspended_id)
+        QTest.keyClick(dialog.table, Qt.Key.Key_Return)
+        self.assertEqual(dialog.selected_suspended_id, "S1")
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+
+    def test_shift_enter_volta_sem_reabrir(self):
+        dialog = SuspendedSaleListDialog((self.suspended,))
+        dialog.show()
+        dialog.resume_button.setFocus()
+        QTest.keyClick(
+            dialog.resume_button, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier,
+        )
+        self.assertIsNone(dialog.selected_suspended_id)
+        self.assertFalse(dialog.resume_button.hasFocus())
+        dialog.close()
+
+    def test_esc_fecha_somente_dialogo(self):
+        window = PDVWindow(self.view_model)
+        window.show()
+        dialog = SuspendedSaleListDialog((self.suspended,), window)
+        dialog.show()
+        QApplication.processEvents()
+        QTest.keyClick(dialog, Qt.Key.Key_Escape)
+        QApplication.processEvents()
+        self.assertFalse(dialog.isVisible())
+        self.assertTrue(window.isVisible())
+        window.close()
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
 class PDVQtTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -842,7 +939,118 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F9", "F10"})
+        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F9", "F10"})
+        f6 = next(
+            shortcut for shortcut in self.window._shortcuts
+            if shortcut.key().toString() == "F6"
+        )
+        self.assertFalse(f6.autoRepeat())
+
+    def test_f6_suspende_sem_cliente_sem_checkout_e_limpa_sessao(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        suspended = self.view_model.application.suspended_sales.open
+        self.assertEqual(len(suspended), 1)
+        self.assertIsNone(suspended[0].customer_id)
+        self.assertTrue(self.view_model.session.cart.is_empty)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_clique_suspende_cliente_real_item_cadastrado_e_desconto(self):
+        self._select_customer()
+        self.view_model.session.add_item(
+            CartItem("PRODUTO NOVE", 2, "10", product_id=9, discount_percent="5")
+        )
+        self.window.refresh_cart()
+        QTest.mouseClick(self.window.suspend_button, Qt.MouseButton.LeftButton)
+        suspended = self.view_model.application.suspended_sales.open[0]
+        self.assertEqual(suspended.customer_id, 7)
+        self.assertEqual(suspended.items[0].product_id, 9)
+        self.assertEqual(suspended.items[0].discount_percent, Decimal("5.00"))
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_carrinho_vazio_bloqueia_suspensao_e_foca_item(self):
+        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        self.assertEqual(self.view_model.application.suspended_sales.open, [])
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_reabrir_sem_cliente_restaura_carrinho_e_foca_cliente(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.cart.items[0].description, "SUSPENSO")
+        self.assertIsNone(self.view_model.session.customer_id)
+        self.assertTrue(self.window.customer_search.hasFocus())
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_reabrir_com_cliente_preserva_id_e_foca_finalizar(self):
+        self._select_customer()
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.selected_customer.customer_id, 7)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_cancelar_lista_nao_consume_venda_suspensa(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = None
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(len(self.view_model.application.suspended_sales.open), 1)
+        self.assertTrue(self.view_model.session.cart.is_empty)
+
+    def test_recusar_substituicao_preserva_carrinho_e_suspensa(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.view_model.add_loose_item("ATUAL", "1", Decimal("5"))
+        self.window.refresh_cart()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.cart.items[0].description, "ATUAL")
+        self.assertEqual(len(self.view_model.application.suspended_sales.open), 1)
+
+    def test_reaberta_so_chega_checkout_oficial_sem_persistencia_antecipada(self):
+        self._select_customer()
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        FakeCheckoutDialog.result = QDialog.DialogCode.Rejected
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window._checkout()
+        self.assertEqual(self.gateway.commands, [])
+        self.assertEqual(len(self.view_model.session.cart.items), 1)
 
     def test_f5_alterna_modo_orcamento_e_f9_salva_sem_checkout(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))

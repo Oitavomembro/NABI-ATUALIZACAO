@@ -14,6 +14,7 @@ from commercial.domain.money import MoneyCodec
 from .checkout_dialog import CheckoutDialog
 from .cart_item_dialog import CartItemDialog
 from .budget_dialog import BudgetListDialog, BudgetPreviewDialog
+from .suspended_sale_dialog import SuspendedSaleListDialog
 from .post_sale_dialog import PostSaleDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
@@ -149,7 +150,12 @@ class PDVWindow(QMainWindow):
         self.budget_button.clicked.connect(self._toggle_budget_mode)
         self.saved_budgets_button = QPushButton("Orçamentos salvos")
         self.saved_budgets_button.clicked.connect(self._open_budgets)
-        for button in (sales, self.budget_button, self.saved_budgets_button):
+        self.suspended_sales_button = QPushButton("Vendas suspensas")
+        self.suspended_sales_button.clicked.connect(self._open_suspended_sales)
+        for button in (
+            sales, self.budget_button, self.saved_budgets_button,
+            self.suspended_sales_button,
+        ):
             row.addWidget(button, 1)
         return frame
 
@@ -302,6 +308,9 @@ class PDVWindow(QMainWindow):
         self.checkout_button = QPushButton("FINALIZAR VENDA  [F9]")
         self.checkout_button.setObjectName("checkout")
         self.checkout_button.clicked.connect(self._conclude_action)
+        self.suspend_button = QPushButton("Suspender venda  [F6]")
+        self.suspend_button.clicked.connect(self._suspend_sale)
+        summary_layout.addWidget(self.suspend_button)
         summary_layout.addWidget(self.checkout_button)
         layout.addWidget(summary)
         return panel
@@ -325,6 +334,7 @@ class PDVWindow(QMainWindow):
         for sequence, callback in (
             ("Esc", self.close), ("F4", self._edit_selected_item),
             ("F5", self._toggle_budget_mode),
+            ("F6", self._suspend_sale),
             ("F10", self._edit_selected_item), ("F9", self._conclude_action),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
@@ -585,6 +595,83 @@ class PDVWindow(QMainWindow):
         self._set_budget_mode(False)
         self.refresh_cart()
         self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _suspend_sale(self) -> None:
+        if self.view_model.session.cart.is_empty:
+            self.statusBar().showMessage(
+                "Inclua ao menos um item antes de suspender a venda.", 3500
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        try:
+            suspended = self.view_model.suspend_sale()
+        except Exception as error:
+            self._show_error(error)
+            self._focus_after_cart_operation()
+            return
+        self._clear_after_budget()
+        self._set_budget_mode(False)
+        self.statusBar().showMessage(
+            f"Venda {suspended.suspended_id} suspensa. Total preservado: "
+            f"R$ {MoneyCodec.format_br(suspended.total)}.",
+            5000,
+        )
+        self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_suspended_sales(self) -> None:
+        try:
+            suspended_sales = self.view_model.list_suspended_sales()
+        except Exception as error:
+            self._show_error(error)
+            return
+        if not suspended_sales:
+            QMessageBox.information(
+                self, "Vendas suspensas", "Não existem vendas suspensas."
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        dialog = SuspendedSaleListDialog(suspended_sales, self)
+        if (
+            dialog.exec() != QDialog.DialogCode.Accepted
+            or not dialog.selected_suspended_id
+        ):
+            self._focus_after_cart_operation()
+            return
+        replace = not self.view_model.session.cart.is_empty
+        if replace and QMessageBox.question(
+            self,
+            "Substituir carrinho",
+            "O carrinho atual será substituído pela venda suspensa. Continuar?",
+        ) != QMessageBox.StandardButton.Yes:
+            self._focus_after_cart_operation()
+            return
+        try:
+            suspended = self.view_model.resume_suspended_sale(
+                dialog.selected_suspended_id, replace=replace
+            )
+        except Exception as error:
+            self._show_error(error)
+            self._focus_after_cart_operation()
+            return
+        customer = self.view_model.selected_customer
+        self.customer_search.blockSignals(True)
+        if customer is None:
+            self.customer_search.clear()
+            self.customer_selected.setText("Nenhum cliente selecionado")
+        else:
+            reference = (
+                customer.record_number
+                if customer.record_number is not None else customer.code
+            )
+            self.customer_search.setText(f"{reference} — {customer.name}")
+            self.customer_selected.setText(f"Selecionado: {customer.name}")
+        self.customer_search.blockSignals(False)
+        self._set_budget_mode(False)
+        self.refresh_cart()
+        self.statusBar().showMessage(
+            f"Venda {suspended.suspended_id} reaberta no carrinho.", 4000
+        )
+        self._focus_after_cart_operation()
 
     def _show_error(self, error: Exception) -> None:
         QMessageBox.warning(self, "NabiCode", str(error) or "Operação não concluída.")
