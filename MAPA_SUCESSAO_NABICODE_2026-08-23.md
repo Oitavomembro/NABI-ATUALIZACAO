@@ -55,6 +55,9 @@ Legenda:
 - [x] o fluxo preserva IDs reais, grava/lista/consome pelo `PDVService` existente, não movimenta estoque/Caixa nem registra venda, oferece prévia/PDF/impressão explícitos e converte para venda somente carregando o carrinho antes do checkout oficial;
 - [x] validação automatizada do Orçamento: 51 testes focados Commercial/backend, 73 testes Qt e regressão ampliada de 241 testes Qt/Commercial/backend, todos aprovados; `compileall` e `git diff --check` aprovados;
 - [~] homologação manual pendente para F5/F9/Enter/Shift+Enter/Esc físicos, aparência Legacy, impressão e abertura de PDF, substituição de carrinho e conversão explícita de orçamento em venda;
+- [x] defeito manual de continuidade do teclado corrigido no commit `b995784`: editar, cancelar edição, remover ou clicar no carrinho restaura a próxima etapa operacional; o clique em Salvar respeita o modo Orçamento; o editor e a prévia possuem foco determinístico, Enter único, Shift+Enter, Esc isolado e bloqueio de auto-repeat;
+- [x] regressão da correção: 81 testes Qt e 249 testes Qt/Commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
+- [~] repetir a homologação física do Orçamento Qt a partir de `b995784`, incluindo as sequências intermediárias que originaram o defeito;
 - [ ] vendas suspensas Qt;
 - [ ] vendas do dia, reimpressão e cancelamento Qt;
 - [ ] resolver todos os botões provisórios;
