@@ -21,6 +21,7 @@ class NabiCodeProductGateway:
             description=str(data.get("nome") or data.get("descricao") or ""),
             unit_price=Decimal(str(data.get("preco_venda") or 0)),
             active=bool(data.get("ativo", True)),
+            current_stock=Decimal(str(data.get("estoque_atual") or 0)),
         )
 
     def search(self, term: str, *, limit: int = 30) -> tuple[ProductRecord, ...]:

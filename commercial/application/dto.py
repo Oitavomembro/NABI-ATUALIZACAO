@@ -46,6 +46,7 @@ class ProductRecord:
     description: str
     unit_price: Decimal
     active: bool = True
+    current_stock: Decimal | None = None
 
     def __post_init__(self) -> None:
         if isinstance(self.product_id, bool) or int(self.product_id) <= 0:
@@ -65,6 +66,11 @@ class ProductRecord:
         object.__setattr__(self, "description", description)
         object.__setattr__(self, "unit_price", price)
         object.__setattr__(self, "active", bool(self.active))
+        if self.current_stock is not None:
+            object.__setattr__(
+                self, "current_stock",
+                Decimal(str(self.current_stock)).quantize(Decimal("0.0001")),
+            )
 
 
 @dataclass(frozen=True, slots=True)
