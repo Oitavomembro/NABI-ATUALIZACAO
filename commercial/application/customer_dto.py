@@ -70,6 +70,25 @@ class CustomerDetails:
 
 
 @dataclass(frozen=True, slots=True)
+class CustomerPurchaseBehavior:
+    customer_id: int
+    on_time_purchases: int
+    delayed_purchases: int
+    delay_count: int
+    unclassified_purchases: int = 0
+
+    def __post_init__(self) -> None:
+        for field_name in (
+            "customer_id", "on_time_purchases", "delayed_purchases",
+            "delay_count", "unclassified_purchases",
+        ):
+            value = int(getattr(self, field_name))
+            if value < (1 if field_name == "customer_id" else 0):
+                raise ValueError("Resumo de atrasos do cliente inválido.")
+            object.__setattr__(self, field_name, value)
+
+
+@dataclass(frozen=True, slots=True)
 class CustomerStatementEntry:
     movement_id: int
     occurred_at: str

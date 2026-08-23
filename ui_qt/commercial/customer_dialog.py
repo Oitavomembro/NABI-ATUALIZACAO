@@ -217,9 +217,12 @@ class CustomerManagementDialog(QDialog):
         search_row.addWidget(QLabel("Letras")); search_row.addWidget(self.font_size)
         search_row.addWidget(self.refresh_button)
         layout.addLayout(search_row)
-        self.table = QTableWidget(0, 3)
+        self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
-            ["Ficha", "Nome", "Saldo devedor"]
+            [
+                "Ficha", "Nome", "Saldo devedor", "Compras sem atraso",
+                "Compras com atraso", "Qtd. de atrasos",
+            ]
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
@@ -302,20 +305,35 @@ class CustomerManagementDialog(QDialog):
             QMessageBox.warning(self, "Clientes", str(exc)); return
         self.table.setRowCount(0)
         self._customers_by_id = {}
+        behavior_loader = getattr(self.service, "customer_purchase_behavior", None)
+        behaviors = (
+            behavior_loader(tuple(customer.customer_id for customer in customers))
+            if callable(behavior_loader) else ()
+        )
+        behavior_by_id = {item.customer_id: item for item in behaviors}
         for customer in customers:
             self._customers_by_id[customer.customer_id] = customer
+            behavior = behavior_by_id.get(customer.customer_id)
             row = self.table.rowCount(); self.table.insertRow(row)
             values = (
                 customer.record_number or "—", customer.name,
                 _money(customer.debt_balance),
+                behavior.on_time_purchases if behavior else 0,
+                behavior.delayed_purchases if behavior else 0,
+                behavior.delay_count if behavior else 0,
             )
             for column, value in enumerate(values):
                 item = QTableWidgetItem(str(value))
-                if column in {1, 3}:
+                if column == 1:
                     item.setToolTip(
                         f"Ficha {customer.record_number or '—'} — {customer.name}\n"
                         f"Endereço: {customer.address or '—'}\n"
                         f"Telefone: {customer.phone or '—'}"
+                    )
+                if behavior and behavior.unclassified_purchases and column in {3, 4, 5}:
+                    item.setToolTip(
+                        f"{behavior.unclassified_purchases} compra(s) antiga(s) sem dados "
+                        "confiáveis de parcelas não entram nesta classificação."
                     )
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, customer.customer_id)

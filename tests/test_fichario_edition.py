@@ -107,6 +107,7 @@ def test_shell_restaura_cards_importacao_e_politica_exclusiva_do_pdv():
     ))
     assert "loose_items_only=True" in shell
     assert "require_registered_customer=True" in shell
+    assert 'title.setAlignment(Qt.AlignmentFlag.AlignCenter)' in shell
     policy = (root / "fichario/pdv_view_model.py").read_text(encoding="utf-8")
     assert "item.product_id is not None" in policy
     assert "CONSUMIDOR_FINAL" in policy

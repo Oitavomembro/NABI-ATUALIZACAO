@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 from .customer_dto import (
-    CustomerCreateCommand, CustomerDetails, CustomerStatement, CustomerUpdateCommand,
+    CustomerCreateCommand, CustomerDetails, CustomerPurchaseBehavior,
+    CustomerStatement, CustomerUpdateCommand,
 )
 from .ports import CustomerAccountPort, CustomerLookupPort
 from .query_dto import CustomerCreditSummary
@@ -57,6 +58,17 @@ class CustomerApplicationService:
         if callable(bulk):
             return tuple(bulk(ids))
         return tuple(self.get_customer(customer_id) for customer_id in ids)
+
+    def customer_purchase_behavior(
+        self, customer_ids,
+    ) -> tuple[CustomerPurchaseBehavior, ...]:
+        ids = tuple(dict.fromkeys(int(value) for value in customer_ids if int(value) > 0))
+        if not ids:
+            return ()
+        bulk = getattr(self._accounts, "purchase_behavior_many", None)
+        if not callable(bulk):
+            return tuple(CustomerPurchaseBehavior(customer_id, 0, 0, 0) for customer_id in ids)
+        return tuple(bulk(ids))
 
     def customer_statement(self, customer_id: int) -> CustomerStatement:
         return self._accounts.statement(customer_id)

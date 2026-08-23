@@ -68,6 +68,13 @@ class ClientHistoryRepositoryTests(unittest.TestCase):
         self.assertIsInstance(data.purchase_summary['compras'][0]['valor'], Decimal)
         self.assertIsInstance(data.purchase_summary['compras'][0]['parcelas'][0]['valor'], Decimal)
 
+    def test_bulk_purchase_summary_reuses_legacy_delay_rule(self) -> None:
+        summary = self.repository.purchase_summaries_many((1,))[1]
+        self.assertEqual(summary["faixas"].get(0, 0), 0)
+        self.assertEqual(summary["faixas"].get(2, 0), 1)
+        self.assertEqual(summary["pagas_atraso"], 1)
+        self.assertEqual(summary["vencidas_aberto"], 1)
+
     def test_missing_client_returns_none(self) -> None:
         self.assertIsNone(self.repository.load(999))
 

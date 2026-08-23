@@ -10,7 +10,9 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication, QDialog
 
-from commercial.application.customer_dto import CustomerDetails, CustomerStatement
+from commercial.application.customer_dto import (
+    CustomerDetails, CustomerPurchaseBehavior, CustomerStatement,
+)
 from ui_qt.commercial.customer_dialog import CustomerEditorDialog, CustomerManagementDialog
 
 
@@ -31,6 +33,12 @@ class Service:
 
     def get_customer(self, customer_id):
         self.calls.append(("get", customer_id)); return self.rows[0]
+
+    def customer_purchase_behavior(self, customer_ids):
+        return tuple(
+            CustomerPurchaseBehavior(customer_id, 3, 2, 4)
+            for customer_id in customer_ids
+        )
 
     def customer_statement(self, customer_id):
         self.calls.append(("statement", customer_id))
@@ -57,10 +65,14 @@ def test_lista_transporta_id_real_e_exibe_saldos(app):
     service = Service(); dialog = CustomerManagementDialog(service)
     assert dialog.table.rowCount() == 1
     assert dialog.selected_customer_id() == 7
-    assert [dialog.table.horizontalHeaderItem(index).text() for index in range(3)] == [
-        "Ficha", "Nome", "Saldo devedor",
+    assert [dialog.table.horizontalHeaderItem(index).text() for index in range(6)] == [
+        "Ficha", "Nome", "Saldo devedor", "Compras sem atraso",
+        "Compras com atraso", "Qtd. de atrasos",
     ]
     assert dialog.table.item(0, 2).text() == "R$ 125,00"
+    assert dialog.table.item(0, 3).text() == "3"
+    assert dialog.table.item(0, 4).text() == "2"
+    assert dialog.table.item(0, 5).text() == "4"
     assert "RUA A" in dialog.table.item(0, 1).toolTip()
     assert "Endereço: RUA A" in dialog.selected_details.text()
     assert "CPF:" not in dialog.selected_details.text()

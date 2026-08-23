@@ -4,11 +4,12 @@ from datetime import date
 from decimal import Decimal
 
 from commercial.application.customer_dto import (
-    CustomerDetails, CustomerInstallment, CustomerReceiptSummary,
+    CustomerDetails, CustomerInstallment, CustomerPurchaseBehavior, CustomerReceiptSummary,
     CustomerStatement, CustomerStatementEntry,
 )
 from commercial.domain.money import MoneyCodec
 from repositories.decimal_storage import DecimalStorage
+from repositories.client_history_repository import ClientHistoryRepository
 
 
 class NabiCodeCustomerAccountGateway:
@@ -72,6 +73,24 @@ class NabiCodeCustomerAccountGateway:
                 available_credit=max(MoneyCodec.ZERO, limit - balance),
             )
         return tuple(details_by_id[value] for value in ids if value in details_by_id)
+
+    def purchase_behavior_many(
+        self, customer_ids: tuple[int, ...],
+    ) -> tuple[CustomerPurchaseBehavior, ...]:
+        ids = tuple(dict.fromkeys(int(value) for value in customer_ids if int(value) > 0))
+        summaries = ClientHistoryRepository(self.database).purchase_summaries_many(ids)
+        result = []
+        for customer_id in ids:
+            summary = summaries[customer_id]
+            bands = summary["faixas"]
+            result.append(CustomerPurchaseBehavior(
+                customer_id=customer_id,
+                on_time_purchases=int(bands.get(0, 0)),
+                delayed_purchases=sum(int(bands.get(value, 0)) for value in range(1, 5)),
+                delay_count=int(summary["pagas_atraso"]) + int(summary["vencidas_aberto"]),
+                unclassified_purchases=int(bands.get("sem_dados", 0)),
+            ))
+        return tuple(result)
 
     def open_installments(self, customer_id: int) -> tuple[CustomerInstallment, ...]:
         today = date.today()

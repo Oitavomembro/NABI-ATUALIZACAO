@@ -80,6 +80,31 @@ class ClientHistoryRepository:
             events=[tuple(row) for row in events],
         )
 
+    def purchase_summaries_many(self, client_ids) -> dict[int, dict[str, Any]]:
+        ids = tuple(dict.fromkeys(int(value) for value in client_ids if int(value) > 0))
+        if not ids:
+            return {}
+        placeholders = ",".join("?" for _ in ids)
+        rows = self.database.fetch_all(
+            f"""SELECT m.cliente_id, m.id, m.descricao, m.valor, m.data,
+                       m.total_parcelas, p.numero_parcela, p.valor_parcela,
+                       p.vencimento, p.status, COALESCE(p.valor_pago,0),
+                       COALESCE(p.data_pagamento,''), COALESCE(p.atraso_registrado,0),
+                       COALESCE(p.dados_confiaveis,1)
+                  FROM movimentacoes m
+                  LEFT JOIN parcelas p ON p.movimentacao_id=m.id
+                 WHERE m.cliente_id IN ({placeholders}) AND m.tipo='COMPRA'
+                 ORDER BY m.cliente_id, m.id DESC, p.numero_parcela""",
+            ids,
+        )
+        grouped: dict[int, list[tuple[Any, ...]]] = {customer_id: [] for customer_id in ids}
+        for row in rows:
+            grouped[int(row[0])].append(tuple(row[1:]))
+        return {
+            customer_id: self._purchase_summary(grouped[customer_id])
+            for customer_id in ids
+        }
+
     def _purchase_summary(self, rows: list[tuple[Any, ...]]) -> dict[str, Any]:
         today = datetime.now().date()
         purchases: dict[int, dict[str, Any]] = {}
