@@ -49,7 +49,8 @@ Legenda:
 - [x] checkpoint 1 protege a fronteira de produtos por teste arquitetural no commit `88ca3ff`: `ProductLookupPort` expõe somente `search/get`, e item avulso não chama escrita de catálogo/estoque; 16 testes focados, `compileall` e `git diff --check` aprovados;
 - [x] checkpoint 3 implementou pós-venda e comprovantes Qt no commit `8685928`: somente resultado confirmado/consumido libera saída, abrir ou cancelar não imprime, cupom/PDF usam serviços oficiais, PDF é registrado e aberto pelo despachante isolado, ajustes reutilizam o rateio comercial e falhas não repetem a venda; 15 testes focados e 135 testes Qt/commercial relacionados aprovados, além de `compileall` e `git diff --check`;
 - [~] homologação manual pendente para aparência, foco e impressão/PDF físicos do pós-venda em perfil TESTE;
-- [ ] operações completas do carrinho: editar, remover, desconto e atalhos;
+- [x] checkpoint 4 completou operações do carrinho no commit `c029dc0`: edição atômica de quantidade/preço/desconto, preço cadastrado protegido sem uma permissão comercial real, preço avulso editável, pagamento/revisão invalidados após mutação válida, F4/F10, duplo clique e Delete com bloqueio de auto-repeat; 27 testes focados e 219 testes Qt/commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
+- [~] homologação manual pendente para edição, remoção, desconto e atalhos físicos do carrinho;
 - [ ] orçamento Qt;
 - [ ] vendas suspensas Qt;
 - [ ] vendas do dia, reimpressão e cancelamento Qt;
@@ -92,8 +93,10 @@ Legenda:
 - [x] decisão: operar por serviços internos, não por cliques livres na GUI;
 - [x] texto primeiro e porta de voz futura definidos;
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
-- [ ] Fase 0: ameaça, permissões, portas e schemas;
-- [ ] Fase 1: mascote e assistente escrita somente leitura;
+- [x] branch paralela `codex/ia-nabi-fase0` informou fundação e painel escritos concluídos no commit local `bd8d126`, árvore limpa e sem push; permissões de sessão, auditoria sem dados sensíveis, schemas fechados, consultas, orquestração textual, adaptador loopback, botão Parar Nabi e proteção contra respostas tardias estão cobertos por até 88 testes combinados;
+- [x] Qwen3-1.7B Q4 escolhido como baseline, mas pesos não foram baixados nem homologados; origem, licença, SHA-256, memória e velocidade continuam pendentes;
+- [x] Fase 0: ameaça, permissões, portas e schemas implementados na branch isolada acima, aguardando integração somente depois de estabilizar o PDV;
+- [~] Fase 1: mascote e assistente escrita somente leitura implementados na branch isolada, aguardando integração e homologação física;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
