@@ -1176,3 +1176,20 @@ importação no banco de produção antes da aprovação visual e de um backup m
   consulta o banco diretamente e o carregamento continua paginado em 60/200;
 - validação final: `39 passed`; `compileall` e `git diff --check` aprovados;
 - nenhum push e nenhum instalador foram realizados.
+
+### Identificação por endereço e escopo visível do backup
+
+- implementação: `df92bd8` — `feat: destaca endereco e escopo do backup no Fichario`;
+- Clientes e Fichas passou a exibir, na ordem operacional solicitada: Ficha,
+  Nome, Saldo devedor, Endereço e Telefone; nome e endereço também possuem dica
+  completa para diferenciar homônimos;
+- a ficha aberta por Enter ou duplo clique mostra endereço e telefone no topo;
+- as confirmações de backup e restauração enumeram os dados do banco preservados:
+  clientes, fichas, endereços, telefones, saldos, vendas, recebimentos, parcelas,
+  históricos e configurações do banco;
+- pasta de backup e tamanho das letras continuam preferências locais da máquina,
+  evitando que uma restauração de outro computador troque silenciosamente o
+  destino configurado, inclusive uma pasta do OneDrive;
+- teste de ida e volta comprova o escopo operacional completo; validação final:
+  `36 passed`, `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
