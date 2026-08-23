@@ -27,6 +27,10 @@ class CustomerRegistrationService:
         self.history_callback = history_callback
         self.now = now
 
+    def next_record_number(self) -> int:
+        """Retorna a próxima ficha configurada pela autoridade cadastral."""
+        return max(1, int(self.get_config("proxima_ficha") or 5500))
+
     def criar(
         self,
         *,

@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtGui import QBrush, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
@@ -44,9 +44,15 @@ class CustomerEditorDialog(QDialog):
         self.setStyleSheet(STYLE)
         layout = QVBoxLayout(self)
         form = QFormLayout()
+        next_record = getattr(service, "next_record_number", lambda: 5500)
+        self.record = QLineEdit(
+            str(customer.record_number or "") if customer else str(next_record())
+        )
+        self.record.setStyleSheet(
+            "font-size:20px;font-weight:900;color:#00d084;border:2px solid #00d084"
+        )
         self.name = QLineEdit(customer.name if customer else "")
         self.code = QLineEdit(customer.code if customer else "")
-        self.record = QLineEdit(str(customer.record_number or "") if customer else "")
         self.cpf = QLineEdit(customer.cpf if customer else "")
         self.rg = QLineEdit(customer.rg if customer else "")
         self.phone = QLineEdit(customer.phone if customer else "")
@@ -56,7 +62,7 @@ class CustomerEditorDialog(QDialog):
         self.limit = MoneyEdit()
         self.limit.set_value(customer.credit_limit if customer else Decimal("0"))
         for label, widget in (
-            ("Nome*", self.name), ("Código", self.code), ("Ficha", self.record),
+            ("NÚMERO DA FICHA*", self.record), ("Código", self.code), ("Nome*", self.name),
             ("CPF", self.cpf), ("RG", self.rg), ("Telefone", self.phone),
             ("Endereço", self.address), ("Observações", self.notes),
             ("Limite de crédito", self.limit),
@@ -74,12 +80,13 @@ class CustomerEditorDialog(QDialog):
         buttons.addWidget(self.save_button)
         layout.addLayout(buttons)
         self._fields = (
-            self.name, self.code, self.record, self.cpf, self.rg, self.phone,
+            self.record, self.code, self.name, self.cpf, self.rg, self.phone,
             self.address, self.notes, self.limit, self.save_button,
         )
         for widget in self._fields:
             widget.installEventFilter(self)
-        self.name.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.record.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.record.selectAll()
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
@@ -114,7 +121,7 @@ class CustomerEditorDialog(QDialog):
                 ))
         except Exception as exc:
             QMessageBox.warning(self, "Cliente", str(exc))
-            self.name.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.record.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         self.accept()
 
@@ -174,7 +181,9 @@ class CustomerManagementDialog(QDialog):
         layout.addWidget(title)
         search_row = QHBoxLayout()
         self.search = QLineEdit()
-        self.search.setPlaceholderText("Buscar por ficha, nome, CPF, telefone ou endereço")
+        self.search.setPlaceholderText(
+            "Buscar por ficha, código, nome, CPF, RG, telefone ou endereço"
+        )
         self.refresh_button = QPushButton("Atualizar  [F5]")
         self.refresh_button.clicked.connect(self.reload)
         search_row.addWidget(self.search, 1); search_row.addWidget(self.refresh_button)
@@ -191,6 +200,11 @@ class CustomerManagementDialog(QDialog):
         self.table.doubleClicked.connect(self.open_statement)
         self.table.installEventFilter(self)
         self.search.installEventFilter(self)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True)
+        self._search_timer.setInterval(250)
+        self._search_timer.timeout.connect(self.reload)
+        self.search.textChanged.connect(lambda _text: self._search_timer.start())
         layout.addWidget(self.table, 1)
         buttons = QHBoxLayout()
         self.new_button = QPushButton("Novo cliente  [F3]")
@@ -240,6 +254,15 @@ class CustomerManagementDialog(QDialog):
                 item = QTableWidgetItem(str(value))
                 if column == 0:
                     item.setData(Qt.ItemDataRole.UserRole, customer.customer_id)
+                    font = item.font(); font.setBold(True); font.setPointSize(font.pointSize() + 2)
+                    item.setFont(font)
+                balance = customer.debt_balance
+                color = "#f0f6fc"
+                if balance > Decimal("500.00"):
+                    color = "#ff7b72"
+                elif balance > Decimal("0.005"):
+                    color = "#ffd33d"
+                item.setForeground(QBrush(QColor(color)))
                 self.table.setItem(row, column, item)
         if self.table.rowCount(): self.table.selectRow(0)
 

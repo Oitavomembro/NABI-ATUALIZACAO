@@ -96,3 +96,17 @@ def test_instalador_preserva_dados_em_appdata():
     assert "nabicode fichario" in source
     assert "deltree" not in source
     assert "{userappdata}" not in source
+
+
+def test_shell_restaura_cards_importacao_e_politica_exclusiva_do_pdv():
+    root = Path(__file__).parents[1]
+    shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
+    assert all(label in shell for label in (
+        "CLIENTES EM DIA", "CLIENTES DEVENDO", "ATRASADOS +60 DIAS",
+        "TOTAL A RECEBER", "IMPORTAR FICHÁRIO ANTIGO",
+    ))
+    assert "loose_items_only=True" in shell
+    assert "require_registered_customer=True" in shell
+    policy = (root / "fichario/pdv_view_model.py").read_text(encoding="utf-8")
+    assert "item.product_id is not None" in policy
+    assert "CONSUMIDOR_FINAL" in policy

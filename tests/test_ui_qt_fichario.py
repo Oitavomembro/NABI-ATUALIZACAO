@@ -11,7 +11,9 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication, QMessageBox
 
 from commercial.application.customer_dto import CustomerDetails
+from fichario.pdv_view_model import FicharioPDVViewModel
 from fichario.receipt_dialog import CustomerReceiptDialog
+from ui_qt.commercial.customer_dialog import CustomerEditorDialog, CustomerManagementDialog
 
 
 def details(balance=Decimal("50")):
@@ -26,6 +28,7 @@ class CustomerService:
     def list_customers(self, term="", limit=500): return (details(self.balance),)
     def get_customer(self, customer_id):
         assert customer_id == 7; return details(self.balance)
+    def next_record_number(self): return 5500
 
 
 class Actions:
@@ -84,3 +87,26 @@ def test_cancelar_nao_persiste(app):
     dialog = CustomerReceiptDialog(service, actions, "operador")
     dialog.reject()
     assert actions.calls == []
+
+
+def test_ficha_e_primeiro_campo_destacado_e_pre_preenchido(app):
+    dialog = CustomerEditorDialog(CustomerService())
+    assert dialog._fields[0] is dialog.record
+    assert dialog.record.text() == "5500"
+    assert "font-weight:900" in dialog.record.styleSheet()
+
+
+def test_lista_aplica_cores_legadas_por_faixa_de_saldo(app):
+    service = CustomerService()
+    dialog = CustomerManagementDialog(service)
+    assert dialog.table.item(0, 0).foreground().color().name() == "#ffd33d"
+
+
+def test_view_model_fichario_recusa_catalogo_e_consumidor_final():
+    application = SimpleNamespace(new_session=lambda: SimpleNamespace())
+    view_model = FicharioPDVViewModel(application)
+    assert view_model.search_products("qualquer") == ()
+    with pytest.raises(PermissionError):
+        view_model.select_product(1)
+    with pytest.raises(ValueError):
+        view_model.select_final_consumer()

@@ -292,6 +292,7 @@ class MySQLMigrationService:
         network_mode: bool = False,
         logger: Any = None,
         remove_demo_clients: bool = True,
+        import_events: bool = True,
         progress: ProgressCallback | None = None,
     ) -> dict:
         """Importa o resumo preparado preservando IDs, vínculos e idempotência."""
@@ -409,7 +410,8 @@ class MySQLMigrationService:
                         client_id = cursor.lastrowid
                         imported += 1
 
-                    for event in data["eventos"].get(old_code, []):
+                    selected_events = data["eventos"].get(old_code, []) if import_events else ()
+                    for event in selected_events:
                         source_id = str(event.get("origem_id") or "").strip()
                         if not source_id:
                             raise ValueError("Movimentação sem identificador de origem.")
@@ -441,7 +443,7 @@ class MySQLMigrationService:
                         movements += 1
 
                     details = (
-                        f"Cadastro, saldo atual e {len(data['eventos'].get(old_code, []))} "
+                        f"Cadastro, saldo atual e {len(selected_events)} "
                         "últimas transações importados."
                     )
                     history_exists = cursor.execute(

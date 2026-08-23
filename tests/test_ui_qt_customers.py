@@ -96,10 +96,10 @@ def test_editor_enter_avanca_shift_volta_e_salva_sem_sql(app):
     service = Service(); dialog = CustomerEditorDialog(service)
     dialog.show(); app.processEvents()
     dialog.name.setText("JOAO")
-    dialog.name.setFocus(); key(dialog.name, Qt.Key.Key_Return)
+    dialog.record.setFocus(); key(dialog.record, Qt.Key.Key_Return)
     assert dialog.code.hasFocus()
     key(dialog.code, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
-    assert dialog.name.hasFocus()
+    assert dialog.record.hasFocus()
     dialog.save_button.setFocus(); key(dialog.save_button, Qt.Key.Key_Return)
     assert service.calls[-1][0] == "create"
     assert service.calls[-1][1].name == "JOAO"

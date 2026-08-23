@@ -23,6 +23,9 @@ class CustomerApplicationService:
         )
         return self.get_customer(customer_id)
 
+    def next_record_number(self) -> int:
+        return self._registration.next_record_number()
+
     def update_customer(self, command: CustomerUpdateCommand) -> CustomerDetails:
         self._registration.editar(
             command.customer_id, nome=command.name, codigo=command.code,

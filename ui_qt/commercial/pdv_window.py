@@ -36,9 +36,13 @@ class PDVWindow(QMainWindow):
         *,
         cash_label: str = "Caixa ativo",
         profile_label: str = "COMERCIAL / NÃO FISCAL",
+        loose_items_only: bool = False,
+        require_registered_customer: bool = False,
     ) -> None:
         super().__init__()
         self.view_model = view_model
+        self._loose_items_only = bool(loose_items_only)
+        self._require_registered_customer = bool(require_registered_customer)
         # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
         # montada. O filtro precisa existir em estado válido desde o início.
         self._enter_widgets = ()
@@ -72,9 +76,15 @@ class PDVWindow(QMainWindow):
         content_layout.addWidget(splitter, 1)
         layout.addWidget(content, 1)
         layout.addWidget(self._footer())
+        if self._loose_items_only:
+            self.loose_item.setChecked(True)
+            self.loose_item.hide()
+            self.expanded_product_search.hide()
+            self._dropdown_button.hide()
         self._install_shortcuts()
         self._install_enter_filters()
-        self.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
+        initial_focus = self._active_item_input() if self._loose_items_only else self.customer_search
+        initial_focus.setFocus(Qt.FocusReason.OtherFocusReason)
 
     @classmethod
     def _style_sheet(cls) -> str:
@@ -345,6 +355,8 @@ class PDVWindow(QMainWindow):
             ("F7", self._open_daily_sales),
             ("F10", self._edit_selected_item), ("F9", self._conclude_action),
         ):
+            if self._loose_items_only and sequence == "F2":
+                continue
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
             shortcut.setAutoRepeat(False)
@@ -813,6 +825,8 @@ class PDVWindow(QMainWindow):
         self.product_results.setVisible(self.product_results.count() > 0)
 
     def _open_expanded_product_search(self) -> None:
+        if self._loose_items_only:
+            return
         self.open_assistant_product_search(self.product_search.text())
 
     def open_assistant_product_search(self, initial_term: str = "") -> bool:
@@ -868,6 +882,11 @@ class PDVWindow(QMainWindow):
             self._show_error(error)
 
     def _toggle_loose(self, enabled: bool) -> None:
+        if self._loose_items_only and not enabled:
+            self.loose_item.blockSignals(True)
+            self.loose_item.setChecked(True)
+            self.loose_item.blockSignals(False)
+            enabled = True
         self.view_model.clear_product()
         self.product_search.clear()
         self.product_results.hide()
@@ -997,6 +1016,16 @@ class PDVWindow(QMainWindow):
                 "Inclua ao menos um item antes de abrir Pagamentos.", 3500
             )
             self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        selected_customer = self.view_model.selected_customer
+        if self._require_registered_customer and (
+            selected_customer is None
+            or selected_customer.code.strip().upper() == "CONSUMIDOR_FINAL"
+        ):
+            self.statusBar().showMessage(
+                "Selecione uma ficha de cliente antes de finalizar a compra.", 4000
+            )
+            self.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         dialog = CheckoutDialog(self.view_model, self)
         if dialog.exec() != CheckoutDialog.DialogCode.Accepted:
