@@ -951,3 +951,68 @@ Próxima etapa coerente da IA: ampliar consultas orientativas somente onde houve
 - validação focada: `48 passed`, `7 subtests passed`;
 - regressão consolidada Nabi + pesquisa + PDV: `232 passed`, `37 subtests passed`, zero falhas;
 - `compileall` e `git diff --check`: aprovados.
+
+## Checkpoint independente — edição NabiCode FICHÁRIO
+
+Estado em `2026-08-23`, worktree
+`C:\Users\famil\Desktop\NabiCode-QT-Homologacao-5b9ff8f\NabiCode-QT-Fichario-codex`,
+branch `codex/edicao-fichario`, derivada da integração limpa `b3787e2`:
+
+- implementação: `76d83f4` — `feat: adiciona edicao NabiCode Fichario`;
+- `LicenseEdition.FICHARIO` e política fail-closed exigem edição assinada
+  `FICHARIO`, recursos assinados `fichario`, `qt`, `commercial` e `financial`, e
+  recusam capacidade `fiscal`; configuração local não promove a edição;
+- composição e entrada próprias em `main_fichario_qt.py` iniciam somente banco,
+  serviços Commercial, autenticação e shell FICHÁRIO; não iniciam Nabi,
+  FiscalWorker, outbox, SEFAZ, certificado ou importação de NF-e;
+- os dados mutáveis ficam isolados em
+  `%APPDATA%\NabiCode\Fichario\Producao` ou `Teste`, fora de `Program Files`;
+- menu Qt simples entrega PDV comercial/não fiscal, clientes, cadastro/edição,
+  ficha/histórico, recebimentos, backup/restauração e informações locais;
+- cliente e recebimento usam `customer_id` real e portas oficiais. Recebimento
+  exige permissão, revisão humana explícita e uma única chamada a
+  `CommercialActionService.receive_customer_payment`;
+- Enter, Shift+Enter, Esc e auto-repeat estão cobertos no diálogo de recebimento;
+- backup/restauração reutilizam `DatabaseMaintenanceService`: cópia SQLite
+  consistente, `integrity_check`, chaves estrangeiras, tabelas obrigatórias e
+  schema 20; restauração exige PDV fechado, permissão e digitação de
+  `RESTAURAR`, cria cópia anterior e recupera automaticamente em falha;
+- o backup inclui o banco operacional (clientes/fichas, produtos, movimentações,
+  parcelas, recebimentos, configurações e auditoria). Não inclui build, logs,
+  credenciais/certificados, chave privada, `.nabilic` ou estado protegido;
+- spec PyInstaller, script de build e Inno Setup próprios reutilizam o pipeline
+  offline aprovado, mas produzem artefato/instalação separados e excluem IA,
+  emissor e componentes fiscais. Nenhum artefato ou release foi gerado;
+- documentação operacional: `docs/FICHARIO_BACKUP_RESTAURACAO.md`.
+
+Evidências automatizadas:
+
+- testes focados da edição, Qt e backup/restauração: `24 passed`;
+- regressão relacionada de licenciamento, Commercial, banco e Qt:
+  `262 passed`, `343 subtests passed`;
+- ida e volta de backup usa somente banco temporário de TESTE e comprova dados,
+  corrupção, schema incompatível, caminho ausente, falha intermediária e
+  recuperação segura;
+- `compileall`, validação do manifesto e `git diff --check`: aprovados.
+
+Build futuro, somente depois da integração final:
+
+1. validar: `python build_tools\build_fichario.py validate`;
+2. gerar aplicativo: `python build_tools\build_fichario.py app`;
+3. gerar instalador, informando o compilador existente:
+   `python build_tools\build_fichario.py installer --iscc "C:\caminho\ISCC.exe"`;
+4. para ambos em sequência:
+   `python build_tools\build_fichario.py all --iscc "C:\caminho\ISCC.exe"`.
+
+Pendências deliberadas:
+
+- integrar esta branch somente após reconciliar a mudança paralela dos gates
+  `assistant`/`fiscal`; não transportar nem sobrescrever `licensing/gate.py` ou
+  `main_qt.py` desta trilha;
+- executar a suíte global, gerar o artefato local e testar instalação, atualização,
+  ativação FICHÁRIO e reinício em máquina Windows de homologação;
+- homologar visualmente clientes, ficha, recebimento/comprovante, PDV, backup e
+  restauração. Impressão física depende de impressora disponível;
+- confirmar no artefato instalado, por inspeção de processos e banco de TESTE,
+  que nenhum worker/arquivo/fila fiscal é iniciado ou criado;
+- nenhum push foi realizado.
