@@ -23,7 +23,7 @@ class Sprint135PDVRegressionTests(unittest.TestCase):
         block = SOURCE.split("def _selecionar_produto_por_codigo_barras", 1)[1].split("def adicionar_item_carrinho", 1)[0]
         self.assertIn("codigo_barras", block)
         self.assertIn("produto_venda_selecionado_id", block)
-        self.assertIn("entry_valor_venda.insert", block)
+        self.assertIn("MoneyEntryBehavior.set_value(self.entry_valor_venda, preco)", block)
 
     def test_sale_always_asks_before_printing_or_generating_pdf(self):
         block = SOURCE.split("def finalizar_venda", 1)[1].split("def tela_clientes", 1)[0]
