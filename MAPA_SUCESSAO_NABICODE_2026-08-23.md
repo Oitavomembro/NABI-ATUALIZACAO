@@ -75,6 +75,12 @@ Legenda:
 - [~] bloqueio visual de cancelamento fiscal permanece coberto por testes automatizados, mas não pôde ser reproduzido fisicamente porque o perfil TESTE não possuía venda fiscal na lista;
 - [~] homologação física Windows avançada: Pagamentos, Orçamento e Vendas do dia foram aprovados pelo operador; o fluxo físico de produto cadastrado permanece impraticável enquanto o perfil TESTE não possuir produto, a impressão física depende de impressora e o bloqueio visual fiscal depende de venda fiscal segura de homologação;
 - [x] substituição automatizada das lacunas físicas disponíveis: 11 cenários específicos de produto cadastrado/ID/Enter/carrinho/Consumidor Final/checkout/estoque foram aprovados e a regressão final relacionada repetiu 235 testes e 335 subtestes sem falhas;
+- [x] pesquisa ampliada e acessível de produtos implementada na branch isolada `codex/pdv-pesquisa-acessivel`, partindo de `b5bcaa7`, no commit `5246711`: F2 e botão explícito abrem janela grande, mantendo a seta/lista rápida existente;
+- [x] a janela ampliada prioriza somente nome, preço e estoque em fonte/linhas grandes, pesquisa também por código/barras, é somente leitura e seleciona exclusivamente `product_id` real;
+- [x] teclado da pesquisa ampliada: Enter na busca move uma etapa para a tabela, Enter na tabela seleciona uma vez, Shift+Enter retorna, Esc cancela e auto-repeat é consumido; seleção retorna ao campo Quantidade;
+- [x] filtro do PDV ficou seguro durante montagem/destruição da janela no commit `2f17ab0`, sem mudar regra comercial;
+- [x] validação: 139 testes e 2 subtestes focados, depois 269 testes e 338 subtestes Qt/Commercial/backend relacionados, todos aprovados; teste de lock afetado pela execução concorrente foi repetido isoladamente e aprovado;
+- [~] homologação manual pendente com catálogo real: legibilidade de nome/preço/estoque, F2, botão, seta/lista rápida, busca por nome/código/barras, Enter/Shift+Enter/Esc, mouse e retorno à Quantidade;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
@@ -121,6 +127,7 @@ Legenda:
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
+- [~] integração futura registrada para a pesquisa ampliada do PDV: a Nabi poderá solicitar abertura/orientação por porta Qt explícita depois da integração do commit `5246711`, sem cliques livres, banco direto, produto inventado ou seleção por texto ambíguo; esta integração não pertence ao checkpoint visual atual;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.
