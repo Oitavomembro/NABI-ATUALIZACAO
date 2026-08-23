@@ -1,11 +1,13 @@
 import sqlite3
 import tempfile
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
 from pathlib import Path
+from threading import Barrier
 
 from services.pdv_service import PDVService
-from services.pdv_transaction_service import PDVTransactionService
+from services.pdv_transaction_service import CreditLimitExceededError, PDVTransactionService
 from services.fiscal_outbox_service import FiscalOutboxService
 
 
@@ -37,14 +39,14 @@ class PDVTransactionServiceTests(unittest.TestCase):
         self.db = Path(self.tmp.name) / "pdv.db"
         conn = sqlite3.connect(self.db)
         conn.executescript("""
-            CREATE TABLE clientes(id INTEGER PRIMARY KEY, nome TEXT, saldo_devedor REAL DEFAULT 0);
+            CREATE TABLE clientes(id INTEGER PRIMARY KEY, numero_ficha INTEGER, codigo TEXT, nome TEXT, limite REAL DEFAULT 0, saldo_devedor REAL DEFAULT 0);
             CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER, tipo TEXT, descricao TEXT, valor REAL, data TEXT, vencimento TEXT, status_pagamento TEXT, valor_aberto REAL, forma_pagamento TEXT);
             CREATE TABLE parcelas(id INTEGER PRIMARY KEY AUTOINCREMENT, movimentacao_id INTEGER, numero_parcela INTEGER, valor_parcela REAL, vencimento TEXT, status TEXT, valor_pago REAL, data_pagamento TEXT, atraso_registrado INTEGER, dados_confiaveis INTEGER);
             CREATE TABLE configuracoes(chave TEXT PRIMARY KEY, valor TEXT);
             CREATE TABLE produtos(id INTEGER PRIMARY KEY, estoque_atual REAL);
             CREATE TABLE estoque_movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT, produto_id INTEGER, tipo TEXT, quantidade REAL, origem TEXT, origem_id INTEGER);
             CREATE TABLE financeiro_titulos(id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT, origem TEXT, origem_id INTEGER, valor REAL, status TEXT);
-            INSERT INTO clientes(id,nome,saldo_devedor) VALUES (1,'CLIENTE',0);
+            INSERT INTO clientes(id,numero_ficha,codigo,nome,limite,saldo_devedor) VALUES (1,1,'C1','CLIENTE',100000,0);
             INSERT INTO produtos(id,estoque_atual) VALUES (1,10);
         """)
         conn.commit(); conn.close()
@@ -55,6 +57,167 @@ class PDVTransactionServiceTests(unittest.TestCase):
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _set_credit(self, *, limit, balance, customer_id=1):
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "UPDATE clientes SET limite=?, saldo_devedor=? WHERE id=?",
+            (limit, balance, customer_id),
+        )
+        conn.commit()
+        conn.close()
+
+    def _credit_sale(self, financed, *, customer_id=1, total=None, entry=0):
+        sale_total = financed if total is None else total
+        items = [{
+            "produto_id": 1,
+            "item": "PRODUTO",
+            "qtd": 1,
+            "preco": sale_total,
+            "subtotal": sale_total,
+        }]
+        payments = []
+        if entry:
+            payments.append({"forma": "PIX", "valor": entry})
+        payments.append({"forma": "CREDIARIO", "valor": financed})
+        return self.service.finalize_sale(
+            customer_id=customer_id,
+            customer_name="CLIENTE",
+            items=items,
+            payments=payments,
+            received=sale_total,
+            change=0,
+            user="admin",
+        )
+
+    def _assert_no_partial_persistence(self, *, balance, customer_id=1, stock=10):
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM parcelas").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM financeiro_titulos").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM estoque_movimentacoes").fetchone()[0], 0)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM configuracoes").fetchone()[0], 0)
+            self.assertEqual(
+                conn.execute(
+                    "SELECT saldo_devedor FROM clientes WHERE id=?", (customer_id,)
+                ).fetchone()[0],
+                balance,
+            )
+            self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE id=1").fetchone()[0], stock)
+        finally:
+            conn.close()
+
+    def test_limite_500_saldo_zero_financiado_2000_bloqueia_sem_persistencia(self):
+        self._set_credit(limit=500, balance=0)
+        with self.assertRaises(CreditLimitExceededError) as captured:
+            self._credit_sale(2000)
+        self.assertEqual(captured.exception.limit, 500)
+        self.assertEqual(captured.exception.balance, 0)
+        self.assertEqual(captured.exception.available, 500)
+        self.assertEqual(captured.exception.financed, 2000)
+        self.assertIn("Valor financiado: R$ 2.000,00", str(captured.exception))
+        self._assert_no_partial_persistence(balance=0)
+
+    def test_limite_500_saldo_400_financiado_101_bloqueia_sem_persistencia(self):
+        self._set_credit(limit=500, balance=400)
+        with self.assertRaises(CreditLimitExceededError):
+            self._credit_sale(101)
+        self._assert_no_partial_persistence(balance=400)
+
+    def test_limite_500_saldo_400_financiado_100_permite(self):
+        self._set_credit(limit=500, balance=400)
+        result = self._credit_sale(100)
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(result.status, "PENDENTE")
+            self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 500)
+        finally:
+            conn.close()
+
+    def test_limite_esgotado_bloqueia_financiamento_sem_persistencia(self):
+        self._set_credit(limit=500, balance=500)
+        with self.assertRaises(CreditLimitExceededError):
+            self._credit_sale(1)
+        self._assert_no_partial_persistence(balance=500)
+
+    def test_entrada_mais_crediario_limite_e_titulo_usam_somente_financiado(self):
+        self._set_credit(limit=100, balance=0)
+        result = self._credit_sale(100, total=500, entry=400)
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 100)
+            self.assertEqual(conn.execute("SELECT valor FROM financeiro_titulos WHERE origem_id=?", (result.sale_id,)).fetchone()[0], 100)
+            self.assertEqual(conn.execute("SELECT valor_aberto FROM movimentacoes WHERE id=?", (result.sale_id,)).fetchone()[0], 100)
+        finally:
+            conn.close()
+
+    def test_consumidor_final_com_crediario_bloqueia_sem_persistencia(self):
+        conn = sqlite3.connect(self.db)
+        conn.execute("INSERT INTO clientes VALUES (2,2,'CONSUMIDOR_FINAL','Consumidor Final',999999,0)")
+        conn.commit()
+        conn.close()
+        with self.assertRaisesRegex(ValueError, "Consumidor Final"):
+            self._credit_sale(10, customer_id=2)
+        self._assert_no_partial_persistence(balance=0, customer_id=2)
+
+    def test_cliente_inexistente_com_crediario_bloqueia_sem_persistencia(self):
+        with self.assertRaisesRegex(ValueError, "inexistente"):
+            self._credit_sale(10, customer_id=999)
+        self._assert_no_partial_persistence(balance=0)
+
+    def test_venda_sem_financiamento_nao_aplica_limite(self):
+        self._set_credit(limit=0, balance=500)
+        result = self.service.finalize_sale(
+            customer_id=1,
+            customer_name="CLIENTE",
+            items=[self.item],
+            payments=[{"forma": "DINHEIRO", "valor": 10}],
+            received=10,
+            change=0,
+            user="admin",
+        )
+        self.assertEqual(result.status, "PAGO")
+
+    def test_duas_vendas_concorrentes_nao_ultrapassam_o_mesmo_limite(self):
+        self._set_credit(limit=100, balance=0)
+        barrier = Barrier(2)
+        avulso = {
+            "produto_id": None,
+            "item": "SERVICO",
+            "qtd": 1,
+            "preco": 60,
+            "subtotal": 60,
+            "item_avulso": True,
+        }
+
+        def finalize():
+            barrier.wait()
+            try:
+                self.service.finalize_sale(
+                    customer_id=1,
+                    customer_name="CLIENTE",
+                    items=[avulso],
+                    payments=[{"forma": "CREDIARIO", "valor": 60}],
+                    received=60,
+                    change=0,
+                    user="admin",
+                )
+                return "ok"
+            except CreditLimitExceededError:
+                return "blocked"
+
+        with ThreadPoolExecutor(max_workers=2) as executor:
+            outcomes = list(executor.map(lambda _index: finalize(), range(2)))
+
+        self.assertCountEqual(outcomes, ["ok", "blocked"])
+        conn = sqlite3.connect(self.db)
+        try:
+            self.assertEqual(conn.execute("SELECT saldo_devedor FROM clientes WHERE id=1").fetchone()[0], 60)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 1)
+            self.assertEqual(conn.execute("SELECT COUNT(*) FROM financeiro_titulos").fetchone()[0], 1)
+        finally:
+            conn.close()
 
     def test_finaliza_venda_paga_atomicamente(self):
         result = self.service.finalize_sale(customer_id=1, customer_name="CLIENTE", items=[self.item], payments=[{"forma":"DINHEIRO","valor":10}], received=10, change=0, user="admin")

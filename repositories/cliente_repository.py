@@ -88,6 +88,42 @@ class ClienteRepository:
             for row in ordered
         ]
 
+    def resolve_sales_reference(self, reference: str) -> ClienteSuggestion | None:
+        """Resolve somente uma referência exata exibida ou digitada no PDV."""
+        text = str(reference or "").strip()
+        if not text:
+            return None
+        identifier, separator, displayed_name = text.partition(" — ")
+        if separator:
+            rows = self.database.fetch_all(
+                """SELECT id, codigo, nome, numero_ficha, cpf, telefone
+                     FROM clientes
+                    WHERE nome = ? COLLATE NOCASE
+                      AND (codigo = ? COLLATE NOCASE OR CAST(numero_ficha AS TEXT) = ?)
+                    LIMIT 2""",
+                (displayed_name.strip(), identifier.strip(), identifier.strip()),
+            )
+        else:
+            rows = self.database.fetch_all(
+                """SELECT id, codigo, nome, numero_ficha, cpf, telefone
+                     FROM clientes
+                    WHERE codigo = ? COLLATE NOCASE
+                       OR nome = ? COLLATE NOCASE
+                       OR CAST(numero_ficha AS TEXT) = ?
+                    LIMIT 2""",
+                (text, text, text),
+            )
+        if len(rows) > 1:
+            raise ValueError("Referência de cliente ambígua; selecione o cliente na lista.")
+        if not rows:
+            return None
+        row = rows[0]
+        return ClienteSuggestion(
+            id=int(row[0]), codigo=str(row[1] or ""), nome=str(row[2] or ""),
+            numero_ficha=int(row[3]) if row[3] not in (None, "") else None,
+            cpf=str(row[4] or ""), telefone=str(row[5] or ""),
+        )
+
     def list_page(
         self,
         term: str = "",

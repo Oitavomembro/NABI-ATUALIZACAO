@@ -55,6 +55,8 @@ __all__ = [
     "ReleasePackagingService",
     "SensitivePackageFinding",
     "SearchEntryBehavior",
+    "MoneyEntryBehavior",
+    "CreditLimitExceededError",
 ]
 
 from .ui_preferences import InterfaceProfile, UIPreferencesService
@@ -105,7 +107,7 @@ from .customer_maintenance_service import CustomerMaintenanceService
 
 from .admin_audit_service import AdminAuditService, SecurityAuditEntry
 
-from .pdv_transaction_service import FinalizedSale, PDVTransactionService
+from .pdv_transaction_service import CreditLimitExceededError, FinalizedSale, PDVTransactionService
 
 from .movement_service import MovementRecord, MovementService
 
@@ -122,6 +124,7 @@ from .product_pricing_controller import ProductPricingController, ProductPricing
 from .release_packaging_service import ReleasePackagingService, SensitivePackageFinding
 
 from services.search_entry_behavior import SearchEntryBehavior
+from services.money_entry_behavior import MoneyEntryBehavior
 
 from .customer_registration_service import CustomerRegistrationService
 from .financeiro_view_data import FinanceiroViewData

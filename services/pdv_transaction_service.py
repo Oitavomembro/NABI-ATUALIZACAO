@@ -17,6 +17,31 @@ class FinalizedSale:
     status: str
 
 
+class CreditLimitExceededError(ValueError):
+    def __init__(
+        self,
+        *,
+        limit: Decimal,
+        balance: Decimal,
+        available: Decimal,
+        financed: Decimal,
+    ) -> None:
+        def brl(value: Decimal) -> str:
+            return f"{value:,.2f}".translate(str.maketrans({",": ".", ".": ","}))
+
+        self.limit = limit
+        self.balance = balance
+        self.available = available
+        self.financed = financed
+        super().__init__(
+            "Limite de crédito insuficiente.\n\n"
+            f"Limite: R$ {brl(limit)}\n"
+            f"Saldo devedor: R$ {brl(balance)}\n"
+            f"Crédito disponível: R$ {brl(available)}\n"
+            f"Valor financiado: R$ {brl(financed)}"
+        )
+
+
 class PDVTransactionService:
     """Persiste e cancela vendas do PDV sem depender da interface gráfica."""
 
@@ -32,6 +57,59 @@ class PDVTransactionService:
         self.estoque_service = estoque_service
         self.financeiro_service = financeiro_service
         self.pdv_service = pdv_service
+
+    @staticmethod
+    def _credit_customer(connection: Any, customer_id: int, financed_value: Decimal) -> dict[str, Any]:
+        columns = {
+            str(row[1]).casefold()
+            for row in connection.execute("PRAGMA table_info(clientes)").fetchall()
+        }
+        required = {"id", "codigo", "nome", "numero_ficha", "limite", "saldo_devedor"}
+        if not required.issubset(columns):
+            missing = ", ".join(sorted(required - columns))
+            raise RuntimeError(
+                f"Cadastro de clientes incompatível com a validação de crédito: {missing}."
+            )
+        canonical_balance = (
+            "saldo_devedor_decimal" if "saldo_devedor_decimal" in columns else "NULL"
+        )
+        row = connection.execute(
+            f"""SELECT id, numero_ficha, codigo, nome, limite,
+                       saldo_devedor, {canonical_balance}
+                  FROM clientes
+                 WHERE id=?""",
+            (int(customer_id),),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Cliente inexistente não pode utilizar crediário.")
+
+        code = str(row[2] or "").strip().upper()
+        name = str(row[3] or "").strip()
+        if code == "CONSUMIDOR_FINAL" or name.upper() == "CONSUMIDOR FINAL":
+            raise ValueError("Consumidor Final não pode utilizar crediário.")
+
+        limit = DecimalStorage.to_decimal(row[4] or 0, field="limite de crédito").quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        balance = DecimalStorage.read(
+            row[6], row[5] or 0, field="saldo devedor"
+        ).quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
+        available = max(Decimal("0.00"), limit - balance).quantize(
+            Decimal("0.01"), rounding=ROUND_HALF_UP
+        )
+        if financed_value > available:
+            raise CreditLimitExceededError(
+                limit=limit,
+                balance=balance,
+                available=available,
+                financed=financed_value,
+            )
+        return {
+            "numero_ficha": row[1],
+            "nome": name,
+            "saldo_devedor": balance,
+            "columns": columns,
+        }
 
     def finalize_sale(
         self,
@@ -90,7 +168,12 @@ class PDVTransactionService:
 
         conn = self.connection_factory()
         try:
-            conn.execute("BEGIN")
+            conn.execute("BEGIN IMMEDIATE" if financed_value > 0 else "BEGIN")
+            credit_customer = (
+                self._credit_customer(conn, int(customer_id), financed_value)
+                if financed_value > 0
+                else None
+            )
             movement_columns = {str(row[1]).casefold() for row in conn.execute("PRAGMA table_info(movimentacoes)").fetchall()}
             if {"valor_decimal", "valor_aberto_decimal"}.issubset(movement_columns):
                 cursor = conn.execute(
@@ -157,19 +240,20 @@ class PDVTransactionService:
                         (installment_count, sale_id),
                     )
             if credit:
-                customer_columns = {str(row[1]).casefold() for row in conn.execute("PRAGMA table_info(clientes)").fetchall()}
+                customer_columns = credit_customer["columns"]
+                new_balance = credit_customer["saldo_devedor"] + financed_value
                 if "saldo_devedor_decimal" in customer_columns:
-                    current = conn.execute("SELECT saldo_devedor,saldo_devedor_decimal FROM clientes WHERE id=?", (int(customer_id),)).fetchone()
-                    new_balance = DecimalStorage.read(current[1] if current else None, current[0] if current else 0, field="saldo devedor") + financed_value
-                    conn.execute("UPDATE clientes SET saldo_devedor=?, saldo_devedor_decimal=? WHERE id=?", (DecimalStorage.legacy_real(new_balance, field="saldo devedor"), DecimalStorage.canonical(new_balance, field="saldo devedor"), int(customer_id)))
+                    cursor_balance = conn.execute("UPDATE clientes SET saldo_devedor=?, saldo_devedor_decimal=? WHERE id=?", (DecimalStorage.legacy_real(new_balance, field="saldo devedor"), DecimalStorage.canonical(new_balance, field="saldo devedor"), int(customer_id)))
                 else:
-                    conn.execute("UPDATE clientes SET saldo_devedor = saldo_devedor + ? WHERE id = ?", (DecimalStorage.legacy_real(financed_value, field="saldo devedor"), int(customer_id)))
+                    cursor_balance = conn.execute("UPDATE clientes SET saldo_devedor=? WHERE id=?", (DecimalStorage.legacy_real(new_balance, field="saldo devedor"), int(customer_id)))
+                if cursor_balance.rowcount != 1:
+                    raise RuntimeError("O cliente deixou de existir durante a venda a crediário.")
                 self.financeiro_service.registrar_venda_crediario_transacao(
                     conn,
                     venda_id=sale_id,
                     cliente_id=int(customer_id),
-                    cliente_nome=str(customer_name or "").strip(),
-                    valor=DecimalStorage.canonical(total, field="total da venda"),
+                    cliente_nome=credit_customer["nome"],
+                    valor=DecimalStorage.canonical(financed_value, field="valor financiado"),
                     data_vencimento=due_date,
                     descricao=f"Venda a crediário #{sale_id} em {installment_count} parcela(s)",
                     usuario=normalized_user,

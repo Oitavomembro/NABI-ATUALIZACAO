@@ -19,14 +19,14 @@ class CancelamentoPDVDecimalTest(unittest.TestCase):
         self.db = Path(self.tmp.name) / "pdv_decimal.db"
         conn = sqlite3.connect(self.db)
         conn.executescript("""
-            CREATE TABLE clientes(id INTEGER PRIMARY KEY, nome TEXT, saldo_devedor REAL DEFAULT 0, saldo_devedor_decimal TEXT);
+            CREATE TABLE clientes(id INTEGER PRIMARY KEY, numero_ficha INTEGER, codigo TEXT, nome TEXT, limite REAL DEFAULT 0, saldo_devedor REAL DEFAULT 0, saldo_devedor_decimal TEXT);
             CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT, cliente_id INTEGER, tipo TEXT, descricao TEXT, valor REAL, valor_decimal TEXT, data TEXT, vencimento TEXT, status_pagamento TEXT, valor_aberto REAL, valor_aberto_decimal TEXT, forma_pagamento TEXT);
             CREATE TABLE parcelas(id INTEGER PRIMARY KEY AUTOINCREMENT, movimentacao_id INTEGER, numero_parcela INTEGER, valor_parcela REAL, valor_parcela_decimal TEXT, vencimento TEXT, status TEXT, valor_pago REAL, valor_pago_decimal TEXT, data_pagamento TEXT, atraso_registrado INTEGER, dados_confiaveis INTEGER);
             CREATE TABLE configuracoes(chave TEXT PRIMARY KEY, valor TEXT);
             CREATE TABLE produtos(id INTEGER PRIMARY KEY, estoque_atual REAL);
             CREATE TABLE estoque_movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT, produto_id INTEGER, tipo TEXT, quantidade REAL, origem TEXT, origem_id INTEGER);
             CREATE TABLE financeiro_titulos(id INTEGER PRIMARY KEY AUTOINCREMENT, tipo TEXT, origem TEXT, origem_id INTEGER, valor REAL, status TEXT);
-            INSERT INTO clientes(id,nome,saldo_devedor,saldo_devedor_decimal) VALUES (1,'CLIENTE',0,'0');
+            INSERT INTO clientes(id,numero_ficha,codigo,nome,limite,saldo_devedor,saldo_devedor_decimal) VALUES (1,1,'C1','CLIENTE',100000,0,'0');
             INSERT INTO produtos(id,estoque_atual) VALUES (1,10);
         """)
         conn.commit()

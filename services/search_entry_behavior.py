@@ -97,6 +97,25 @@ class SearchEntryBehavior:
         # desativação do placeholder para a primeira tecla/leitura ser aceita.
         return None
 
+    @classmethod
+    def prepare_empty_input(cls, entry: Any, *, placeholder: str) -> None:
+        """Muda o modo do campo sem depender do próximo evento ``FocusIn``.
+
+        ``CTkEntry.set`` desativa seu placeholder pela API pública. Para widgets
+        Tk compatíveis, a mesma transição é feita com ``delete``.
+        """
+        entry.configure(placeholder_text=placeholder)
+        setter = getattr(entry, "set", None)
+        if callable(setter):
+            setter("")
+        else:
+            entry.delete(0, "end")
+        entry.focus_set()
+        try:
+            entry.icursor(0)
+        except (AttributeError, TypeError):
+            pass
+
     @staticmethod
     def consume_enter() -> str:
         return "break"

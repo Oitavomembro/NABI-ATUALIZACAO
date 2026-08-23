@@ -15,6 +15,7 @@ class FakeEntry:
         self.selected = None
         self.cursor = None
         self.bindings = {}
+        self.focused = False
 
     def configure(self, **kwargs):
         self.config.update(kwargs)
@@ -30,6 +31,15 @@ class FakeEntry:
 
     def bind(self, sequence, callback, add=None):
         self.bindings[sequence] = (callback, add)
+
+    def delete(self, start, end):
+        self.value = ""
+
+    def set(self, value):
+        self.value = value
+
+    def focus_set(self):
+        self.focused = True
 
 
 class FakeNativeEntry(FakeEntry):
@@ -88,6 +98,22 @@ class SearchEntryBehaviorTests(unittest.TestCase):
             callback = entry.bindings[sequence][0]
             self.assertEqual(callback(FakeEvent(entry)), "break")
         self.assertEqual(calls, ["enter", "enter"])
+
+    def test_prepare_empty_input_transitions_placeholder_state_immediately(self):
+        entry = FakeEntry("texto anterior")
+
+        SearchEntryBehavior.prepare_empty_input(
+            entry, placeholder="Digite a descrição do item avulso..."
+        )
+
+        self.assertEqual(entry.value, "")
+        self.assertEqual(
+            entry.config["placeholder_text"],
+            "Digite a descrição do item avulso...",
+        )
+        self.assertTrue(entry.focused)
+        self.assertEqual(entry.cursor, 0)
+        self.assertFalse(hasattr(entry, "_entry"))
 
 
 if __name__ == "__main__":

@@ -120,6 +120,18 @@ class ClienteRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repo.search_sales_suggestions(""), [])
         self.assertEqual(len(self.repo.search_sales_suggestions("maria", limit=1)), 1)
 
+    def test_resolve_referencia_de_venda_com_travessao(self) -> None:
+        cliente = self.repo.resolve_sales_reference("20 — MARIA SILVA")
+        self.assertIsNotNone(cliente)
+        self.assertEqual(cliente.id, 1)
+
+    def test_resolve_referencia_de_venda_por_codigo_ou_ficha(self) -> None:
+        self.assertEqual(self.repo.resolve_sales_reference("C10").id, 2)
+        self.assertEqual(self.repo.resolve_sales_reference("10").id, 2)
+
+    def test_resolve_referencia_inexistente_sem_fallback_perigoso(self) -> None:
+        self.assertIsNone(self.repo.resolve_sales_reference("999 — NINGUEM"))
+
     def test_alternar_favorito_atualiza_cliente_e_historico_na_mesma_transacao(self) -> None:
         self.assertTrue(self.repo.toggle_favorite(2, event_date="02/08/2026 21:30:00"))
         with closing(sqlite3.connect(self.db_path)) as conn:

@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalDFeService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, FiscalTaxRuleService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalDFeService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, FiscalTaxRuleService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, MoneyEntryBehavior, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -5552,6 +5552,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         self.entry_valor_venda = ctk.CTkEntry(busca, placeholder_text="Preço", width=118, height=42, fg_color="#0d1117", text_color="#ffffff", justify="center")
         self.entry_valor_venda.grid(row=0, column=4, padx=6, pady=12)
+        MoneyEntryBehavior.attach(self.entry_valor_venda)
 
         def validar_quantidade_pdv():
             try:
@@ -5561,7 +5562,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         def validar_preco_pdv():
             try:
-                return tratar_numero(self.entry_valor_venda.get()) >= 0
+                return MoneyEntryBehavior.value(self.entry_valor_venda) >= 0
             except (TypeError, ValueError):
                 return False
 
@@ -5591,6 +5592,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             entry_qtd_venda=self.entry_qtd_venda,
             entry_valor_venda=self.entry_valor_venda,
             var_item_avulso_pdv=self.var_item_avulso_pdv,
+            item_placeholder_default="Digite o nome, código interno ou código de barras...",
         )
 
         area_itens = ctk.CTkFrame(corpo, fg_color="#161b22", corner_radius=12)
@@ -6458,6 +6460,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         
         self.entry_valor_venda = ctk.CTkEntry(frame_inputs, placeholder_text="Preço Unit. (R$)", width=110, height=32, fg_color="#0d1117", text_color="#ffffff")
         self.entry_valor_venda.pack(side="left", padx=(0, 6))
+        MoneyEntryBehavior.attach(self.entry_valor_venda)
         self.entry_valor_venda.bind("<Return>", lambda event: self.adicionar_item_carrinho())
         
         btn_add_item = ctk.CTkButton(frame_inputs, text="➕ Adicionar", fg_color="#1f6feb", hover_color="#1158c7", height=32, command=self.adicionar_item_carrinho)
@@ -6469,6 +6472,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             entry_qtd_venda=self.entry_qtd_venda,
             entry_valor_venda=self.entry_valor_venda,
             var_item_avulso_pdv=self.var_item_avulso_aba_vendas,
+            item_placeholder_default="Descrição do Produto / Serviço",
         )
 
         tabela_carrinho_frame = ctk.CTkFrame(conteudo_venda_frame, fg_color="#161b22", corner_radius=12)
@@ -7016,7 +7020,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if hasattr(self, "var_item_avulso_pdv"):
                 self.var_item_avulso_pdv.set(True)
             self.produto_venda_selecionado_id = None
-            self.entry_item_venda.delete(0, "end")
+            self.alternar_item_avulso_pdv()
             self.entry_item_venda.insert(0, nome_avulso)
             self.fechar_sugestoes_produto()
             self.entry_valor_venda.focus_set()
@@ -7029,11 +7033,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             self.var_item_avulso_pdv.set(False)
         self.entry_item_venda.delete(0, "end")
         self.entry_item_venda.insert(0, produto["nome"])
-        self.entry_valor_venda.delete(0, "end")
         preco = DecimalStorage.to_decimal(
             produto.get("preco_venda") or 0, field="preço do produto"
         )
-        self.entry_valor_venda.insert(0, f"{preco:.2f}".replace(".", ","))
+        MoneyEntryBehavior.set_value(self.entry_valor_venda, preco)
         self.fechar_sugestoes_produto()
         if not self._confirmar_estoque_pdv_ao_selecionar(int(produto["id"])):
             return "break"
@@ -7057,6 +7060,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def alternar_item_avulso_pdv(self):
         """Alterna entre produto cadastrado e item livre sem controle de estoque."""
+        self._sincronizar_contexto_item_venda()
         ativo = bool(getattr(getattr(self, "var_item_avulso_pdv", None), "get", lambda: False)())
         if ativo and (obter_config("modo_operacao") or "COMERCIAL").strip().upper() == "FISCAL":
             self.var_item_avulso_pdv.set(False)
@@ -7069,13 +7073,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.produto_venda_selecionado_id = None
         self.fechar_sugestoes_produto()
         if hasattr(self, "entry_item_venda"):
-            self.entry_item_venda.configure(
-                placeholder_text=(
-                    "Digite a descrição do item avulso..." if ativo
-                    else "Digite o nome, código interno ou código de barras..."
-                )
+            SearchEntryBehavior.prepare_empty_input(
+                self.entry_item_venda,
+                placeholder=(
+                    "Digite a descrição do item avulso..."
+                    if ativo
+                    else getattr(
+                        self,
+                        "item_placeholder_default",
+                        "Digite o nome, código interno ou código de barras...",
+                    )
+                ),
             )
-            self.entry_item_venda.focus_set()
         if hasattr(self, "lbl_item_avulso_pdv"):
             self.lbl_item_avulso_pdv.configure(
                 text=(
@@ -7104,8 +7113,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             preco = DecimalStorage.to_decimal(
                 produto.get("preco_venda") or 0, field="preço do produto"
             )
-            self.entry_valor_venda.delete(0, "end")
-            self.entry_valor_venda.insert(0, f"{preco:.2f}".replace(".", ","))
+            MoneyEntryBehavior.set_value(self.entry_valor_venda, preco)
             self.fechar_sugestoes_produto()
             if not self._confirmar_estoque_pdv_ao_selecionar(int(produto["id"])):
                 return False
@@ -7193,7 +7201,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return
 
         try:
-            preco = tratar_numero(valor_str)
+            preco = float(MoneyEntryBehavior.value(self.entry_valor_venda))
             if preco < 0:
                 raise ValueError
         except ValueError:
@@ -7222,7 +7230,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             produto_id = getattr(self, "produto_venda_selecionado_id", None)
             item = self.entry_item_venda.get().strip()
             valor_str = self.entry_valor_venda.get().strip()
-            preco = tratar_numero(valor_str)
+            preco = float(MoneyEntryBehavior.value(self.entry_valor_venda))
 
         if not item_avulso and produto_id and not self._confirmar_estoque_pdv_para_quantidade(produto_id, qtd):
             return
@@ -7250,7 +7258,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fechar_sugestoes_produto()
         self.entry_qtd_venda.delete(0, "end")
         self.entry_qtd_venda.insert(0, "1")
-        self.entry_valor_venda.delete(0, "end")
+        MoneyEntryBehavior.clear(self.entry_valor_venda)
         if hasattr(self, "var_item_avulso_pdv"):
             self.var_item_avulso_pdv.set(False)
             self.alternar_item_avulso_pdv()
@@ -7654,20 +7662,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         cli_selecionado = self.entry_cliente_venda.get().strip()
         cliente_id = getattr(self, "cliente_venda_selecionado_id", None)
         if not cliente_id:
+            cliente_id = getattr(self, "dict_clientes_venda", {}).get(cli_selecionado)
+        if not cliente_id:
             escolha_combo = self.combo_cliente_venda.get().strip() if hasattr(self, "combo_cliente_venda") else ""
             cliente_id = getattr(self, "dict_clientes_venda", {}).get(escolha_combo)
         if not cliente_id and cli_selecionado:
-            codigo_ou_nome = cli_selecionado.split(" - ")[0] if " - " in cli_selecionado else cli_selecionado
-            conn = conectar_banco()
-            try:
-                res = conn.execute(
-                    "SELECT id FROM clientes WHERE codigo = ? OR nome = ?",
-                    (codigo_ou_nome, cli_selecionado),
-                ).fetchone()
-            finally:
-                conn.close()
-            if res:
-                cliente_id = res[0]
+            cliente = CLIENTE_REPOSITORY.resolve_sales_reference(cli_selecionado)
+            if cliente is None:
+                raise ValueError("Cliente não identificado. Selecione-o novamente na lista.")
+            cliente_id = cliente.id
+            cli_selecionado = cliente.nome
         if not cliente_id:
             cliente_id = self._cliente_consumidor_final()
             cli_selecionado = "CONSUMIDOR FINAL"
@@ -7762,7 +7766,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             messagebox.showwarning("Aviso", "O carrinho de compras está vazio!")
             return
 
-        cliente_id, cli_selecionado = self._resolver_cliente_venda_atual()
+        try:
+            cliente_id, cli_selecionado = self._resolver_cliente_venda_atual()
+        except ValueError as exc:
+            messagebox.showerror(
+                "Cliente da venda", str(exc), parent=getattr(self, "pdv_window", self)
+            )
+            return
         fiscal_required = (obter_config("modo_operacao") or "COMERCIAL").strip().upper() == "FISCAL"
         config_fiscal = None
         if fiscal_required:
