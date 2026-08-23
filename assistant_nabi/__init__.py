@@ -19,6 +19,7 @@ from .read_tools import register_commercial_read_tools
 from .application import AssistantApplicationService, UnavailableAssistantService
 from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_read_only_assistant
+from .activation import AuthenticatedAssistantActivation
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -30,6 +31,7 @@ from .runtime_artifact import (
 
 __all__ = [
     "AssistantActor",
+    "AuthenticatedAssistantActivation",
     "AssistantApplicationService",
     "AssistantTurn",
     "UnavailableAssistantService",

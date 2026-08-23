@@ -7,16 +7,60 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
-from assistant_nabi import UnavailableAssistantService
+from assistant_nabi import (
+    AuthenticatedAssistantActivation,
+    LLAMA_CPP_B10537_CPU_X64,
+    LocalLlamaServer,
+    QWEN3_1_7B_Q4_K_M_CANDIDATE,
+    UnavailableAssistantService,
+    create_read_only_assistant,
+)
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from database import DatabaseManager
 from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database
 from services.network_config_service import NetworkConfigService, NetworkPaths
+from services.admin_audit_service import AdminAuditService
+from services.security_service import SecurityService
+from repositories.system_repository import SystemRepository
 from ui_qt.app import run
 
 SCHEMA_VERSION = 20
+
+
+def _create_assistant_activation(database, profile, container):
+    """Compõe ativação autenticada; nenhum runtime inicia durante o startup."""
+
+    system = SystemRepository(database.connect)
+    security = SecurityService(database.connect)
+    security.bootstrap_admin(system.get_config("admin_senha_hash"))
+    audit = AdminAuditService(database.connect, logging.getLogger("NabiCode.NabiAudit"))
+    ia_root = profile.app_dir / "ia"
+
+    def runtime_factory():
+        return LocalLlamaServer(
+            runtime_manifest=LLAMA_CPP_B10537_CPU_X64,
+            runtime_directory=ia_root / "runtime" / "b10537",
+            manifest=QWEN3_1_7B_Q4_K_M_CANDIDATE,
+            model_directory=ia_root / "models",
+            log_directory=ia_root / "logs",
+        )
+
+    def assistant_factory(model, session_id):
+        return create_read_only_assistant(
+            model=model,
+            query_service=container.query,
+            security_service=security,
+            audit_service=audit,
+            session_id=session_id,
+        )
+
+    return AuthenticatedAssistantActivation(
+        security_service=security,
+        runtime_factory=runtime_factory,
+        assistant_factory=assistant_factory,
+    )
 
 
 def _network_configuration(profile):
@@ -86,15 +130,18 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
+        assistant_activation = _create_assistant_activation(database, profile, container)
+        qt.aboutToQuit.connect(assistant_activation.stop)
         return run(
             container.application,
             argv,
             cash_label="Caixa ativo",
             profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
             assistant_service=UnavailableAssistantService(
-                "O painel foi integrado com segurança. O modelo local e a sessão "
-                "autenticada ainda precisam ser configurados e homologados."
+                "Clique em Ativar Nabi e autentique um usuário autorizado. "
+                "O modelo local somente será iniciado depois da validação."
             ),
+            assistant_activation=assistant_activation,
         )
     except Exception as error:
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")

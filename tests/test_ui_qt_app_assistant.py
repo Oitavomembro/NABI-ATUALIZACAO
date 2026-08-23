@@ -58,6 +58,22 @@ class QtApplicationAssistantTests(unittest.TestCase):
         self.assertIn("Modelo ausente", panel.history.toPlainText())
         window.close()
 
+    def test_gerenciador_de_ativacao_chega_ao_painel_sem_ativar_sozinho(self):
+        service = UnavailableAssistantService("Autenticação necessária.")
+        activation = object()
+        with (
+            patch.object(qt_app, "PDVWindow", FakeWindow),
+            patch.object(qt_app, "PDVViewModel", lambda application: application),
+        ):
+            _, window = qt_app.create_application(
+                object(), [], assistant_service=service,
+                assistant_activation=activation,
+            )
+        panel = window.nabi_assistant_dock.widget()
+        self.assertIs(panel._activation_manager, activation)
+        self.assertFalse(panel.send.isEnabled())
+        window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

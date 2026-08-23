@@ -25,9 +25,36 @@ from PySide6.QtWidgets import (
 
 from assistant_nabi import AssistantTurn
 
+from .activation_dialog import NabiActivationDialog
+
 
 class _WorkerSignals(QObject):
     completed = Signal(int, object)
+
+
+class _ActivationSignals(QObject):
+    completed = Signal(int, object, object)
+
+
+class _ActivationWorker(QRunnable):
+    def __init__(self, generation: int, manager, username: str, password: str) -> None:
+        super().__init__()
+        self.generation = generation
+        self.manager = manager
+        self.username = username
+        self.password = password
+        self.signals = _ActivationSignals()
+
+    def run(self) -> None:
+        error = None
+        try:
+            service = self.manager.activate(self.username, self.password)
+        except Exception as exc:
+            service = None
+            error = exc
+        finally:
+            self.password = ""
+        self.signals.completed.emit(self.generation, service, error)
 
 
 class _AskWorker(QRunnable):
@@ -52,12 +79,15 @@ class _AskWorker(QRunnable):
 class NabiAssistantPanel(QWidget):
     """Painel escrito opcional; não possui acesso direto a banco, GUI ou Fiscal."""
 
-    def __init__(self, service, parent=None, *, thread_pool=None) -> None:
+    def __init__(
+        self, service, parent=None, *, thread_pool=None, activation_manager=None
+    ) -> None:
         super().__init__(parent)
         self._service = service
         self._pool = thread_pool or QThreadPool.globalInstance()
         self._generation = 0
         self._busy = False
+        self._activation_manager = activation_manager
         self._workers: set[_AskWorker] = set()
         self.setObjectName("nabiAssistantPanel")
         self.setMinimumWidth(320)
@@ -105,6 +135,14 @@ class NabiAssistantPanel(QWidget):
         root.addLayout(entry)
         root.addWidget(self.voice)
 
+        self.activate_button = QPushButton("ATIVAR NABI")
+        self.activate_button.setObjectName("activateNabi")
+        self.activate_button.setVisible(activation_manager is not None)
+        self.activate_button.setToolTip(
+            "Exige usuário e senha reais antes de iniciar o modelo local."
+        )
+        root.addWidget(self.activate_button)
+
         self.stop = QPushButton("PARAR NABI")
         self.stop.setObjectName("stopNabi")
         self.stop.setToolTip("Invalida a solicitação atual e impede novos comandos até reativar.")
@@ -112,6 +150,7 @@ class NabiAssistantPanel(QWidget):
 
         self.send.clicked.connect(self.submit)
         self.message.returnPressed.connect(self.submit)
+        self.activate_button.clicked.connect(self.request_activation)
         self.stop.clicked.connect(self.stop_nabi)
         self._apply_style()
         self._set_state("available", "Disponível")
@@ -133,6 +172,7 @@ class NabiAssistantPanel(QWidget):
             }
             QPushButton { background: #2478e5; color: white; border: 0; padding: 9px; }
             QPushButton#stopNabi { background: #b62324; font-weight: 700; }
+            QPushButton#activateNabi { background: #1769aa; font-weight: 700; }
             QLabel { color: #f0f6fc; }
         """)
         self.mascot.setStyleSheet("background: transparent;")
@@ -212,6 +252,53 @@ class NabiAssistantPanel(QWidget):
         )
         self._pool.start(worker)
 
+    def request_activation(self) -> None:
+        if self._activation_manager is None or self._busy:
+            return
+        credentials = NabiActivationDialog.get_credentials(self)
+        if credentials is None:
+            return
+        self._start_activation(*credentials)
+
+    def _start_activation(self, username: str, password: str) -> None:
+        self._generation += 1
+        generation = self._generation
+        self._busy = True
+        self._set_controls(False)
+        self.activate_button.setEnabled(False)
+        self._set_state("thinking", "Inicializando com segurança…")
+        worker = _ActivationWorker(
+            generation, self._activation_manager, username, password
+        )
+        self._workers.add(worker)
+        worker.signals.completed.connect(
+            lambda received, service, error, current=worker: self._activation_complete(
+                received, service, error, current
+            )
+        )
+        self._pool.start(worker)
+
+    def _activation_complete(self, generation, service, error, worker=None) -> None:
+        if worker is not None:
+            self._workers.discard(worker)
+        if generation != self._generation:
+            if service is not None and self._activation_manager is not None:
+                self._activation_manager.stop()
+            return
+        self._busy = False
+        if service is None:
+            self.activate_button.setEnabled(True)
+            self._set_state("blocked", "Ativação não concluída")
+            message = str(error or "Falha segura ao ativar a Nabi.")
+            self.history.append(f"<b>Nabi:</b> {self._escape(message)}")
+            return
+        self._service = service
+        self.activate_button.setVisible(False)
+        self._set_controls(True)
+        self._set_state("available", "Disponível")
+        self.history.append("<b>Nabi:</b> Sessão autenticada. Modo somente leitura ativo.")
+        self.message.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _complete(self, generation: int, turn: AssistantTurn, worker=None) -> None:
         if worker is not None:
             self._workers.discard(worker)
@@ -238,10 +325,19 @@ class NabiAssistantPanel(QWidget):
         self._generation += 1
         self._busy = False
         self._set_controls(False)
+        if self._activation_manager is not None:
+            self._activation_manager.stop()
+            self.activate_button.setVisible(True)
+            self.activate_button.setEnabled(True)
         self._set_state("stopped", "Parada pelo operador")
         self.history.append("<b>Nabi:</b> Solicitações pendentes foram invalidadas.")
 
     def reactivate(self) -> None:
+        if self._activation_manager is not None and not self._activation_manager.active:
+            self.activate_button.setVisible(True)
+            self.activate_button.setEnabled(True)
+            self._set_state("offline", "Autenticação necessária")
+            return
         if not getattr(self._service, "available", True):
             return
         self._generation += 1

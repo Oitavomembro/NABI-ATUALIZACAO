@@ -19,6 +19,7 @@ def create_application(
     cash_label: str = "Caixa ativo",
     profile_label: str = "COMERCIAL / NÃO FISCAL",
     assistant_service=None,
+    assistant_activation=None,
 ) -> tuple[QApplication, PDVWindow]:
     qt_application = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qt_application.setApplicationName("NabiCode")
@@ -32,7 +33,11 @@ def create_application(
         dock.setAllowedAreas(
             Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
         )
-        dock.setWidget(NabiAssistantPanel(assistant_service, dock))
+        dock.setWidget(
+            NabiAssistantPanel(
+                assistant_service, dock, activation_manager=assistant_activation
+            )
+        )
         window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
         window.nabi_assistant_dock = dock
     return qt_application, window
@@ -45,6 +50,7 @@ def run(
     cash_label: str = "Caixa ativo",
     profile_label: str = "COMERCIAL / NÃO FISCAL",
     assistant_service=None,
+    assistant_activation=None,
 ) -> int:
     qt_application, window = create_application(
         application,
@@ -52,6 +58,7 @@ def run(
         cash_label=cash_label,
         profile_label=profile_label,
         assistant_service=assistant_service,
+        assistant_activation=assistant_activation,
     )
     window.show()
     return qt_application.exec()

@@ -24,6 +24,16 @@ class Service:
         return AssistantTurn(f"Resposta para {message}")
 
 
+class Activation:
+    def __init__(self):
+        self.active = False
+        self.stops = 0
+
+    def stop(self):
+        self.active = False
+        self.stops += 1
+
+
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
     @classmethod
@@ -131,6 +141,51 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("ainda não homologados", panel.history.toPlainText())
         panel.reactivate()
         self.assertFalse(panel.send.isEnabled())
+
+    def test_ativacao_autenticada_libera_texto_e_oculta_botao(self):
+        activation = Activation()
+        panel = NabiAssistantPanel(
+            UnavailableAssistantService("Autenticação necessária."),
+            activation_manager=activation,
+        )
+        self.addCleanup(panel.close)
+        self.assertFalse(panel.activate_button.isHidden())
+        panel._generation = 7
+        panel._busy = True
+        activation.active = True
+        panel._activation_complete(7, Service(), None)
+        self.assertTrue(panel.send.isEnabled())
+        self.assertFalse(panel.activate_button.isVisible())
+        self.assertEqual(panel.status.property("nabiState"), "available")
+        self.assertIn("somente leitura", panel.history.toPlainText())
+
+    def test_falha_de_ativacao_nao_expoe_credencial_nem_libera_texto(self):
+        activation = Activation()
+        panel = NabiAssistantPanel(
+            UnavailableAssistantService("Autenticação necessária."),
+            activation_manager=activation,
+        )
+        self.addCleanup(panel.close)
+        panel._generation = 8
+        panel._busy = True
+        panel._activation_complete(8, None, PermissionError("Usuário ou senha inválidos."))
+        self.assertFalse(panel.send.isEnabled())
+        self.assertTrue(panel.activate_button.isEnabled())
+        self.assertEqual(panel.status.property("nabiState"), "blocked")
+        self.assertNotIn("segredo", panel.history.toPlainText())
+
+    def test_parar_encerra_runtime_autenticado_e_exige_novo_login(self):
+        activation = Activation()
+        activation.active = True
+        panel = NabiAssistantPanel(Service(), activation_manager=activation)
+        self.addCleanup(panel.close)
+        panel.stop_nabi()
+        self.assertEqual(activation.stops, 1)
+        self.assertFalse(panel.send.isEnabled())
+        self.assertFalse(panel.activate_button.isHidden())
+        panel.reactivate()
+        self.assertFalse(panel.send.isEnabled())
+        self.assertEqual(panel.status.text(), "Autenticação necessária")
 
 
 if __name__ == "__main__":
