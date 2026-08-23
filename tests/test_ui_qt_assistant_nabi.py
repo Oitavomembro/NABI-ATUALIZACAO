@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -278,6 +279,35 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(service.confirmations[0][1], "purchase-1")
         self.assertIn("Registro #77", panel.history.toPlainText())
         self.assertEqual(panel.status.text(), "Recebimento registrado")
+
+    def test_revisao_xml_exibe_evidencia_sem_declarar_importacao(self):
+        panel = NabiAssistantPanel(Service(), nfe_entry_service=object())
+        self.addCleanup(panel.close)
+        draft = SimpleNamespace(
+            number="123", supplier_name="FORNECEDOR", access_key="35" * 22,
+            protocol_status_evidence="100",
+            items=(SimpleNamespace(
+                index=0, quantity="2.0000", unit="UN", description="CAFÉ",
+                match_status="VINCULAR", match_criterion="EAN",
+            ),),
+        )
+        panel._generation = 12
+        panel._busy = True
+        panel._nfe_entry_complete(12, draft, None)
+        text = panel.history.toPlainText()
+        self.assertIn("Evidência cStat", text)
+        self.assertIn("SOMENTE REVISÃO", text)
+        self.assertIn("nenhum produto, estoque ou financeiro", text)
+        self.assertEqual(panel.status.text(), "XML aguardando revisão manual")
+
+    def test_resposta_xml_atrasada_e_ignorada_apos_parar(self):
+        panel = NabiAssistantPanel(Service(), nfe_entry_service=object())
+        self.addCleanup(panel.close)
+        panel._generation = 20
+        panel.stop_nabi()
+        before = panel.history.toPlainText()
+        panel._nfe_entry_complete(20, None, ValueError("não mostrar"))
+        self.assertEqual(panel.history.toPlainText(), before)
 
 
 if __name__ == "__main__":

@@ -14,6 +14,7 @@ from PySide6.QtCore import (
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
     QGraphicsOpacityEffect,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -76,12 +77,34 @@ class _AskWorker(QRunnable):
         self.signals.completed.emit(self.generation, turn)
 
 
+class _NFeEntrySignals(QObject):
+    completed = Signal(int, object, object)
+
+
+class _NFeEntryWorker(QRunnable):
+    def __init__(self, generation: int, service, path: str) -> None:
+        super().__init__()
+        self.generation = generation
+        self.service = service
+        self.path = path
+        self.signals = _NFeEntrySignals()
+
+    def run(self) -> None:
+        draft = error = None
+        try:
+            draft = self.service.prepare_selected_file(self.path)
+        except Exception as exc:
+            error = exc
+        self.signals.completed.emit(self.generation, draft, error)
+
+
 class NabiAssistantPanel(QWidget):
     """Painel escrito opcional; não possui acesso direto a banco, GUI ou Fiscal."""
 
     def __init__(
         self, service, parent=None, *, thread_pool=None, activation_manager=None,
         draft_transfer=None,
+        nfe_entry_service=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -90,6 +113,7 @@ class NabiAssistantPanel(QWidget):
         self._busy = False
         self._activation_manager = activation_manager
         self._draft_transfer = draft_transfer
+        self._nfe_entry_service = nfe_entry_service
         self._workers: set[_AskWorker] = set()
         self._pending_draft = None
         self._confirmation_token = None
@@ -139,6 +163,13 @@ class NabiAssistantPanel(QWidget):
         root.addLayout(entry)
         root.addWidget(self.voice)
 
+        self.prepare_nfe_entry_button = QPushButton("REVISAR XML DE ENTRADA")
+        self.prepare_nfe_entry_button.setVisible(nfe_entry_service is not None)
+        self.prepare_nfe_entry_button.setToolTip(
+            "Lê um XML local como dado não confiável; não importa nem acessa a SEFAZ."
+        )
+        root.addWidget(self.prepare_nfe_entry_button)
+
         confirmation = QHBoxLayout()
         self.review_draft_button = QPushButton("REVISAR RASCUNHO")
         self.confirm_draft_button = QPushButton("CONFIRMAR RASCUNHO")
@@ -166,6 +197,7 @@ class NabiAssistantPanel(QWidget):
         self.activate_button.clicked.connect(self.request_activation)
         self.review_draft_button.clicked.connect(self.review_draft)
         self.confirm_draft_button.clicked.connect(self.confirm_draft)
+        self.prepare_nfe_entry_button.clicked.connect(self.prepare_nfe_entry)
         self.stop.clicked.connect(self.stop_nabi)
         self._apply_style()
         self._set_state("available", "Disponível")
@@ -423,6 +455,57 @@ class NabiAssistantPanel(QWidget):
         self._set_state("stopped", "Parada pelo operador")
         self.history.append("<b>Nabi:</b> Solicitações pendentes foram invalidadas.")
 
+    def prepare_nfe_entry(self) -> None:
+        if self._nfe_entry_service is None or self._busy:
+            return
+        path, _selected_filter = QFileDialog.getOpenFileName(
+            self, "Selecionar XML de entrada", "", "XML de NF-e (*.xml)"
+        )
+        if not path:
+            return
+        self._generation += 1
+        generation = self._generation
+        self._busy = True
+        self._set_controls(False)
+        self.prepare_nfe_entry_button.setEnabled(False)
+        self._set_state("thinking", "Analisando XML local…")
+        worker = _NFeEntryWorker(generation, self._nfe_entry_service, path)
+        self._workers.add(worker)
+        worker.signals.completed.connect(
+            lambda received, draft, error, current=worker: self._nfe_entry_complete(
+                received, draft, error, current
+            )
+        )
+        self._pool.start(worker)
+
+    def _nfe_entry_complete(self, generation, draft, error, worker=None) -> None:
+        if worker is not None:
+            self._workers.discard(worker)
+        if generation != self._generation:
+            return
+        self._busy = False
+        self._set_controls(True)
+        self.prepare_nfe_entry_button.setEnabled(True)
+        if draft is None:
+            self._set_state("blocked", "XML não preparado")
+            self.history.append(
+                f"<b>Nabi:</b> {self._escape(str(error or 'Falha segura ao analisar o XML.'))}"
+            )
+            return
+        self._set_state("warning", "XML aguardando revisão manual")
+        lines = [
+            f"NF-e nº {draft.number or '-'} — fornecedor {draft.supplier_name or '-'}",
+            f"Chave informada: {draft.access_key or '-'}",
+            f"Evidência cStat no arquivo: {draft.protocol_status_evidence or '-'}",
+        ]
+        lines.extend(
+            f"Item {item.index + 1}: {item.quantity} {item.unit} — {item.description} "
+            f"— correspondência {item.match_status} ({item.match_criterion})"
+            for item in draft.items
+        )
+        lines.append("SOMENTE REVISÃO — nenhum produto, estoque ou financeiro foi alterado.")
+        self.history.append(f"<pre>{self._escape(chr(10).join(lines))}</pre>")
+
     def reactivate(self) -> None:
         if self._activation_manager is not None and not self._activation_manager.active:
             self.activate_button.setVisible(True)
@@ -439,6 +522,8 @@ class NabiAssistantPanel(QWidget):
     def _set_controls(self, enabled: bool) -> None:
         self.message.setEnabled(enabled)
         self.send.setEnabled(enabled)
+        if self._nfe_entry_service is not None:
+            self.prepare_nfe_entry_button.setEnabled(enabled)
 
     def _show_unavailable(self, message: str) -> None:
         self._set_controls(False)
