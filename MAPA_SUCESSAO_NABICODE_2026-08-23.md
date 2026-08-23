@@ -93,13 +93,16 @@ Legenda:
 - [x] decisão: operar por serviços internos, não por cliques livres na GUI;
 - [x] texto primeiro e porta de voz futura definidos;
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
-- [x] branch paralela `codex/ia-nabi-fase0` informou fundação e painel escritos concluídos no commit local `bd8d126`, árvore limpa e sem push; permissões de sessão, auditoria sem dados sensíveis, schemas fechados, consultas, orquestração textual, adaptador loopback, botão Parar Nabi e proteção contra respostas tardias estão cobertos por até 88 testes combinados;
-- [x] Qwen3-1.7B Q4 escolhido como baseline, mas pesos não foram baixados nem homologados; origem, licença, SHA-256, memória e velocidade continuam pendentes;
-- [x] Fase 0: ameaça, permissões, portas e schemas implementados na branch isolada acima, aguardando integração somente depois de estabilizar o PDV;
-- [~] Fase 1: mascote e assistente escrita somente leitura implementados na branch isolada, aguardando integração e homologação física;
+- [x] a fundação e o painel escritos no commit `bd8d126` foram reunidos ao histórico estabilizado do PDV na branch isolada `codex/integracao-nabi-pdv`, sem alterar as branches de origem e sem push;
+- [x] Fase 0 implementa ameaça, permissões vinculadas à sessão, auditoria sem parâmetros sensíveis, schemas fechados, consultas, orquestração textual e adaptador `llama.cpp/llama-server` restrito a loopback;
+- [~] Fase 1 possui painel Qt escrito, mascote provisório leve, renderização determinística, voz desativada, botão `Parar Nabi` e proteção contra respostas atrasadas; conexão ao `main_qt.py` e homologação visual continuam pendentes;
+- [x] Qwen3-1.7B Instruct em GGUF Q4 é o baseline atual; Qwen3-4B em GGUF Q4 permanece somente candidato posterior se memória e velocidade forem aceitáveis;
+- [~] nenhum peso foi baixado ou homologado; origem, licença, revisão, SHA-256, memória, velocidade e avaliações físicas continuam pendentes;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
+- [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
+- [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.
