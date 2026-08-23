@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtWidgets import (
     QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
@@ -16,6 +16,10 @@ from ui_qt.commercial.pdv_window import PDVWindow
 from .receipt_dialog import CustomerReceiptDialog
 from .legacy_import_dialog import LegacyFicharioImportDialog
 from .pdv_view_model import FicharioPDVViewModel
+from .preferences_dialog import (
+    FicharioPreferencesDialog, configured_backup_directory, fichario_settings,
+    interface_font_size,
+)
 
 
 class LoginDialog(QDialog):
@@ -45,7 +49,7 @@ class FicharioWindow(QMainWindow):
         self.container = container; self.database = database; self.profile = profile
         self.security = security; self.session = session; self._pdv = None
         self.setWindowTitle("NabiCode Fichario")
-        self.setMinimumSize(900, 600); self.setStyleSheet(STYLE)
+        self.setMinimumSize(900, 600); self._apply_interface_font()
         root = QWidget(); self.setCentralWidget(root); layout = QVBoxLayout(root)
         title = QLabel("NABICODE FICHARIO")
         title.setStyleSheet("font-size:28px;font-weight:900;color:#00d084")
@@ -59,6 +63,7 @@ class FicharioWindow(QMainWindow):
         system_menu.addAction("Criar backup", self.create_backup)
         system_menu.addAction("Restaurar backup", self.restore_backup)
         system_menu.addSeparator()
+        system_menu.addAction("Backup diário e tamanho das letras", self.open_preferences)
         system_menu.addAction("Informações da instalação", self.show_settings)
         self._summary_labels = {}
         summary = QGridLayout()
@@ -89,6 +94,7 @@ class FicharioWindow(QMainWindow):
             ("VENDAS", self.open_pdv),
             ("CLIENTES E FICHAS", self.open_customers),
             ("RECEBER DE CLIENTE", self.open_receipt),
+            ("MENU DO SISTEMA", self.open_system_center),
         )):
             button = QPushButton(label); button.setMinimumHeight(78)
             button.setStyleSheet(
@@ -101,6 +107,56 @@ class FicharioWindow(QMainWindow):
         footer = QLabel(f"{profile.label} - EDICAO FICHARIO - usuario {session.user.display_name}")
         layout.addWidget(footer)
         self.refresh_summary()
+        QTimer.singleShot(0, self._run_daily_backup)
+
+    def _apply_interface_font(self) -> None:
+        self.setStyleSheet(
+            STYLE + f"\nQMainWindow,QDialog,QMenu,QMenuBar{{font-size:{interface_font_size()}px;}}"
+        )
+
+    def open_system_center(self) -> None:
+        dialog = QDialog(self); dialog.setWindowTitle("Menu do Sistema")
+        dialog.setMinimumWidth(540); dialog.setStyleSheet(STYLE)
+        layout = QVBoxLayout(dialog)
+        title = QLabel("MENU DO SISTEMA")
+        title.setStyleSheet("font-size:22px;font-weight:900;color:#00d084")
+        layout.addWidget(title)
+        for label, callback in (
+            ("Fazer backup agora", self.create_backup),
+            ("Restaurar backup do NabiCode", self.restore_backup),
+            ("Importar Fichário antigo", self.open_legacy_import),
+            ("Backup diário, pasta e tamanho das letras", self.open_preferences),
+            ("Informações da instalação", self.show_settings),
+        ):
+            button = QPushButton(label); button.setMinimumHeight(52)
+            button.clicked.connect(callback); layout.addWidget(button)
+        close = QPushButton("Fechar"); close.clicked.connect(dialog.accept)
+        layout.addWidget(close)
+        dialog.exec()
+
+    def open_preferences(self) -> None:
+        if FicharioPreferencesDialog(self.profile, self).exec() == QDialog.DialogCode.Accepted:
+            self._apply_interface_font()
+            self.statusBar().showMessage("Configurações salvas.", 3000)
+
+    def _run_daily_backup(self) -> None:
+        settings = fichario_settings()
+        enabled = str(settings.value("backup/daily_enabled", "false")).lower() in {
+            "true", "1", "yes"
+        }
+        today = QDate.currentDate().toString("yyyy-MM-dd")
+        if not enabled or str(settings.value("backup/last_success", "")) == today:
+            return
+        try:
+            target, _report = self._maintenance().create_backup(prefix="fichario_diario")
+        except Exception as error:
+            QMessageBox.warning(
+                self, "Backup diário não concluído",
+                f"Nenhum backup diário foi marcado como concluído.\n\n{error}",
+            )
+            return
+        settings.setValue("backup/last_success", today); settings.sync()
+        self.statusBar().showMessage(f"Backup diário validado: {target}", 6000)
 
     def refresh_summary(self) -> None:
         try:
@@ -184,7 +240,7 @@ class FicharioWindow(QMainWindow):
                 "Feche o PDV antes de restaurar. Nenhum dado foi alterado.",
             ); return
         source, _ = QFileDialog.getOpenFileName(
-            self, "Selecionar backup Fichario", str(self.profile.paths.backups),
+            self, "Selecionar backup Fichario", str(configured_backup_directory(self.profile)),
             "Banco SQLite (*.db)",
         )
         if not source: return
@@ -210,7 +266,7 @@ class FicharioWindow(QMainWindow):
 
     def _maintenance(self) -> DatabaseMaintenanceService:
         return DatabaseMaintenanceService(
-            self.database.database_path, self.profile.paths.backups,
+            self.database.database_path, configured_backup_directory(self.profile),
             expected_schema_version=20,
             required_tables=(
                 "clientes", "produtos", "movimentacoes", "parcelas",

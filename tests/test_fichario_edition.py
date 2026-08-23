@@ -110,3 +110,16 @@ def test_shell_restaura_cards_importacao_e_politica_exclusiva_do_pdv():
     policy = (root / "fichario/pdv_view_model.py").read_text(encoding="utf-8")
     assert "item.product_id is not None" in policy
     assert "CONSUMIDOR_FINAL" in policy
+
+
+def test_menu_visivel_e_backup_diario_configuravel():
+    root = Path(__file__).parents[1]
+    shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
+    preferences = (root / "fichario/preferences_dialog.py").read_text(encoding="utf-8")
+    assert '"MENU DO SISTEMA"' in shell
+    assert 'prefix="fichario_diario"' in shell
+    assert 'backup/last_success' in shell
+    assert "configured_backup_directory(self.profile)" in shell
+    assert "getExistingDirectory" in preferences
+    assert "OneDrive" in preferences
+    assert "interface/font_size" in preferences
