@@ -42,6 +42,7 @@ Legenda:
 - [x] fluxo Item → Cliente → Finalizar → Pagamentos implementado e corrigido nos commits locais até `83c72af`;
 - [~] homologação manual da janela de Pagamentos em andamento no Windows;
 - [~] achado manual: separar “Revisar” de “Confirmar venda”; revisão não pode persistir, confirmação explícita finaliza e conduz à opção de impressão;
+- [x] checkpoint 2 separou `Revisar` de `Confirmar venda` no commit `85f4ae2`: revisão imutável, invalidação após mudanças, confirmação impossível sem revisão e bloqueio de duplicidade; 109 testes Qt/commercial relacionados e 17 testes finais focados aprovados, além de `compileall` e `git diff --check`;
 - [~] alinhar as janelas Qt desse fluxo à aparência e à organização das equivalentes do Legacy, sem transportar regras fiscais ou decisões indevidas para a GUI;
 - [x] fronteira atual do PDV usa consulta de produtos e não oferece criação/edição de catálogo;
 - [x] produto avulso cria somente item de venda, sem `product_id`, cadastro de produto ou movimentação de estoque;
