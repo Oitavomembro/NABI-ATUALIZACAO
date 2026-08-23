@@ -311,7 +311,9 @@ class NabiAssistantPanel(QWidget):
         self.activate_button.setVisible(False)
         self._set_controls(True)
         self._set_state("available", "Disponível")
-        self.history.append("<b>Nabi:</b> Sessão autenticada. Modo somente leitura ativo.")
+        self.history.append(
+            "<b>Nabi:</b> Sessão autenticada. Consultas e rascunhos seguros ativos."
+        )
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _complete(self, generation: int, turn: AssistantTurn, worker=None) -> None:
@@ -334,7 +336,10 @@ class NabiAssistantPanel(QWidget):
             detail = self._result_text(result)
             if detail:
                 self.history.append(f"<pre>{self._escape(detail)}</pre>")
-            if result.success and result.tool_name == "vendas.criar_rascunho":
+            if result.success and result.tool_name in {
+                "vendas.criar_rascunho",
+                "vendas.sugerir_rascunho_por_estoque",
+            }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
                     result.payload["draft_id"], result.payload["fingerprint"]
@@ -459,7 +464,10 @@ class NabiAssistantPanel(QWidget):
                 f"Produto #{payload['product_id']} — estoque {payload['current_quantity']} — "
                 f"mínimo {payload['minimum_quantity']} — {payload['status']}"
             )
-        if result.tool_name == "vendas.criar_rascunho":
+        if result.tool_name in {
+            "vendas.criar_rascunho",
+            "vendas.sugerir_rascunho_por_estoque",
+        }:
             lines = [
                 f"{item['quantity']}x {item['description']} — R$ {item['line_total']}"
                 for item in payload.get("items", ())

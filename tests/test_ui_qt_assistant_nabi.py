@@ -175,7 +175,7 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertTrue(panel.send.isEnabled())
         self.assertFalse(panel.activate_button.isVisible())
         self.assertEqual(panel.status.property("nabiState"), "available")
-        self.assertIn("somente leitura", panel.history.toPlainText())
+        self.assertIn("rascunhos seguros", panel.history.toPlainText())
 
     def test_falha_de_ativacao_nao_expoe_credencial_nem_libera_texto(self):
         activation = Activation()
@@ -231,6 +231,21 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(service.confirmations[0][0], "token-seguro")
         self.assertEqual(len(transferred), 1)
         self.assertIn("Nenhuma venda foi registrada", panel.history.toPlainText())
+
+    def test_rascunho_por_valor_e_estoque_tambem_habilita_revisao(self):
+        service = DraftService()
+        panel = NabiAssistantPanel(service, draft_transfer=lambda *_: None)
+        self.addCleanup(panel.close)
+        panel._generation = 6
+        panel._complete(6, AssistantTurn("Sugestão", (ToolResult(
+            "req-target", "vendas.sugerir_rascunho_por_estoque", True,
+            {
+                "draft_id": "draft-target", "fingerprint": "b" * 64,
+                "items": [], "total": "500.00", "payment_method": "PIX",
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        self.assertIn("RASCUNHO", panel.history.toPlainText())
 
 
 if __name__ == "__main__":
