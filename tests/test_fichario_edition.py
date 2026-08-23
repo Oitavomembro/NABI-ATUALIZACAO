@@ -103,7 +103,7 @@ def test_shell_restaura_cards_importacao_e_politica_exclusiva_do_pdv():
     shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
     assert all(label in shell for label in (
         "CLIENTES EM DIA", "CLIENTES DEVENDO", "ATRASADOS +60 DIAS",
-        "TOTAL A RECEBER", "IMPORTAR FICHÁRIO ANTIGO",
+        "TOTAL A RECEBER", "Importar Fichário antigo",
     ))
     assert "loose_items_only=True" in shell
     assert "require_registered_customer=True" in shell

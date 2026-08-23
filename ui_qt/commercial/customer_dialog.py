@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtCore import QEvent, Qt, QTimer
+from PySide6.QtCore import QEvent, QSettings, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QComboBox, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
     QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
     QTextEdit, QVBoxLayout,
 )
@@ -33,6 +33,15 @@ def _money(value: Decimal) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _customer_font_size() -> int:
+    value = int(QSettings("NabiCode", "Fichario").value("clientes/font_size", 15))
+    return max(13, min(value, 22))
+
+
+def _customer_style(size: int | None = None) -> str:
+    return STYLE + f"\nQDialog {{ font-size:{size or _customer_font_size()}px; }}"
+
+
 class CustomerEditorDialog(QDialog):
     def __init__(self, service, customer=None, parent=None) -> None:
         super().__init__(parent)
@@ -41,7 +50,7 @@ class CustomerEditorDialog(QDialog):
         self.saved_customer = None
         self.setWindowTitle("Editar cliente" if customer else "Novo cliente")
         self.setMinimumWidth(620)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
         form = QFormLayout()
         next_record = getattr(service, "next_record_number", lambda: 5500)
@@ -131,7 +140,7 @@ class CustomerStatementDialog(QDialog):
         super().__init__(parent)
         self.setWindowTitle(f"Ficha do cliente — {statement.customer.name}")
         self.resize(900, 620)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
         customer = statement.customer
         title = QLabel(f"FICHA {customer.record_number or '—'} — {customer.name}")
@@ -174,7 +183,7 @@ class CustomerManagementDialog(QDialog):
         self.setWindowTitle("Clientes e fichas")
         self.resize(1100, 700)
         self.setMinimumSize(820, 540)
-        self.setStyleSheet(STYLE)
+        self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
         title = QLabel("CLIENTES E FICHAS")
         title.setStyleSheet("font-size:23px;font-weight:800;color:#00d084")
@@ -186,7 +195,14 @@ class CustomerManagementDialog(QDialog):
         )
         self.refresh_button = QPushButton("Atualizar  [F5]")
         self.refresh_button.clicked.connect(self.reload)
-        search_row.addWidget(self.search, 1); search_row.addWidget(self.refresh_button)
+        self.font_size = QComboBox()
+        self.font_size.addItems(("13", "15", "17", "19", "21"))
+        self.font_size.setCurrentText(str(_customer_font_size()))
+        self.font_size.setToolTip("Tamanho das letras desta área")
+        self.font_size.currentTextChanged.connect(self._change_font_size)
+        search_row.addWidget(self.search, 1)
+        search_row.addWidget(QLabel("Letras")); search_row.addWidget(self.font_size)
+        search_row.addWidget(self.refresh_button)
         layout.addLayout(search_row)
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
@@ -237,9 +253,16 @@ class CustomerManagementDialog(QDialog):
             return None
         return self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
 
+    def _change_font_size(self, value: str) -> None:
+        size = max(13, min(int(value), 22))
+        QSettings("NabiCode", "Fichario").setValue("clientes/font_size", size)
+        self.setStyleSheet(_customer_style(size))
+        self.table.verticalHeader().setDefaultSectionSize(size + 22)
+
     def reload(self) -> None:
         try:
-            customers = self.service.list_customers(self.search.text().strip(), limit=250)
+            term = self.search.text().strip()
+            customers = self.service.list_customers(term, limit=200 if term else 60)
         except Exception as exc:
             QMessageBox.warning(self, "Clientes", str(exc)); return
         self.table.setRowCount(0)

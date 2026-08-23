@@ -46,6 +46,9 @@ class CustomerApplicationService:
 
     def list_customers(self, term: str = "", *, limit: int = 250) -> tuple[CustomerDetails, ...]:
         records = self._customers.list(term, limit=limit)
+        bulk = getattr(self._accounts, "details_many", None)
+        if callable(bulk):
+            return tuple(bulk(tuple(record.customer_id for record in records)))
         return tuple(self.get_customer(record.customer_id) for record in records)
 
     def customer_statement(self, customer_id: int) -> CustomerStatement:

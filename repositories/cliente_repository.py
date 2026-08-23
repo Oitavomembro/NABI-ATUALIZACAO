@@ -174,9 +174,9 @@ class ClienteRepository:
                     WHEN INSTR(LOWER(COALESCE(nome, '')), ?) > 0 THEN 5
                     ELSE 6
                 END ASC,
+                nome COLLATE NOCASE ASC,
                 CASE WHEN numero_ficha IS NULL THEN 1 ELSE 0 END ASC,
-                numero_ficha ASC,
-                nome COLLATE NOCASE ASC
+                numero_ficha ASC
             """
             query_params.extend(
                 [

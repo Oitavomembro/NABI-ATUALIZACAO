@@ -70,7 +70,7 @@ def test_enter_busca_uma_acao_shift_enter_retorna_e_auto_repeat_nao_age(app, mon
     key(dialog.search, Qt.Key.Key_Return, auto=True)
     assert len(service.calls) == initial
     key(dialog.search, Qt.Key.Key_Return)
-    assert service.calls[-1] == ("list", "maria", 250)
+    assert service.calls[-1] == ("list", "maria", 200)
     assert dialog.table.hasFocus()
     monkeypatch.setattr(dialog, "open_statement", lambda *_: service.calls.append(("opened",)))
     key(dialog.table, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)

@@ -53,6 +53,13 @@ class FicharioWindow(QMainWindow):
         subtitle = QLabel("Clientes, fichas, recebimentos e vendas comerciais")
         subtitle.setStyleSheet("font-size:16px")
         layout.addWidget(subtitle)
+        system_menu = self.menuBar().addMenu("Sistema")
+        system_menu.addAction("Importar Fichário antigo", self.open_legacy_import)
+        system_menu.addSeparator()
+        system_menu.addAction("Criar backup", self.create_backup)
+        system_menu.addAction("Restaurar backup", self.restore_backup)
+        system_menu.addSeparator()
+        system_menu.addAction("Informações da instalação", self.show_settings)
         self._summary_labels = {}
         summary = QGridLayout()
         for index, (key, title_text, color) in enumerate((
@@ -79,13 +86,9 @@ class FicharioWindow(QMainWindow):
         layout.addLayout(summary)
         actions = QGridLayout()
         for index, (label, callback) in enumerate((
-            ("PDV COMERCIAL / NAO FISCAL", self.open_pdv),
+            ("VENDAS", self.open_pdv),
             ("CLIENTES E FICHAS", self.open_customers),
             ("RECEBER DE CLIENTE", self.open_receipt),
-            ("IMPORTAR FICHÁRIO ANTIGO", self.open_legacy_import),
-            ("CRIAR BACKUP", self.create_backup),
-            ("RESTAURAR BACKUP", self.restore_backup),
-            ("INFORMACOES DA INSTALACAO", self.show_settings),
         )):
             button = QPushButton(label); button.setMinimumHeight(78)
             button.setStyleSheet(

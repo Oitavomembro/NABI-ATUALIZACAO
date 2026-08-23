@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import QDate, QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, Qt, QTimer
 from PySide6.QtWidgets import (
     QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout, QLabel,
     QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
@@ -35,6 +35,9 @@ class CustomerReceiptDialog(QDialog):
         layout.addWidget(title)
         form = QFormLayout()
         self.customer = QComboBox()
+        self.customer.setEditable(True)
+        self.customer.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
+        self.customer.lineEdit().setPlaceholderText("Digite a ficha ou o nome")
         self.amount = MoneyEdit()
         self.method = QComboBox(); self.method.addItems(self.METHODS)
         self.payment_date = QDateEdit(QDate.currentDate())
@@ -61,22 +64,38 @@ class CustomerReceiptDialog(QDialog):
         )
         for widget in self._fields: widget.installEventFilter(self)
         self.customer.currentIndexChanged.connect(self._refresh_balance)
+        self._search_timer = QTimer(self)
+        self._search_timer.setSingleShot(True); self._search_timer.setInterval(250)
+        self._search_timer.timeout.connect(self._search_customers)
+        self.customer.lineEdit().textEdited.connect(lambda _text: self._search_timer.start())
         self._load_customers()
         self.customer.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _load_customers(self) -> None:
-        self._customers = self.customer_service.list_customers("", limit=500)
+    def _load_customers(self, term: str = "") -> None:
+        self._customers = self.customer_service.list_customers(term, limit=100)
+        self.customer.blockSignals(True)
         self.customer.clear()
         for item in self._customers:
             label = f"Ficha {item.record_number or '-'} - {item.name}"
             self.customer.addItem(label, item.customer_id)
+        self.customer.blockSignals(False)
         self._refresh_balance()
+
+    def _search_customers(self) -> None:
+        term = self.customer.currentText().strip()
+        self._load_customers(term)
+        if self.customer.count():
+            self.customer.showPopup()
 
     def _refresh_balance(self) -> None:
         customer_id = self.customer.currentData()
         if customer_id is None:
             self.balance.setText("Saldo atual: R$ 0,00"); return
-        details = self.customer_service.get_customer(int(customer_id))
+        details = next(
+            (item for item in self._customers if item.customer_id == int(customer_id)), None
+        )
+        if details is None:
+            details = self.customer_service.get_customer(int(customer_id))
         self.balance.setText(f"Saldo atual: {_money(details.debt_balance)}")
 
     def eventFilter(self, watched, event) -> bool:

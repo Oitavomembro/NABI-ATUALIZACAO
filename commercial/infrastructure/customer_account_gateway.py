@@ -43,6 +43,36 @@ class NabiCodeCustomerAccountGateway:
             available_credit=max(MoneyCodec.ZERO, limit - balance),
         )
 
+    def details_many(self, customer_ids: tuple[int, ...]) -> tuple[CustomerDetails, ...]:
+        ids = tuple(dict.fromkeys(int(value) for value in customer_ids if int(value) > 0))
+        if not ids:
+            return ()
+        columns = {str(row[1]) for row in self.database.fetch_all("PRAGMA table_info(clientes)")}
+        limit_canonical = "limite_decimal" if "limite_decimal" in columns else "NULL"
+        balance_canonical = (
+            "saldo_devedor_decimal" if "saldo_devedor_decimal" in columns else "NULL"
+        )
+        placeholders = ",".join("?" for _ in ids)
+        rows = self.database.fetch_all(
+            f"""SELECT id,codigo,numero_ficha,nome,cpf,rg,telefone,endereco,observacoes,
+                       limite,saldo_devedor,{limit_canonical},{balance_canonical}
+                  FROM clientes WHERE id IN ({placeholders})""",
+            ids,
+        )
+        details_by_id = {}
+        for row in rows:
+            limit = DecimalStorage.read(row[11], row[9] or 0, field="limite")
+            balance = DecimalStorage.read(row[12], row[10] or 0, field="saldo devedor")
+            details_by_id[int(row[0])] = CustomerDetails(
+                customer_id=int(row[0]), code=str(row[1] or ""),
+                record_number=int(row[2]) if row[2] not in (None, "") else None,
+                name=str(row[3] or ""), cpf=str(row[4] or ""), rg=str(row[5] or ""),
+                phone=str(row[6] or ""), address=str(row[7] or ""), notes=str(row[8] or ""),
+                credit_limit=limit, debt_balance=balance,
+                available_credit=max(MoneyCodec.ZERO, limit - balance),
+            )
+        return tuple(details_by_id[value] for value in ids if value in details_by_id)
+
     def open_installments(self, customer_id: int) -> tuple[CustomerInstallment, ...]:
         today = date.today()
         result = []

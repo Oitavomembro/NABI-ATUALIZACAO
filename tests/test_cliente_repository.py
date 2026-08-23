@@ -80,7 +80,7 @@ class ClienteRepositoryTests(unittest.TestCase):
     def test_filtro_favoritos_e_busca_por_nome(self) -> None:
         pagina = self.repo.list_page("maria", favorites_only=True)
         self.assertEqual(pagina.total, 2)
-        self.assertEqual([row[2] for row in pagina.rows], ["MARIA SILVA", "MARIA JOSE"])
+        self.assertEqual([row[2] for row in pagina.rows], ["MARIA JOSE", "MARIA SILVA"])
 
     def test_busca_ordena_por_relevancia_e_nome(self) -> None:
         conn = sqlite3.connect(self.db_path)
@@ -94,6 +94,8 @@ class ClienteRepositoryTests(unittest.TestCase):
                     (41, "C41", "GUSTAVO ARAUJO", 0, 0, "", "", "", "", "", 0),
                     (42, "C42", "MARIA GUSMAO", 0, 0, "", "", "", "", "", 0),
                     (43, "C43", "AUGUSTO BRAGA", 0, 0, "", "", "", "", "", 0),
+                    (44, "C44", "ANA GUSTAVO", 0, 0, "", "", "", "", "", 0),
+                    (45, "C45", "ZELIA GUSMAO", 0, 0, "", "", "", "", "", 0),
                 ],
             )
             conn.commit()
@@ -103,6 +105,8 @@ class ClienteRepositoryTests(unittest.TestCase):
         nomes = [row[2] for row in pagina.rows]
         self.assertLess(nomes.index("GUSTAVO ARAUJO"), nomes.index("MARIA GUSMAO"))
         self.assertLess(nomes.index("GUSTAVO SILVA"), nomes.index("MARIA GUSMAO"))
+        self.assertLess(nomes.index("ANA GUSTAVO"), nomes.index("MARIA GUSMAO"))
+        self.assertLess(nomes.index("MARIA GUSMAO"), nomes.index("ZELIA GUSMAO"))
         self.assertLess(nomes.index("MARIA GUSMAO"), nomes.index("AUGUSTO BRAGA"))
 
     def test_sugestoes_de_venda_priorizam_posicao_no_nome(self) -> None:
