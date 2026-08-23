@@ -47,7 +47,8 @@ Legenda:
 - [x] fronteira atual do PDV usa consulta de produtos e não oferece criação/edição de catálogo;
 - [x] produto avulso cria somente item de venda, sem `product_id`, cadastro de produto ou movimentação de estoque;
 - [x] checkpoint 1 protege a fronteira de produtos por teste arquitetural no commit `88ca3ff`: `ProductLookupPort` expõe somente `search/get`, e item avulso não chama escrita de catálogo/estoque; 16 testes focados, `compileall` e `git diff --check` aprovados;
-- [ ] pós-venda e comprovantes Qt;
+- [x] checkpoint 3 implementou pós-venda e comprovantes Qt no commit `8685928`: somente resultado confirmado/consumido libera saída, abrir ou cancelar não imprime, cupom/PDF usam serviços oficiais, PDF é registrado e aberto pelo despachante isolado, ajustes reutilizam o rateio comercial e falhas não repetem a venda; 15 testes focados e 135 testes Qt/commercial relacionados aprovados, além de `compileall` e `git diff --check`;
+- [~] homologação manual pendente para aparência, foco e impressão/PDF físicos do pós-venda em perfil TESTE;
 - [ ] operações completas do carrinho: editar, remover, desconto e atalhos;
 - [ ] orçamento Qt;
 - [ ] vendas suspensas Qt;
