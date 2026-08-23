@@ -127,13 +127,12 @@ class CheckoutDialog(QDialog):
             event.accept()
             if event.isAutoRepeat():
                 return True
-            if watched is self.add_payment:
-                self._add_payment()
-                return True
             flow = self._visible_navigation()
             index = flow.index(watched)
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 flow[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
+            elif watched is self.add_payment:
+                self._add_payment()
             elif index == len(flow) - 1:
                 self._review()
             else:

@@ -272,6 +272,28 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertEqual(self.dialog._payments, [])
         self.assertTrue(self.dialog.add_payment.hasFocus())
 
+    def test_shift_enter_no_botao_nao_adiciona_e_volta_ao_campo_anterior(self):
+        self.dialog.add_payment.setFocus()
+        QTest.keyClick(
+            self.dialog.add_payment,
+            Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier,
+        )
+        QApplication.processEvents()
+        self.assertEqual(self.dialog._payments, [])
+        self.assertTrue(self.dialog.amount.hasFocus())
+
+    def test_shift_enter_auto_repeat_no_botao_e_consumido_sem_adicionar(self):
+        self.dialog.add_payment.setFocus()
+        event = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier, "\r", True, 2,
+        )
+        QApplication.sendEvent(self.dialog.add_payment, event)
+        QApplication.processEvents()
+        self.assertEqual(self.dialog._payments, [])
+        self.assertTrue(self.dialog.add_payment.hasFocus())
+
     def test_erro_ao_adicionar_mantem_foco_no_valor(self):
         self.dialog.amount.clear_value()
         self.dialog.add_payment.setFocus()
