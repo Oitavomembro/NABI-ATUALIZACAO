@@ -899,3 +899,26 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 ## Regra final para sucessores
 
 Não confundir automação inteligente com autoridade. A Nabi poderá planejar, consultar e operar ferramentas autorizadas, mas o NabiCode continuará sendo a fonte de verdade. Backend, permissões, validações, confirmação humana, transações e auditoria decidem o que realmente pode acontecer.
+
+## Checkpoint IA — consultas operacionais seguras ampliadas
+
+Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
+
+- implementação: `7929721bc90f619c733d862dcdb8ada2893cf555` — `feat: amplia consultas seguras da Nabi`;
+- a Nabi passou a consultar, por ferramentas tipadas, crédito do cliente, estoque baixo, vendas do dia, recebimentos do dia, cobranças vencidas, resumo financeiro e fluxo de caixa;
+- todas as consultas usam exclusivamente `CommercialQueryService` ou `FinancialQueryService`, sem SQL, conexão de banco ou serviço mutável entregue ao modelo;
+- cada ferramenta exige a permissão `view` do módulo correspondente e a permissão é verificada novamente na execução;
+- datas aceitam somente `AAAA-MM-DD`, períodos financeiros são limitados a 366 dias e listas são limitadas antes de entrarem no contexto do modelo;
+- saídas foram minimizadas: não transportam CPF/CNPJ, telefone, endereço, e-mail, chave/protocolo fiscal, documento de título, referência financeira ou observações livres;
+- o painel Qt ganhou renderização determinística para todas as novas consultas;
+- `main_qt.py` injeta a fachada financeira somente quando ela existe; sua ausência mantém as ferramentas financeiras indisponíveis sem impedir a Nabi;
+- Fiscal/SEFAZ, licenciamento, emissor, banco real e splash não foram alterados.
+
+Evidências:
+
+- suíte focada: `43 passed`, `15 subtests passed`;
+- regressão Nabi/painel: `68 passed`, `15 subtests passed`;
+- suíte consolidada IA + fachadas relacionadas: `123 passed`, `35 subtests passed`, zero falhas;
+- `compileall` e `git diff --check`: aprovados.
+
+Próxima etapa coerente da IA: ampliar consultas orientativas somente onde houver fachada oficial e necessidade comprovada; ações de Caixa/Financeiro continuam proibidas até possuírem rascunho, confirmação reforçada, idempotência e auditoria próprios.
