@@ -1,5 +1,9 @@
 # NabiCode v2.4.24 — Exclusão segura de NF-e importada
 
+> **Entrada obrigatória no projeto:** antes de qualquer trabalho, leia
+> integralmente `MAPA_SUCESSAO_NABICODE_2026-08-23.md`. Ele registra o que foi
+> concluído, o que ainda falta, os bloqueios e o ponto exato de retomada.
+
 Versão baseada na v2.4.23.
 
 ## Implementado
