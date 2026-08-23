@@ -5,7 +5,7 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from .action_dto import ActionContext, PersistedCancellation, SaleCancelled
-from .dto import CheckoutCommand, CheckoutResult, CustomerRecord, ProductRecord
+from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
 from .query_dto import (
     CancelledSaleSummary, DailyMovementSummary, DailySaleSummary,
     OverdueChargeSummary, ReceiptSummary,
@@ -70,6 +70,17 @@ class CommercialEventPort(Protocol):
     """Efeito secundário executado somente depois do commit da venda."""
 
     def sale_committed(self, result: CheckoutResult) -> None: ...
+
+
+@runtime_checkable
+class SaleReceiptOutputPort(Protocol):
+    """Saídas explícitas de comprovante, disponíveis somente após o commit."""
+
+    def print_thermal(self, receipt: CheckoutReceipt) -> str: ...
+
+    def generate_pdf(self, receipt: CheckoutReceipt) -> str: ...
+
+    def open_file(self, path: str) -> str: ...
 
 
 @runtime_checkable

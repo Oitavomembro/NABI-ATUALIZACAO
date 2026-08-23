@@ -5,13 +5,14 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
-from commercial.application.dto import CheckoutCommand, CustomerRecord
+from commercial.application.dto import CheckoutCommand, CheckoutReceipt, CustomerRecord
 from commercial.domain.cart import CartItem
 from commercial.domain.credit import CreditTerms
 from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 from commercial.infrastructure.checkout_gateway import NabiCodeCheckoutGateway
 from commercial.infrastructure.customer_gateway import NabiCodeCustomerGateway
 from commercial.infrastructure.product_gateway import NabiCodeProductGateway
+from commercial.infrastructure.sale_receipt_gateway import NabiCodeSaleReceiptGateway
 
 
 class FakeDatabase:
@@ -71,7 +72,109 @@ class FakeTransactionService:
         )
 
 
+class FakeReceiptService:
+    def __init__(self):
+        self.calls = []
+
+    def build_sale_text(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return "COMPROVANTE"
+
+
+class FakePrintingService:
+    def __init__(self):
+        self.calls = []
+
+    def print_text(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return kwargs["printer"]
+
+
+class FakePDFService:
+    def __init__(self):
+        self.calls = []
+
+    def generate_sale(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return "C:/teste/venda.pdf"
+
+
+class FakeOpener:
+    def __init__(self):
+        self.calls = []
+
+    def open(self, path):
+        self.calls.append(path)
+        return path
+
+
 class NabiCodeGatewayTests(unittest.TestCase):
+    def test_saida_de_comprovante_reutiliza_servicos_oficiais_sem_persistir_venda(self):
+        receipts = FakeReceiptService()
+        printing = FakePrintingService()
+        pdf = FakePDFService()
+        opener = FakeOpener()
+        gateway = NabiCodeSaleReceiptGateway(
+            receipts=receipts,
+            printing=printing,
+            pdf=pdf,
+            opener=opener,
+            config_getter=lambda key: "IMPRESSORA RECIBO" if key == "impressora_recibo" else "",
+            item_allocator=FakeLegacyPDVService().ratear_total_itens,
+        )
+        receipt = CheckoutReceipt(
+            sale_id=44,
+            customer=CustomerRecord(7, "C7", "CLIENTE"),
+            items=(CartItem("ITEM", 2, Decimal("25.00")),),
+            payments=(Payment(PaymentMethod.PIX, Decimal("50.00")),),
+            total=Decimal("50.00"),
+            financed_value=Decimal("0.00"),
+            received=Decimal("50.00"),
+            change=Decimal("0.00"),
+            payment_description="PIX",
+            status="PAGO",
+        )
+
+        self.assertEqual(gateway.print_thermal(receipt), "IMPRESSORA RECIBO")
+        self.assertEqual(gateway.generate_pdf(receipt), "C:/teste/venda.pdf")
+        self.assertEqual(gateway.open_file("C:/teste/venda.pdf"), "C:/teste/venda.pdf")
+        self.assertEqual(receipts.calls[0][0][0], 7)
+        self.assertEqual(receipts.calls[0][1]["sale_id"], 44)
+        self.assertEqual(printing.calls[0][1]["printer"], "IMPRESSORA RECIBO")
+        self.assertEqual(pdf.calls[0][1]["document_id"], 44)
+        self.assertEqual(opener.calls, ["C:/teste/venda.pdf"])
+
+    def test_comprovante_rateia_ajuste_pelo_mesmo_servico_comercial_do_checkout(self):
+        receipts = FakeReceiptService()
+        printing = FakePrintingService()
+        pdf = FakePDFService()
+        pdv = FakeLegacyPDVService()
+        gateway = NabiCodeSaleReceiptGateway(
+            receipts=receipts,
+            printing=printing,
+            pdf=pdf,
+            opener=FakeOpener(),
+            item_allocator=pdv.ratear_total_itens,
+        )
+        receipt = CheckoutReceipt(
+            sale_id=45,
+            customer=CustomerRecord(7, "C7", "CLIENTE"),
+            items=(CartItem("ITEM", 1, Decimal("100.00")),),
+            payments=(Payment(PaymentMethod.PIX, Decimal("90.00")),),
+            total=Decimal("90.00"),
+            financed_value=Decimal("0.00"),
+            received=Decimal("90.00"),
+            change=Decimal("0.00"),
+            payment_description="PIX",
+            status="PAGO",
+        )
+
+        gateway.print_thermal(receipt)
+
+        self.assertEqual(pdv.rates[0][1], Decimal("90.00"))
+        emitted_items = receipts.calls[0][0][1]
+        self.assertEqual(emitted_items[0]["subtotal"], Decimal("90.00"))
+
     def test_checkout_gateway_preserva_autorizacao_pos(self):
         transaction = FakeTransactionService()
         gateway = NabiCodeCheckoutGateway(transaction, FakeLegacyPDVService())

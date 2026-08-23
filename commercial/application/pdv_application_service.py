@@ -12,7 +12,10 @@ from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
 from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
 from .pdv_session import PDVSession
-from .ports import CheckoutPort, CommercialEventPort, CustomerLookupPort, ProductLookupPort
+from .ports import (
+    CheckoutPort, CommercialEventPort, CustomerLookupPort, ProductLookupPort,
+    SaleReceiptOutputPort,
+)
 
 
 class PDVApplicationService:
@@ -25,11 +28,31 @@ class PDVApplicationService:
         products: ProductLookupPort,
         checkout_gateway: CheckoutPort,
         events: CommercialEventPort | None = None,
+        receipt_output: SaleReceiptOutputPort | None = None,
     ) -> None:
         self.customers = customers
         self.products = products
         self.checkout_gateway = checkout_gateway
         self.events = events
+        self.receipt_output = receipt_output
+
+    @staticmethod
+    def _confirmed_receipt(result: CheckoutResult) -> CheckoutReceipt:
+        if not result.committed or not result.session_consumed or result.receipt is None:
+            raise ValueError("O comprovante exige uma venda confirmada.")
+        return result.receipt
+
+    def print_receipt(self, result: CheckoutResult) -> str:
+        if self.receipt_output is None:
+            raise RuntimeError("A impressão de comprovante não está configurada.")
+        return self.receipt_output.print_thermal(self._confirmed_receipt(result))
+
+    def generate_receipt_pdf(self, result: CheckoutResult) -> str:
+        if self.receipt_output is None:
+            raise RuntimeError("A geração de PDF não está configurada.")
+        path = self.receipt_output.generate_pdf(self._confirmed_receipt(result))
+        self.receipt_output.open_file(path)
+        return path
 
     @staticmethod
     def new_session() -> PDVSession:

@@ -15,11 +15,16 @@ from services.pdv_service import PDVService
 from services.pdv_transaction_service import PDVTransactionService
 from services.produto_service import ProdutoService
 from services.customer_registration_service import CustomerRegistrationService
+from services.emitted_document_service import EmittedDocumentService
+from services.pdf_document_service import PDFDocumentService
+from services.printing_service import PrintingService
+from services.receipt_service import ReceiptService
 
 from .container import CommercialContainer
+from .sale_receipt_gateway import NabiCodeSaleReceiptGateway
 
 
-def create_commercial_container(database: DatabaseManager) -> CommercialContainer:
+def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> CommercialContainer:
     """Compõe o backend comercial atual sem importar qualquer interface."""
 
     products = ProdutoService(
@@ -45,6 +50,21 @@ def create_commercial_container(database: DatabaseManager) -> CommercialContaine
         set_config=system.set_config,
         history_callback=system.add_client_history,
     )
+    receipt_output = None
+    if pdf_dir is not None:
+        documents = EmittedDocumentService(database.connect)
+        receipt_output = NabiCodeSaleReceiptGateway(
+            receipts=ReceiptService(database, config_getter=system.get_config),
+            printing=PrintingService(system.get_config),
+            pdf=PDFDocumentService(
+                connection_factory=database.connect,
+                config_getter=system.get_config,
+                pdf_dir=pdf_dir,
+                document_registrar=documents.register,
+            ),
+            config_getter=system.get_config,
+            item_allocator=pdv.ratear_total_itens,
+        )
     return CommercialContainer.from_existing(
         cliente_repository=customers,
         produto_service=products,
@@ -57,4 +77,5 @@ def create_commercial_container(database: DatabaseManager) -> CommercialContaine
         database=database,
         financeiro_service=finance,
         estoque_service=stock,
+        receipt_output=receipt_output,
     )

@@ -10,7 +10,7 @@ from commercial.application.financial_action_service import FinancialActionServi
 from commercial.application.financial_query_service import FinancialQueryService
 from commercial.application.product_application_service import ProductApplicationService
 from commercial.application.stock_action_service import StockActionService
-from commercial.application.ports import CommercialEventPort
+from commercial.application.ports import CommercialEventPort, SaleReceiptOutputPort
 
 from .cancellation_gateway import NabiCodeSaleCancellationGateway
 from .checkout_gateway import NabiCodeCheckoutGateway
@@ -48,6 +48,7 @@ class CommercialContainer:
         pdv_transaction_service,
         pdv_service,
         events: CommercialEventPort | None = None,
+        receipt_output: SaleReceiptOutputPort | None = None,
         financeiro_repository=None,
         cobranca_service=None,
         dashboard_repository=None,
@@ -67,6 +68,7 @@ class CommercialContainer:
             products=products,
             checkout_gateway=checkout,
             events=events,
+            receipt_output=receipt_output,
         )
         cancellation = NabiCodeSaleCancellationGateway(pdv_transaction_service)
         accounts = None

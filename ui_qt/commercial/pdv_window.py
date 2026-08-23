@@ -12,6 +12,7 @@ from PySide6.QtWidgets import (
 from commercial.domain.money import MoneyCodec
 
 from .checkout_dialog import CheckoutDialog
+from .post_sale_dialog import PostSaleDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
 
@@ -675,11 +676,18 @@ class PDVWindow(QMainWindow):
             message = result.message
             if result.secondary_effect_failed:
                 QMessageBox.warning(self, title, message)
-            else:
-                QMessageBox.information(self, title, message)
             self.customer_selected.setText("Nenhum cliente selecionado")
             self.customer_search.clear()
             self.refresh_cart()
+            try:
+                PostSaleDialog(self.view_model, result, self).exec()
+            except Exception as error:
+                QMessageBox.critical(
+                    self,
+                    "Venda confirmada — comprovante indisponível",
+                    f"{message}\n\nNão foi possível abrir as opções de comprovante:\n{error}\n\n"
+                    "Não finalize esta venda novamente.",
+                )
         else:
             QMessageBox.warning(self, "Venda recusada", result.message)
             self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)

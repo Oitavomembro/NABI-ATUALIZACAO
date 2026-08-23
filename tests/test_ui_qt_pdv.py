@@ -21,6 +21,7 @@ try:
     from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
     from ui_qt.commercial.checkout_dialog import CheckoutDialog
     from ui_qt.commercial.pdv_window import PDVWindow
+    from ui_qt.commercial.post_sale_dialog import PostSaleDialog
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
 except (ImportError, OSError) as qt_error:
     QT_AVAILABLE = False
@@ -86,10 +87,11 @@ class FakeCheckout:
         )
 
 
-def make_view_model(error=None):
+def make_view_model(error=None, receipt_output=None):
     gateway = FakeCheckout(error)
     application = PDVApplicationService(
-        customers=FakeCustomers(), products=FakeProducts(), checkout_gateway=gateway
+        customers=FakeCustomers(), products=FakeProducts(), checkout_gateway=gateway,
+        receipt_output=receipt_output,
     )
     return PDVViewModel(application), gateway
 
@@ -111,7 +113,70 @@ class FakeCheckoutDialog:
         raise AssertionError("Diálogo cancelado não pode preparar checkout")
 
 
+class FakeAcceptedCheckoutDialog:
+    DialogCode = QDialog.DialogCode if QT_AVAILABLE else None
+
+    def __init__(self, _view_model, parent=None):
+        self.parent = parent
+
+    def exec(self):
+        return self.DialogCode.Accepted
+
+    def checkout_input(self):
+        return CheckoutInput(PaymentMethod.CASH, Decimal("10.00"))
+
+
+class FakePostSaleDialog:
+    calls = []
+
+    def __init__(self, _view_model, result, parent=None):
+        type(self).calls.append(("init", result.sale_id, parent))
+
+    def exec(self):
+        type(self).calls.append(("exec",))
+        return QDialog.DialogCode.Accepted
+
+
+class FakeReceiptOutput:
+    def __init__(self, error=None):
+        self.error = error
+        self.calls = []
+
+    def print_thermal(self, receipt):
+        self.calls.append(("print", receipt.sale_id))
+        if self.error:
+            raise self.error
+        return "IMPRESSORA TESTE"
+
+    def generate_pdf(self, receipt):
+        self.calls.append(("pdf", receipt.sale_id))
+        if self.error:
+            raise self.error
+        return "C:/teste/comprovante.pdf"
+
+    def open_file(self, path):
+        self.calls.append(("open", path))
+        return path
+
+
 class PDVViewModelTests(unittest.TestCase):
+    def test_comprovante_recusa_resultado_sem_commit(self):
+        output = FakeReceiptOutput()
+        view_model, _gateway = make_view_model(
+            error=ValueError("venda recusada"), receipt_output=output
+        )
+        view_model.select_customer(7)
+        view_model.add_loose_item("ITEM", "1", Decimal("100"))
+        result = view_model.checkout(
+            CheckoutInput(PaymentMethod.CASH, Decimal("100")), user="Operador"
+        )
+        self.assertFalse(result.committed)
+        with self.assertRaisesRegex(ValueError, "venda confirmada"):
+            view_model.application.print_receipt(result)
+        with self.assertRaisesRegex(ValueError, "venda confirmada"):
+            view_model.application.generate_receipt_pdf(result)
+        self.assertEqual(output.calls, [])
+
     def test_checkout_confirmado_nao_pode_ser_repetido(self):
         view_model, gateway = self._prepared()
         data = CheckoutInput(PaymentMethod.CASH, Decimal("100"))
@@ -441,6 +506,50 @@ class CheckoutDialogTests(unittest.TestCase):
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
+class PostSaleDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def _dialog(self, *, error=None):
+        output = FakeReceiptOutput(error)
+        view_model, _gateway = make_view_model(receipt_output=output)
+        view_model.select_customer(7)
+        view_model.add_loose_item("ITEM", "1", Decimal("100"))
+        result = view_model.checkout(
+            CheckoutInput(PaymentMethod.CASH, Decimal("100")), user="Operador"
+        )
+        return PostSaleDialog(view_model, result), output
+
+    def test_abrir_ou_cancelar_pos_venda_nao_emite_comprovante(self):
+        dialog, output = self._dialog()
+        self.assertEqual(output.calls, [])
+        dialog.reject()
+        self.assertEqual(output.calls, [])
+
+    def test_impresso_e_pdf_exigem_acoes_explicitas(self):
+        dialog, output = self._dialog()
+        with patch.object(QMessageBox, "information"):
+            dialog._print()
+        self.assertEqual(output.calls, [("print", 41)])
+
+        dialog, output = self._dialog()
+        dialog._pdf()
+        self.assertEqual(
+            output.calls,
+            [("pdf", 41), ("open", "C:/teste/comprovante.pdf")],
+        )
+
+    def test_falha_de_saida_nao_repete_venda_e_mantem_dialogo(self):
+        dialog, output = self._dialog(error=RuntimeError("falha de impressão"))
+        with patch.object(QMessageBox, "critical") as critical:
+            dialog._print()
+        self.assertEqual(critical.call_count, 1)
+        self.assertEqual(output.calls, [("print", 41)])
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Rejected)
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
 class PDVQtTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -722,6 +831,20 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(FakeCheckoutDialog.exec_calls, 1)
         self.assertEqual(self.gateway.commands, [])
         self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_confirmacao_abre_pos_venda_uma_vez_sem_nova_persistencia(self):
+        self._cart_with_customer()
+        FakePostSaleDialog.calls = []
+        with (
+            patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeAcceptedCheckoutDialog),
+            patch("ui_qt.commercial.pdv_window.PostSaleDialog", FakePostSaleDialog),
+        ):
+            self.window._checkout()
+        self.assertEqual(len(self.gateway.commands), 1)
+        self.assertEqual(
+            [call[0] for call in FakePostSaleDialog.calls], ["init", "exec"]
+        )
+        self.assertTrue(self.view_model.session.cart.is_empty)
 
     def test_f9_opens_same_dialog(self):
         self._cart_with_customer()

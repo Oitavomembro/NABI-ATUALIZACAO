@@ -84,7 +84,7 @@ def main(argv=None) -> int:
         lock.acquire()
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
-        container = create_commercial_container(database)
+        container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
         return run(
             container.application,
             argv,
