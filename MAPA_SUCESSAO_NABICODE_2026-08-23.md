@@ -51,7 +51,10 @@ Legenda:
 - [~] homologação manual pendente para aparência, foco e impressão/PDF físicos do pós-venda em perfil TESTE;
 - [x] checkpoint 4 completou operações do carrinho no commit `c029dc0`: edição atômica de quantidade/preço/desconto, preço cadastrado protegido sem uma permissão comercial real, preço avulso editável, pagamento/revisão invalidados após mutação válida, F4/F10, duplo clique e Delete com bloqueio de auto-repeat; 27 testes focados e 219 testes Qt/commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
 - [~] homologação manual pendente para edição, remoção, desconto e atalhos físicos do carrinho;
-- [ ] orçamento Qt;
+- [x] Orçamento Qt implementado na branch isolada `codex/orcamento-qt`, criada do merge de integração `abff7d4`: checkpoint Commercial `d25c2bd` e interface Qt `a58279a`;
+- [x] o fluxo preserva IDs reais, grava/lista/consome pelo `PDVService` existente, não movimenta estoque/Caixa nem registra venda, oferece prévia/PDF/impressão explícitos e converte para venda somente carregando o carrinho antes do checkout oficial;
+- [x] validação automatizada do Orçamento: 51 testes focados Commercial/backend, 73 testes Qt e regressão ampliada de 241 testes Qt/Commercial/backend, todos aprovados; `compileall` e `git diff --check` aprovados;
+- [~] homologação manual pendente para F5/F9/Enter/Shift+Enter/Esc físicos, aparência Legacy, impressão e abertura de PDF, substituição de carrinho e conversão explícita de orçamento em venda;
 - [ ] vendas suspensas Qt;
 - [ ] vendas do dia, reimpressão e cancelamento Qt;
 - [ ] resolver todos os botões provisórios;
