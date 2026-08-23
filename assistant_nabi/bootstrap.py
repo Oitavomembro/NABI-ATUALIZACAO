@@ -11,6 +11,7 @@ from .confirmations import DraftConfirmationService
 from .draft_catalog import AssistantDraftCatalog
 from .purchase_tools import register_purchase_draft_tools
 from .nfe_entry_tools import register_nfe_entry_draft_tools
+from .ui_tools import register_ui_intent_tools
 
 
 def create_read_only_assistant(
@@ -72,6 +73,7 @@ def create_draft_assistant(
     registry = DraftToolRegistry(permissions=permissions, audit=audit)
     register_commercial_read_tools(registry, query_service)
     register_financial_read_tools(registry, financial_query_service)
+    register_ui_intent_tools(registry)
     drafts = SaleDraftService(query_service)
     draft_catalog = AssistantDraftCatalog(
         drafts, purchase_draft_service, nfe_entry_draft_service

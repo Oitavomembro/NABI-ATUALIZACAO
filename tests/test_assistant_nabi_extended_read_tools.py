@@ -4,11 +4,12 @@ from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal
 
-from assistant_nabi import AssistantActor, ReadOnlyToolRegistry, ToolRequest
+from assistant_nabi import AssistantActor, DraftToolRegistry, ReadOnlyToolRegistry, ToolRequest
 from assistant_nabi.read_tools import (
     register_commercial_read_tools,
     register_financial_read_tools,
 )
+from assistant_nabi.ui_tools import register_ui_intent_tools
 from commercial.application.financial_dto import CashFlowEntry, FinancialSummary
 from commercial.application.product_dto import LowStockProductSummary
 from commercial.application.query_dto import (
@@ -145,3 +146,21 @@ def test_servico_financeiro_ausente_nao_registra_ferramentas():
     }), actor=actor)
     assert not result.success
     assert result.message == "Ferramenta não registrada."
+
+
+def test_intencao_de_pesquisa_nao_seleciona_produto_nem_recebe_id():
+    permissions = Permissions()
+    registry = DraftToolRegistry(permissions=permissions, audit=Audit())
+    register_ui_intent_tools(registry)
+    actor = AssistantActor("operador", "OPERADOR", "sessão")
+
+    result = registry.execute(ToolRequest(
+        "interface.abrir_pesquisa_produtos", {"term": "café"}
+    ), actor=actor)
+    invented_id = registry.execute(ToolRequest(
+        "interface.abrir_pesquisa_produtos", {"term": "café", "product_id": 7}
+    ), actor=actor)
+
+    assert result.success
+    assert result.payload == {"action": "OPEN_PRODUCT_SEARCH", "term": "café"}
+    assert not invented_id.success

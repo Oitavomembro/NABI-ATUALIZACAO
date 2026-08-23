@@ -105,6 +105,7 @@ class NabiAssistantPanel(QWidget):
         self, service, parent=None, *, thread_pool=None, activation_manager=None,
         draft_transfer=None,
         nfe_entry_service=None,
+        product_search_opener=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -114,6 +115,7 @@ class NabiAssistantPanel(QWidget):
         self._activation_manager = activation_manager
         self._draft_transfer = draft_transfer
         self._nfe_entry_service = nfe_entry_service
+        self._product_search_opener = product_search_opener
         self._workers: set[_AskWorker] = set()
         self._pending_draft = None
         self._confirmation_token = None
@@ -382,6 +384,22 @@ class NabiAssistantPanel(QWidget):
                 self._confirmation_token = None
                 self.review_draft_button.setVisible(True)
                 self.confirm_draft_button.setVisible(False)
+            if (
+                result.success
+                and result.tool_name == "interface.abrir_pesquisa_produtos"
+            ):
+                if self._product_search_opener is None:
+                    self.history.append(
+                        "<b>Nabi:</b> A pesquisa ampliada não está disponível nesta tela."
+                    )
+                else:
+                    opened = bool(
+                        self._product_search_opener(result.payload.get("term", ""))
+                    )
+                    if not opened:
+                        self.history.append(
+                            "<b>Nabi:</b> Saia do modo Produto avulso para pesquisar o catálogo."
+                        )
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def review_draft(self) -> None:
@@ -644,6 +662,12 @@ class NabiAssistantPanel(QWidget):
                 f"{item['occurred_at']} — {item['direction']} — "
                 f"{item['origin']} — R$ {item['amount']}"
                 for item in items
+            )
+        if result.tool_name == "interface.abrir_pesquisa_produtos":
+            term = payload.get("term", "")
+            return (
+                f"Pesquisa ampliada solicitada para: {term}"
+                if term else "Pesquisa ampliada solicitada."
             )
         if result.tool_name in {
             "vendas.criar_rascunho",

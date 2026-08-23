@@ -161,3 +161,29 @@ class ProductSearchPDVIntegrationTests(unittest.TestCase):
         self.assertFalse(self.window.expanded_product_search.isVisible())
         self.window._open_expanded_product_search()
         self.assertIsNone(self.view_model.selected_product)
+
+    def test_porta_da_nabi_so_abre_dialogo_e_nao_inventa_identidade(self):
+        captured = []
+
+        class RejectedDialog:
+            selected_product_id = None
+
+            def __init__(self, *_args, **kwargs):
+                captured.append(kwargs["initial_term"])
+
+            @staticmethod
+            def exec():
+                return QDialog.DialogCode.Rejected
+
+        with patch("ui_qt.commercial.pdv_window.ProductSearchDialog", RejectedDialog):
+            opened = self.window.open_assistant_product_search("café")
+        self.assertTrue(opened)
+        self.assertEqual(captured, ["café"])
+        self.assertIsNone(self.view_model.selected_product)
+
+    def test_porta_da_nabi_recusa_modo_avulso_sem_abrir_dialogo(self):
+        self.window.loose_item.setChecked(True)
+        with patch("ui_qt.commercial.pdv_window.ProductSearchDialog") as dialog:
+            opened = self.window.open_assistant_product_search("café")
+        self.assertFalse(opened)
+        dialog.assert_not_called()

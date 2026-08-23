@@ -183,6 +183,21 @@ class NabiAssistantPanelTests(unittest.TestCase):
             "P7 — CAFÉ — atual 1.0000 — mínimo 3.0000",
         )
 
+    def test_intencao_abre_pesquisa_por_porta_explicita_uma_vez(self):
+        opened = []
+        panel = NabiAssistantPanel(
+            Service(), product_search_opener=lambda term: opened.append(term) or True
+        )
+        self.addCleanup(panel.close)
+        turn = AssistantTurn("Vou abrir a pesquisa.", (ToolResult(
+            "r-ui", "interface.abrir_pesquisa_produtos", True,
+            {"action": "OPEN_PRODUCT_SEARCH", "term": "café"},
+        ),))
+        panel._generation = 4
+        panel._complete(4, turn)
+        self.assertEqual(opened, ["café"])
+        self.assertIn("Pesquisa ampliada solicitada para: café", panel.history.toPlainText())
+
     def test_servico_indisponivel_desativa_entrada_sem_impedir_painel(self):
         panel = NabiAssistantPanel(
             UnavailableAssistantService("Modelo e sessão ainda não homologados.")

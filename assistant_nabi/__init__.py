@@ -16,6 +16,7 @@ from .contracts import (
 from .registry import DraftToolRegistry, ReadOnlyToolRegistry
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 from .read_tools import register_commercial_read_tools
+from .ui_tools import OPEN_PRODUCT_SEARCH, register_ui_intent_tools
 from .application import AssistantApplicationService, UnavailableAssistantService
 from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_draft_assistant, create_read_only_assistant
@@ -92,6 +93,8 @@ __all__ = [
     "ToolResult",
     "ToolSchema",
     "register_commercial_read_tools",
+    "OPEN_PRODUCT_SEARCH",
+    "register_ui_intent_tools",
     "create_read_only_assistant",
     "create_draft_assistant",
     "verify_model_artifact",

@@ -813,17 +813,23 @@ class PDVWindow(QMainWindow):
         self.product_results.setVisible(self.product_results.count() > 0)
 
     def _open_expanded_product_search(self) -> None:
+        self.open_assistant_product_search(self.product_search.text())
+
+    def open_assistant_product_search(self, initial_term: str = "") -> bool:
+        """Porta Qt explícita; não recebe identidade nem seleciona por texto."""
+
         if self.loose_item.isChecked():
-            return
+            return False
         dialog = ProductSearchDialog(
             lambda term, limit: self.view_model.search_products(term, limit=limit),
             self,
-            initial_term=self.product_search.text(),
+            initial_term=str(initial_term or "")[:100],
         )
         if dialog.exec() != QDialog.DialogCode.Accepted or dialog.selected_product_id is None:
             self.product_search.setFocus(Qt.FocusReason.OtherFocusReason)
-            return
+            return True
         self._select_product_id(dialog.selected_product_id)
+        return True
 
     def _product_text_changed(self, term: str) -> None:
         if self.view_model.selected_product is not None:

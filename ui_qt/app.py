@@ -39,6 +39,9 @@ def create_application(
                 assistant_service, dock, activation_manager=assistant_activation,
                 draft_transfer=window.load_assistant_draft,
                 nfe_entry_service=nfe_entry_service,
+                product_search_opener=getattr(
+                    window, "open_assistant_product_search", None
+                ),
             )
         )
         window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
