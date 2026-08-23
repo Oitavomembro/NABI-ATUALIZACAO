@@ -10,12 +10,16 @@ from commercial.domain.credit import CreditTerms
 from commercial.domain.money import MoneyCodec
 from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
-from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
+from .dto import (
+    BudgetDocument, CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord,
+    ProductRecord, SuspendedSale,
+)
 from .pdv_session import PDVSession
 from .ports import (
-    CheckoutPort, CommercialEventPort, CustomerLookupPort, ProductLookupPort,
-    SaleReceiptOutputPort,
+    BudgetOutputPort, BudgetPort, CheckoutPort, CommercialEventPort, CustomerLookupPort,
+    DailySalesPort, ProductLookupPort, SaleReceiptOutputPort, SuspendedSalePort,
 )
+from .query_dto import DailySaleSummary
 
 
 class PDVApplicationService:
@@ -29,12 +33,157 @@ class PDVApplicationService:
         checkout_gateway: CheckoutPort,
         events: CommercialEventPort | None = None,
         receipt_output: SaleReceiptOutputPort | None = None,
+        budgets: BudgetPort | None = None,
+        budget_output: BudgetOutputPort | None = None,
+        suspended_sales: SuspendedSalePort | None = None,
+        daily_sales: DailySalesPort | None = None,
     ) -> None:
         self.customers = customers
         self.products = products
         self.checkout_gateway = checkout_gateway
         self.events = events
         self.receipt_output = receipt_output
+        self.budgets = budgets
+        self.budget_output = budget_output
+        self.suspended_sales = suspended_sales
+        self.daily_sales = daily_sales
+
+    def _daily_sales_port(self) -> DailySalesPort:
+        if self.daily_sales is None:
+            raise RuntimeError("O serviço de vendas do dia não está configurado.")
+        return self.daily_sales
+
+    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
+        return self._daily_sales_port().list_today()
+
+    def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
+        return self._daily_sales_port().preview_text(sale)
+
+    def print_daily_sale(self, sale: DailySaleSummary) -> str:
+        return self._daily_sales_port().print_thermal(sale)
+
+    def generate_daily_sale_pdf(self, sale: DailySaleSummary) -> str:
+        path = self._daily_sales_port().generate_pdf(sale)
+        self._daily_sales_port().open_file(path)
+        return path
+
+    def cancel_daily_sale(self, sale_id: int, *, user: str) -> None:
+        self._daily_sales_port().cancel_local(sale_id, user=user)
+
+    def _suspended_sale_port(self) -> SuspendedSalePort:
+        if self.suspended_sales is None:
+            raise RuntimeError("O serviço de vendas suspensas não está configurado.")
+        return self.suspended_sales
+
+    def suspend_sale(self, session: PDVSession) -> SuspendedSale:
+        session.ensure_open()
+        if session.cart.is_empty:
+            raise ValueError("Inclua ao menos um item antes de suspender a venda.")
+        customer = None
+        if session.customer_id is not None:
+            customer = self.get_customer(session.customer_id)
+            if customer is None:
+                raise ValueError("O cliente selecionado não está mais disponível.")
+        suspended = self._suspended_sale_port().suspend(
+            customer_id=customer.customer_id if customer else None,
+            customer_name=customer.name if customer else "",
+            items=session.cart.items,
+        )
+        session.reset()
+        return suspended
+
+    def list_suspended_sales(self) -> tuple[SuspendedSale, ...]:
+        return self._suspended_sale_port().list_open()
+
+    def resume_suspended_sale(
+        self, session: PDVSession, suspended_id: str, *, replace: bool = False
+    ) -> SuspendedSale:
+        session.ensure_open()
+        if not session.cart.is_empty and not replace:
+            raise ValueError("O carrinho atual precisa ser preservado ou substituído explicitamente.")
+        suspended = next(
+            (item for item in self.list_suspended_sales()
+             if item.suspended_id == str(suspended_id)), None
+        )
+        if suspended is None:
+            raise ValueError("Venda suspensa não encontrada.")
+        customer = None
+        if suspended.customer_id is not None:
+            customer = self.get_customer(suspended.customer_id)
+            if customer is None:
+                raise ValueError("O cliente da venda suspensa não está mais disponível.")
+        resumed = self._suspended_sale_port().resume(suspended.suspended_id)
+        session.reset()
+        for item in resumed.items:
+            session.add_item(item)
+        if customer is not None:
+            session.select_customer(customer.customer_id)
+        return resumed
+
+    def _budget_port(self) -> BudgetPort:
+        if self.budgets is None:
+            raise RuntimeError("O serviço de orçamentos não está configurado.")
+        return self.budgets
+
+    def save_budget(self, session: PDVSession) -> BudgetDocument:
+        session.ensure_open()
+        if session.cart.is_empty:
+            raise ValueError("Inclua ao menos um item antes de salvar o orçamento.")
+        customer = (
+            self.select_final_consumer(session)
+            if session.customer_id is None
+            else self.get_customer(session.customer_id)
+        )
+        if customer is None:
+            raise ValueError("O cliente do orçamento não está disponível.")
+        budget = self._budget_port().save(
+            customer_id=customer.customer_id,
+            customer_name=customer.name,
+            items=session.cart.items,
+        )
+        session.reset()
+        return budget
+
+    def list_budgets(self) -> tuple[BudgetDocument, ...]:
+        return self._budget_port().list_open()
+
+    def load_budget(
+        self, session: PDVSession, budget_id: str, *, replace: bool = False
+    ) -> BudgetDocument:
+        session.ensure_open()
+        if not session.cart.is_empty and not replace:
+            raise ValueError("O carrinho atual precisa ser preservado ou substituído explicitamente.")
+        budget = next(
+            (item for item in self.list_budgets() if item.budget_id == str(budget_id)), None
+        )
+        if budget is None:
+            raise ValueError("Orçamento não encontrado.")
+        customer = self.get_customer(budget.customer_id)
+        if customer is None:
+            raise ValueError("O cliente do orçamento não está mais disponível.")
+        consumed = self._budget_port().consume(budget.budget_id)
+        session.reset()
+        for item in consumed.items:
+            session.add_item(item)
+        session.select_customer(customer.customer_id)
+        return consumed
+
+    def budget_preview_text(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A saída de orçamento não está configurada.")
+        return self.budget_output.preview_text(budget)
+
+    def print_budget(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A impressão de orçamento não está configurada.")
+        return self.budget_output.print_thermal(budget)
+
+    def generate_budget_pdf(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A geração de PDF de orçamento não está configurada.")
+        path = self.budget_output.generate_pdf(budget)
+        self.budget_output.open_file(path)
+        return path
 
     @staticmethod
     def _confirmed_receipt(result: CheckoutResult) -> CheckoutReceipt:

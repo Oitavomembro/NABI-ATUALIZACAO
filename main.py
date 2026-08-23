@@ -372,6 +372,22 @@ def main() -> int:
     mark_startup("runtime_profile_imported")
 
     runtime_profile = configure_profile_environment("TESTE")
+    from licensing.restricted_commands import handle_restricted_command
+
+    restricted_result = handle_restricted_command(sys.argv[1:], runtime_profile)
+    if restricted_result is not None:
+        return restricted_result
+    from licensing.gate import Capability
+    from licensing.runtime import evaluate_runtime_gate, startup_block_message
+
+    license_gate = evaluate_runtime_gate(runtime_profile.app_dir)
+    if not license_gate.allows(Capability.LEGACY):
+        _show_startup_message(
+            "Licença NabiCode V2",
+            startup_block_message(license_gate, Capability.LEGACY),
+            warning=True,
+        )
+        return 3
     startup_logger = _startup_logger(runtime_profile)
     startup_logger.info("START_APP")
     startup_logger.info("APP_START")

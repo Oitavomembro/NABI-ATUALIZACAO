@@ -51,12 +51,30 @@ Legenda:
 - [~] homologação manual pendente para aparência, foco e impressão/PDF físicos do pós-venda em perfil TESTE;
 - [x] checkpoint 4 completou operações do carrinho no commit `c029dc0`: edição atômica de quantidade/preço/desconto, preço cadastrado protegido sem uma permissão comercial real, preço avulso editável, pagamento/revisão invalidados após mutação válida, F4/F10, duplo clique e Delete com bloqueio de auto-repeat; 27 testes focados e 219 testes Qt/commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
 - [~] homologação manual pendente para edição, remoção, desconto e atalhos físicos do carrinho;
-- [ ] orçamento Qt;
-- [ ] vendas suspensas Qt;
-- [ ] vendas do dia, reimpressão e cancelamento Qt;
-- [ ] resolver todos os botões provisórios;
-- [ ] suíte completa do NabiCode após o conjunto;
-- [ ] homologação física Windows do PDV completo;
+- [x] Orçamento Qt implementado na branch isolada `codex/orcamento-qt`, criada do merge de integração `abff7d4`: checkpoint Commercial `d25c2bd` e interface Qt `a58279a`;
+- [x] o fluxo preserva IDs reais, grava/lista/consome pelo `PDVService` existente, não movimenta estoque/Caixa nem registra venda, oferece prévia/PDF/impressão explícitos e converte para venda somente carregando o carrinho antes do checkout oficial;
+- [x] validação automatizada do Orçamento: 51 testes focados Commercial/backend, 73 testes Qt e regressão ampliada de 241 testes Qt/Commercial/backend, todos aprovados; `compileall` e `git diff --check` aprovados;
+- [~] homologação manual pendente para F5/F9/Enter/Shift+Enter/Esc físicos, aparência Legacy, impressão e abertura de PDF, substituição de carrinho e conversão explícita de orçamento em venda;
+- [x] defeito manual de continuidade do teclado corrigido no commit `b995784`: editar, cancelar edição, remover ou clicar no carrinho restaura a próxima etapa operacional; o clique em Salvar respeita o modo Orçamento; o editor e a prévia possuem foco determinístico, Enter único, Shift+Enter, Esc isolado e bloqueio de auto-repeat;
+- [x] regressão da correção: 81 testes Qt e 249 testes Qt/Commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
+- [~] repetir a homologação física do Orçamento Qt a partir de `b995784`, incluindo as sequências intermediárias que originaram o defeito;
+- [x] achado manual subsequente de Pagamentos corrigido no commit `fca7bf1`: após cobrir o total, Enter deixa a área de inclusão e segue para ajustes/revisão; nova inclusão é recusada mesmo por clique; pagamento parcial prepara somente o saldo restante; o indicador passou a `TROCO` em fonte grande;
+- [x] regressão dessa correção: 85 testes Qt e 253 testes Qt/Commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
+- [x] homologação física aprovada pelo operador para a não duplicação por Enter e a legibilidade do indicador grande `TROCO`, na versão de código `fca7bf1`;
+- [x] Vendas Suspensas Qt implementadas na branch isolada `codex/vendas-suspensas-qt`: fronteira Commercial no commit `33ddd89` e interface Qt no commit `d22e05d`;
+- [x] F6 e clique preservam o carrinho pelo `PDVService` oficial sem checkout, pagamento, estoque, Caixa ou Fiscal; a listagem/reabertura só consome após seleção e confirmação de substituição, mantendo cliente somente por ID real;
+- [x] validação automatizada: 58 testes focados Commercial/backend, 96 testes Qt e regressão ampliada de 271 testes Qt/Commercial/backend aprovados; `compileall` e `git diff --check` aprovados;
+- [~] homologação manual pendente para F6, clique, foco, substituição recusada, reabertura com/sem cliente, persistência após reinício e continuidade pelo checkout oficial;
+- [x] Vendas do dia Qt implementadas na branch isolada `codex/vendas-do-dia-qt`: fronteira Commercial `df6e56c`, janela Qt `aa5a281`, identificação real do cliente `e6dc302` e remoção dos últimos marcadores provisórios `6f371ea`;
+- [x] F7 e clique listam vendas e orçamentos do dia, filtram dados reais e oferecem prévia, segunda via e PDF pelos serviços documentais existentes; cancelamento local exige confirmação e reverte pelo `PDVTransactionService` oficial;
+- [x] a porta Commercial recusa cancelamento local de qualquer venda vinculada a documento fiscal e orienta uso exclusivo da Central Fiscal, sem importar, chamar ou alterar Fiscal/SEFAZ;
+- [x] validação relacionada: 235 testes Qt/Commercial/backend e 335 subtestes aprovados; `compileall` e `git diff --check` aprovados;
+- [x] todos os botões comerciais visíveis no PDV Qt possuem ação real; o método e o rótulo provisórios foram removidos;
+- [~] suíte integral executada: 1693 testes e 385 subtestes aprovados, 1 ignorado e 3 falhas fora deste checkpoint — duas por ausência local de `brazilfiscalreport` em testes de DANFE e uma asserção textual Legacy antiga que ainda procura `entry_valor_venda.insert` após a migração já existente para `MoneyEntryBehavior.set_value`; nenhuma dessas áreas foi alterada por esta missão;
+- [x] homologação manual aprovada para F7 e clique, filtros, Enter em transição única, Shift+Enter, Esc, bloqueio de auto-repeat, prévia, PDF, cancelamento local recusado/confirmado, repetição bloqueada, orçamento não cancelável e persistência após reiniciar; impressão física não foi executada por ausência de impressora;
+- [~] bloqueio visual de cancelamento fiscal permanece coberto por testes automatizados, mas não pôde ser reproduzido fisicamente porque o perfil TESTE não possuía venda fiscal na lista;
+- [~] homologação física Windows avançada: Pagamentos, Orçamento e Vendas do dia foram aprovados pelo operador; o fluxo físico de produto cadastrado permanece impraticável enquanto o perfil TESTE não possuir produto, a impressão física depende de impressora e o bloqueio visual fiscal depende de venda fiscal segura de homologação;
+- [x] substituição automatizada das lacunas físicas disponíveis: 11 cenários específicos de produto cadastrado/ID/Enter/carrinho/Consumidor Final/checkout/estoque foram aprovados e a regressão final relacionada repetiu 235 testes e 335 subtestes sem falhas;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
@@ -76,16 +94,34 @@ Legenda:
 - [x] arquitetura escolhida: licença offline Ed25519 assinada e vinculada à máquina;
 - [x] tolerância normativa de dez dias definida;
 - [x] pesquisa preliminar de tecnologias e licenças abertas concluída;
-- [ ] projetar formato canônico `.nabilic` e schemas;
-- [ ] criar portão único para Legacy, Qt e auxiliares;
-- [ ] implementar verificador fail-closed e modo restrito de backup/exportação;
-- [ ] criar Emissor de Licenças separado;
+- [x] formato canônico `.nabilic`, schema estrito e assinatura Ed25519 implementados em `8cc9990`;
+- [x] portão único para Legacy, Qt e auxiliares implementado em `1254a27` e endurecido em `a242f71`;
+- [x] verificador fail-closed, monitoramento contínuo e modo restrito de ativação/diagnóstico/backup/exportação implementados;
+- [x] Emissor de Licenças separado do runtime e excluído do pacote distribuído;
 - [ ] proteger e fazer backup da chave privada fora do repositório;
-- [ ] implementar edição AVALIAÇÃO para o chefe;
-- [ ] testar adulteração, expiração, tolerância e retrocesso de relógio;
+- [x] edição AVALIAÇÃO vinculada à máquina e limitada a trinta dias implementada;
+- [x] adulteração, expiração, tolerância, retrocesso de relógio, revogação, rollback e máquina divergente cobertos por testes automatizados;
 - [ ] testar cópia física para uma segunda máquina;
-- [ ] revisar avisos de terceiros e termos jurídicos;
+- [~] avisos de terceiros e documentação operacional atualizados em `a5b6d97`; revisão jurídica permanece obrigatória;
 - [!] nenhuma cópia comercial/de avaliação deve ser entregue antes desse portão.
+
+#### Checkpoint automatizável do Licenciamento V2 — branch `codex/licenciamento-v2`
+
+- base preservada: `b5bcaa7842d65430ee49642cc28516e69c2e3827`;
+- núcleo criptográfico: `8cc9990`;
+- portão e emissor externo: `1254a27`;
+- modo restrito, monitoramento contínuo Legacy/Qt e empacotamento sem emissor: `a242f71`;
+- operação, cerimônia e avisos de terceiros: `a5b6d97`;
+- contrato histórico de empacotamento preservado em `b846c6c`;
+- catálogo público real permanece intencionalmente vazio, portanto o runtime falha fechado;
+- nenhuma senha mestre fabrica, prolonga ou restaura licença;
+- nenhuma chave privada, PEM ou segredo foi versionado, logado ou incluído no pacote;
+- o portão externo impede inicialização de banco, runtime Legacy/Qt e workers quando bloqueado, sem alterar regras, XML, outbox, transmissão ou cancelamento Fiscal/SEFAZ;
+- validação focada: 94 testes e 8 subtestes aprovados;
+- regressão integral inicial: 1.717 testes e 385 subtestes aprovados, com quatro falhas diagnosticadas; o contrato do empacotamento foi corrigido, o teste textual obsoleto do MoneyEdit foi atualizado e a dependência bloqueada já declarada `BrazilFiscalReport==1.0.1` foi restaurada no Python de testes;
+- regressão integral final: 1.721 testes e 385 subtestes aprovados, 1 teste previamente marcado como ignorado e zero falhas;
+- pendências físicas/materiais: cerimônia da chave real pelo proprietário, duas cópias privadas criptografadas em locais separados, hash do catálogo público, revisão jurídica, teste físico em segunda máquina, reinstalação/atualização e homologação dos estados visuais no Windows;
+- nenhum push realizado.
 
 ### IA Nabi
 
@@ -123,7 +159,10 @@ Legenda:
 - [x] transferência ao PDV `76f5634`: carrega atomicamente carrinho vazio, revalida produto/preço, seleciona cliente ou Consumidor Final, sugere pagamento e exige finalização pelo fluxo oficial Revisar → Confirmar; não substitui venda em andamento e não persiste antecipadamente; regressão conjunta com 171 testes e 36 subtestes aprovada, além de `compileall` e `git diff --check`;
 - [x] planejamento por valor/estoque `aa195e7`: a ferramenta `vendas.sugerir_rascunho_por_estoque` exige valor alvo, tolerância, limite de unidades e pagamento explícitos, consulta produtos ativos/vendáveis pela fachada Commercial, prioriza maior saldo e só produz combinação dentro da tolerância; preço, saldo e disponibilidade são revalidados ao criar o rascunho, nenhuma venda ou movimentação é persistida e a transferência continua sujeita ao fluxo oficial Revisar → Confirmar; 138 testes e 34 subtestes aprovados, além de `compileall` e `git diff --check`;
 - [x] correção de integração visual `cdd15be`: o painel reconhece tanto o rascunho explícito quanto a sugestão por valor/estoque, renderiza itens/total/pagamento e libera Revisar → Confirmar; a mensagem de ativação passou a refletir consultas e rascunhos seguros; 19 testes e 3 subtestes focados aprovados, além de `compileall` e `git diff --check`;
-- [~] Compras e Entradas Assistidas `6163bfc`: núcleo de rascunho de recebimento de pedido implementado sem gravação, com IDs reais, saldo pendente, quantidades/custos decimais, total, documento e efeito financeiro explícitos; rejeita item alheio, excesso, duplicidade e conta a pagar sem vencimento. A porta de mutação permanece fechada porque o backend de compras ainda não possui chave idempotente persistente para repetição após resposta desconhecida; 139 testes e 37 subtestes aprovados, além de `compileall` e `git diff --check`. Ainda faltam idempotência durável, ferramenta tipada, revisão/transferência para a tela oficial e o checkpoint adversarial separado de importação NF-e/XML, sem acesso direto à SEFAZ e sem importação automática;
+- [x] Compras Assistidas `6163bfc`, `209bcaa`, `1086e24` e `e2e2d9b`: rascunho tipado usa IDs reais, saldo pendente, quantidades/custos decimais, total, documento e efeito financeiro explícitos; confirmação reforçada revalida usuário, sessão, permissão e hash; o journal idempotente é gravado na mesma transação de recebimento, estoque, custo, auditoria e financeiro, repetição da mesma chave retorna o commit anterior e conteúdo divergente é recusado; execução ocorre exclusivamente pelo `CompraService` oficial e o painel não possui acesso direto ao banco;
+- [x] revisão segura de XML de entrada `3ff2842` e `ee17cbf`: arquivo é escolhido explicitamente pelo operador, limitado em tamanho e rejeita DTD/entidades antes do parser; chave, fornecedor, itens, candidatos e `cStat` são exibidos como dados/evidências, nunca como instrução ou declaração própria de autorização; o checkpoint não importa, não movimenta estoque/financeiro e não acessa SEFAZ;
+- [x] integração conjunta Licenciamento V2 + Qt completo + Nabi: históricos preservados por merge normal; startup mantém portão fail-closed e monitoramento contínuo da licença antes de compor a ativação autenticada, rascunhos de venda, recebimentos idempotentes e revisão XML; validação conjunta pré-merge com 231 testes e 37 subtestes, painel com 16 testes, ativação com 1 teste e licenciamento com 25 testes aprovados;
+- [ ] integração futura após o checkpoint Qt de pesquisa ampla de produtos: a Nabi poderá abrir ou orientar a janela somente por porta Qt explícita, transportar exclusivamente `product_id` real e respeitar seleção inequívoca; não clicar livremente, inventar produto, resolver texto ambíguo automaticamente nem consultar banco diretamente;
 - [ ] experimento visual somente em perfil TESTE: preservar integralmente o splash original e acrescentar, perto do final do carregamento real, a mascote Nabi azul entrando/flutuando e pousando discretamente ao lado do nome; não alterar fundo, logotipo, proporções ou sequência existente, não atrasar artificialmente o startup e não promover para Produção/instalador sem aprovação visual expressa;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;

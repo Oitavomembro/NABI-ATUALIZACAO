@@ -6,7 +6,11 @@ from decimal import Decimal
 from pathlib import Path
 import unittest
 
-from commercial.application.dto import CheckoutCommand, CheckoutResult, CustomerRecord, ProductRecord
+from commercial.application.dto import (
+    BudgetDocument, CheckoutCommand, CheckoutResult, CustomerRecord, ProductRecord,
+    SuspendedSale,
+)
+from commercial.domain.cart import CartItem
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import CheckoutState, PDVSession
 from commercial.application.ports import PersistedCheckout, ProductLookupPort
@@ -110,12 +114,66 @@ class FakeEvents:
             raise RuntimeError("falha técnica que não deve vazar")
 
 
-def make_application(*, gateway=None, events=None):
+class FakeBudgets:
+    def __init__(self, *, error=None):
+        self.error = error
+        self.saved = []
+        self.open = []
+
+    def save(self, *, customer_id, customer_name, items):
+        if self.error:
+            raise self.error
+        budget = BudgetDocument(
+            budget_id="ORC-1", created_at="2026-08-23T12:00:00",
+            customer_id=customer_id, customer_name=customer_name,
+            items=items, total=sum(item.subtotal for item in items),
+        )
+        self.saved.append(budget)
+        self.open.append(budget)
+        return budget
+
+    def list_open(self):
+        return tuple(self.open)
+
+    def consume(self, budget_id):
+        budget = next(item for item in self.open if item.budget_id == budget_id)
+        self.open.remove(budget)
+        return budget
+
+
+class FakeSuspendedSales:
+    def __init__(self, *, error=None):
+        self.error = error
+        self.open = []
+
+    def suspend(self, *, customer_id, customer_name, items):
+        if self.error:
+            raise self.error
+        suspended = SuspendedSale(
+            suspended_id="S1", created_at="2026-08-23T15:00:00",
+            customer_id=customer_id, customer_name=customer_name,
+            items=items, total=sum(item.subtotal for item in items),
+        )
+        self.open.append(suspended)
+        return suspended
+
+    def list_open(self):
+        return tuple(self.open)
+
+    def resume(self, suspended_id):
+        suspended = next(item for item in self.open if item.suspended_id == suspended_id)
+        self.open.remove(suspended)
+        return suspended
+
+
+def make_application(*, gateway=None, events=None, budgets=None, suspended_sales=None):
     return PDVApplicationService(
         customers=FakeCustomers(),
         products=FakeProducts(),
         checkout_gateway=gateway or FakeCheckoutGateway(),
         events=events,
+        budgets=budgets,
+        suspended_sales=suspended_sales,
     )
 
 
@@ -130,6 +188,125 @@ def prepared_cash_session(application):
 
 
 class PDVApplicationSessionTests(unittest.TestCase):
+    def test_suspender_sem_cliente_preserva_carrinho_sem_criar_identidade(self):
+        suspended_sales = FakeSuspendedSales()
+        checkout = FakeCheckoutGateway()
+        application = make_application(
+            gateway=checkout, suspended_sales=suspended_sales
+        )
+        session = application.new_session()
+        application.add_loose_item(
+            session, description="AVULSO", quantity=2, unit_price="10"
+        )
+
+        suspended = application.suspend_sale(session)
+
+        self.assertIsNone(suspended.customer_id)
+        self.assertEqual(suspended.customer_name, "")
+        self.assertTrue(session.cart.is_empty)
+        self.assertEqual(checkout.calls, [])
+
+    def test_suspender_com_cliente_preserva_id_real_e_desconto(self):
+        suspended_sales = FakeSuspendedSales()
+        application = make_application(suspended_sales=suspended_sales)
+        session = application.new_session()
+        application.select_customer(session, 7)
+        session.add_item(CartItem("PRODUTO", 2, "10", product_id=10, discount_percent="5"))
+
+        suspended = application.suspend_sale(session)
+
+        self.assertEqual(suspended.customer_id, 7)
+        self.assertEqual(suspended.customer_name, "CLIENTE SETE")
+        self.assertEqual(suspended.items[0].discount_percent, Decimal("5.00"))
+
+    def test_falha_ao_suspender_preserva_sessao(self):
+        application = make_application(
+            suspended_sales=FakeSuspendedSales(error=RuntimeError("falha"))
+        )
+        session = application.new_session()
+        application.add_loose_item(session, description="ITEM", quantity=1, unit_price=10)
+        with self.assertRaisesRegex(RuntimeError, "falha"):
+            application.suspend_sale(session)
+        self.assertEqual(len(session.cart.items), 1)
+
+    def test_reabrir_consumindo_somente_apos_validar_substituicao(self):
+        suspended_sales = FakeSuspendedSales()
+        application = make_application(suspended_sales=suspended_sales)
+        source = application.new_session()
+        application.select_customer(source, 7)
+        application.add_product(source, 10, quantity=1)
+        suspended = application.suspend_sale(source)
+        target = application.new_session()
+        application.add_loose_item(target, description="ATUAL", quantity=1, unit_price=3)
+
+        with self.assertRaisesRegex(ValueError, "substituído explicitamente"):
+            application.resume_suspended_sale(target, suspended.suspended_id)
+        self.assertEqual(len(suspended_sales.open), 1)
+
+        resumed = application.resume_suspended_sale(
+            target, suspended.suspended_id, replace=True
+        )
+        self.assertEqual(resumed.customer_id, 7)
+        self.assertEqual(target.customer_id, 7)
+        self.assertEqual(target.cart.items[0].product_id, 10)
+        self.assertEqual(suspended_sales.open, [])
+
+    def test_reabrir_sem_cliente_mantem_sessao_sem_cliente(self):
+        suspended_sales = FakeSuspendedSales()
+        application = make_application(suspended_sales=suspended_sales)
+        source = application.new_session()
+        application.add_loose_item(source, description="ITEM", quantity=1, unit_price=4)
+        suspended = application.suspend_sale(source)
+        target = application.new_session()
+        application.resume_suspended_sale(target, suspended.suspended_id)
+        self.assertIsNone(target.customer_id)
+        self.assertEqual(target.cart.items[0].description, "ITEM")
+
+    def test_orcamento_usa_consumidor_final_real_e_nao_finaliza_venda(self):
+        budgets = FakeBudgets()
+        checkout = FakeCheckoutGateway()
+        application = make_application(gateway=checkout, budgets=budgets)
+        session = application.new_session()
+        application.add_loose_item(
+            session, description="ITEM", quantity=2, unit_price="10.00"
+        )
+
+        budget = application.save_budget(session)
+
+        self.assertEqual(budget.customer_id, 1)
+        self.assertEqual(budget.customer_name, "CONSUMIDOR FINAL")
+        self.assertTrue(session.cart.is_empty)
+        self.assertIsNone(session.customer_id)
+        self.assertEqual(checkout.calls, [])
+
+    def test_falha_ao_salvar_orcamento_preserva_sessao(self):
+        application = make_application(budgets=FakeBudgets(error=RuntimeError("falha")))
+        session = application.new_session()
+        application.select_customer(session, 7)
+        application.add_product(session, 10, quantity=1)
+        with self.assertRaises(RuntimeError):
+            application.save_budget(session)
+        self.assertEqual(len(session.cart.items), 1)
+        self.assertEqual(session.customer_id, 7)
+
+    def test_carregar_orcamento_exige_substituicao_explicita_e_preserva_ids(self):
+        budgets = FakeBudgets()
+        application = make_application(budgets=budgets)
+        source = application.new_session()
+        application.select_customer(source, 7)
+        application.add_product(source, 10, quantity=2)
+        budget = application.save_budget(source)
+        target = application.new_session()
+        application.add_loose_item(target, description="ATUAL", quantity=1, unit_price=1)
+        with self.assertRaises(ValueError):
+            application.load_budget(target, budget.budget_id)
+        self.assertEqual(target.cart.items[0].description, "ATUAL")
+        loaded = application.load_budget(target, budget.budget_id, replace=True)
+        self.assertEqual(loaded.customer_id, 7)
+        self.assertEqual(target.customer_id, 7)
+        self.assertEqual(target.cart.items[0].product_id, 10)
+        self.assertEqual(application.list_budgets(), ())
+
     def test_fronteira_de_produtos_do_pdv_e_somente_consulta(self):
         public_operations = {
             name for name in ProductLookupPort.__dict__ if not name.startswith("_")

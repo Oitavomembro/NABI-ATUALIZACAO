@@ -6,6 +6,7 @@ from datetime import datetime
 from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import QTimer
 
 from assistant_nabi import (
     AuthenticatedAssistantActivation,
@@ -13,6 +14,8 @@ from assistant_nabi import (
     LocalLlamaServer,
     QWEN3_1_7B_Q4_K_M_CANDIDATE,
     UnavailableAssistantService,
+    NFeEntryDraftService,
+    create_purchase_assistant_components,
     create_draft_assistant,
 )
 from commercial.infrastructure.runtime import create_commercial_container
@@ -24,7 +27,11 @@ from services.network_config_service import NetworkConfigService, NetworkPaths
 from services.admin_audit_service import AdminAuditService
 from services.security_service import SecurityService
 from repositories.system_repository import SystemRepository
+from repositories import NFeImportRepository
+from services import NFeImportService
 from ui_qt.app import run
+from licensing.gate import Capability
+from licensing.runtime import evaluate_runtime_gate, startup_block_message
 
 SCHEMA_VERSION = 20
 
@@ -37,6 +44,9 @@ def _create_assistant_activation(database, profile, container):
     security.bootstrap_admin(system.get_config("admin_senha_hash"))
     audit = AdminAuditService(database.connect, logging.getLogger("NabiCode.NabiAudit"))
     ia_root = profile.app_dir / "ia"
+    purchase_drafts = purchase_executor = None
+    if getattr(container, "purchase_service", None) is not None:
+        purchase_drafts, purchase_executor = create_purchase_assistant_components(container)
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -54,6 +64,8 @@ def _create_assistant_activation(database, profile, container):
             security_service=security,
             audit_service=audit,
             session_id=session_id,
+            purchase_draft_service=purchase_drafts,
+            purchase_executor=purchase_executor,
         )
 
     return AuthenticatedAssistantActivation(
@@ -118,6 +130,18 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
 def main(argv=None) -> int:
     qt = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     profile = configure_profile_environment("PRODUCAO")
+    from licensing.restricted_commands import handle_restricted_command
+
+    restricted_result = handle_restricted_command(list(argv or sys.argv)[1:], profile)
+    if restricted_result is not None:
+        return restricted_result
+    license_gate = evaluate_runtime_gate(profile.app_dir)
+    if not license_gate.allows(Capability.QT):
+        QMessageBox.warning(
+            None, "Licença NabiCode V2",
+            startup_block_message(license_gate, Capability.QT),
+        )
+        return 3
     configuration = _network_configuration(profile)
     database_path = profile.validate_database(
         configuration.get("db_path") or profile.paths.database
@@ -132,6 +156,25 @@ def main(argv=None) -> int:
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
         assistant_activation = _create_assistant_activation(database, profile, container)
         qt.aboutToQuit.connect(assistant_activation.stop)
+        license_timer = QTimer(qt)
+        license_timer.setInterval(60_000)
+
+        def monitor_license() -> None:
+            current_gate = evaluate_runtime_gate(profile.app_dir)
+            if current_gate.allows(Capability.QT):
+                return
+            license_timer.stop()
+            QMessageBox.warning(
+                None, "Licença NabiCode V2",
+                startup_block_message(current_gate, Capability.QT),
+            )
+            qt.quit()
+
+        license_timer.timeout.connect(monitor_license)
+        license_timer.start()
+        nfe_entry_service = NFeEntryDraftService(
+            NFeImportService(NFeImportRepository(database))
+        )
         return run(
             container.application,
             argv,
@@ -142,6 +185,7 @@ def main(argv=None) -> int:
                 "O modelo local somente será iniciado depois da validação."
             ),
             assistant_activation=assistant_activation,
+            nfe_entry_service=nfe_entry_service,
         )
     except Exception as error:
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")

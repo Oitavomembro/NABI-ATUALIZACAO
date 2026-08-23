@@ -18,6 +18,7 @@ packages = (
 )
 
 datas, binaries, hiddenimports = [(version_file, '.')], [], []
+datas.append((os.path.join(project_root, 'licensing', 'trusted_public_keys.json'), 'licensing'))
 for package in packages:
     package_datas, package_binaries, package_hiddenimports = collect_all(package)
     datas += package_datas
@@ -70,7 +71,7 @@ a = Analysis(
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
-    excludes=[],
+    excludes=['license_issuer'],
     noarchive=False,
     optimize=0,
 )

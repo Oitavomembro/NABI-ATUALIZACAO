@@ -34,6 +34,7 @@ REQUIRED_SOURCE_FILES = (
     "build_tools/pyinstaller/runtime_production_profile.py",
     "build_tools/resources/PERFIL_NABICODE.txt",
     "build_tools/requirements-windows.lock",
+    "licensing/trusted_public_keys.json",
 )
 REQUIRED_DISTRIBUTIONS = (
     "customtkinter",

@@ -13,6 +13,9 @@ from commercial.domain.money import MoneyCodec
 
 from .checkout_dialog import CheckoutDialog
 from .cart_item_dialog import CartItemDialog
+from .budget_dialog import BudgetListDialog, BudgetPreviewDialog
+from .suspended_sale_dialog import SuspendedSaleListDialog
+from .daily_sales_dialog import DailySalesDialog
 from .post_sale_dialog import PostSaleDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
@@ -38,6 +41,8 @@ class PDVWindow(QMainWindow):
         # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
         # montada. O filtro precisa existir em estado válido desde o início.
         self._enter_widgets = ()
+        self._budget_mode = False
+        self._budget_saving = False
         self.setWindowTitle("NabiCode — NABI VENDAS")
         self.setMinimumSize(960, 620)
         self.resize(1280, 760)
@@ -136,13 +141,21 @@ class PDVWindow(QMainWindow):
         row = QHBoxLayout(frame)
         row.setContentsMargins(7, 7, 7, 7)
         row.setSpacing(8)
-        sales = QPushButton("Vendas do dia  [F7]")
-        sales.setObjectName("primary")
-        budget = QPushButton("ORÇAMENTO DESLIGADO  [F5]")
-        budget.setObjectName("inactive")
-        for button in (sales, budget):
-            button.setToolTip("Disponível quando o respectivo módulo for desacoplado")
-            button.clicked.connect(self._unavailable_action)
+        self.daily_sales_button = QPushButton("Vendas do dia  [F7]")
+        self.daily_sales_button.setObjectName("primary")
+        self.daily_sales_button.clicked.connect(self._open_daily_sales)
+        self.budget_button = QPushButton("ORÇAMENTO DESLIGADO  [F5]")
+        self.budget_button.setObjectName("inactive")
+        self.budget_button.setToolTip("F5 alterna entre venda e orçamento")
+        self.budget_button.clicked.connect(self._toggle_budget_mode)
+        self.saved_budgets_button = QPushButton("Orçamentos salvos")
+        self.saved_budgets_button.clicked.connect(self._open_budgets)
+        self.suspended_sales_button = QPushButton("Vendas suspensas")
+        self.suspended_sales_button.clicked.connect(self._open_suspended_sales)
+        for button in (
+            self.daily_sales_button, self.budget_button, self.saved_budgets_button,
+            self.suspended_sales_button,
+        ):
             row.addWidget(button, 1)
         return frame
 
@@ -288,13 +301,16 @@ class PDVWindow(QMainWindow):
         remove.setToolTip("Selecione uma linha em Itens da venda para remover")
         remove.clicked.connect(self._remove_selected_item)
         summary_layout.addWidget(remove)
-        future = QLabel("AÇÕES COMERCIAIS • EM EVOLUÇÃO")
+        future = QLabel("AÇÕES COMERCIAIS")
         future.setObjectName("muted")
         future.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(future)
         self.checkout_button = QPushButton("FINALIZAR VENDA  [F9]")
         self.checkout_button.setObjectName("checkout")
-        self.checkout_button.clicked.connect(self._checkout)
+        self.checkout_button.clicked.connect(self._conclude_action)
+        self.suspend_button = QPushButton("Suspender venda  [F6]")
+        self.suspend_button.clicked.connect(self._suspend_sale)
+        summary_layout.addWidget(self.suspend_button)
         summary_layout.addWidget(self.checkout_button)
         layout.addWidget(summary)
         return panel
@@ -317,10 +333,14 @@ class PDVWindow(QMainWindow):
         self._shortcuts = []
         for sequence, callback in (
             ("Esc", self.close), ("F4", self._edit_selected_item),
-            ("F10", self._edit_selected_item), ("F9", self._checkout),
+            ("F5", self._toggle_budget_mode),
+            ("F6", self._suspend_sale),
+            ("F7", self._open_daily_sales),
+            ("F10", self._edit_selected_item), ("F9", self._conclude_action),
         ):
             shortcut = QShortcut(QKeySequence(sequence), self)
             shortcut.setContext(Qt.ShortcutContext.WindowShortcut)
+            shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback)
             self._shortcuts.append(shortcut)
 
@@ -334,6 +354,13 @@ class PDVWindow(QMainWindow):
         for widget in self._enter_widgets:
             widget.installEventFilter(self)
 
+    def _open_daily_sales(self) -> None:
+        try:
+            DailySalesDialog(self.view_model, self).exec()
+        except Exception as error:
+            self._show_error(error)
+        self._focus_after_cart_operation()
+
     def eventFilter(self, watched, event) -> bool:
         if (
             watched is self.cart
@@ -342,6 +369,15 @@ class PDVWindow(QMainWindow):
         ):
             if not event.isAutoRepeat():
                 self._remove_selected_item()
+            event.accept()
+            return True
+        if (
+            watched is self.cart
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+        ):
+            if not event.isAutoRepeat():
+                self._focus_after_cart_operation()
             event.accept()
             return True
         if event.type() == QEvent.Type.KeyPress and event.key() == Qt.Key.Key_Down:
@@ -424,7 +460,7 @@ class PDVWindow(QMainWindow):
             self._add_item()
             return
         if focus is self.checkout_button:
-            self._checkout()
+            self._conclude_action()
 
     def _active_item_input(self) -> QLineEdit:
         return self.description if self.loose_item.isChecked() else self.product_search
@@ -445,12 +481,202 @@ class PDVWindow(QMainWindow):
         )
         target.setFocus(Qt.FocusReason.OtherFocusReason)
 
+    def _focus_after_cart_operation(self) -> None:
+        if self.view_model.session.cart.is_empty:
+            target = self._active_item_input()
+        elif self.view_model.selected_customer is not None:
+            target = self.checkout_button
+        else:
+            target = self.customer_search
+        target.setFocus(Qt.FocusReason.OtherFocusReason)
+
     def _field_error(self, field: QWidget, message: str) -> None:
         self.statusBar().showMessage(message, 3500)
         field.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _unavailable_action(self) -> None:
-        self.statusBar().showMessage("Funcionalidade aguardando desacoplamento comercial.", 3000)
+    def _toggle_budget_mode(self) -> None:
+        self._set_budget_mode(not self._budget_mode)
+
+    def _set_budget_mode(self, enabled: bool) -> None:
+        self._budget_mode = bool(enabled)
+        if self._budget_mode:
+            self.budget_button.setText("ORÇAMENTO LIGADO  [F5]")
+            self.budget_button.setObjectName("budgetActive")
+            self.budget_button.setStyleSheet(
+                "background:#9a6700; color:white; font-weight:700; padding:9px;"
+            )
+            self.statusBar().showMessage(
+                "Modo Orçamento: F9 salva sem registrar venda, estoque ou Caixa.", 3500
+            )
+            self.checkout_button.setText("SALVAR ORÇAMENTO  [F9]")
+        else:
+            self.budget_button.setText("ORÇAMENTO DESLIGADO  [F5]")
+            self.budget_button.setObjectName("inactive")
+            self.budget_button.setStyleSheet("")
+            self.checkout_button.setText("FINALIZAR VENDA  [F9]")
+        self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _conclude_action(self) -> None:
+        if self._budget_mode:
+            self._save_budget()
+        else:
+            self._checkout()
+
+    def _clear_after_budget(self) -> None:
+        self.customer_search.blockSignals(True)
+        self.customer_search.clear()
+        self.customer_search.blockSignals(False)
+        self.customer_selected.setText("Nenhum cliente selecionado")
+        self.view_model.clear_product()
+        self.product_search.blockSignals(True)
+        self.product_search.clear()
+        self.product_search.blockSignals(False)
+        self.description.clear()
+        self.quantity.setText("1")
+        self.price.clear_value()
+        self.refresh_cart()
+
+    def _save_budget(self) -> None:
+        if self._budget_saving:
+            return
+        if self.view_model.session.cart.is_empty:
+            self.statusBar().showMessage(
+                "Inclua ao menos um item antes de salvar o orçamento.", 3500
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        self._budget_saving = True
+        try:
+            budget = self.view_model.save_budget()
+        except Exception as error:
+            self._show_error(error)
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        finally:
+            self._budget_saving = False
+        self._clear_after_budget()
+        BudgetPreviewDialog(self.view_model, budget, self).exec()
+        self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_budgets(self) -> None:
+        try:
+            budgets = self.view_model.list_budgets()
+        except Exception as error:
+            self._show_error(error)
+            return
+        if not budgets:
+            QMessageBox.information(self, "Orçamentos", "Não existem orçamentos abertos.")
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        dialog = BudgetListDialog(self.view_model, budgets, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selected_budget_id:
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        replace = not self.view_model.session.cart.is_empty
+        if replace and QMessageBox.question(
+            self,
+            "Substituir carrinho",
+            "Substituir o carrinho atual pelo orçamento selecionado?",
+        ) != QMessageBox.StandardButton.Yes:
+            self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        try:
+            budget = self.view_model.load_budget(
+                dialog.selected_budget_id, replace=replace
+            )
+        except Exception as error:
+            self._show_error(error)
+            return
+        customer = self.view_model.selected_customer
+        self.customer_search.blockSignals(True)
+        self.customer_search.setText(
+            f"{customer.record_number if customer and customer.record_number is not None else customer.code}"
+            f" — {customer.name}" if customer else budget.customer_name
+        )
+        self.customer_search.blockSignals(False)
+        self.customer_selected.setText(
+            f"Selecionado: {budget.customer_name}"
+        )
+        self._set_budget_mode(False)
+        self.refresh_cart()
+        self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _suspend_sale(self) -> None:
+        if self.view_model.session.cart.is_empty:
+            self.statusBar().showMessage(
+                "Inclua ao menos um item antes de suspender a venda.", 3500
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        try:
+            suspended = self.view_model.suspend_sale()
+        except Exception as error:
+            self._show_error(error)
+            self._focus_after_cart_operation()
+            return
+        self._clear_after_budget()
+        self._set_budget_mode(False)
+        self.statusBar().showMessage(
+            f"Venda {suspended.suspended_id} suspensa. Total preservado: "
+            f"R$ {MoneyCodec.format_br(suspended.total)}.",
+            5000,
+        )
+        self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_suspended_sales(self) -> None:
+        try:
+            suspended_sales = self.view_model.list_suspended_sales()
+        except Exception as error:
+            self._show_error(error)
+            return
+        if not suspended_sales:
+            QMessageBox.information(
+                self, "Vendas suspensas", "Não existem vendas suspensas."
+            )
+            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        dialog = SuspendedSaleListDialog(suspended_sales, self)
+        if (
+            dialog.exec() != QDialog.DialogCode.Accepted
+            or not dialog.selected_suspended_id
+        ):
+            self._focus_after_cart_operation()
+            return
+        replace = not self.view_model.session.cart.is_empty
+        if replace and QMessageBox.question(
+            self,
+            "Substituir carrinho",
+            "O carrinho atual será substituído pela venda suspensa. Continuar?",
+        ) != QMessageBox.StandardButton.Yes:
+            self._focus_after_cart_operation()
+            return
+        try:
+            suspended = self.view_model.resume_suspended_sale(
+                dialog.selected_suspended_id, replace=replace
+            )
+        except Exception as error:
+            self._show_error(error)
+            self._focus_after_cart_operation()
+            return
+        customer = self.view_model.selected_customer
+        self.customer_search.blockSignals(True)
+        if customer is None:
+            self.customer_search.clear()
+            self.customer_selected.setText("Nenhum cliente selecionado")
+        else:
+            reference = (
+                customer.record_number
+                if customer.record_number is not None else customer.code
+            )
+            self.customer_search.setText(f"{reference} — {customer.name}")
+            self.customer_selected.setText(f"Selecionado: {customer.name}")
+        self.customer_search.blockSignals(False)
+        self._set_budget_mode(False)
+        self.refresh_cart()
+        self.statusBar().showMessage(
+            f"Venda {suspended.suspended_id} reaberta no carrinho.", 4000
+        )
+        self._focus_after_cart_operation()
 
     def _show_error(self, error: Exception) -> None:
         QMessageBox.warning(self, "NabiCode", str(error) or "Operação não concluída.")
@@ -717,24 +943,15 @@ class PDVWindow(QMainWindow):
                 self._show_error(error)
                 continue
             self.refresh_cart()
-            self.cart.selectRow(
-                next(
-                    index for index, current in enumerate(self.view_model.session.cart.items)
-                    if current.line_id == item.line_id
-                )
-            )
-            self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_cart_operation()
             return
+        self._focus_after_cart_operation()
 
     def _remove_item(self, line_id: str) -> None:
         try:
             self.view_model.remove_item(line_id)
             self.refresh_cart()
-            if self.view_model.session.cart.is_empty:
-                self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
-            else:
-                self.cart.selectRow(min(self.cart.rowCount() - 1, max(0, self.cart.currentRow())))
-                self.cart.setFocus(Qt.FocusReason.OtherFocusReason)
+            self._focus_after_cart_operation()
         except Exception as error:
             self._show_error(error)
 

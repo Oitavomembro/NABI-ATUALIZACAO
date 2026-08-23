@@ -20,6 +20,7 @@ def create_application(
     profile_label: str = "COMERCIAL / NÃO FISCAL",
     assistant_service=None,
     assistant_activation=None,
+    nfe_entry_service=None,
 ) -> tuple[QApplication, PDVWindow]:
     qt_application = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qt_application.setApplicationName("NabiCode")
@@ -37,6 +38,7 @@ def create_application(
             NabiAssistantPanel(
                 assistant_service, dock, activation_manager=assistant_activation,
                 draft_transfer=window.load_assistant_draft,
+                nfe_entry_service=nfe_entry_service,
             )
         )
         window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
@@ -52,6 +54,7 @@ def run(
     profile_label: str = "COMERCIAL / NÃO FISCAL",
     assistant_service=None,
     assistant_activation=None,
+    nfe_entry_service=None,
 ) -> int:
     qt_application, window = create_application(
         application,
@@ -60,6 +63,7 @@ def run(
         profile_label=profile_label,
         assistant_service=assistant_service,
         assistant_activation=assistant_activation,
+        nfe_entry_service=nfe_entry_service,
     )
     window.show()
     return qt_application.exec()

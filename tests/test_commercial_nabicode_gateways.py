@@ -5,7 +5,7 @@ from decimal import Decimal
 from types import SimpleNamespace
 import unittest
 
-from commercial.application.dto import CheckoutCommand, CheckoutReceipt, CustomerRecord
+from commercial.application.dto import BudgetDocument, CheckoutCommand, CheckoutReceipt, CustomerRecord
 from commercial.domain.cart import CartItem
 from commercial.domain.credit import CreditTerms
 from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
@@ -13,6 +13,8 @@ from commercial.infrastructure.checkout_gateway import NabiCodeCheckoutGateway
 from commercial.infrastructure.customer_gateway import NabiCodeCustomerGateway
 from commercial.infrastructure.product_gateway import NabiCodeProductGateway
 from commercial.infrastructure.sale_receipt_gateway import NabiCodeSaleReceiptGateway
+from commercial.infrastructure.budget_gateway import NabiCodeBudgetGateway
+from commercial.infrastructure.suspended_sale_gateway import NabiCodeSuspendedSaleGateway
 
 
 class FakeDatabase:
@@ -80,6 +82,9 @@ class FakeReceiptService:
         self.calls.append((args, kwargs))
         return "COMPROVANTE"
 
+    def customer(self, customer_id):
+        return SimpleNamespace(name="CONSUMIDOR FINAL" if customer_id == 1 else "CLIENTE")
+
 
 class FakePrintingService:
     def __init__(self):
@@ -108,7 +113,108 @@ class FakeOpener:
         return path
 
 
+class FakeBudgetPDVService:
+    def __init__(self):
+        self.documents = []
+
+    def salvar_documento(self, tipo, items, *, cliente_id, cliente_nome):
+        document = SimpleNamespace(
+            id="B1", criada_em="2026-08-23T12:00:00", cliente_id=cliente_id,
+            cliente_nome=cliente_nome, itens=tuple(items),
+            total=sum(Decimal(str(item["qtd"])) * Decimal(str(item["preco"])) for item in items),
+            tipo=tipo,
+        )
+        self.documents.append(document)
+        return document
+
+    def listar_documentos(self, tipo):
+        return [item for item in self.documents if item.tipo == tipo]
+
+    def consumir_documento(self, document_id):
+        document = next(item for item in self.documents if item.id == document_id)
+        self.documents.remove(document)
+        return document
+
+
+class FakeSuspendedPDVService:
+    def __init__(self):
+        self.open = []
+
+    def suspender(self, items, *, cliente_id, cliente_nome):
+        suspended = SimpleNamespace(
+            id="S1", criada_em="2026-08-23T15:00:00",
+            cliente_id=cliente_id, cliente_nome=cliente_nome,
+            itens=tuple(items),
+            total=sum(Decimal(str(item["qtd"])) * Decimal(str(item["preco"])) for item in items),
+        )
+        self.open.append(suspended)
+        return suspended
+
+    def listar_suspensas(self):
+        return list(self.open)
+
+    def reabrir(self, suspended_id):
+        suspended = next(item for item in self.open if item.id == suspended_id)
+        self.open.remove(suspended)
+        return suspended
+
+
 class NabiCodeGatewayTests(unittest.TestCase):
+    def test_venda_suspensa_reutiliza_pdv_service_sem_checkout(self):
+        pdv = FakeSuspendedPDVService()
+        gateway = NabiCodeSuspendedSaleGateway(pdv)
+        suspended = gateway.suspend(
+            customer_id=7, customer_name="CLIENTE",
+            items=(CartItem("PRODUTO", 2, "10", product_id=9, discount_percent="10"),),
+        )
+        self.assertEqual(suspended.customer_id, 7)
+        self.assertEqual(suspended.items[0].product_id, 9)
+        self.assertEqual(suspended.items[0].discount_percent, Decimal("10.00"))
+        self.assertEqual(gateway.list_open()[0].suspended_id, "S1")
+        self.assertEqual(gateway.resume("S1").suspended_id, "S1")
+        self.assertEqual(gateway.list_open(), ())
+
+    def test_texto_sem_id_nao_vira_cliente_ao_ler_suspensa_legacy(self):
+        pdv = FakeSuspendedPDVService()
+        stored = pdv.suspender(
+            [{"item": "AVULSO", "qtd": 1, "preco": 5, "subtotal": 5,
+              "item_avulso": True}],
+            cliente_id=None, cliente_nome="TEXTO ANTIGO",
+        )
+        suspended = NabiCodeSuspendedSaleGateway(pdv).list_open()[0]
+        self.assertEqual(stored.cliente_nome, "TEXTO ANTIGO")
+        self.assertIsNone(suspended.customer_id)
+        self.assertEqual(suspended.customer_name, "")
+
+    def test_orcamento_reutiliza_servicos_legacy_sem_persistir_venda(self):
+        pdv = FakeBudgetPDVService()
+        receipts = FakeReceiptService()
+        printing = FakePrintingService()
+        pdf = FakePDFService()
+        opener = FakeOpener()
+        gateway = NabiCodeBudgetGateway(
+            pdv=pdv, receipts=receipts, printing=printing, pdf=pdf,
+            opener=opener, final_consumer_id=1,
+            config_getter=lambda key: "IMPRESSORA" if key == "impressora_recibo" else "",
+        )
+        budget = gateway.save(
+            customer_id=7, customer_name="CLIENTE",
+            items=(CartItem("PRODUTO", 2, "10", product_id=9, discount_percent="10"),),
+        )
+        self.assertEqual(budget.total, Decimal("18.00"))
+        self.assertEqual(budget.items[0].product_id, 9)
+        self.assertEqual(budget.items[0].discount_percent, Decimal("10.00"))
+        self.assertEqual(gateway.preview_text(budget), "COMPROVANTE")
+        self.assertEqual(gateway.print_thermal(budget), "IMPRESSORA")
+        self.assertEqual(gateway.generate_pdf(budget), "C:/teste/venda.pdf")
+        gateway.open_file("C:/teste/venda.pdf")
+        self.assertEqual(receipts.calls[0][0][3], "ORCAMENTO")
+        self.assertEqual(pdf.calls[0][0][3], "ORCAMENTO")
+        self.assertIsNone(pdf.calls[0][1]["document_id"])
+        self.assertEqual(gateway.list_open()[0].budget_id, "B1")
+        self.assertEqual(gateway.consume("B1").budget_id, "B1")
+        self.assertEqual(gateway.list_open(), ())
+
     def test_saida_de_comprovante_reutiliza_servicos_oficiais_sem_persistir_venda(self):
         receipts = FakeReceiptService()
         printing = FakePrintingService()

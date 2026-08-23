@@ -28,3 +28,12 @@ As demais dependências continuam declaradas em `requirements.txt` e no lock can
 - uso no NabiCode: peso local opcional da assistente Nabi;
 - o peso permanece fora do Git e ainda não foi incorporado ao instalador;
 - redistribuição futura exige preservar licença, avisos, origem e hash do artefato exato.
+
+## cryptography
+
+- versão validada nesta implementação: 46.0.7;
+- projeto: https://github.com/pyca/cryptography;
+- licença declarada pelo pacote: `Apache-2.0 OR BSD-3-Clause`;
+- uso no NabiCode: verificação Ed25519 das licenças e leitura da chave privada
+  somente na ferramenta externa de emissão;
+- nenhuma chave privada é distribuída com o aplicativo.

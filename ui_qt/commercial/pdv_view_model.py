@@ -4,7 +4,10 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from commercial.application.dto import CheckoutResult, CustomerRecord, ProductRecord
+from commercial.application.dto import (
+    BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord, SuspendedSale,
+)
+from commercial.application.query_dto import DailySaleSummary
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.pdv_session import PDVSession
 from commercial.domain.money import MoneyCodec
@@ -147,6 +150,67 @@ class PDVViewModel:
             unit_price=unit_price,
             discount_percent=discount_percent,
         )
+
+    def save_budget(self) -> BudgetDocument:
+        budget = self.application.save_budget(self.session)
+        self.selected_customer = None
+        self.selected_product = None
+        return budget
+
+    def list_budgets(self) -> tuple[BudgetDocument, ...]:
+        return self.application.list_budgets()
+
+    def load_budget(self, budget_id: str, *, replace: bool = False) -> BudgetDocument:
+        budget = self.application.load_budget(self.session, budget_id, replace=replace)
+        self.selected_customer = self.application.get_customer(budget.customer_id)
+        self.selected_product = None
+        return budget
+
+    def budget_preview_text(self, budget: BudgetDocument) -> str:
+        return self.application.budget_preview_text(budget)
+
+    def print_budget(self, budget: BudgetDocument) -> str:
+        return self.application.print_budget(budget)
+
+    def generate_budget_pdf(self, budget: BudgetDocument) -> str:
+        return self.application.generate_budget_pdf(budget)
+
+    def suspend_sale(self) -> SuspendedSale:
+        suspended = self.application.suspend_sale(self.session)
+        self.selected_customer = None
+        self.selected_product = None
+        return suspended
+
+    def list_suspended_sales(self) -> tuple[SuspendedSale, ...]:
+        return self.application.list_suspended_sales()
+
+    def resume_suspended_sale(
+        self, suspended_id: str, *, replace: bool = False
+    ) -> SuspendedSale:
+        suspended = self.application.resume_suspended_sale(
+            self.session, suspended_id, replace=replace
+        )
+        self.selected_customer = (
+            self.application.get_customer(suspended.customer_id)
+            if suspended.customer_id is not None else None
+        )
+        self.selected_product = None
+        return suspended
+
+    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
+        return self.application.list_daily_sales()
+
+    def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
+        return self.application.daily_sale_preview_text(sale)
+
+    def print_daily_sale(self, sale: DailySaleSummary) -> str:
+        return self.application.print_daily_sale(sale)
+
+    def generate_daily_sale_pdf(self, sale: DailySaleSummary) -> str:
+        return self.application.generate_daily_sale_pdf(sale)
+
+    def cancel_daily_sale(self, sale_id: int, *, user: str = "Sistema") -> None:
+        self.application.cancel_daily_sale(sale_id, user=user)
 
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:

@@ -8,9 +8,12 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from commercial.application.dto import CustomerRecord, ProductRecord
+from commercial.application.dto import (
+    BudgetDocument, CustomerRecord, ProductRecord, SuspendedSale,
+)
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.ports import PersistedCheckout
+from commercial.domain.cart import CartItem
 from commercial.domain.payments import Payment, PaymentMethod
 from ui_qt.commercial.pdv_view_model import CheckoutInput, PDVViewModel
 
@@ -21,6 +24,8 @@ try:
     from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
     from ui_qt.commercial.checkout_dialog import CheckoutDialog
     from ui_qt.commercial.cart_item_dialog import CartItemDialog
+    from ui_qt.commercial.budget_dialog import BudgetListDialog, BudgetPreviewDialog
+    from ui_qt.commercial.suspended_sale_dialog import SuspendedSaleListDialog
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.post_sale_dialog import PostSaleDialog
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
@@ -88,11 +93,86 @@ class FakeCheckout:
         )
 
 
-def make_view_model(error=None, receipt_output=None):
+class FakeBudgets:
+    def __init__(self):
+        self.open = []
+        self.output_calls = []
+
+    def save(self, *, customer_id, customer_name, items):
+        budget = BudgetDocument(
+            budget_id=f"B{len(self.open) + 1}",
+            created_at="2026-08-23T12:00:00",
+            customer_id=customer_id,
+            customer_name=customer_name,
+            items=items,
+            total=sum(item.subtotal for item in items),
+        )
+        self.open.append(budget)
+        return budget
+
+    def list_open(self):
+        return tuple(self.open)
+
+    def consume(self, budget_id):
+        budget = next(item for item in self.open if item.budget_id == budget_id)
+        self.open.remove(budget)
+        return budget
+
+    def preview_text(self, budget):
+        self.output_calls.append(("preview", budget.budget_id))
+        return "ORÇAMENTO — SEM VALOR FISCAL\nTOTAL"
+
+    def print_thermal(self, budget):
+        self.output_calls.append(("print", budget.budget_id))
+        return "IMPRESSORA"
+
+    def generate_pdf(self, budget):
+        self.output_calls.append(("pdf", budget.budget_id))
+        return "C:/teste/orcamento.pdf"
+
+    def open_file(self, path):
+        self.output_calls.append(("open", path))
+        return path
+
+
+class FakeSuspendedSales:
+    def __init__(self):
+        self.open = []
+
+    def suspend(self, *, customer_id, customer_name, items):
+        suspended = SuspendedSale(
+            suspended_id=f"S{len(self.open) + 1}",
+            created_at="2026-08-23T15:00:00",
+            customer_id=customer_id,
+            customer_name=customer_name,
+            items=items,
+            total=sum(item.subtotal for item in items),
+        )
+        self.open.append(suspended)
+        return suspended
+
+    def list_open(self):
+        return tuple(self.open)
+
+    def resume(self, suspended_id):
+        suspended = next(
+            item for item in self.open if item.suspended_id == suspended_id
+        )
+        self.open.remove(suspended)
+        return suspended
+
+
+def make_view_model(
+    error=None, receipt_output=None, budgets=None, suspended_sales=None
+):
     gateway = FakeCheckout(error)
+    budgets = budgets or FakeBudgets()
+    suspended_sales = suspended_sales or FakeSuspendedSales()
     application = PDVApplicationService(
         customers=FakeCustomers(), products=FakeProducts(), checkout_gateway=gateway,
         receipt_output=receipt_output,
+        budgets=budgets, budget_output=budgets,
+        suspended_sales=suspended_sales,
     )
     return PDVViewModel(application), gateway
 
@@ -138,6 +218,41 @@ class FakePostSaleDialog:
         return QDialog.DialogCode.Accepted
 
 
+class FakeBudgetPreviewDialog:
+    calls = []
+
+    def __init__(self, _view_model, budget, parent=None):
+        type(self).calls.append(("init", budget.budget_id, parent))
+
+    def exec(self):
+        type(self).calls.append(("exec",))
+        return QDialog.DialogCode.Accepted
+
+
+class FakeBudgetListDialog:
+    selected_budget_id = None
+
+    def __init__(self, _view_model, budgets, parent=None):
+        self.budgets = budgets
+        self.parent = parent
+        self.selected_budget_id = type(self).selected_budget_id
+
+    def exec(self):
+        return QDialog.DialogCode.Accepted
+
+
+class FakeSuspendedSaleListDialog:
+    selected_suspended_id = None
+
+    def __init__(self, suspended_sales, parent=None):
+        self.suspended_sales = suspended_sales
+        self.parent = parent
+        self.selected_suspended_id = type(self).selected_suspended_id
+
+    def exec(self):
+        return QDialog.DialogCode.Accepted
+
+
 class FakeCartItemDialog:
     DialogCode = QDialog.DialogCode if QT_AVAILABLE else None
     quantity_value = "2"
@@ -164,6 +279,11 @@ class FakeCartItemDialog:
 
     def exec(self):
         return self.DialogCode.Accepted
+
+
+class FakeCancelledCartItemDialog(FakeCartItemDialog):
+    def exec(self):
+        return self.DialogCode.Rejected
 
 
 class FakeReceiptOutput:
@@ -353,7 +473,35 @@ class CheckoutDialogTests(unittest.TestCase):
         QApplication.processEvents()
         self.assertEqual(len(self.dialog._payments), 1)
         self.assertEqual(self.dialog._payments[0].amount, Decimal("100.00"))
+        self.assertTrue(self.dialog.discount_type.hasFocus())
+
+    def test_enter_repetido_apos_total_coberto_nao_duplica_pagamento(self):
+        self.dialog.add_payment.setFocus()
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+        self.assertEqual(len(self.dialog._payments), 1)
+        self.assertTrue(self.dialog.discount_type.hasFocus())
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Return)
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Return)
+        self.assertEqual(len(self.dialog._payments), 1)
+
+    def test_total_coberto_bloqueia_nova_inclusao_ate_por_clique(self):
+        self.assertTrue(self.dialog._add_payment())
+        self.assertFalse(self.dialog._add_payment())
+        self.assertEqual(len(self.dialog._payments), 1)
+        self.assertIn("já está coberto", self.dialog.error_label.text())
+
+    def test_pagamento_parcial_prepara_saldo_restante_e_mantem_fluxo_misto(self):
+        self.dialog.amount.set_value("40")
+        self.assertTrue(self.dialog._add_payment())
+        self.assertEqual(self.dialog.amount.value(), Decimal("60.00"))
         self.assertTrue(self.dialog.method.hasFocus())
+
+    def test_rotulo_de_troco_e_grande_e_nao_diz_potencial(self):
+        self.dialog.amount.set_value("120")
+        self.dialog._refresh_totals()
+        self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 20,00")
+        self.assertNotIn("potencial", self.dialog.balance_label.text().casefold())
+        self.assertIn("font-size: 28px", self.dialog.balance_label.styleSheet())
 
     def test_auto_repeat_no_botao_nao_adiciona_pagamento(self):
         self.dialog.add_payment.setFocus()
@@ -579,6 +727,157 @@ class PostSaleDialogTests(unittest.TestCase):
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
+class BudgetDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.view_model, _gateway = make_view_model()
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.budget = self.view_model.save_budget()
+
+    def test_abrir_e_fechar_previa_nao_imprime_nem_persiste_venda(self):
+        output = self.view_model.application.budget_output
+        dialog = BudgetPreviewDialog(self.view_model, self.budget)
+        self.assertEqual(output.output_calls, [("preview", "B1")])
+        dialog.reject()
+        self.assertEqual(output.output_calls, [("preview", "B1")])
+
+    def test_enter_shift_enter_e_auto_repeat_na_previa(self):
+        output = self.view_model.application.budget_output
+        dialog = BudgetPreviewDialog(self.view_model, self.budget)
+        dialog.show()
+        dialog.print_button.setFocus()
+        QTest.keyClick(dialog.print_button, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier)
+        self.assertNotIn(("print", "B1"), output.output_calls)
+        repeat = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier,
+            "", True, 2,
+        )
+        QApplication.sendEvent(dialog.print_button, repeat)
+        self.assertNotIn(("print", "B1"), output.output_calls)
+        dialog.print_button.setFocus()
+        with patch.object(QMessageBox, "information"):
+            QTest.keyClick(dialog.print_button, Qt.Key.Key_Return)
+        self.assertEqual(output.output_calls.count(("print", "B1")), 1)
+        dialog.close()
+
+    def test_esc_fecha_somente_previa_e_preserva_janela_pdv(self):
+        window = PDVWindow(self.view_model)
+        window.show()
+        dialog = BudgetPreviewDialog(self.view_model, self.budget, window)
+        dialog.show()
+        QApplication.processEvents()
+        QTest.keyClick(dialog, Qt.Key.Key_Escape)
+        QApplication.processEvents()
+        self.assertFalse(dialog.isVisible())
+        self.assertTrue(window.isVisible())
+        window.close()
+
+    def test_editor_de_item_tem_fluxo_deterministico_e_bloqueia_auto_repeat(self):
+        item = self.budget.items[0]
+        dialog = CartItemDialog(item)
+        dialog.show()
+        QApplication.processEvents()
+        self.assertTrue(dialog.quantity.hasFocus())
+        repeat = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "", True, 2,
+        )
+        QApplication.sendEvent(dialog.quantity, repeat)
+        self.assertTrue(dialog.quantity.hasFocus())
+        QTest.keyClick(dialog.quantity, Qt.Key.Key_Return)
+        self.assertTrue(dialog.price.hasFocus())
+        QTest.keyClick(dialog.price, Qt.Key.Key_Return)
+        self.assertTrue(dialog.discount.hasFocus())
+        QTest.keyClick(dialog.discount, Qt.Key.Key_Return)
+        self.assertTrue(dialog.apply_button.hasFocus())
+        dialog.close()
+
+    def test_lista_real_enter_visualiza_uma_vez_sem_consumir_orcamento(self):
+        dialog = BudgetListDialog(self.view_model, (self.budget,))
+        dialog.show()
+        QApplication.processEvents()
+        with patch("ui_qt.commercial.budget_dialog.BudgetPreviewDialog") as preview:
+            preview.return_value.exec.return_value = QDialog.DialogCode.Rejected
+            QTest.keyClick(dialog.table, Qt.Key.Key_Return)
+            self.assertEqual(preview.call_count, 1)
+            repeat = QKeyEvent(
+                QEvent.Type.KeyPress, Qt.Key.Key_Return,
+                Qt.KeyboardModifier.NoModifier, "", True, 2,
+            )
+            QApplication.sendEvent(dialog.table, repeat)
+            self.assertEqual(preview.call_count, 1)
+        self.assertIsNone(dialog.selected_budget_id)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        dialog.close()
+
+    def test_lista_real_shift_enter_volta_sem_carregar(self):
+        dialog = BudgetListDialog(self.view_model, (self.budget,))
+        dialog.show()
+        dialog.preview_button.setFocus()
+        QTest.keyClick(
+            dialog.preview_button, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier,
+        )
+        self.assertIsNone(dialog.selected_budget_id)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertFalse(dialog.preview_button.hasFocus())
+        dialog.close()
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
+class SuspendedSaleDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.view_model, _gateway = make_view_model()
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.suspended = self.view_model.suspend_sale()
+
+    def test_enter_reabre_uma_vez_e_auto_repeat_nao_reabre(self):
+        dialog = SuspendedSaleListDialog((self.suspended,))
+        dialog.show()
+        QApplication.processEvents()
+        repeat = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "", True, 2,
+        )
+        QApplication.sendEvent(dialog.table, repeat)
+        self.assertIsNone(dialog.selected_suspended_id)
+        QTest.keyClick(dialog.table, Qt.Key.Key_Return)
+        self.assertEqual(dialog.selected_suspended_id, "S1")
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+
+    def test_shift_enter_volta_sem_reabrir(self):
+        dialog = SuspendedSaleListDialog((self.suspended,))
+        dialog.show()
+        dialog.resume_button.setFocus()
+        QTest.keyClick(
+            dialog.resume_button, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier,
+        )
+        self.assertIsNone(dialog.selected_suspended_id)
+        self.assertFalse(dialog.resume_button.hasFocus())
+        dialog.close()
+
+    def test_esc_fecha_somente_dialogo(self):
+        window = PDVWindow(self.view_model)
+        window.show()
+        dialog = SuspendedSaleListDialog((self.suspended,), window)
+        dialog.show()
+        QApplication.processEvents()
+        QTest.keyClick(dialog, Qt.Key.Key_Escape)
+        QApplication.processEvents()
+        self.assertFalse(dialog.isVisible())
+        self.assertTrue(window.isVisible())
+        window.close()
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
 class PDVQtTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -639,8 +938,204 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("Vendas do dia  [F7]", buttons)
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
+        self.assertNotIn("EM EVOLUÇÃO", labels)
+        self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F4", "F9", "F10"})
+        self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F7", "F9", "F10"})
+        f6 = next(
+            shortcut for shortcut in self.window._shortcuts
+            if shortcut.key().toString() == "F6"
+        )
+        self.assertFalse(f6.autoRepeat())
+
+    def test_f6_suspende_sem_cliente_sem_checkout_e_limpa_sessao(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        suspended = self.view_model.application.suspended_sales.open
+        self.assertEqual(len(suspended), 1)
+        self.assertIsNone(suspended[0].customer_id)
+        self.assertTrue(self.view_model.session.cart.is_empty)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_clique_suspende_cliente_real_item_cadastrado_e_desconto(self):
+        self._select_customer()
+        self.view_model.session.add_item(
+            CartItem("PRODUTO NOVE", 2, "10", product_id=9, discount_percent="5")
+        )
+        self.window.refresh_cart()
+        QTest.mouseClick(self.window.suspend_button, Qt.MouseButton.LeftButton)
+        suspended = self.view_model.application.suspended_sales.open[0]
+        self.assertEqual(suspended.customer_id, 7)
+        self.assertEqual(suspended.items[0].product_id, 9)
+        self.assertEqual(suspended.items[0].discount_percent, Decimal("5.00"))
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_carrinho_vazio_bloqueia_suspensao_e_foca_item(self):
+        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        self.assertEqual(self.view_model.application.suspended_sales.open, [])
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_reabrir_sem_cliente_restaura_carrinho_e_foca_cliente(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.cart.items[0].description, "SUSPENSO")
+        self.assertIsNone(self.view_model.session.customer_id)
+        self.assertTrue(self.window.customer_search.hasFocus())
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_reabrir_com_cliente_preserva_id_e_foca_finalizar(self):
+        self._select_customer()
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.selected_customer.customer_id, 7)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_cancelar_lista_nao_consume_venda_suspensa(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = None
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(len(self.view_model.application.suspended_sales.open), 1)
+        self.assertTrue(self.view_model.session.cart.is_empty)
+
+    def test_recusar_substituicao_preserva_carrinho_e_suspensa(self):
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.view_model.add_loose_item("ATUAL", "1", Decimal("5"))
+        self.window.refresh_cart()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ), patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+        ):
+            self.window._open_suspended_sales()
+        self.assertEqual(self.view_model.session.cart.items[0].description, "ATUAL")
+        self.assertEqual(len(self.view_model.application.suspended_sales.open), 1)
+
+    def test_reaberta_so_chega_checkout_oficial_sem_persistencia_antecipada(self):
+        self._select_customer()
+        self.view_model.add_loose_item("SUSPENSO", "1", Decimal("10"))
+        suspended = self.view_model.suspend_sale()
+        self.window._clear_after_budget()
+        FakeSuspendedSaleListDialog.selected_suspended_id = suspended.suspended_id
+        with patch(
+            "ui_qt.commercial.pdv_window.SuspendedSaleListDialog",
+            FakeSuspendedSaleListDialog,
+        ):
+            self.window._open_suspended_sales()
+        FakeCheckoutDialog.result = QDialog.DialogCode.Rejected
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            self.window._checkout()
+        self.assertEqual(self.gateway.commands, [])
+        self.assertEqual(len(self.view_model.session.cart.items), 1)
+
+    def test_f5_alterna_modo_orcamento_e_f9_salva_sem_checkout(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        self.assertTrue(self.window._budget_mode)
+        self.assertIn("ORÇAMENTO LIGADO", self.window.budget_button.text())
+        self.assertIn("SALVAR ORÇAMENTO", self.window.checkout_button.text())
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            self.window._conclude_action()
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.view_model.session.cart.is_empty)
+        self.assertEqual(FakeBudgetPreviewDialog.calls[0][0], "init")
+
+    def test_enter_no_botao_salva_orcamento_exatamente_uma_vez(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        self.window.checkout_button.setFocus()
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.keyClick(self.window.checkout_button, Qt.Key.Key_Return)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertEqual(len(FakeBudgetPreviewDialog.calls), 2)
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_atalho_f9_salva_orcamento_exatamente_uma_vez(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.keyClick(self.window, Qt.Key.Key_F9)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertEqual(len(FakeBudgetPreviewDialog.calls), 2)
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_clique_no_botao_salva_orcamento_sem_abrir_checkout(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.mouseClick(self.window.checkout_button, Qt.MouseButton.LeftButton)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_enter_auto_repeat_no_salvar_orcamento_nao_duplica(self):
+        self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        self.window.checkout_button.setFocus()
+        event = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier,
+            "", True, 2,
+        )
+        QApplication.sendEvent(self.window.checkout_button, event)
+        self.assertEqual(self.view_model.application.budgets.open, [])
+        self.assertEqual(len(self.view_model.session.cart.items), 1)
+
+    def test_carregar_orcamento_prepara_venda_oficial_sem_finalizar(self):
+        self._select_customer()
+        self.view_model.add_loose_item("ORÇADO", "2", Decimal("10"))
+        budget = self.view_model.save_budget()
+        self.window._clear_after_budget()
+        FakeBudgetListDialog.selected_budget_id = budget.budget_id
+        with patch("ui_qt.commercial.pdv_window.BudgetListDialog", FakeBudgetListDialog):
+            self.window._open_budgets()
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.session.cart.items[0].description, "ORÇADO")
+        self.assertFalse(self.window._budget_mode)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_carrinho_vazio_bloqueia_orcamento_e_foca_item(self):
+        self.window._toggle_budget_mode()
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog") as preview:
+            self.window._conclude_action()
+        self.assertFalse(preview.called)
+        self.assertEqual(self.view_model.application.budgets.open, [])
+        self.assertTrue(self.window.product_search.hasFocus())
 
     def test_editar_item_avulso_atualiza_linha_e_invalida_pagamento(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
@@ -657,7 +1152,70 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(item.discount_percent, Decimal("10.00"))
         self.assertEqual(item.subtotal, Decimal("27.00"))
         self.assertIsNone(self.view_model.session.payment_plan)
-        self.assertTrue(self.window.cart.hasFocus())
+        self.assertTrue(self.window.customer_search.hasFocus())
+
+    def test_editar_item_no_orcamento_restaura_salvar_e_enter_funciona(self):
+        self._cart_with_customer()
+        self.window._toggle_budget_mode()
+        self.window.cart.selectRow(0)
+        with patch("ui_qt.commercial.pdv_window.CartItemDialog", FakeCartItemDialog):
+            self.window._edit_selected_item()
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.keyClick(self.window.checkout_button, Qt.Key.Key_Return)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+        self.assertEqual(self.gateway.commands, [])
+
+    def test_cancelar_edicao_restaura_foco_operacional_do_orcamento(self):
+        self._cart_with_customer()
+        self.window._toggle_budget_mode()
+        self.window.cart.selectRow(0)
+        with patch(
+            "ui_qt.commercial.pdv_window.CartItemDialog", FakeCancelledCartItemDialog
+        ):
+            self.window._edit_selected_item()
+        self.assertEqual(len(self.view_model.session.cart.items), 1)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
+    def test_remover_item_restante_restaura_enter_para_salvar(self):
+        self._select_customer()
+        self.view_model.add_loose_item("ITEM 1", "1", Decimal("10"))
+        self.view_model.add_loose_item("ITEM 2", "1", Decimal("5"))
+        self.window.refresh_cart()
+        self.window._toggle_budget_mode()
+        self.window.cart.selectRow(0)
+        self.window._remove_selected_item()
+        self.assertEqual(len(self.view_model.session.cart.items), 1)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.keyClick(self.window.checkout_button, Qt.Key.Key_Return)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+
+    def test_clique_no_carrinho_enter_retorna_ao_proximo_passo_sem_dupla_acao(self):
+        self._cart_with_customer()
+        self.window._toggle_budget_mode()
+        self.window.cart.selectRow(0)
+        self.window.cart.setFocus()
+        QTest.keyClick(self.window.cart, Qt.Key.Key_Return)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        self.assertEqual(self.view_model.application.budgets.open, [])
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.keyClick(self.window.checkout_button, Qt.Key.Key_Return)
+        self.assertEqual(len(self.view_model.application.budgets.open), 1)
+
+    def test_trocar_texto_do_produto_preserva_fluxo_por_enter(self):
+        self.window._toggle_budget_mode()
+        self.window.product_search.setText("p9")
+        self.window._select_product(self.window.product_results.item(0))
+        self.window.product_search.setText("p9")
+        self.assertIsNone(self.view_model.selected_product)
+        self.window.product_search.setFocus()
+        QTest.keyClick(self.window.product_search, Qt.Key.Key_Return)
+        self.assertEqual(self.view_model.selected_product.product_id, 9)
+        self.assertTrue(self.window.quantity.hasFocus())
 
     def test_delete_no_carrinho_remove_uma_vez_e_foca_entrada(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
