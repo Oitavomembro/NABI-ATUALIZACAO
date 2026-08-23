@@ -52,10 +52,8 @@ def test_recebimento_transporta_id_real_e_exige_confirmacao_explicita(app, monke
     service = CustomerService(); actions = Actions(service)
     dialog = CustomerReceiptDialog(service, actions, "operador")
     dialog.amount.set_value(Decimal("20"))
-    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.No)
-    key(dialog.confirm)
+    key(dialog.review_button)
     assert actions.calls == []
-    monkeypatch.setattr(QMessageBox, "question", lambda *_a, **_k: QMessageBox.StandardButton.Yes)
     monkeypatch.setattr(QMessageBox, "information", lambda *_a, **_k: QMessageBox.StandardButton.Ok)
     key(dialog.confirm)
     assert len(actions.calls) == 1
@@ -67,12 +65,24 @@ def test_recebimento_transporta_id_real_e_exige_confirmacao_explicita(app, monke
 def test_enter_auto_repeat_nao_grava_e_shift_enter_retorna(app):
     service = CustomerService(); actions = Actions(service)
     dialog = CustomerReceiptDialog(service, actions, "operador")
-    dialog.show(); dialog.confirm.setFocus(); app.processEvents()
+    dialog.show(); dialog.amount.set_value(Decimal("20")); key(dialog.review_button)
+    dialog.confirm.setFocus(); app.processEvents()
     key(dialog.confirm, auto=True)
     assert actions.calls == []
     key(dialog.confirm, Qt.KeyboardModifier.ShiftModifier)
     assert dialog.notes.hasFocus()
     assert actions.calls == []
+
+
+def test_alteracao_apos_revisao_invalida_confirmacao(app):
+    service = CustomerService(); actions = Actions(service)
+    dialog = CustomerReceiptDialog(service, actions, "operador")
+    dialog.show(); app.processEvents()
+    dialog.amount.set_value(Decimal("20")); key(dialog.review_button)
+    assert dialog.confirm.isVisible() and actions.calls == []
+    dialog.amount.set_value(Decimal("19"))
+    assert not dialog.confirm.isVisible()
+    assert dialog._reviewed_command is None and actions.calls == []
 
 
 def test_um_enter_avanca_exatamente_um_campo(app):

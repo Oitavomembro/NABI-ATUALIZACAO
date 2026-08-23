@@ -17,7 +17,7 @@ def fichario_settings() -> QSettings:
 
 def interface_font_size() -> int:
     value = int(fichario_settings().value("interface/font_size", 15))
-    return max(13, min(value, 22))
+    return max(12, min(value, 30))
 
 
 def configured_backup_directory(profile) -> Path:
@@ -50,7 +50,8 @@ class FicharioPreferencesDialog(QDialog):
         choose = QPushButton("Escolher pasta...")
         choose.clicked.connect(self._choose_directory)
         directory_row.addWidget(self.directory, 1); directory_row.addWidget(choose)
-        self.font_size = QComboBox(); self.font_size.addItems(("13", "15", "17", "19", "21"))
+        self.font_size = QComboBox()
+        self.font_size.addItems(tuple(str(value) for value in range(12, 31)))
         self.font_size.setCurrentText(str(interface_font_size()))
         form.addRow("Backup diário", self.daily)
         form.addRow("Pasta dos backups", directory_row)

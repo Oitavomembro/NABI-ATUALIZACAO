@@ -9,11 +9,13 @@ from PySide6.QtWidgets import (
 
 from database.maintenance import DatabaseMaintenanceService
 from repositories.dashboard_repository import DashboardRepository
+from repositories.system_repository import SystemRepository
 from services.security_service import SecurityService
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog, STYLE
 from ui_qt.commercial.pdv_window import PDVWindow
 
 from .receipt_dialog import CustomerReceiptDialog
+from .receipt_output import FicharioCustomerReceiptOutput
 from .legacy_import_dialog import LegacyFicharioImportDialog
 from .pdv_view_model import FicharioPDVViewModel
 from .preferences_dialog import (
@@ -48,6 +50,10 @@ class FicharioWindow(QMainWindow):
         super().__init__(parent)
         self.container = container; self.database = database; self.profile = profile
         self.security = security; self.session = session; self._pdv = None
+        system_repository = SystemRepository(database.connect)
+        self._receipt_output = FicharioCustomerReceiptOutput(
+            database, profile.paths.pdfs, system_repository.get_config
+        )
         self.setWindowTitle("NabiCode Fichario")
         self.setMinimumSize(900, 600); self._apply_interface_font()
         root = QWidget(); self.setCentralWidget(root); layout = QVBoxLayout(root)
@@ -207,7 +213,7 @@ class FicharioWindow(QMainWindow):
         if not self._allowed("clientes", "edit"): return
         CustomerReceiptDialog(
             self.container.customer_application, self.container.actions,
-            self.session.user.username, self,
+            self.session.user.username, self, receipt_output=self._receipt_output,
         ).exec()
         self.refresh_summary()
 

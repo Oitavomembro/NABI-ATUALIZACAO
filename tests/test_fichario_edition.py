@@ -123,3 +123,16 @@ def test_menu_visivel_e_backup_diario_configuravel():
     assert "getExistingDirectory" in preferences
     assert "OneDrive" in preferences
     assert "interface/font_size" in preferences
+
+
+def test_recebimento_separa_revisao_confirmacao_e_oferece_comprovante_oficial():
+    root = Path(__file__).parents[1]
+    dialog = (root / "fichario/receipt_dialog.py").read_text(encoding="utf-8")
+    output = (root / "fichario/receipt_output.py").read_text(encoding="utf-8")
+    assert "Revisar recebimento" in dialog
+    assert "CONFIRMAR RECEBIMENTO" in dialog
+    assert "Saldo antes" in dialog and "Saldo após confirmar" in dialog
+    assert "Imprimir recibo" in dialog and "Salvar PDF" in dialog
+    assert "ReceiptService" in output
+    assert "PrintingService" in output
+    assert "generate_customer_payment" in output

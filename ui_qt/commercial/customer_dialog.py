@@ -35,7 +35,7 @@ def _money(value: Decimal) -> str:
 
 def _customer_font_size() -> int:
     value = int(QSettings("NabiCode", "Fichario").value("clientes/font_size", 15))
-    return max(13, min(value, 22))
+    return max(12, min(value, 30))
 
 
 def _customer_style(size: int | None = None) -> str:
@@ -58,7 +58,8 @@ class CustomerEditorDialog(QDialog):
             str(customer.record_number or "") if customer else str(next_record())
         )
         self.record.setStyleSheet(
-            "font-size:20px;font-weight:900;color:#00d084;border:2px solid #00d084"
+            f"font-size:{max(20, _customer_font_size() + 4)}px;font-weight:900;"
+            "color:#00d084;border:2px solid #00d084"
         )
         self.name = QLineEdit(customer.name if customer else "")
         self.code = QLineEdit(customer.code if customer else "")
@@ -196,7 +197,7 @@ class CustomerManagementDialog(QDialog):
         self.refresh_button = QPushButton("Atualizar  [F5]")
         self.refresh_button.clicked.connect(self.reload)
         self.font_size = QComboBox()
-        self.font_size.addItems(("13", "15", "17", "19", "21"))
+        self.font_size.addItems(tuple(str(value) for value in range(12, 31)))
         self.font_size.setCurrentText(str(_customer_font_size()))
         self.font_size.setToolTip("Tamanho das letras desta área")
         self.font_size.currentTextChanged.connect(self._change_font_size)
@@ -221,6 +222,7 @@ class CustomerManagementDialog(QDialog):
         self._search_timer.setInterval(250)
         self._search_timer.timeout.connect(self.reload)
         self.search.textChanged.connect(lambda _text: self._search_timer.start())
+        self._apply_customer_font(_customer_font_size())
         layout.addWidget(self.table, 1)
         buttons = QHBoxLayout()
         self.new_button = QPushButton("Novo cliente  [F3]")
@@ -254,9 +256,17 @@ class CustomerManagementDialog(QDialog):
         return self.table.item(row, 0).data(Qt.ItemDataRole.UserRole)
 
     def _change_font_size(self, value: str) -> None:
-        size = max(13, min(int(value), 22))
+        size = max(12, min(int(value), 30))
         QSettings("NabiCode", "Fichario").setValue("clientes/font_size", size)
+        QSettings("NabiCode", "Fichario").setValue("interface/font_size", size)
         self.setStyleSheet(_customer_style(size))
+        self._apply_customer_font(size)
+
+    def _apply_customer_font(self, size: int) -> None:
+        self.search.setStyleSheet(
+            f"font-size:{size + 2}px;font-weight:800;min-height:{size + 30}px;"
+        )
+        self.table.setStyleSheet(f"font-size:{size}px;")
         self.table.verticalHeader().setDefaultSectionSize(size + 22)
 
     def reload(self) -> None:
