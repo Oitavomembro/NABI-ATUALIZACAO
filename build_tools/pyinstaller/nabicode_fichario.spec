@@ -1,5 +1,8 @@
 # -*- mode: python ; coding: utf-8 -*-
 from pathlib import Path
+import shutil
+import sys
+import zipfile
 
 project_root = Path(SPECPATH).resolve().parents[1]
 version_file = project_root / "VERSAO.txt"
@@ -16,6 +19,33 @@ datas = [
     (str(production_profile), "."),
     (str(project_root / "licensing" / "trusted_public_keys.json"), "licensing"),
 ]
+
+# Python 3.14 distribui Tcl/Tk em ZIPs. O hook atual do PyInstaller procura
+# diretórios tradicionais e, sem esta extração determinística, gera um EXE que
+# falha antes mesmo de a interface Qt abrir.
+tcl_source = Path(sys.base_prefix) / "tcl"
+tcl_runtime = project_root / "build_output" / "fichario" / "tcl_runtime"
+if tcl_runtime.exists():
+    shutil.rmtree(tcl_runtime)
+tcl_runtime.mkdir(parents=True)
+for pattern, prefix, destination in (
+    ("libtcl*.zip", "tcl_library/", "_tcl_data"),
+    ("libtk*.zip", "tk_library/", "_tk_data"),
+):
+    archives = sorted(tcl_source.glob(pattern))
+    if len(archives) != 1:
+        raise RuntimeError(f"Runtime {pattern} não encontrado de forma única.")
+    target = tcl_runtime / destination
+    target.mkdir()
+    with zipfile.ZipFile(archives[0]) as archive:
+        for archive_name in archive.namelist():
+            if not archive_name.startswith(prefix) or archive_name.endswith("/"):
+                continue
+            relative = Path(archive_name[len(prefix):])
+            output = target / relative
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(archive.read(archive_name))
+    datas.append((str(target), destination))
 hiddenimports = [
     "cryptography.hazmat.primitives.asymmetric.ed25519",
     "cryptography.hazmat.bindings._rust",
@@ -25,7 +55,6 @@ hiddenimports = [
 ]
 excludes = [
     "pytest", "tests", "benchmark_tests", "stress_tests", "soak_tests",
-    "tkinter", "_tkinter", "customtkinter",
     "assistant_nabi", "ui_qt.assistant_nabi", "license_issuer",
 ]
 
