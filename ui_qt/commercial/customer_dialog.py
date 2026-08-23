@@ -190,8 +190,8 @@ class CustomerManagementDialog(QDialog):
         self.service = service
         self.customer_provider = customer_provider
         self.setWindowTitle("Clientes e fichas")
-        self.resize(1100, 700)
-        self.setMinimumSize(820, 540)
+        self.resize(1180, 720)
+        self.setMinimumSize(940, 600)
         self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
         title = QLabel("CLIENTES E FICHAS")
@@ -219,14 +219,13 @@ class CustomerManagementDialog(QDialog):
         layout.addLayout(search_row)
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(
-            ["Ficha", "Nome", "Saldo devedor", "Endereço", "Telefone"]
+            ["Ficha", "Nome", "Saldo devedor", "CPF", "Telefone"]
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         self.table.doubleClicked.connect(self.open_statement)
         self.table.installEventFilter(self)
         self.search.installEventFilter(self)
@@ -237,6 +236,14 @@ class CustomerManagementDialog(QDialog):
         self.search.textChanged.connect(lambda _text: self._search_timer.start())
         self._apply_customer_font(_customer_font_size())
         layout.addWidget(self.table, 1)
+        self.selected_details = QLabel("Selecione um cliente para ver o endereço.")
+        self.selected_details.setWordWrap(True)
+        self.selected_details.setStyleSheet(
+            "background:#161b22;border:1px solid #30363d;border-radius:7px;"
+            "padding:9px;color:#f0f6fc;font-weight:700;"
+        )
+        layout.addWidget(self.selected_details)
+        self.table.itemSelectionChanged.connect(self._show_selected_details)
         buttons = QHBoxLayout()
         self.new_button = QPushButton("Novo cliente  [F3]")
         self.edit_button = QPushButton("Editar selecionado  [F4]")
@@ -298,7 +305,7 @@ class CustomerManagementDialog(QDialog):
             row = self.table.rowCount(); self.table.insertRow(row)
             values = (
                 customer.record_number or "—", customer.name,
-                _money(customer.debt_balance), customer.address or "—",
+                _money(customer.debt_balance), customer.cpf or "—",
                 customer.phone or "—",
             )
             for column, value in enumerate(values):
@@ -322,6 +329,15 @@ class CustomerManagementDialog(QDialog):
                 item.setForeground(QBrush(QColor(color)))
                 self.table.setItem(row, column, item)
         if self.table.rowCount(): self.table.selectRow(0)
+
+    def _show_selected_details(self) -> None:
+        row = self.table.currentRow()
+        if row < 0:
+            self.selected_details.setText("Selecione um cliente para ver o endereço.")
+            return
+        name_item = self.table.item(row, 1)
+        tooltip = name_item.toolTip() if name_item is not None else ""
+        self.selected_details.setText(tooltip.replace("\n", "   •   "))
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:

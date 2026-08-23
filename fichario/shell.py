@@ -55,7 +55,9 @@ class FicharioWindow(QMainWindow):
             database, profile.paths.pdfs, system_repository.get_config
         )
         self.setWindowTitle("NabiCode Fichario")
-        self.setMinimumSize(900, 600); self._apply_interface_font()
+        self.setMinimumSize(1000, 640)
+        self.resize(1220, 720)
+        self._apply_interface_font()
         root = QWidget(); self.setCentralWidget(root); layout = QVBoxLayout(root)
         title = QLabel("NABICODE FICHARIO")
         title.setStyleSheet("font-size:28px;font-weight:900;color:#00d084")
