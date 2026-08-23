@@ -455,8 +455,8 @@ class Transport:
         self.response = response
         self.calls = []
 
-    def post(self, url, payload, *, timeout_seconds):
-        self.calls.append((url, payload, timeout_seconds))
+    def post(self, url, payload, *, timeout_seconds, headers=None):
+        self.calls.append((url, payload, timeout_seconds, headers))
         return self.response
 
 
@@ -490,13 +490,24 @@ class NabiLocalProviderTests(unittest.TestCase):
         reply = adapter.respond("procure café", available_tools=(PRODUCT_SEARCH,))
         self.assertEqual(reply.tool_requests[0].tool_name, "produtos.pesquisar")
         self.assertEqual(reply.tool_requests[0].parameters["term"], "cafe")
-        url, payload, timeout = transport.calls[0]
+        url, payload, timeout, headers = transport.calls[0]
         self.assertEqual(url, "http://127.0.0.1:8080/v1/chat/completions")
         self.assertEqual(timeout, 5)
+        self.assertIsNone(headers)
         schema = payload["tools"][0]["function"]["parameters"]
         self.assertFalse(schema["additionalProperties"])
         self.assertEqual(schema["required"], ["term"])
         self.assertEqual(payload["temperature"], 0)
+
+    def test_chave_local_e_enviada_somente_no_cabecalho(self):
+        transport = Transport({"choices": [{"message": {"content": "ok"}}]})
+        adapter = LocalOpenAICompatibleModelAdapter(
+            model="qwen", transport=transport, api_key="segredo-efemero"
+        )
+        adapter.respond("oi", available_tools=())
+        url, _payload, _timeout, headers = transport.calls[0]
+        self.assertNotIn("segredo-efemero", url)
+        self.assertEqual(headers, {"Authorization": "Bearer segredo-efemero"})
 
     def test_resposta_malformada_e_argumentos_nao_objeto_falham(self):
         malformed = LocalOpenAICompatibleModelAdapter(

@@ -43,7 +43,7 @@ Esse verificador não escolhe a origem, não baixa o arquivo e não transforma u
 peso ainda não testado em modelo homologado. A revisão e o SHA-256 reais serão
 registrados somente depois da seleção explícita do artefato oficial.
 
-## Artefato candidato selecionado, ainda não baixado
+## Artefato baixado e verificado no ambiente TESTE
 
 - conversão: `ggml-org/Qwen3-1.7B-GGUF`;
 - arquivo: `Qwen3-1.7B-Q4_K_M.gguf`;
@@ -57,6 +57,31 @@ registrados somente depois da seleção explícita do artefato oficial.
 
 O repositório oficial `Qwen/Qwen3-1.7B-GGUF` observado oferece o peso Q8_0. A
 conversão Q4_K_M foi selecionada no `ggml-org` para reduzir memória e tamanho,
-sem alterar a origem do modelo-base Qwen. A promoção continua condicionada ao
-download manual controlado, conferência local do hash, avisos de terceiros,
-teste do runtime e avaliações físicas do NabiCode.
+sem alterar a origem do modelo-base Qwen. O arquivo foi baixado manualmente para
+`AppData/Roaming/NabiCode/Teste/ia/models`, fora do Git e da Produção. Tamanho e
+SHA-256 locais coincidiram exatamente com o manifesto.
+
+## Runtime e homologação física inicial
+
+- runtime: `llama.cpp` CPU x64 build `b10537`, commit
+  `bf0040e15fd5b716262658f4d652c9cee959cf91`;
+- arquivo oficial: `llama-b10537-bin-win-cpu-x64.zip`;
+- SHA-256 do pacote:
+  `48d02dfdc5a715d1f58e06b9c9622bb548eb214b021af027808c9e8c124c4dec`;
+- árvore extraída: 52 arquivos, hash agregado
+  `8d32024aab57571fd10931d50626b0000d39f5e9040f8cc568c98d5466dd931c`;
+- execução: somente `127.0.0.1`, sem interface web, CORS limitado, credenciais
+  CORS desativadas e chave efêmera mantida apenas em memória;
+- requisição sem chave foi recusada com HTTP 401;
+- primeira medição: modelo carregado em 1,827 s e resposta curta em 4,609 s;
+- repetição após verificar integralmente modelo e runtime: carga em 2,210 s e
+  resposta curta em 6,729 s;
+- memória ativa observada no primeiro carregamento: aproximadamente 1,41 GB;
+- chamada de ferramenta estruturada `produtos.pesquisar` produzida corretamente;
+- pedidos hostis para executar SQL e inventar autorização SEFAZ foram recusados
+  sem chamada de ferramenta;
+- servidor foi encerrado ao final de cada ensaio e não inicia com o Windows.
+
+Esta é homologação técnica inicial, não liberação comercial. Ainda faltam login
+Qt real, consulta com sessão/permissões reais, avaliações ampliadas de qualidade,
+teste prolongado, integração visual e decisão sobre redistribuição no instalador.

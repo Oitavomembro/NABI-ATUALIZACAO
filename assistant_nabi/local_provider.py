@@ -25,11 +25,20 @@ class StandardLibraryJsonTransport:
         def redirect_request(self, req, fp, code, msg, headers, newurl):
             raise ValueError("O provedor local tentou redirecionar a conexão.")
 
-    def post(self, url: str, payload: dict, *, timeout_seconds: float) -> dict:
+    def post(
+        self,
+        url: str,
+        payload: dict,
+        *,
+        timeout_seconds: float,
+        headers: dict[str, str] | None = None,
+    ) -> dict:
+        request_headers = {"Content-Type": "application/json"}
+        request_headers.update(headers or {})
         request = Request(
             url,
             data=json.dumps(payload, ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type": "application/json"},
+            headers=request_headers,
             method="POST",
         )
         opener = build_opener(self._NoRedirect())
@@ -55,6 +64,7 @@ class LocalOpenAICompatibleModelAdapter:
         model: str,
         transport=None,
         timeout_seconds: float = 30.0,
+        api_key: str | None = None,
     ) -> None:
         parsed = urlparse(str(endpoint or ""))
         if (
@@ -72,6 +82,7 @@ class LocalOpenAICompatibleModelAdapter:
             raise ValueError("O identificador do modelo local é obrigatório.")
         self._transport = transport or StandardLibraryJsonTransport()
         self._timeout = max(1.0, min(float(timeout_seconds), 120.0))
+        self._api_key = str(api_key or "").strip()
 
     def respond(
         self, message: str, *, available_tools: tuple[ToolDefinition, ...]
@@ -87,7 +98,14 @@ class LocalOpenAICompatibleModelAdapter:
             "stream": False,
         }
         response = self._transport.post(
-            self._endpoint, payload, timeout_seconds=self._timeout
+            self._endpoint,
+            payload,
+            timeout_seconds=self._timeout,
+            headers=(
+                {"Authorization": f"Bearer {self._api_key}"}
+                if self._api_key
+                else None
+            ),
         )
         try:
             message_data = response["choices"][0]["message"]

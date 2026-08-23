@@ -21,6 +21,12 @@ from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_read_only_assistant
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
+from .local_runtime import LocalLlamaServer
+from .runtime_artifact import (
+    LLAMA_CPP_B10537_CPU_X64,
+    RuntimeDirectoryManifest,
+    verify_runtime_directory,
+)
 
 __all__ = [
     "AssistantActor",
@@ -33,8 +39,11 @@ __all__ = [
     "ParameterType",
     "ModelReply",
     "LocalOpenAICompatibleModelAdapter",
+    "LocalLlamaServer",
+    "LLAMA_CPP_B10537_CPU_X64",
     "ModelArtifactManifest",
     "ReadOnlyToolRegistry",
+    "RuntimeDirectoryManifest",
     "QWEN3_1_7B_Q4_K_M_CANDIDATE",
     "CurrentSessionPermissionAdapter",
     "ToolDefinition",
@@ -45,4 +54,5 @@ __all__ = [
     "register_commercial_read_tools",
     "create_read_only_assistant",
     "verify_model_artifact",
+    "verify_runtime_directory",
 ]

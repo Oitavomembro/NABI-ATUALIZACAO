@@ -109,6 +109,12 @@ Legenda:
 - [x] portão local de artefato GGUF implementado: manifesto exige modelo, arquivo, quantização, URL HTTPS sem credenciais, revisão imutável, licença, tamanho e SHA-256; ausência, truncamento ou adulteração falham fechados e nenhum download é realizado; validação ampliada com 204 testes e 336 subtestes aprovada;
 - [x] candidato Q4_K_M registrado sem download: `ggml-org/Qwen3-1.7B-GGUF`, revisão imutável `daeb8e2d528a760970442092f6bf1e55c3b659eb`, arquivo de 1.282.439.264 bytes, licença Apache-2.0 e SHA-256 `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`;
 - [~] o artefato registrado ainda não equivale a homologação do peso ou do `llama-server`: download controlado, hash local, avisos de terceiros, desempenho e avaliações físicas continuam pendentes;
+- [x] download controlado realizado somente na área persistente do perfil TESTE: peso de 1.282.439.264 bytes e SHA-256 local coincidentes; nada foi colocado no Git ou na Produção;
+- [x] `llama.cpp` portátil CPU x64 `b10537` verificado pela atestação/hash oficial e por manifesto da árvore extraída com 52 arquivos;
+- [x] supervisor local inicia oculto em loopback, sem Web UI, com CORS restrito e chave efêmera somente em memória; acesso sem chave retornou HTTP 401 e o processo é encerrado após uso;
+- [x] homologação física inicial: carga entre 1,827 s e 2,210 s; respostas curtas entre 4,609 s e 6,729 s; chamada estruturada de pesquisa aprovada; ataques de SQL e falsa autorização SEFAZ recusados sem ferramenta;
+- [~] substituir a pendência anterior por homologação ampliada: login Qt real, sessão/permissões reais, teste prolongado, avaliações de qualidade e decisão de empacotamento continuam pendentes;
+- [ ] experimento visual somente em perfil TESTE: preservar integralmente o splash original e acrescentar, perto do final do carregamento real, a mascote Nabi azul entrando/flutuando e pousando discretamente ao lado do nome; não alterar fundo, logotipo, proporções ou sequência existente, não atrasar artificialmente o startup e não promover para Produção/instalador sem aprovação visual expressa;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.
