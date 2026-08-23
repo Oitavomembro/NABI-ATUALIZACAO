@@ -37,6 +37,14 @@ def test_estado_nao_operacional_falha_fechado():
     with pytest.raises(PermissionError): policy.require()
 
 
+def test_licenca_ausente_abre_ativacao_antes_do_banco():
+    blocked = LicenseDecision(LicenseState.INVALID, "LICENSE_MISSING", "NABI2-TESTE")
+    assert FicharioLicensePolicy(blocked).message == "Nenhuma licença foi instalada."
+    source = (Path(__file__).parents[1] / "main_fichario_qt.py").read_text(encoding="utf-8")
+    assert source.index("FicharioLicenseDialog(") < source.index("DatabaseUsageLock(")
+    assert source.index("activation.exec()") < source.index("lock.acquire()")
+
+
 def test_perfil_fichario_isola_dados_fora_do_programa(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     monkeypatch.setenv("NABICODE_PROFILE", "TESTE")

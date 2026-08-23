@@ -10,6 +10,7 @@ from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock
 from database import DatabaseManager
 from fichario.license_policy import FicharioLicensePolicy
+from fichario.license_dialog import FicharioLicenseDialog
 from fichario.profile import configure_fichario_profile
 from fichario.runtime import initialize_fichario_database
 from fichario.shell import FicharioWindow, LoginDialog
@@ -28,8 +29,12 @@ def main(argv=None) -> int:
     license_service = build_runtime_license_service(profile.app_dir)
     policy = FicharioLicensePolicy(license_service.evaluate())
     if not policy.operational:
-        QMessageBox.warning(None, "Licenca NabiCode Fichario", policy.message)
-        return 3
+        activation = FicharioLicenseDialog(license_service, policy)
+        if activation.exec() != QDialog.DialogCode.Accepted:
+            return 3
+        policy = FicharioLicensePolicy(license_service.evaluate())
+        if not policy.operational:
+            return 3
     database_path = profile.validate_database(profile.paths.database)
     lock = DatabaseUsageLock(database_path, f"{profile.profile}-FICHARIO")
     window = None

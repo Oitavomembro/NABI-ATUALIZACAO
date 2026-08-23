@@ -31,7 +31,17 @@ class FicharioLicensePolicy:
     def message(self) -> str:
         payload = self.decision.payload
         if not self.decision.operational or payload is None:
-            return f"Licenca FICHARIO indisponivel: {self.decision.reason}."
+            reasons = {
+                "LICENSE_MISSING": "Nenhuma licença foi instalada.",
+                "LICENSE_INVALID": "A licença instalada é inválida.",
+                "MACHINE_MISMATCH": "A licença pertence a outra máquina.",
+                "EXPIRED": "A licença e o prazo de tolerância venceram.",
+                "CLOCK_ROLLBACK": "O relógio da máquina precisa ser verificado.",
+            }
+            return reasons.get(
+                self.decision.reason,
+                "A licença FICHÁRIO não está disponível para uso.",
+            )
         if payload.edition is not LicenseEdition.FICHARIO:
             return "Esta instalacao exige uma licenca assinada da edicao FICHARIO."
         if self.REQUIRED_FEATURES.difference(payload.features):
