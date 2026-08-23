@@ -128,6 +128,8 @@ class LocalOpenAICompatibleModelAdapter:
             field = {"type": schema_type}
             if parameter.max_length is not None:
                 field["maxLength"] = parameter.max_length
+            if parameter.allowed_values:
+                field["enum"] = list(parameter.allowed_values)
             properties[parameter.name] = field
             if parameter.required:
                 required.append(parameter.name)

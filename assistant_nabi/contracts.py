@@ -60,6 +60,7 @@ class ParameterDefinition:
     parameter_type: ParameterType
     required: bool = False
     max_length: int | None = None
+    allowed_values: tuple[str, ...] = ()
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "name", _required_text(self.name, "Parâmetro"))
@@ -73,6 +74,12 @@ class ParameterDefinition:
             raise ValueError("O tamanho máximo deve ser positivo.")
         if self.max_length is not None and parameter_type is not ParameterType.TEXT:
             raise ValueError("Tamanho máximo só pode ser usado em parâmetros de texto.")
+        allowed = tuple(str(item) for item in self.allowed_values)
+        if allowed and parameter_type is not ParameterType.TEXT:
+            raise ValueError("Lista de valores permitidos só pode ser usada em texto.")
+        if len(allowed) != len(set(allowed)):
+            raise ValueError("A lista de valores permitidos possui duplicidade.")
+        object.__setattr__(self, "allowed_values", allowed)
 
     def validate(self, value: Any) -> None:
         if self.parameter_type is ParameterType.TEXT:
@@ -80,6 +87,8 @@ class ParameterDefinition:
                 raise ValueError(f"O parâmetro {self.name} deve ser texto.")
             if self.max_length is not None and len(value) > self.max_length:
                 raise ValueError(f"O parâmetro {self.name} excede o tamanho permitido.")
+            if self.allowed_values and value not in self.allowed_values:
+                raise ValueError(f"O parâmetro {self.name} possui valor não permitido.")
             return
         if self.parameter_type is ParameterType.INTEGER:
             if isinstance(value, bool) or not isinstance(value, int):

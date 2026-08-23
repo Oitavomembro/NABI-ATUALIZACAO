@@ -23,6 +23,9 @@ from commercial.application.dto import CustomerRecord, ProductRecord
 from commercial.application.product_dto import ProductStockSummary
 from decimal import Decimal
 from assistant_nabi.read_tools import PRODUCT_SEARCH
+from assistant_nabi.diagnostic_tools import (
+    RUN_TEST_SUITE, RunTestSuiteTool, TestExecution,
+)
 
 
 class Permissions:
@@ -184,6 +187,14 @@ class NabiPhaseZeroTests(unittest.TestCase):
             with self.subTest(invalid=invalid):
                 with self.assertRaisesRegex(ValueError, "decimal"):
                     parameter.validate(invalid)
+
+    def test_enum_textual_rejeita_valor_fora_da_lista(self):
+        parameter = ParameterDefinition(
+            "suite", ParameterType.TEXT, allowed_values=("commercial", "ia_nabi")
+        )
+        parameter.validate("commercial")
+        with self.assertRaisesRegex(ValueError, "não permitido"):
+            parameter.validate("comando_livre")
 
 
 class SecurityUser:
@@ -503,6 +514,38 @@ class NabiLocalProviderTests(unittest.TestCase):
         )
         with self.assertRaisesRegex(ValueError, "objeto"):
             invalid_arguments.respond("oi", available_tools=(PRODUCT_SEARCH,))
+
+
+class Runner:
+    def __init__(self):
+        self.calls = []
+
+    def run(self, suite):
+        self.calls.append(suite)
+        return TestExecution(suite, 0, "Ran 28 tests - OK")
+
+
+class NabiDiagnosticToolTests(unittest.TestCase):
+    def test_modelo_escolhe_apenas_suite_fixa_sem_comando(self):
+        runner = Runner()
+        tool = RunTestSuiteTool(runner)
+        result = tool.execute(
+            ToolRequest("diagnostico.executar_testes", {"suite": "ia_nabi"}),
+            actor=AssistantActor("admin", "ADMIN", "sessao"),
+        )
+        self.assertTrue(result["passed"])
+        self.assertEqual(runner.calls, ["ia_nabi"])
+
+    def test_schema_da_ferramenta_recusa_terminal_ou_caminho_inventado(self):
+        RUN_TEST_SUITE.schema.validate({"suite": "commercial"})
+        for parameters in (
+            {"suite": "rm -rf"},
+            {"suite": "ia_nabi", "command": "pytest"},
+            {"path": "C:/"},
+        ):
+            with self.subTest(parameters=parameters):
+                with self.assertRaises(ValueError):
+                    RUN_TEST_SUITE.schema.validate(parameters)
 
 
 if __name__ == "__main__":
