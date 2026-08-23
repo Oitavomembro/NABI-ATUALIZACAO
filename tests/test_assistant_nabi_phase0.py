@@ -9,6 +9,7 @@ from assistant_nabi import (
     CapabilityLevel,
     CurrentSessionPermissionAdapter,
     ModelReply,
+    LocalOpenAICompatibleModelAdapter,
     ParameterDefinition,
     ParameterType,
     ReadOnlyToolRegistry,
@@ -21,6 +22,7 @@ from assistant_nabi import (
 from commercial.application.dto import CustomerRecord, ProductRecord
 from commercial.application.product_dto import ProductStockSummary
 from decimal import Decimal
+from assistant_nabi.read_tools import PRODUCT_SEARCH
 
 
 class Permissions:
@@ -435,6 +437,72 @@ class NabiApplicationServiceTests(unittest.TestCase):
         valid, _model = self.service(ModelReply("ok"), max_message_length=100)
         self.assertTrue(valid.ask("x" * 101).safe_failure)
         self.assertTrue(valid.ask("  ").safe_failure)
+
+
+class Transport:
+    def __init__(self, response):
+        self.response = response
+        self.calls = []
+
+    def post(self, url, payload, *, timeout_seconds):
+        self.calls.append((url, payload, timeout_seconds))
+        return self.response
+
+
+class NabiLocalProviderTests(unittest.TestCase):
+    def test_rejeita_endpoint_remoto_ou_https(self):
+        for endpoint in (
+            "https://127.0.0.1:8080/v1/chat/completions",
+            "http://example.com/v1/chat/completions",
+            "http://usuario:senha@127.0.0.1:8080/v1/chat/completions",
+            "http://127.0.0.1:8080/v1/chat/completions?token=segredo",
+        ):
+            with self.subTest(endpoint=endpoint):
+                with self.assertRaisesRegex(ValueError, "loopback"):
+                    LocalOpenAICompatibleModelAdapter(endpoint=endpoint, model="qwen")
+
+    def test_converte_schema_fechado_e_chamada_local(self):
+        response = {"choices": [{"message": {
+            "content": "Vou consultar.",
+            "tool_calls": [{
+                "id": "call-1",
+                "function": {
+                    "name": "produtos.pesquisar",
+                    "arguments": '{"term":"cafe"}',
+                },
+            }],
+        }}]}
+        transport = Transport(response)
+        adapter = LocalOpenAICompatibleModelAdapter(
+            model="qwen3-4b-local", transport=transport, timeout_seconds=5
+        )
+        reply = adapter.respond("procure café", available_tools=(PRODUCT_SEARCH,))
+        self.assertEqual(reply.tool_requests[0].tool_name, "produtos.pesquisar")
+        self.assertEqual(reply.tool_requests[0].parameters["term"], "cafe")
+        url, payload, timeout = transport.calls[0]
+        self.assertEqual(url, "http://127.0.0.1:8080/v1/chat/completions")
+        self.assertEqual(timeout, 5)
+        schema = payload["tools"][0]["function"]["parameters"]
+        self.assertFalse(schema["additionalProperties"])
+        self.assertEqual(schema["required"], ["term"])
+        self.assertEqual(payload["temperature"], 0)
+
+    def test_resposta_malformada_e_argumentos_nao_objeto_falham(self):
+        malformed = LocalOpenAICompatibleModelAdapter(
+            model="qwen", transport=Transport({"erro": "sem choices"})
+        )
+        with self.assertRaisesRegex(ValueError, "sem mensagem"):
+            malformed.respond("oi", available_tools=())
+        invalid_arguments = LocalOpenAICompatibleModelAdapter(
+            model="qwen", transport=Transport({"choices": [{"message": {
+                "content": "",
+                "tool_calls": [{"function": {
+                    "name": "produtos.pesquisar", "arguments": "[]"
+                }}],
+            }}]})
+        )
+        with self.assertRaisesRegex(ValueError, "objeto"):
+            invalid_arguments.respond("oi", available_tools=(PRODUCT_SEARCH,))
 
 
 if __name__ == "__main__":

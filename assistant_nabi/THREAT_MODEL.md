@@ -48,3 +48,20 @@ não enfraquecer `ReadOnlyToolRegistry`. Antes de qualquer mutação serão exig
 
 Fiscal/SEFAZ permanece fora da autoridade da Nabi. Uma integração futura poderá
 apenas solicitar o fluxo oficial e relatar o estado comprovado pelo pipeline.
+
+## Provedor local recomendado para homologação
+
+- runtime preferencial: `llama.cpp/llama-server`, sob MIT;
+- API: OpenAI-compatible exclusivamente em loopback;
+- modelo-base candidato: Qwen3-4B, sob Apache 2.0;
+- nenhum peso de modelo é incorporado ou baixado automaticamente nesta fase;
+- origem, licença, hash e quantização do arquivo GGUF deverão ser registrados
+  antes de distribuição;
+- o adaptador rejeita endpoint remoto, não recebe token e usa temperatura zero;
+- trocar o modelo não altera ferramentas, schemas, permissões ou políticas.
+
+Fontes oficiais consultadas em 23/08/2026:
+
+- `https://github.com/ggml-org/llama.cpp` e seu arquivo `LICENSE`;
+- `https://qwenlm.github.io/blog/qwen3/`;
+- `https://huggingface.co/Qwen/Qwen3-4B`.

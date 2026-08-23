@@ -89,7 +89,7 @@ Legenda:
 - [x] decisão: operar por serviços internos, não por cliques livres na GUI;
 - [x] texto primeiro e porta de voz futura definidos;
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
-- [~] Fase 0: modelo de ameaças, níveis, schemas fechados, registro fail-closed, sessão/permissões, auditoria, consultas comerciais e orquestração textual segura implementados na branch `codex/ia-nabi-fase0`; adaptador e escolha homologada de provedor local aberto ainda pendentes;
+- [~] Fase 0: fundação segura, consultas e adaptador local loopback implementados na branch `codex/ia-nabi-fase0`; `llama.cpp/llama-server` (MIT) e Qwen3-4B (Apache 2.0) são candidatos documentados, mas pesos não foram baixados e a homologação física do modelo ainda está pendente;
 - [ ] Fase 1: mascote e assistente escrita somente leitura;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;

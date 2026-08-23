@@ -17,6 +17,7 @@ from .registry import ReadOnlyToolRegistry
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 from .read_tools import register_commercial_read_tools
 from .application import AssistantApplicationService
+from .local_provider import LocalOpenAICompatibleModelAdapter
 
 __all__ = [
     "AssistantActor",
@@ -27,6 +28,7 @@ __all__ = [
     "ParameterDefinition",
     "ParameterType",
     "ModelReply",
+    "LocalOpenAICompatibleModelAdapter",
     "ReadOnlyToolRegistry",
     "CurrentSessionPermissionAdapter",
     "ToolDefinition",
