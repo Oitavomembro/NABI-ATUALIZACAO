@@ -1193,3 +1193,16 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - teste de ida e volta comprova o escopo operacional completo; validação final:
   `36 passed`, `compileall` e `git diff --check` aprovados;
 - nenhum push e nenhum instalador foram realizados.
+
+### Lista ampliada e identificação persistente de homônimos
+
+- implementação: `dc69d39` — `feat: amplia lista e fixa identificacao do cliente`;
+- a lista final usa Ficha, Nome, Saldo devedor, CPF e Telefone; o endereço saiu
+  da coluna para reduzir ruído e continua disponível na ficha completa;
+- selecionar qualquer cliente mantém abaixo da tabela uma faixa fixa com ficha,
+  nome, endereço e telefone, sem depender do atraso ou desaparecimento da dica
+  temporária do mouse; a dica sobre o nome foi preservada como atalho adicional;
+- janela principal passou a 1220x720 e Clientes e Fichas a 1180x720, com mínimos
+  maiores e sem obrigar modo de tela cheia;
+- validação final: `31 passed`, `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
