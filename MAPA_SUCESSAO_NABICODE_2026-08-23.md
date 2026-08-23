@@ -65,9 +65,13 @@ Legenda:
 - [x] F6 e clique preservam o carrinho pelo `PDVService` oficial sem checkout, pagamento, estoque, Caixa ou Fiscal; a listagem/reabertura só consome após seleção e confirmação de substituição, mantendo cliente somente por ID real;
 - [x] validação automatizada: 58 testes focados Commercial/backend, 96 testes Qt e regressão ampliada de 271 testes Qt/Commercial/backend aprovados; `compileall` e `git diff --check` aprovados;
 - [~] homologação manual pendente para F6, clique, foco, substituição recusada, reabertura com/sem cliente, persistência após reinício e continuidade pelo checkout oficial;
-- [ ] vendas do dia, reimpressão e cancelamento Qt;
-- [ ] resolver todos os botões provisórios;
-- [ ] suíte completa do NabiCode após o conjunto;
+- [x] Vendas do dia Qt implementadas na branch isolada `codex/vendas-do-dia-qt`: fronteira Commercial `df6e56c`, janela Qt `aa5a281`, identificação real do cliente `e6dc302` e remoção dos últimos marcadores provisórios `6f371ea`;
+- [x] F7 e clique listam vendas e orçamentos do dia, filtram dados reais e oferecem prévia, segunda via e PDF pelos serviços documentais existentes; cancelamento local exige confirmação e reverte pelo `PDVTransactionService` oficial;
+- [x] a porta Commercial recusa cancelamento local de qualquer venda vinculada a documento fiscal e orienta uso exclusivo da Central Fiscal, sem importar, chamar ou alterar Fiscal/SEFAZ;
+- [x] validação relacionada: 235 testes Qt/Commercial/backend e 335 subtestes aprovados; `compileall` e `git diff --check` aprovados;
+- [x] todos os botões comerciais visíveis no PDV Qt possuem ação real; o método e o rótulo provisórios foram removidos;
+- [~] suíte integral executada: 1693 testes e 385 subtestes aprovados, 1 ignorado e 3 falhas fora deste checkpoint — duas por ausência local de `brazilfiscalreport` em testes de DANFE e uma asserção textual Legacy antiga que ainda procura `entry_valor_venda.insert` após a migração já existente para `MoneyEntryBehavior.set_value`; nenhuma dessas áreas foi alterada por esta missão;
+- [~] homologação manual pendente para F7, filtros, Enter/Shift+Enter/Esc, segunda via/PDF/impressão, cancelamento local confirmado/recusado e bloqueio de venda fiscal;
 - [ ] homologação física Windows do PDV completo;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
