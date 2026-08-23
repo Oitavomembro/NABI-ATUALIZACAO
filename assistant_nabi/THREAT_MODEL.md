@@ -1,10 +1,12 @@
-# Nabi — modelo de ameaças da Fase 0
+# Nabi — modelo de ameaças operacional
 
 ## Escopo
 
-Esta fase cria somente contratos, classificação de capacidades e um catálogo de
-consultas. Não há modelo de linguagem conectado, interface de conversa, acesso
-direto a banco, execução de comandos, ferramenta mutável ou integração fiscal.
+A Nabi possui conversa local, consultas, rascunhos e duas operações comerciais
+confirmadas: recebimento de pedido e entrada local de NF-e com vínculo exato.
+Não há acesso direto a banco, terminal, URL, SEFAZ ou ferramenta mutável genérica.
+Toda gravação passa por serviço oficial, permissão atual, prévia imutável,
+confirmação humana reforçada e chave idempotente.
 
 ## Fronteiras de confiança
 
@@ -27,15 +29,19 @@ direto a banco, execução de comandos, ferramenta mutável ou integração fisc
 | SQL, terminal, URL ou código emitido pelo modelo | Não existem ferramentas genéricas para essas operações |
 | Vazamento de erro ou segredo | Resultado externo usa mensagem segura e não inclui exceção interna |
 | Alteração dos parâmetros após autorização | Requisições e resultados imutáveis |
-| Ação mutável prematura | Registro da Fase 0 aceita apenas `READ` de nível 1 |
+| Ação mutável prematura | Registro aceita apenas leitura/rascunho; execução existe fora do catálogo e exige confirmação vinculada |
 | Ausência de trilha | Toda tentativa, inclusive negada ou desconhecida, é enviada à porta de auditoria |
 | Indisponibilidade da IA | Núcleo do NabiCode não depende deste pacote para operar |
-| Falsa evidência fiscal | Nenhuma ferramenta ou porta Fiscal/SEFAZ nesta fase |
+| Falsa evidência fiscal | `cStat` é apenas dado local; a Nabi não autentica XML nem consulta SEFAZ |
+| XML de terceiro ou rejeitado | Automação exige destinatário documentado e evidência local literal `cStat=100`; demais casos vão para conferência humana |
+| Produto ambíguo ou inventado | Entrada automática aceita somente um ID real ligado inequivocamente por EAN/código exato |
+| Conversão de unidade presumida | Fator positivo deve ser informado para cada item e aparece na prévia |
+| Repetição após resposta desconhecida | Diário idempotente é confirmado na mesma transação de nota, estoque e financeiro |
 
 ## Regras de evolução
 
-Uma fase futura que introduza rascunhos ou mutações deve usar contratos novos e
-não enfraquecer `ReadOnlyToolRegistry`. Antes de qualquer mutação serão exigidos:
+Novas mutações devem usar contratos próprios e não enfraquecer
+`ReadOnlyToolRegistry` nem `DraftToolRegistry`. Para toda mutação são exigidos:
 
 1. schema fechado e validação recursiva dos parâmetros;
 2. permissão vinculada à sessão atual;
@@ -46,8 +52,9 @@ não enfraquecer `ReadOnlyToolRegistry`. Antes de qualquer mutação serão exig
 7. resultado real retornado pelo backend;
 8. testes adversariais e homologação manual no Windows.
 
-Fiscal/SEFAZ permanece fora da autoridade da Nabi. Uma integração futura poderá
-apenas solicitar o fluxo oficial e relatar o estado comprovado pelo pipeline.
+Fiscal/SEFAZ permanece fora da autoridade da Nabi. A entrada assistida lê um XML
+local escolhido pelo operador e chama o importador transacional já existente;
+não transmite, consulta, autoriza, cancela nem interpreta resposta da SEFAZ.
 
 ## Provedor local recomendado para homologação
 
