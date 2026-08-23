@@ -68,6 +68,55 @@ class ProductRecord:
 
 
 @dataclass(frozen=True, slots=True)
+class BudgetDocument:
+    budget_id: str
+    created_at: str
+    customer_id: int
+    customer_name: str
+    items: tuple[CartItem, ...]
+    total: Decimal
+
+    def __init__(
+        self,
+        *,
+        budget_id: str,
+        created_at: str,
+        customer_id: int,
+        customer_name: str,
+        items: Iterable[CartItem],
+        total: Decimal | int | str,
+    ) -> None:
+        object.__setattr__(self, "budget_id", str(budget_id or "").strip())
+        object.__setattr__(self, "created_at", str(created_at or "").strip())
+        object.__setattr__(self, "customer_id", customer_id)
+        object.__setattr__(self, "customer_name", str(customer_name or "").strip())
+        object.__setattr__(self, "items", tuple(items))
+        object.__setattr__(self, "total", total)
+        self.__post_init__()
+
+    def __post_init__(self) -> None:
+        if not self.budget_id or not self.created_at:
+            raise ValueError("Orçamento exige identificação e data de criação.")
+        if isinstance(self.customer_id, bool) or int(self.customer_id) <= 0:
+            raise ValueError("Orçamento exige customer_id real.")
+        if not self.customer_name:
+            raise ValueError("Orçamento exige nome do cliente.")
+        if not self.items or any(not isinstance(item, CartItem) for item in self.items):
+            raise ValueError("Orçamento exige itens comerciais válidos.")
+        try:
+            total = MoneyCodec.parse(self.total, field="total do orçamento")
+        except MoneyValueError as exc:
+            raise ValueError(str(exc)) from exc
+        calculated = sum((item.subtotal for item in self.items), MoneyCodec.ZERO).quantize(
+            MoneyCodec.CENT
+        )
+        if total != calculated:
+            raise ValueError("O total do orçamento diverge dos itens.")
+        object.__setattr__(self, "customer_id", int(self.customer_id))
+        object.__setattr__(self, "total", total)
+
+
+@dataclass(frozen=True, slots=True)
 class CheckoutCommand:
     customer_id: int
     items: tuple[CartItem, ...]

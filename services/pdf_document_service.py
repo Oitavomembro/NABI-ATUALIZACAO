@@ -155,7 +155,10 @@ class PDFDocumentService:
         name, code, record, phone, address, reference, balance = customer
         category = "entrega" if document_type == "ENTREGA" else "recibo"
         model = self.document_model(category)
-        title = "COMPROVANTE DE ENTREGA" if document_type == "ENTREGA" else "COMPROVANTE DE VENDA"
+        title = {
+            "ENTREGA": "COMPROVANTE DE ENTREGA",
+            "ORCAMENTO": "ORÇAMENTO — SEM VALOR FISCAL",
+        }.get(document_type, "COMPROVANTE DE VENDA")
         base = (
             f"{category}_{document_id or datetime.now().strftime('%H%M%S')}_"
             f"{self.safe_name(name)}_{datetime.now():%Y%m%d_%H%M%S}.pdf"

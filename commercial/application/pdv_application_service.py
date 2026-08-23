@@ -10,11 +10,14 @@ from commercial.domain.credit import CreditTerms
 from commercial.domain.money import MoneyCodec
 from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
-from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
+from .dto import (
+    BudgetDocument, CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord,
+    ProductRecord,
+)
 from .pdv_session import PDVSession
 from .ports import (
-    CheckoutPort, CommercialEventPort, CustomerLookupPort, ProductLookupPort,
-    SaleReceiptOutputPort,
+    BudgetOutputPort, BudgetPort, CheckoutPort, CommercialEventPort, CustomerLookupPort,
+    ProductLookupPort, SaleReceiptOutputPort,
 )
 
 
@@ -29,12 +32,81 @@ class PDVApplicationService:
         checkout_gateway: CheckoutPort,
         events: CommercialEventPort | None = None,
         receipt_output: SaleReceiptOutputPort | None = None,
+        budgets: BudgetPort | None = None,
+        budget_output: BudgetOutputPort | None = None,
     ) -> None:
         self.customers = customers
         self.products = products
         self.checkout_gateway = checkout_gateway
         self.events = events
         self.receipt_output = receipt_output
+        self.budgets = budgets
+        self.budget_output = budget_output
+
+    def _budget_port(self) -> BudgetPort:
+        if self.budgets is None:
+            raise RuntimeError("O serviço de orçamentos não está configurado.")
+        return self.budgets
+
+    def save_budget(self, session: PDVSession) -> BudgetDocument:
+        session.ensure_open()
+        if session.cart.is_empty:
+            raise ValueError("Inclua ao menos um item antes de salvar o orçamento.")
+        customer = (
+            self.select_final_consumer(session)
+            if session.customer_id is None
+            else self.get_customer(session.customer_id)
+        )
+        if customer is None:
+            raise ValueError("O cliente do orçamento não está disponível.")
+        budget = self._budget_port().save(
+            customer_id=customer.customer_id,
+            customer_name=customer.name,
+            items=session.cart.items,
+        )
+        session.reset()
+        return budget
+
+    def list_budgets(self) -> tuple[BudgetDocument, ...]:
+        return self._budget_port().list_open()
+
+    def load_budget(
+        self, session: PDVSession, budget_id: str, *, replace: bool = False
+    ) -> BudgetDocument:
+        session.ensure_open()
+        if not session.cart.is_empty and not replace:
+            raise ValueError("O carrinho atual precisa ser preservado ou substituído explicitamente.")
+        budget = next(
+            (item for item in self.list_budgets() if item.budget_id == str(budget_id)), None
+        )
+        if budget is None:
+            raise ValueError("Orçamento não encontrado.")
+        customer = self.get_customer(budget.customer_id)
+        if customer is None:
+            raise ValueError("O cliente do orçamento não está mais disponível.")
+        consumed = self._budget_port().consume(budget.budget_id)
+        session.reset()
+        for item in consumed.items:
+            session.add_item(item)
+        session.select_customer(customer.customer_id)
+        return consumed
+
+    def budget_preview_text(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A saída de orçamento não está configurada.")
+        return self.budget_output.preview_text(budget)
+
+    def print_budget(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A impressão de orçamento não está configurada.")
+        return self.budget_output.print_thermal(budget)
+
+    def generate_budget_pdf(self, budget: BudgetDocument) -> str:
+        if self.budget_output is None:
+            raise RuntimeError("A geração de PDF de orçamento não está configurada.")
+        path = self.budget_output.generate_pdf(budget)
+        self.budget_output.open_file(path)
+        return path
 
     @staticmethod
     def _confirmed_receipt(result: CheckoutResult) -> CheckoutReceipt:

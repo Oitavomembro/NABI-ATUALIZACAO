@@ -31,6 +31,9 @@ class PDVSession:
         if self.checkout_state is not CheckoutState.OPEN:
             raise RuntimeError("A sessão está em processo de finalização.")
 
+    def ensure_open(self) -> None:
+        self._ensure_open()
+
     def _invalidate_payment(self) -> None:
         self.payment_plan = None
         self.credit_terms = None

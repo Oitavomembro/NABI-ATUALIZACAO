@@ -5,7 +5,10 @@ from decimal import Decimal
 from typing import Protocol, runtime_checkable
 
 from .action_dto import ActionContext, PersistedCancellation, SaleCancelled
-from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
+from .dto import (
+    BudgetDocument, CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord,
+    ProductRecord,
+)
 from .query_dto import (
     CancelledSaleSummary, DailyMovementSummary, DailySaleSummary,
     OverdueChargeSummary, ReceiptSummary,
@@ -79,6 +82,32 @@ class SaleReceiptOutputPort(Protocol):
     def print_thermal(self, receipt: CheckoutReceipt) -> str: ...
 
     def generate_pdf(self, receipt: CheckoutReceipt) -> str: ...
+
+    def open_file(self, path: str) -> str: ...
+
+
+@runtime_checkable
+class BudgetPort(Protocol):
+    """Persistência não fiscal de orçamentos abertos do PDV."""
+
+    def save(
+        self, *, customer_id: int, customer_name: str, items: tuple
+    ) -> BudgetDocument: ...
+
+    def list_open(self) -> tuple[BudgetDocument, ...]: ...
+
+    def consume(self, budget_id: str) -> BudgetDocument: ...
+
+
+@runtime_checkable
+class BudgetOutputPort(Protocol):
+    """Prévia e saídas explícitas; nunca registra venda ou documento fiscal."""
+
+    def preview_text(self, budget: BudgetDocument) -> str: ...
+
+    def print_thermal(self, budget: BudgetDocument) -> str: ...
+
+    def generate_pdf(self, budget: BudgetDocument) -> str: ...
 
     def open_file(self, path: str) -> str: ...
 
