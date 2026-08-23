@@ -13,7 +13,7 @@ from fichario.license_policy import FicharioLicensePolicy
 from fichario.license_dialog import FicharioLicenseDialog
 from fichario.profile import configure_fichario_profile
 from fichario.runtime import initialize_fichario_database
-from fichario.shell import FicharioWindow, LoginDialog
+from fichario.shell import FicharioWindow
 from licensing.restricted_commands import handle_restricted_command
 from licensing.runtime import build_runtime_license_service
 from repositories.system_repository import SystemRepository
@@ -46,10 +46,9 @@ def main(argv=None) -> int:
         system = SystemRepository(database.connect)
         security = SecurityService(database.connect)
         security.bootstrap_admin(system.get_config("admin_senha_hash"))
-        login = LoginDialog(security)
-        if login.exec() != QDialog.DialogCode.Accepted: return 0
+        session = security.start_session_without_password("admin")
         window = FicharioWindow(
-            container, database, profile, security, login.session
+            container, database, profile, security, session
         )
         window.show()
         timer = QTimer(qt); timer.setInterval(60_000)

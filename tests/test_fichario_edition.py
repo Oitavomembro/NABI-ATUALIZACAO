@@ -50,6 +50,15 @@ def test_licenca_ausente_abre_ativacao_antes_do_banco():
     assert "QApplication.clipboard().setText(self._machine_code_value)" in dialog
 
 
+def test_fichario_licenciado_abre_sessao_local_sem_tela_de_login():
+    source = (Path(__file__).parents[1] / "main_fichario_qt.py").read_text(encoding="utf-8")
+    assert 'security.start_session_without_password("admin")' in source
+    assert "LoginDialog(" not in source
+    assert source.index("policy.operational") < source.index(
+        'security.start_session_without_password("admin")'
+    )
+
+
 def test_perfil_fichario_isola_dados_fora_do_programa(tmp_path, monkeypatch):
     monkeypatch.setenv("APPDATA", str(tmp_path))
     monkeypatch.setenv("NABICODE_PROFILE", "TESTE")
