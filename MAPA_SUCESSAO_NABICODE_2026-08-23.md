@@ -1161,3 +1161,18 @@ importação no banco de produção antes da aprovação visual e de um backup m
   Clientes e Fichas e destaca especialmente pesquisa, número da ficha e tabela;
 - validação final: `31 passed`; `compileall` e `git diff --check` aprovados;
 - nenhum push e nenhum instalador foram realizados.
+
+### Cards do Fichário como filtros de clientes
+
+- implementação: `e2c2a49` — `feat: filtra clientes pelos cards do Fichario`;
+- os cinco cards do resumo são botões acessíveis e abrem Clientes e Fichas já
+  limitado à situação escolhida: todas as fichas, em dia, devendo sem alerta,
+  atrasados há mais de 60 dias ou todos com saldo a receber;
+- a classificação reutiliza exatamente a mesma regra e a mesma data-limite do
+  resumo, evitando divergência entre o número mostrado e a relação aberta;
+- a janela identifica visualmente o filtro ativo e mantém pesquisa por ficha,
+  código, nome, documento, telefone e endereço dentro daquele grupo;
+- apenas `customer_id` real atravessa a fronteira Commercial; a interface não
+  consulta o banco diretamente e o carregamento continua paginado em 60/200;
+- validação final: `39 passed`; `compileall` e `git diff --check` aprovados;
+- nenhum push e nenhum instalador foram realizados.
