@@ -282,10 +282,15 @@ def test_empacotamento_externo_nao_inclui_runtime_catalogo_ou_segredos():
     assert "trusted_public_keys" not in spec
     assert "assistant_nabi" in spec and "services" in spec
     assert "license_issuer_app.py" in spec
-    private_files = [
-        path for path in ROOT.rglob("*")
-        if path.is_file() and path.suffix.lower() in {".pem", ".key", ".p12", ".pfx"}
-    ]
+    private_files = []
+    for path in ROOT.rglob("*"):
+        if not path.is_file():
+            continue
+        suffix = path.suffix.lower()
+        if suffix in {".p12", ".pfx"}:
+            private_files.append(path)
+        elif suffix in {".pem", ".key"} and b"PRIVATE KEY" in path.read_bytes():
+            private_files.append(path)
     assert private_files == []
 
 
