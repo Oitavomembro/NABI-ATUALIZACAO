@@ -69,6 +69,7 @@ def _create_assistant_activation(
         return create_draft_assistant(
             model=model,
             query_service=container.query,
+            financial_query_service=getattr(container, "financial_query", None),
             security_service=security,
             audit_service=audit,
             session_id=session_id,

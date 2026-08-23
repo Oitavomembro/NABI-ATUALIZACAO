@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 from .application import AssistantApplicationService
-from .read_tools import register_commercial_read_tools
+from .read_tools import register_commercial_read_tools, register_financial_read_tools
 from .registry import ReadOnlyToolRegistry
 from .registry import DraftToolRegistry
 from .draft_tools import register_sale_draft_tools
@@ -21,6 +21,7 @@ def create_read_only_assistant(
     audit_service,
     session_id: str,
     event_bus=None,
+    financial_query_service=None,
 ) -> AssistantApplicationService:
     """Compõe a Nabi de consulta usando apenas sessão, auditoria e fachada oficiais."""
 
@@ -39,6 +40,7 @@ def create_read_only_assistant(
     audit = AdminAssistantAuditAdapter(audit_service, event_bus=event_bus)
     registry = ReadOnlyToolRegistry(permissions=permissions, audit=audit)
     register_commercial_read_tools(registry, query_service)
+    register_financial_read_tools(registry, financial_query_service)
     return AssistantApplicationService(
         model=model,
         registry=registry,
@@ -50,6 +52,7 @@ def create_draft_assistant(
     *, model, query_service, security_service, audit_service, session_id: str,
     event_bus=None, purchase_draft_service=None, purchase_executor=None,
     nfe_entry_draft_service=None, nfe_entry_executor=None,
+    financial_query_service=None,
 ) -> AssistantApplicationService:
     """Compõe consultas e rascunhos; não registra ferramentas mutáveis."""
     for value, message in (
@@ -68,6 +71,7 @@ def create_draft_assistant(
     )
     registry = DraftToolRegistry(permissions=permissions, audit=audit)
     register_commercial_read_tools(registry, query_service)
+    register_financial_read_tools(registry, financial_query_service)
     drafts = SaleDraftService(query_service)
     draft_catalog = AssistantDraftCatalog(
         drafts, purchase_draft_service, nfe_entry_draft_service

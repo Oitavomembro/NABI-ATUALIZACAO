@@ -90,6 +90,8 @@ class NabiBootstrapTests(unittest.TestCase):
             "produtos.pesquisar",
             "produtos.consultar_estoque",
             "clientes.pesquisar",
+            "clientes.consultar_credito",
+            "estoque.listar_baixo",
         ))
         self.assertEqual(audit.events[0][0:2], ("IA_NABI", "CONSULTA_FERRAMENTA"))
         self.assertIn("session_id=qt-session-1", audit.events[0][2]["details"])

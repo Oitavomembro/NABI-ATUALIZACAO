@@ -52,7 +52,10 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         database = SimpleNamespace(connect=Mock())
         profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
         purchase = object()
-        container = SimpleNamespace(query=object(), purchase_service=purchase)
+        financial_query = object()
+        container = SimpleNamespace(
+            query=object(), purchase_service=purchase, financial_query=financial_query
+        )
         security = Mock()
         security.authenticate.return_value = object()
         system = Mock()
@@ -75,6 +78,7 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         purchase_factory.assert_called_once_with(container)
         self.assertEqual(factory.call_args.kwargs["purchase_draft_service"], "rascunhos-compra")
         self.assertEqual(factory.call_args.kwargs["purchase_executor"], "executor-compra")
+        self.assertIs(factory.call_args.kwargs["financial_query_service"], financial_query)
 
     def test_composicao_injeta_entrada_nfe_sem_iniciar_runtime_ou_sefaz(self):
         database = SimpleNamespace(connect=Mock())

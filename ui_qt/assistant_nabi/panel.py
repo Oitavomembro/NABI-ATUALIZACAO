@@ -584,6 +584,67 @@ class NabiAssistantPanel(QWidget):
                 f"Produto #{payload['product_id']} — estoque {payload['current_quantity']} — "
                 f"mínimo {payload['minimum_quantity']} — {payload['status']}"
             )
+        if result.tool_name == "clientes.consultar_credito":
+            return (
+                f"Cliente #{payload['customer_id']} — limite R$ {payload['credit_limit']} — "
+                f"saldo devedor R$ {payload['debt_balance']} — "
+                f"disponível R$ {payload['available_credit']}"
+            )
+        if result.tool_name == "estoque.listar_baixo":
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhum produto com estoque baixo."
+            return "\n".join(
+                f"{item['code']} — {item['description']} — atual {item['current_quantity']} "
+                f"— mínimo {item['minimum_quantity']}"
+                for item in items
+            )
+        if result.tool_name == "vendas.listar_dia":
+            items = payload.get("items", ())
+            if not items:
+                return f"Nenhuma venda em {payload['day']}."
+            return "\n".join(
+                f"Venda #{item['sale_id']} — {item['occurred_at']} — "
+                f"R$ {item['total']} — {item['status']}"
+                for item in items
+            )
+        if result.tool_name == "recebimentos.listar_dia":
+            items = payload.get("items", ())
+            if not items:
+                return f"Nenhum recebimento em {payload['day']}."
+            return "\n".join(
+                f"{item['paid_at']} — {item['customer_name']} — "
+                f"{item['payment_method']} — R$ {item['amount']}"
+                for item in items
+            )
+        if result.tool_name == "cobrancas.listar_vencidas":
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhuma cobrança vencida."
+            return "\n".join(
+                f"{item['customer_name']} — parcela {item['installment_number']} — "
+                f"vence {item['due_date']} — R$ {item['open_amount']}"
+                for item in items
+            )
+        if result.tool_name == "financeiro.resumo":
+            return "\n".join((
+                f"Período: {payload['start_date']} a {payload['end_date']}",
+                f"A receber aberto: R$ {payload['receivable_open']}",
+                f"A receber vencido: R$ {payload['receivable_overdue']}",
+                f"A pagar aberto: R$ {payload['payable_open']}",
+                f"A pagar hoje: R$ {payload['payable_due_today']}",
+                f"Recebido: R$ {payload['received_in_period']}",
+                f"Pago: R$ {payload['paid_in_period']}",
+            ))
+        if result.tool_name == "financeiro.fluxo_caixa":
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhum movimento financeiro no período."
+            return "\n".join(
+                f"{item['occurred_at']} — {item['direction']} — "
+                f"{item['origin']} — R$ {item['amount']}"
+                for item in items
+            )
         if result.tool_name in {
             "vendas.criar_rascunho",
             "vendas.sugerir_rascunho_por_estoque",

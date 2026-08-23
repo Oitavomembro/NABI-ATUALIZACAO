@@ -159,6 +159,30 @@ class NabiAssistantPanelTests(unittest.TestCase):
         for field in ("cpf", "telefone", "endereço"):
             self.assertNotIn(field, text.casefold())
 
+    def test_renderiza_resumo_financeiro_sem_documentos(self):
+        result = ToolResult("r-fin", "financeiro.resumo", True, {
+            "start_date": "2026-08-01", "end_date": "2026-08-23",
+            "receivable_open": "100.00", "receivable_overdue": "20.00",
+            "payable_open": "70.00", "payable_due_today": "10.00",
+            "received_in_period": "50.00", "paid_in_period": "30.00",
+        })
+        text = self.panel._result_text(result)
+        self.assertIn("A receber aberto: R$ 100.00", text)
+        self.assertIn("Pago: R$ 30.00", text)
+        self.assertNotIn("documento", text.casefold())
+
+    def test_renderiza_estoque_baixo_deterministicamente(self):
+        result = ToolResult("r-stock", "estoque.listar_baixo", True, {
+            "items": [{
+                "product_id": 7, "code": "P7", "description": "CAFÉ",
+                "current_quantity": "1.0000", "minimum_quantity": "3.0000",
+            }]
+        })
+        self.assertEqual(
+            self.panel._result_text(result),
+            "P7 — CAFÉ — atual 1.0000 — mínimo 3.0000",
+        )
+
     def test_servico_indisponivel_desativa_entrada_sem_impedir_painel(self):
         panel = NabiAssistantPanel(
             UnavailableAssistantService("Modelo e sessão ainda não homologados.")

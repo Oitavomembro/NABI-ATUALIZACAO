@@ -416,7 +416,7 @@ class NabiApplicationServiceTests(unittest.TestCase):
         self.assertFalse(turn.safe_failure)
         self.assertEqual(turn.message, "Encontrei estes produtos.")
         self.assertTrue(turn.tool_results[0].success)
-        self.assertEqual(len(model.calls[0][1]), 3)
+        self.assertEqual(len(model.calls[0][1]), 8)
 
     def test_modelo_nao_pode_inventar_sql_ou_ferramenta(self):
         service, _model = self.service(ModelReply("Vou executar.", (
