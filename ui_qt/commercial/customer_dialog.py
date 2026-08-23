@@ -220,15 +220,31 @@ class CustomerManagementDialog(QDialog):
         self.table = QTableWidget(0, 6)
         self.table.setHorizontalHeaderLabels(
             [
-                "Ficha", "Nome", "Saldo devedor", "Compras sem atraso",
-                "Compras com atraso", "Qtd. de atrasos",
+                "Ficha", "Nome", "Saldo\ndevedor", "Compras\nsem atraso",
+                "Compras\ncom atraso", "Parcelas\natrasadas",
             ]
         )
+        header_tips = (
+            "Número da ficha do cliente.",
+            "Nome cadastrado do cliente.",
+            "Valor que o cliente ainda deve.",
+            "Compras confiáveis em que nenhuma parcela atrasou.",
+            "Compras confiáveis com pelo menos uma parcela atrasada.",
+            "Total de parcelas pagas com atraso ou vencidas em aberto.",
+        )
+        for index, tip in enumerate(header_tips):
+            self.table.horizontalHeaderItem(index).setToolTip(tip)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setVisible(False)
-        self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        header = self.table.horizontalHeader()
+        header.setMinimumHeight(58)
+        header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        for column, width in ((0, 90), (2, 145), (3, 145), (4, 145), (5, 145)):
+            self.table.setColumnWidth(column, width)
         self.table.doubleClicked.connect(self.open_statement)
         self.table.installEventFilter(self)
         self.search.installEventFilter(self)

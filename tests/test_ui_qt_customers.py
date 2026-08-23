@@ -66,9 +66,11 @@ def test_lista_transporta_id_real_e_exibe_saldos(app):
     assert dialog.table.rowCount() == 1
     assert dialog.selected_customer_id() == 7
     assert [dialog.table.horizontalHeaderItem(index).text() for index in range(6)] == [
-        "Ficha", "Nome", "Saldo devedor", "Compras sem atraso",
-        "Compras com atraso", "Qtd. de atrasos",
+        "Ficha", "Nome", "Saldo\ndevedor", "Compras\nsem atraso",
+        "Compras\ncom atraso", "Parcelas\natrasadas",
     ]
+    assert "nenhuma parcela atrasou" in dialog.table.horizontalHeaderItem(3).toolTip()
+    assert "vencidas em aberto" in dialog.table.horizontalHeaderItem(5).toolTip()
     assert dialog.table.item(0, 2).text() == "R$ 125,00"
     assert dialog.table.item(0, 3).text() == "3"
     assert dialog.table.item(0, 4).text() == "2"
