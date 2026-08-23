@@ -86,6 +86,9 @@ class CheckoutDialog(QDialog):
         root.addWidget(self.credit_box)
 
         self.balance_label = QLabel()
+        self.balance_label.setStyleSheet(
+            "font-size: 28px; font-weight: 800; color: #00e676; padding: 8px 0;"
+        )
         self.error_label = QLabel()
         self.error_label.setStyleSheet("color: #ff6b6b;")
         root.addWidget(self.balance_label)
@@ -173,6 +176,18 @@ class CheckoutDialog(QDialog):
 
     def _add_payment(self) -> bool:
         try:
+            _discount, _surcharge, final = self.view_model.application.resolve_adjustments(
+                self.view_model.session.items_total, **self._adjustment_data()
+            )
+        except ValueError as error:
+            self.error_label.setText(str(error))
+            return False
+        paid_before = sum((payment.amount for payment in self._payments), Decimal("0"))
+        if self._payments and paid_before >= final:
+            self.error_label.setText("O total já está coberto. Revise os pagamentos.")
+            self.discount_type.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        try:
             self._payments.append(self._current_payment())
         except ValueError as error:
             self.error_label.setText(str(error))
@@ -183,7 +198,12 @@ class CheckoutDialog(QDialog):
         self._invalidate_review()
         self._render_payments()
         self._refresh_totals()
-        self.method.setFocus(Qt.FocusReason.OtherFocusReason)
+        paid = sum((payment.amount for payment in self._payments), Decimal("0"))
+        if paid >= final:
+            self.discount_type.setFocus(Qt.FocusReason.OtherFocusReason)
+        else:
+            self.amount.set_value(final - paid)
+            self.method.setFocus(Qt.FocusReason.OtherFocusReason)
         return True
 
     def _remove_payment(self) -> None:
@@ -225,8 +245,8 @@ class CheckoutDialog(QDialog):
             paid = sum((payment.amount for payment in self._payments), self.amount.value() if not self._payments else Decimal("0"))
             difference = paid - final
             self.balance_label.setText(
-                f"Troco potencial: R$ {MoneyCodec.format_br(difference)}" if difference >= 0
-                else f"Falta: R$ {MoneyCodec.format_br(-difference)}"
+                f"TROCO: R$ {MoneyCodec.format_br(difference)}" if difference >= 0
+                else f"FALTA: R$ {MoneyCodec.format_br(-difference)}"
             )
             self.total_label.setText(
                 f"Subtotal R$ {MoneyCodec.format_br(self.view_model.session.items_total)}  •  "

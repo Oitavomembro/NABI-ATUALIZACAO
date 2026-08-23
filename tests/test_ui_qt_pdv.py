@@ -426,7 +426,35 @@ class CheckoutDialogTests(unittest.TestCase):
         QApplication.processEvents()
         self.assertEqual(len(self.dialog._payments), 1)
         self.assertEqual(self.dialog._payments[0].amount, Decimal("100.00"))
+        self.assertTrue(self.dialog.discount_type.hasFocus())
+
+    def test_enter_repetido_apos_total_coberto_nao_duplica_pagamento(self):
+        self.dialog.add_payment.setFocus()
+        QTest.keyClick(self.dialog.add_payment, Qt.Key.Key_Return)
+        self.assertEqual(len(self.dialog._payments), 1)
+        self.assertTrue(self.dialog.discount_type.hasFocus())
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Return)
+        QTest.keyClick(QApplication.focusWidget(), Qt.Key.Key_Return)
+        self.assertEqual(len(self.dialog._payments), 1)
+
+    def test_total_coberto_bloqueia_nova_inclusao_ate_por_clique(self):
+        self.assertTrue(self.dialog._add_payment())
+        self.assertFalse(self.dialog._add_payment())
+        self.assertEqual(len(self.dialog._payments), 1)
+        self.assertIn("já está coberto", self.dialog.error_label.text())
+
+    def test_pagamento_parcial_prepara_saldo_restante_e_mantem_fluxo_misto(self):
+        self.dialog.amount.set_value("40")
+        self.assertTrue(self.dialog._add_payment())
+        self.assertEqual(self.dialog.amount.value(), Decimal("60.00"))
         self.assertTrue(self.dialog.method.hasFocus())
+
+    def test_rotulo_de_troco_e_grande_e_nao_diz_potencial(self):
+        self.dialog.amount.set_value("120")
+        self.dialog._refresh_totals()
+        self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 20,00")
+        self.assertNotIn("potencial", self.dialog.balance_label.text().casefold())
+        self.assertIn("font-size: 28px", self.dialog.balance_label.styleSheet())
 
     def test_auto_repeat_no_botao_nao_adiciona_pagamento(self):
         self.dialog.add_payment.setFocus()
