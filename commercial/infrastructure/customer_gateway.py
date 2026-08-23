@@ -11,6 +11,18 @@ class NabiCodeCustomerGateway:
     def __init__(self, repository) -> None:
         self.repository = repository
 
+    def list(self, term: str = "", *, limit: int = 250) -> tuple[CustomerRecord, ...]:
+        page = self.repository.list_page(term, page=0, per_page=limit)
+        return tuple(
+            CustomerRecord(
+                customer_id=int(row[0]), code="", name=str(row[2] or ""),
+                record_number=int(row[1]) if row[1] not in (None, "") else None,
+                debt_balance=Decimal(str(row[3] or 0)),
+                credit_limit=Decimal(str(row[4] or 0)),
+            )
+            for row in page.rows
+        )
+
     def search(self, term: str, *, limit: int = 30) -> tuple[CustomerRecord, ...]:
         return tuple(
             CustomerRecord(

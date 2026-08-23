@@ -41,6 +41,10 @@ class CustomerApplicationService:
     def search_customers(self, term: str, *, limit: int = 30):
         return self._customers.search(term, limit=limit)
 
+    def list_customers(self, term: str = "", *, limit: int = 250) -> tuple[CustomerDetails, ...]:
+        records = self._customers.list(term, limit=limit)
+        return tuple(self.get_customer(record.customer_id) for record in records)
+
     def customer_statement(self, customer_id: int) -> CustomerStatement:
         return self._accounts.statement(customer_id)
 
