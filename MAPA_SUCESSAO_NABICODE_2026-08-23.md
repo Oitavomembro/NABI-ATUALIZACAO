@@ -95,9 +95,9 @@ Legenda:
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
 - [x] a fundação e o painel escritos no commit `bd8d126` foram reunidos ao histórico estabilizado do PDV na branch isolada `codex/integracao-nabi-pdv`, sem alterar as branches de origem e sem push;
 - [x] Fase 0 implementa ameaça, permissões vinculadas à sessão, auditoria sem parâmetros sensíveis, schemas fechados, consultas, orquestração textual e adaptador `llama.cpp/llama-server` restrito a loopback;
-- [~] Fase 1 possui painel Qt escrito, mascote provisório leve, renderização determinística, voz desativada, botão `Parar Nabi` e proteção contra respostas atrasadas; o painel foi conectado ao shell e ao `main_qt.py` como dock opcional em falha fechada, enquanto a homologação visual e a ativação com sessão/modelo reais continuam pendentes;
+- [~] Fase 1 possui painel Qt escrito, mascote azul aprovada com transparência real, estados visuais acompanhados de texto/acessibilidade, renderização determinística, voz desativada, botão `Parar Nabi` e proteção contra respostas atrasadas; o painel foi conectado ao shell e ao `main_qt.py` como dock opcional em falha fechada, enquanto a homologação visual na janela real e a ativação com sessão autenticada continuam pendentes;
 - [x] Qwen3-1.7B Instruct em GGUF Q4 é o baseline atual; Qwen3-4B em GGUF Q4 permanece somente candidato posterior se memória e velocidade forem aceitáveis;
-- [~] nenhum peso foi baixado ou homologado; origem, licença, revisão, SHA-256, memória, velocidade e avaliações físicas continuam pendentes;
+- [x] peso e runtime locais foram baixados somente no perfil TESTE, verificados por origem, licença, revisão e SHA-256 e submetidos à homologação física inicial; login Qt real, avaliações prolongadas e decisão de empacotamento continuam pendentes;
 - [ ] Fase 2: rascunhos comerciais;
 - [ ] Fase 3: ações confirmadas e idempotentes;
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
@@ -108,12 +108,13 @@ Legenda:
 - [!] ativação real no `main_qt.py` permanece bloqueada até o Qt possuir login autenticado legítimo e o modelo local possuir origem, licença, hash e homologação física; é proibido usar `start_session_without_password` ou fabricar sessão para habilitar a Nabi;
 - [x] portão local de artefato GGUF implementado: manifesto exige modelo, arquivo, quantização, URL HTTPS sem credenciais, revisão imutável, licença, tamanho e SHA-256; ausência, truncamento ou adulteração falham fechados e nenhum download é realizado; validação ampliada com 204 testes e 336 subtestes aprovada;
 - [x] candidato Q4_K_M registrado sem download: `ggml-org/Qwen3-1.7B-GGUF`, revisão imutável `daeb8e2d528a760970442092f6bf1e55c3b659eb`, arquivo de 1.282.439.264 bytes, licença Apache-2.0 e SHA-256 `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`;
-- [~] o artefato registrado ainda não equivale a homologação do peso ou do `llama-server`: download controlado, hash local, avisos de terceiros, desempenho e avaliações físicas continuam pendentes;
+- [x] artefato e `llama-server` foram homologados no checkpoint `a30449a`, incluindo avisos de terceiros, integridade local, desempenho inicial, ferramenta real de consulta e recusas adversariais;
 - [x] download controlado realizado somente na área persistente do perfil TESTE: peso de 1.282.439.264 bytes e SHA-256 local coincidentes; nada foi colocado no Git ou na Produção;
 - [x] `llama.cpp` portátil CPU x64 `b10537` verificado pela atestação/hash oficial e por manifesto da árvore extraída com 52 arquivos;
 - [x] supervisor local inicia oculto em loopback, sem Web UI, com CORS restrito e chave efêmera somente em memória; acesso sem chave retornou HTTP 401 e o processo é encerrado após uso;
 - [x] homologação física inicial: carga entre 1,827 s e 2,210 s; respostas curtas entre 4,609 s e 6,729 s; chamada estruturada de pesquisa aprovada; ataques de SQL e falsa autorização SEFAZ recusados sem ferramenta;
 - [~] substituir a pendência anterior por homologação ampliada: login Qt real, sessão/permissões reais, teste prolongado, avaliações de qualidade e decisão de empacotamento continuam pendentes;
+- [x] checkpoint visual `32a2e32`: mascote azul integrada ao painel sem substituir o funcionamento textual; PNG RGBA validado, estado nunca depende somente da animação, cabeçalho adaptado ao dock estreito e fallback preservado; 55 testes e 25 subtestes aprovados, além de `compileall` e `git diff --check`;
 - [ ] experimento visual somente em perfil TESTE: preservar integralmente o splash original e acrescentar, perto do final do carregamento real, a mascote Nabi azul entrando/flutuando e pousando discretamente ao lado do nome; não alterar fundo, logotipo, proporções ou sequência existente, não atrasar artificialmente o startup e não promover para Produção/instalador sem aprovação visual expressa;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
