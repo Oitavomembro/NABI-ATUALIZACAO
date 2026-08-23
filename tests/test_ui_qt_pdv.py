@@ -938,6 +938,8 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("Vendas do dia  [F7]", buttons)
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
+        self.assertNotIn("EM EVOLUÇÃO", labels)
+        self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
         self.assertEqual(shortcuts, {"Esc", "F4", "F5", "F6", "F7", "F9", "F10"})
         f6 = next(

@@ -301,7 +301,7 @@ class PDVWindow(QMainWindow):
         remove.setToolTip("Selecione uma linha em Itens da venda para remover")
         remove.clicked.connect(self._remove_selected_item)
         summary_layout.addWidget(remove)
-        future = QLabel("AÇÕES COMERCIAIS • EM EVOLUÇÃO")
+        future = QLabel("AÇÕES COMERCIAIS")
         future.setObjectName("muted")
         future.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(future)
@@ -493,9 +493,6 @@ class PDVWindow(QMainWindow):
     def _field_error(self, field: QWidget, message: str) -> None:
         self.statusBar().showMessage(message, 3500)
         field.setFocus(Qt.FocusReason.OtherFocusReason)
-
-    def _unavailable_action(self) -> None:
-        self.statusBar().showMessage("Funcionalidade aguardando desacoplamento comercial.", 3000)
 
     def _toggle_budget_mode(self) -> None:
         self._set_budget_mode(not self._budget_mode)
