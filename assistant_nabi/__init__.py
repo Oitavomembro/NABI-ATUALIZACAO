@@ -20,6 +20,7 @@ from .application import AssistantApplicationService, UnavailableAssistantServic
 from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_read_only_assistant
 from .activation import AuthenticatedAssistantActivation
+from .sale_drafts import SaleDraft, SaleDraftItem, SaleDraftItemRequest, SaleDraftService
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -32,6 +33,10 @@ from .runtime_artifact import (
 __all__ = [
     "AssistantActor",
     "AuthenticatedAssistantActivation",
+    "SaleDraft",
+    "SaleDraftItem",
+    "SaleDraftItemRequest",
+    "SaleDraftService",
     "AssistantApplicationService",
     "AssistantTurn",
     "UnavailableAssistantService",
