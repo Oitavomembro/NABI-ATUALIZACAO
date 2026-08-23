@@ -93,6 +93,14 @@ class NabiAssistantPanel(QWidget):
         self.message.returnPressed.connect(self.submit)
         self.stop.clicked.connect(self.stop_nabi)
         self._apply_style()
+        if not getattr(service, "available", True):
+            self._show_unavailable(
+                getattr(
+                    service,
+                    "unavailable_message",
+                    "A Nabi ainda nao esta disponivel neste ambiente.",
+                )
+            )
 
     def _apply_style(self) -> None:
         self.setStyleSheet("""
@@ -160,6 +168,8 @@ class NabiAssistantPanel(QWidget):
         self.history.append("<b>Nabi:</b> Solicitações pendentes foram invalidadas.")
 
     def reactivate(self) -> None:
+        if not getattr(self._service, "available", True):
+            return
         self._generation += 1
         self._busy = False
         self._set_controls(True)
@@ -168,6 +178,11 @@ class NabiAssistantPanel(QWidget):
     def _set_controls(self, enabled: bool) -> None:
         self.message.setEnabled(enabled)
         self.send.setEnabled(enabled)
+
+    def _show_unavailable(self, message: str) -> None:
+        self._set_controls(False)
+        self.status.setText("Em preparação")
+        self.history.append(f"<b>Nabi:</b> {self._escape(message)}")
 
     @staticmethod
     def _escape(value: object) -> str:

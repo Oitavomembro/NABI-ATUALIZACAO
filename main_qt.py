@@ -7,6 +7,7 @@ from pathlib import Path
 
 from PySide6.QtWidgets import QApplication, QMessageBox
 
+from assistant_nabi import UnavailableAssistantService
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from database import DatabaseManager
@@ -90,6 +91,10 @@ def main(argv=None) -> int:
             argv,
             cash_label="Caixa ativo",
             profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
+            assistant_service=UnavailableAssistantService(
+                "O painel foi integrado com segurança. O modelo local e a sessão "
+                "autenticada ainda precisam ser configurados e homologados."
+            ),
         )
     except Exception as error:
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")

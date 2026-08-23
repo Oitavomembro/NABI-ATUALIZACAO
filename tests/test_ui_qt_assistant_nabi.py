@@ -5,7 +5,7 @@ import unittest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from assistant_nabi import AssistantTurn, ToolResult
+from assistant_nabi import AssistantTurn, ToolResult, UnavailableAssistantService
 
 try:
     from PySide6.QtWidgets import QApplication
@@ -97,6 +97,18 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(text, "91 — Maria")
         for field in ("cpf", "telefone", "endereço"):
             self.assertNotIn(field, text.casefold())
+
+    def test_servico_indisponivel_desativa_entrada_sem_impedir_painel(self):
+        panel = NabiAssistantPanel(
+            UnavailableAssistantService("Modelo e sessão ainda não homologados.")
+        )
+        self.addCleanup(panel.close)
+        self.assertFalse(panel.message.isEnabled())
+        self.assertFalse(panel.send.isEnabled())
+        self.assertEqual(panel.status.text(), "Em preparação")
+        self.assertIn("ainda não homologados", panel.history.toPlainText())
+        panel.reactivate()
+        self.assertFalse(panel.send.isEnabled())
 
 
 if __name__ == "__main__":

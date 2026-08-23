@@ -95,7 +95,7 @@ Legenda:
 - [x] confirmação humana, ferramentas tipadas, auditoria e níveis de capacidade definidos;
 - [x] a fundação e o painel escritos no commit `bd8d126` foram reunidos ao histórico estabilizado do PDV na branch isolada `codex/integracao-nabi-pdv`, sem alterar as branches de origem e sem push;
 - [x] Fase 0 implementa ameaça, permissões vinculadas à sessão, auditoria sem parâmetros sensíveis, schemas fechados, consultas, orquestração textual e adaptador `llama.cpp/llama-server` restrito a loopback;
-- [~] Fase 1 possui painel Qt escrito, mascote provisório leve, renderização determinística, voz desativada, botão `Parar Nabi` e proteção contra respostas atrasadas; conexão ao `main_qt.py` e homologação visual continuam pendentes;
+- [~] Fase 1 possui painel Qt escrito, mascote provisório leve, renderização determinística, voz desativada, botão `Parar Nabi` e proteção contra respostas atrasadas; o painel foi conectado ao shell e ao `main_qt.py` como dock opcional em falha fechada, enquanto a homologação visual e a ativação com sessão/modelo reais continuam pendentes;
 - [x] Qwen3-1.7B Instruct em GGUF Q4 é o baseline atual; Qwen3-4B em GGUF Q4 permanece somente candidato posterior se memória e velocidade forem aceitáveis;
 - [~] nenhum peso foi baixado ou homologado; origem, licença, revisão, SHA-256, memória, velocidade e avaliações físicas continuam pendentes;
 - [ ] Fase 2: rascunhos comerciais;
@@ -103,6 +103,7 @@ Legenda:
 - [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
+- [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.

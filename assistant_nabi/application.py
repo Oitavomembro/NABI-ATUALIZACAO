@@ -3,8 +3,22 @@ from __future__ import annotations
 from .contracts import AssistantTurn, LanguageModelPort, ModelReply
 
 
+class UnavailableAssistantService:
+    """Falha fechada usada enquanto modelo e sessao nao foram homologados."""
+
+    available = False
+
+    def __init__(self, message: str) -> None:
+        self.unavailable_message = str(message).strip()
+
+    def ask(self, message: str) -> AssistantTurn:
+        return AssistantTurn(self.unavailable_message, safe_failure=True)
+
+
 class AssistantApplicationService:
     """Orquestra conversa e consultas sem conceder autoridade ao modelo."""
+
+    available = True
 
     def __init__(
         self,
