@@ -199,6 +199,38 @@ class ToolResult:
         object.__setattr__(self, "message", str(self.message or "").strip())
 
 
+@dataclass(frozen=True, slots=True)
+class ModelReply:
+    """Saída estruturada não confiável produzida por um provedor de linguagem."""
+
+    message: str
+    tool_requests: tuple[ToolRequest, ...] = ()
+
+    def __post_init__(self) -> None:
+        message = str(self.message or "").strip()
+        requests = tuple(self.tool_requests)
+        if any(not isinstance(request, ToolRequest) for request in requests):
+            raise TypeError("O modelo retornou uma requisição de ferramenta inválida.")
+        if not message and not requests:
+            raise ValueError("O modelo retornou uma resposta vazia.")
+        object.__setattr__(self, "message", message)
+        object.__setattr__(self, "tool_requests", requests)
+
+
+@dataclass(frozen=True, slots=True)
+class AssistantTurn:
+    message: str
+    tool_results: tuple[ToolResult, ...] = ()
+    safe_failure: bool = False
+
+    def __post_init__(self) -> None:
+        object.__setattr__(self, "message", str(self.message or "").strip())
+        results = tuple(self.tool_results)
+        if any(not isinstance(result, ToolResult) for result in results):
+            raise TypeError("O turno contém resultado de ferramenta inválido.")
+        object.__setattr__(self, "tool_results", results)
+
+
 @runtime_checkable
 class PermissionPort(Protocol):
     def allows(self, actor: AssistantActor, module: str, action: str) -> bool: ...
@@ -224,4 +256,6 @@ class AssistantAuditPort(Protocol):
 class LanguageModelPort(Protocol):
     """Porta futura: nenhum SDK de modelo pertence ao núcleo da Nabi."""
 
-    def respond(self, message: str, *, available_tools: tuple[ToolDefinition, ...]) -> object: ...
+    def respond(
+        self, message: str, *, available_tools: tuple[ToolDefinition, ...]
+    ) -> ModelReply: ...
