@@ -61,7 +61,10 @@ Legenda:
 - [x] achado manual subsequente de Pagamentos corrigido no commit `fca7bf1`: após cobrir o total, Enter deixa a área de inclusão e segue para ajustes/revisão; nova inclusão é recusada mesmo por clique; pagamento parcial prepara somente o saldo restante; o indicador passou a `TROCO` em fonte grande;
 - [x] regressão dessa correção: 85 testes Qt e 253 testes Qt/Commercial/backend relacionados aprovados, além de `compileall` e `git diff --check`;
 - [x] homologação física aprovada pelo operador para a não duplicação por Enter e a legibilidade do indicador grande `TROCO`, na versão de código `fca7bf1`;
-- [ ] vendas suspensas Qt;
+- [x] Vendas Suspensas Qt implementadas na branch isolada `codex/vendas-suspensas-qt`: fronteira Commercial no commit `33ddd89` e interface Qt no commit `d22e05d`;
+- [x] F6 e clique preservam o carrinho pelo `PDVService` oficial sem checkout, pagamento, estoque, Caixa ou Fiscal; a listagem/reabertura só consome após seleção e confirmação de substituição, mantendo cliente somente por ID real;
+- [x] validação automatizada: 58 testes focados Commercial/backend, 96 testes Qt e regressão ampliada de 271 testes Qt/Commercial/backend aprovados; `compileall` e `git diff --check` aprovados;
+- [~] homologação manual pendente para F6, clique, foco, substituição recusada, reabertura com/sem cliente, persistência após reinício e continuidade pelo checkout oficial;
 - [ ] vendas do dia, reimpressão e cancelamento Qt;
 - [ ] resolver todos os botões provisórios;
 - [ ] suíte completa do NabiCode após o conjunto;
