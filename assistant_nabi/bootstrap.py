@@ -10,6 +10,7 @@ from .sale_drafts import SaleDraftService
 from .confirmations import DraftConfirmationService
 from .draft_catalog import AssistantDraftCatalog
 from .purchase_tools import register_purchase_draft_tools
+from .nfe_entry_tools import register_nfe_entry_draft_tools
 
 
 def create_read_only_assistant(
@@ -48,6 +49,7 @@ def create_read_only_assistant(
 def create_draft_assistant(
     *, model, query_service, security_service, audit_service, session_id: str,
     event_bus=None, purchase_draft_service=None, purchase_executor=None,
+    nfe_entry_draft_service=None, nfe_entry_executor=None,
 ) -> AssistantApplicationService:
     """Compõe consultas e rascunhos; não registra ferramentas mutáveis."""
     for value, message in (
@@ -67,13 +69,18 @@ def create_draft_assistant(
     registry = DraftToolRegistry(permissions=permissions, audit=audit)
     register_commercial_read_tools(registry, query_service)
     drafts = SaleDraftService(query_service)
-    draft_catalog = AssistantDraftCatalog(drafts, purchase_draft_service)
+    draft_catalog = AssistantDraftCatalog(
+        drafts, purchase_draft_service, nfe_entry_draft_service
+    )
     confirmations = DraftConfirmationService()
     register_sale_draft_tools(registry, drafts)
     if purchase_draft_service is not None:
         register_purchase_draft_tools(registry, purchase_draft_service)
+    if nfe_entry_draft_service is not None:
+        register_nfe_entry_draft_tools(registry, nfe_entry_draft_service)
     return AssistantApplicationService(
         model=model, registry=registry, permissions=permissions,
         draft_service=draft_catalog, confirmation_service=confirmations,
         purchase_executor=purchase_executor,
+        nfe_entry_executor=nfe_entry_executor,
     )

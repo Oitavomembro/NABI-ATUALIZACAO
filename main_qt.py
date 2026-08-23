@@ -15,6 +15,7 @@ from assistant_nabi import (
     QWEN3_1_7B_Q4_K_M_CANDIDATE,
     UnavailableAssistantService,
     NFeEntryDraftService,
+    NabiCodeNFeEntryAssistantGateway,
     create_purchase_assistant_components,
     create_draft_assistant,
 )
@@ -36,7 +37,9 @@ from licensing.runtime import evaluate_runtime_gate, startup_block_message
 SCHEMA_VERSION = 20
 
 
-def _create_assistant_activation(database, profile, container):
+def _create_assistant_activation(
+    database, profile, container, nfe_entry_service=None, nfe_import_service=None
+):
     """Compõe ativação autenticada; nenhum runtime inicia durante o startup."""
 
     system = SystemRepository(database.connect)
@@ -47,6 +50,11 @@ def _create_assistant_activation(database, profile, container):
     purchase_drafts = purchase_executor = None
     if getattr(container, "purchase_service", None) is not None:
         purchase_drafts, purchase_executor = create_purchase_assistant_components(container)
+    nfe_entry_executor = None
+    if nfe_entry_service is not None and nfe_import_service is not None:
+        nfe_entry_executor = NabiCodeNFeEntryAssistantGateway(
+            nfe_entry_service, nfe_import_service
+        )
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -66,6 +74,8 @@ def _create_assistant_activation(database, profile, container):
             session_id=session_id,
             purchase_draft_service=purchase_drafts,
             purchase_executor=purchase_executor,
+            nfe_entry_draft_service=nfe_entry_service,
+            nfe_entry_executor=nfe_entry_executor,
         )
 
     return AuthenticatedAssistantActivation(
@@ -154,7 +164,11 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
-        assistant_activation = _create_assistant_activation(database, profile, container)
+        nfe_import_service = NFeImportService(NFeImportRepository(database))
+        nfe_entry_service = NFeEntryDraftService(nfe_import_service)
+        assistant_activation = _create_assistant_activation(
+            database, profile, container, nfe_entry_service, nfe_import_service
+        )
         qt.aboutToQuit.connect(assistant_activation.stop)
         license_timer = QTimer(qt)
         license_timer.setInterval(60_000)
@@ -172,9 +186,6 @@ def main(argv=None) -> int:
 
         license_timer.timeout.connect(monitor_license)
         license_timer.start()
-        nfe_entry_service = NFeEntryDraftService(
-            NFeImportService(NFeImportRepository(database))
-        )
         return run(
             container.application,
             argv,

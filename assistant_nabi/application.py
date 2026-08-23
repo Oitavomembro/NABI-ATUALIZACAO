@@ -31,6 +31,7 @@ class AssistantApplicationService:
         draft_service=None,
         confirmation_service=None,
         purchase_executor=None,
+        nfe_entry_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -40,6 +41,7 @@ class AssistantApplicationService:
         self._drafts = draft_service
         self._confirmations = confirmation_service
         self._purchase_executor = purchase_executor
+        self._nfe_entry_executor = nfe_entry_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -82,6 +84,7 @@ class AssistantApplicationService:
         permission = {
             "SALE": ("vendas", "create"),
             "PURCHASE_RECEIPT": ("compras", "create"),
+            "NFE_ENTRY_IMPORT": ("compras", "create"),
         }.get(str(getattr(draft, "operation_kind", "")))
         if permission is None or not self._permissions.allows(actor, *permission):
             raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
@@ -101,6 +104,17 @@ class AssistantApplicationService:
         if getattr(draft, "operation_kind", "") != "PURCHASE_RECEIPT":
             raise TypeError("O rascunho confirmado não é um recebimento de compra.")
         result = self._purchase_executor.execute(draft, authorization)
+        return result, authorization
+
+    def confirm_and_execute_nfe_entry(
+        self, token: str, draft_id: str, fingerprint: str
+    ):
+        if self._nfe_entry_executor is None:
+            raise RuntimeError("Execução assistida de entrada por NF-e não está configurada.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        if getattr(draft, "operation_kind", "") != "NFE_ENTRY_IMPORT":
+            raise TypeError("O rascunho confirmado não é uma entrada de NF-e.")
+        result = self._nfe_entry_executor.execute(draft, authorization)
         return result, authorization
 
     def invalidate_confirmations(self) -> None:

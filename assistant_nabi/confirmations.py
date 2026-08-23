@@ -53,7 +53,7 @@ class DraftConfirmationService:
             expires_at=now + timedelta(seconds=self._ttl),
             required_capability=(
                 CapabilityLevel.REINFORCED_CONFIRMATION
-                if draft.operation_kind == "PURCHASE_RECEIPT"
+                if draft.operation_kind in {"PURCHASE_RECEIPT", "NFE_ENTRY_IMPORT"}
                 else CapabilityLevel.SIMPLE_CONFIRMATION
             ),
         )

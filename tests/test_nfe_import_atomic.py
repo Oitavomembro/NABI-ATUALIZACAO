@@ -17,6 +17,7 @@ CREATE TABLE produto_fornecedores(id INTEGER PRIMARY KEY AUTOINCREMENT,produto_i
 CREATE TABLE estoque_movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT,produto_id INTEGER,tipo TEXT,quantidade REAL,saldo_anterior REAL,saldo_atual REAL,origem TEXT,origem_id TEXT,motivo TEXT,usuario TEXT,data TEXT);
 CREATE TABLE nfe_importacoes(id INTEGER PRIMARY KEY AUTOINCREMENT,chave TEXT UNIQUE,numero TEXT,fornecedor_cnpj TEXT,fornecedor_nome TEXT,arquivo_origem TEXT,status TEXT,itens_total INTEGER,itens_criados INTEGER,itens_vinculados INTEGER,valor_total TEXT NOT NULL DEFAULT '0',data_importacao TEXT);
 CREATE TABLE titulos_financeiros(id INTEGER PRIMARY KEY AUTOINCREMENT,tipo TEXT,origem TEXT,origem_id TEXT,pessoa_id INTEGER,pessoa_nome TEXT,documento TEXT,descricao TEXT,data_emissao TEXT,data_vencimento TEXT,valor_original REAL,valor_pago REAL,status TEXT,observacao TEXT,criado_em TEXT,atualizado_em TEXT);
+CREATE TABLE assistant_operation_journal(id INTEGER PRIMARY KEY AUTOINCREMENT,idempotency_key TEXT NOT NULL UNIQUE,operation_kind TEXT NOT NULL,fingerprint TEXT NOT NULL,status TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',username TEXT NOT NULL,created_at TEXT NOT NULL,committed_at TEXT NOT NULL DEFAULT '');
 """
 
 
@@ -168,6 +169,55 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 0)
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM historico_precos_produtos")["n"], 0)
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM fornecedores")["n"], 0)
+
+    def test_importacao_assistida_e_idempotente_na_mesma_transacao(self):
+        fingerprint = "a" * 64
+        first = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+            usuario="Operador", idempotency_key="nabi:nfe:teste",
+            operation_fingerprint=fingerprint,
+        )
+        second = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+            usuario="Operador", idempotency_key="nabi:nfe:teste",
+            operation_fingerprint=fingerprint,
+        )
+        self.assertEqual(second, first)
+        db = self.repo.database
+        self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"], 1)
+        self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 1)
+        journal = db.fetch_one("SELECT status,username FROM assistant_operation_journal")
+        self.assertEqual((journal["status"], journal["username"]), ("COMMITTED", "Operador"))
+
+    def test_idempotencia_rejeita_mesma_chave_com_outro_conteudo(self):
+        self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+            idempotency_key="nabi:nfe:teste", operation_fingerprint="a" * 64,
+        )
+        with self.assertRaisesRegex(ValueError, "outra operação"):
+            self.service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+                idempotency_key="nabi:nfe:teste", operation_fingerprint="b" * 64,
+            )
+
+    def test_falha_assistida_reverte_diario_estoque_financeiro_e_nota(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TRIGGER falhar_nfe_assistida BEFORE INSERT ON nfe_importacoes "
+            "BEGIN SELECT RAISE(ABORT, 'falha final'); END"
+        )
+        conn.commit(); conn.close()
+        with self.assertRaises(sqlite3.IntegrityError):
+            self.service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+                idempotency_key="nabi:nfe:rollback", operation_fingerprint="c" * 64,
+            )
+        db = self.repo.database
+        for table in (
+            "assistant_operation_journal", "produtos", "estoque_movimentacoes",
+            "titulos_financeiros", "nfe_importacoes",
+        ):
+            self.assertEqual(db.fetch_one(f"SELECT COUNT(*) n FROM {table}")["n"], 0)
 
 
 if __name__ == "__main__":

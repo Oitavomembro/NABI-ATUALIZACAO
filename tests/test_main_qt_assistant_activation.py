@@ -76,6 +76,34 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         self.assertEqual(factory.call_args.kwargs["purchase_draft_service"], "rascunhos-compra")
         self.assertEqual(factory.call_args.kwargs["purchase_executor"], "executor-compra")
 
+    def test_composicao_injeta_entrada_nfe_sem_iniciar_runtime_ou_sefaz(self):
+        database = SimpleNamespace(connect=Mock())
+        profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
+        container = SimpleNamespace(query=object())
+        drafts = object()
+        imports = object()
+        security = Mock()
+        security.authenticate.return_value = object()
+        runtime = Mock()
+        runtime.create_model_adapter.return_value = "modelo"
+        with (
+            patch.object(main_qt, "SystemRepository") as system_cls,
+            patch.object(main_qt, "SecurityService", return_value=security),
+            patch.object(main_qt, "AdminAuditService", return_value="auditoria"),
+            patch.object(main_qt, "LocalLlamaServer", return_value=runtime),
+            patch.object(main_qt, "NabiCodeNFeEntryAssistantGateway", return_value="executor-nfe") as gateway,
+            patch.object(main_qt, "create_draft_assistant", return_value="assistente") as factory,
+        ):
+            system_cls.return_value.get_config.return_value = "hash"
+            activation = main_qt._create_assistant_activation(
+                database, profile, container, drafts, imports
+            )
+            runtime.start.assert_not_called()
+            activation.activate("op", "senha")
+        gateway.assert_called_once_with(drafts, imports)
+        self.assertIs(factory.call_args.kwargs["nfe_entry_draft_service"], drafts)
+        self.assertEqual(factory.call_args.kwargs["nfe_entry_executor"], "executor-nfe")
+
 
 if __name__ == "__main__":
     unittest.main()

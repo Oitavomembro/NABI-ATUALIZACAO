@@ -372,6 +372,7 @@ class NabiAssistantPanel(QWidget):
                 "vendas.criar_rascunho",
                 "vendas.sugerir_rascunho_por_estoque",
                 "compras.preparar_recebimento",
+                "compras.preparar_entrada_nfe_exata",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -386,7 +387,7 @@ class NabiAssistantPanel(QWidget):
     def review_draft(self) -> None:
         if self._pending_draft is None:
             return
-        draft_id, fingerprint, _operation_kind = self._pending_draft
+        draft_id, fingerprint, operation_kind = self._pending_draft
         try:
             challenge = self._service.review_draft(draft_id, fingerprint)
         except Exception:
@@ -397,8 +398,14 @@ class NabiAssistantPanel(QWidget):
         self.review_draft_button.setVisible(False)
         self.confirm_draft_button.setVisible(True)
         self._set_state("warning", "Aguardando confirmação")
+        guidance = {
+            "PURCHASE_RECEIPT": "Confira pedido, itens, custos, total e financeiro.",
+            "NFE_ENTRY_IMPORT": (
+                "Confira chave, fornecedor, produtos vinculados, quantidades e fatores de conversão."
+            ),
+        }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
         self.history.append(
-            "<b>Nabi:</b> Confira itens, total, cliente e pagamento. "
+            f"<b>Nabi:</b> {guidance} "
             "A confirmação é temporária e vale somente para este conteúdo."
         )
 
@@ -409,6 +416,10 @@ class NabiAssistantPanel(QWidget):
         try:
             if operation_kind == "PURCHASE_RECEIPT":
                 result, _authorization = self._service.confirm_and_execute_purchase(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind == "NFE_ENTRY_IMPORT":
+                result, _authorization = self._service.confirm_and_execute_nfe_entry(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -430,6 +441,14 @@ class NabiAssistantPanel(QWidget):
             self.history.append(
                 "<b>Nabi:</b> Recebimento confirmado pelo serviço oficial. "
                 f"Registro #{int(result.recebimento_id)}; pedido {result.status_pedido}."
+            )
+        elif operation_kind == "NFE_ENTRY_IMPORT":
+            self._set_state("completed", "Entrada de NF-e registrada")
+            self.history.append(
+                "<b>Nabi:</b> Entrada local confirmada pelo importador oficial. "
+                f"Importação #{int(result['importacao_id'])}; "
+                f"{int(result['itens_vinculados'])} item(ns) vinculado(s). "
+                "Nenhuma comunicação com a SEFAZ foi realizada."
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")
@@ -497,6 +516,8 @@ class NabiAssistantPanel(QWidget):
             f"NF-e nº {draft.number or '-'} — fornecedor {draft.supplier_name or '-'}",
             f"Chave informada: {draft.access_key or '-'}",
             f"Evidência cStat no arquivo: {draft.protocol_status_evidence or '-'}",
+            f"Destinatário no XML: {getattr(draft, 'recipient_name', '') or '-'} — "
+            f"{getattr(draft, 'recipient_document', '') or '-'}",
         ]
         lines.extend(
             f"Item {item.index + 1}: {item.quantity} {item.unit} — {item.description} "
@@ -589,6 +610,22 @@ class NabiAssistantPanel(QWidget):
                 f"Total da entrada: R$ {payload.get('total', '0.00')}",
                 "EFEITOS: estoque e custo; financeiro somente quando indicado.",
                 "RASCUNHO — nenhum recebimento foi registrado.",
+            ))
+            return "\n".join(lines)
+        if result.tool_name == "compras.preparar_entrada_nfe_exata":
+            lines = [
+                f"Produto #{item['product_id']} — {item['description']} — "
+                f"XML {item['xml_quantity']} × fator {item['conversion_factor']} "
+                f"= estoque {item['stock_quantity']} — custo R$ {item['unit_cost']}"
+                for item in payload.get("items", ())
+            ]
+            lines.extend((
+                f"NF-e: {payload.get('number', '-')} — {payload.get('supplier_name', '-')}",
+                f"Destinatário no XML: {payload.get('recipient_name', '-')} — "
+                f"{payload.get('recipient_document', '-')}",
+                f"Total informado no XML: R$ {payload.get('document_total', '0.00')}",
+                "EFEITOS: vínculo de fornecedor, estoque e financeiro pelo importador oficial.",
+                "RASCUNHO — nenhuma entrada foi registrada e nenhuma consulta à SEFAZ ocorreu.",
             ))
             return "\n".join(lines)
         if result.tool_name == "diagnostico.executar_testes":

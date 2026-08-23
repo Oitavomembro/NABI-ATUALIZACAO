@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import logging
+import json
+import re
 from pathlib import Path
 from datetime import datetime
 from typing import Any
@@ -39,6 +41,8 @@ class NFeImportService:
         arquivo_origem: str | Path,
         itens: list[dict[str, Any]],
         usuario: str = "Sistema",
+        idempotency_key: str | None = None,
+        operation_fingerprint: str | None = None,
     ) -> dict[str, Any]:
         """Grava toda a importação em uma única transação SQLite.
 
@@ -47,12 +51,37 @@ class NFeImportService:
         rollback integral, mantendo a NF-e disponível para nova tentativa.
         """
         NFeImportValidator.complete_items(len(itens), len(documento.itens))
-        self.validar_nao_importada(documento)
+        key = str(idempotency_key or "").strip()
+        fingerprint = str(operation_fingerprint or "").strip()
+        if bool(key) != bool(fingerprint):
+            raise ValueError("Idempotência da importação exige chave e impressão digital.")
+        if key and (len(key) > 128 or not re.fullmatch(r"[A-Za-z0-9:._-]+", key)):
+            raise ValueError("Chave idempotente da importação é inválida.")
+        if fingerprint and not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError("Identificação idempotente da importação é inválida.")
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         criados = vinculados = 0
         resultados: list[dict[str, Any]] = []
 
         with self.repository.database.session(write=True) as connection:
+            if key:
+                previous = connection.execute(
+                    "SELECT fingerprint,status,result_json FROM assistant_operation_journal "
+                    "WHERE idempotency_key=?",
+                    (key,),
+                ).fetchone()
+                if previous:
+                    if str(previous["fingerprint"]) != fingerprint:
+                        raise ValueError("A chave idempotente já pertence a outra operação.")
+                    if str(previous["status"]) == "COMMITTED":
+                        return json.loads(str(previous["result_json"] or "{}"))
+                    raise RuntimeError("A importação idempotente anterior não foi concluída.")
+                connection.execute(
+                    """INSERT INTO assistant_operation_journal
+                       (idempotency_key,operation_kind,fingerprint,status,result_json,username,created_at)
+                       VALUES(?, 'NFE_ENTRY_IMPORT', ?, 'PENDING', '', ?, ?)""",
+                    (key, fingerprint, str(usuario or "Sistema"), agora),
+                )
             if documento.chave:
                 duplicada = connection.execute(
                     "SELECT id FROM nfe_importacoes WHERE chave=? LIMIT 1", (documento.chave,)
@@ -124,11 +153,20 @@ class NFeImportService:
                 connection, documento=documento, importacao_id=importacao_id,
                 fornecedor_id=fornecedor_id, agora=agora,
             )
+            result = {
+                "importacao_id": importacao_id, "titulo_id": titulo_id,
+                "itens_criados": criados, "itens_vinculados": vinculados,
+                "resultados": resultados,
+            }
+            if key:
+                connection.execute(
+                    """UPDATE assistant_operation_journal
+                       SET status='COMMITTED',result_json=?,committed_at=?
+                       WHERE idempotency_key=?""",
+                    (json.dumps(result, ensure_ascii=False, sort_keys=True), agora, key),
+                )
 
-        return {
-            "importacao_id": importacao_id, "titulo_id": titulo_id, "itens_criados": criados,
-            "itens_vinculados": vinculados, "resultados": resultados,
-        }
+        return result
 
     def listar_importacoes(self, data_inicial: str = "", data_final: str = "") -> list[dict[str, Any]]:
         return self.repository.listar_importacoes(data_inicial, data_final)

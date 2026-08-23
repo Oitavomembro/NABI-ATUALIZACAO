@@ -59,6 +59,10 @@ class DraftService(Service):
         })()
         return result, object()
 
+    def confirm_and_execute_nfe_entry(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        return {"importacao_id": 88, "itens_vinculados": 2}, object()
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
@@ -299,6 +303,32 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("SOMENTE REVISÃO", text)
         self.assertIn("nenhum produto, estoque ou financeiro", text)
         self.assertEqual(panel.status.text(), "XML aguardando revisão manual")
+
+    def test_entrada_nfe_exata_exige_duas_etapas_e_informa_ausencia_de_sefaz(self):
+        service = DraftService()
+        panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 13
+        panel._complete(13, AssistantTurn("Entrada preparada", (ToolResult(
+            "req-nfe", "compras.preparar_entrada_nfe_exata", True,
+            {
+                "draft_id": "nfe-1", "fingerprint": "d" * 64,
+                "operation_kind": "NFE_ENTRY_IMPORT", "number": "123",
+                "supplier_name": "FORNECEDOR", "document_total": "42.00",
+                "items": [{
+                    "product_id": 7, "description": "CAFÉ",
+                    "xml_quantity": "2.0000", "conversion_factor": "1.0000",
+                    "stock_quantity": "2.0000", "unit_cost": "21.00",
+                }],
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        panel.review_draft()
+        panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][1], "nfe-1")
+        self.assertIn("Importação #88", panel.history.toPlainText())
+        self.assertIn("Nenhuma comunicação com a SEFAZ", panel.history.toPlainText())
+        self.assertEqual(panel.status.text(), "Entrada de NF-e registrada")
 
     def test_resposta_xml_atrasada_e_ignorada_apos_parar(self):
         panel = NabiAssistantPanel(Service(), nfe_entry_service=object())
