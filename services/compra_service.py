@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 from typing import Any, Iterable
+import json
+import re
 
 from repositories import CompraRepository, EstoqueRepository
 from services.financeiro_service import FinanceiroService
@@ -75,11 +77,21 @@ class CompraService:
         usuario: str = "Sistema",
         gerar_conta_pagar: bool = False,
         data_vencimento: str | None = None,
+        idempotency_key: str | None = None,
+        operation_fingerprint: str | None = None,
     ) -> ResultadoRecebimentoCompra:
         itens_entrada = list(itens)
         if not itens_entrada:
             raise ValueError("Informe ao menos um item para recebimento.")
+        key, fingerprint = self._idempotency_fields(
+            idempotency_key, operation_fingerprint
+        )
         with self.database.session(write=True) as connection:
+            previous = self._begin_idempotent(
+                connection, key=key, fingerprint=fingerprint, usuario=usuario
+            )
+            if previous is not None:
+                return previous
             pedido = self.repository.obter_pedido(int(pedido_id), connection)
             if not pedido:
                 raise ValueError("Pedido de compra não encontrado.")
@@ -161,18 +173,91 @@ class CompraService:
                     usuario=usuario,
                     connection=connection,
                 )
+            result = ResultadoRecebimentoCompra(
+                pedido_id=int(pedido_id), recebimento_id=recebimento_id,
+                status_pedido=status, itens_recebidos=len(recebidos),
+                valor_total=valor_total,
+            )
             connection.execute(
                 """
                 INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado)
                 VALUES(datetime('now','localtime'),?,'Compras','RECEBER',?,?, 'SUCESSO')
                 """,
                 (str(usuario or "Sistema"), str(pedido_id),
-                 f"Recebimento {recebimento_id}; itens={len(recebidos)}; total={valor_total:.2f}"),
+                 f"Recebimento {recebimento_id}; itens={len(recebidos)}; "
+                 f"total={valor_total:.2f}; idempotency={key or '-'}"),
             )
-        return ResultadoRecebimentoCompra(
-            pedido_id=int(pedido_id), recebimento_id=recebimento_id,
-            status_pedido=status, itens_recebidos=len(recebidos), valor_total=valor_total,
+            self._commit_idempotent(connection, key=key, result=result)
+        return result
+
+    @staticmethod
+    def _idempotency_fields(key, fingerprint) -> tuple[str, str]:
+        normalized_key = str(key or "").strip()
+        normalized_fingerprint = str(fingerprint or "").strip().lower()
+        if not normalized_key and not normalized_fingerprint:
+            return "", ""
+        if not normalized_key or not normalized_fingerprint:
+            raise ValueError("Chave idempotente e fingerprint devem ser informados juntos.")
+        if len(normalized_key) > 128 or not re.fullmatch(r"[A-Za-z0-9:._-]+", normalized_key):
+            raise ValueError("Chave idempotente inválida.")
+        if not re.fullmatch(r"[0-9a-f]{64}", normalized_fingerprint):
+            raise ValueError("Fingerprint da operação inválido.")
+        return normalized_key, normalized_fingerprint
+
+    @staticmethod
+    def _begin_idempotent(connection, *, key: str, fingerprint: str, usuario: str):
+        if not key:
+            return None
+        try:
+            row = connection.execute(
+                "SELECT fingerprint,status,result_json FROM assistant_operation_journal "
+                "WHERE idempotency_key=?",
+                (key,),
+            ).fetchone()
+        except Exception as error:
+            raise RuntimeError(
+                "O banco ainda não possui o diário idempotente de operações assistidas."
+            ) from error
+        if row is not None:
+            if str(row["fingerprint"]).lower() != fingerprint:
+                raise PermissionError("A chave idempotente já pertence a outro conteúdo.")
+            if str(row["status"]).upper() != "COMMITTED":
+                raise RuntimeError("A operação assistida possui estado persistente desconhecido.")
+            payload = json.loads(str(row["result_json"] or "{}"))
+            return ResultadoRecebimentoCompra(
+                pedido_id=int(payload["pedido_id"]),
+                recebimento_id=int(payload["recebimento_id"]),
+                status_pedido=str(payload["status_pedido"]),
+                itens_recebidos=int(payload["itens_recebidos"]),
+                valor_total=Decimal(str(payload["valor_total"])),
+            )
+        connection.execute(
+            """INSERT INTO assistant_operation_journal
+               (idempotency_key,operation_kind,fingerprint,status,result_json,username,created_at)
+               VALUES(?,'PURCHASE_RECEIPT',?,'PENDING','',?,datetime('now','localtime'))""",
+            (key, fingerprint, str(usuario or "Sistema")),
         )
+        return None
+
+    @staticmethod
+    def _commit_idempotent(connection, *, key: str, result: ResultadoRecebimentoCompra) -> None:
+        if not key:
+            return
+        payload = json.dumps({
+            "pedido_id": result.pedido_id,
+            "recebimento_id": result.recebimento_id,
+            "status_pedido": result.status_pedido,
+            "itens_recebidos": result.itens_recebidos,
+            "valor_total": format(result.valor_total, "f"),
+        }, sort_keys=True, separators=(",", ":"))
+        updated = connection.execute(
+            """UPDATE assistant_operation_journal
+               SET status='COMMITTED',result_json=?,committed_at=datetime('now','localtime')
+               WHERE idempotency_key=? AND status='PENDING'""",
+            (payload, key),
+        )
+        if updated.rowcount != 1:
+            raise RuntimeError("Não foi possível confirmar o diário idempotente.")
 
     def _normalizar_itens_pedido(self, itens: Iterable[dict[str, Any]]) -> list[dict[str, Any]]:
         agregados: dict[int, dict[str, Any]] = {}

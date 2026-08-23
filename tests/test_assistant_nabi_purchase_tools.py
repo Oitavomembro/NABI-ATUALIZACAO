@@ -6,7 +6,9 @@ from decimal import Decimal
 from types import SimpleNamespace
 
 from assistant_nabi import ModelReply, ToolRequest, create_draft_assistant
+from assistant_nabi import CapabilityLevel
 from assistant_nabi.purchase_drafts import PurchaseReceiptDraftService
+from assistant_nabi.purchase_gateway import NabiCodePurchaseAssistantGateway
 from assistant_nabi.purchase_tools import PREPARE_PURCHASE_RECEIPT
 
 
@@ -42,6 +44,14 @@ class PurchaseGateway:
         })
 
 
+class OfficialPurchase:
+    repository = SimpleNamespace()
+    def __init__(self): self.calls = []
+    def receber(self, *args, **kwargs):
+        self.calls.append((args, kwargs))
+        return SimpleNamespace(recebimento_id=91, status_pedido="PARCIAL")
+
+
 class Model:
     def respond(self, message, *, available_tools):
         return ModelReply("Entrada preparada.", (ToolRequest(
@@ -68,23 +78,41 @@ class PurchaseToolTests(unittest.TestCase):
     def test_prepara_revisa_e_confirma_sem_executar_recebimento(self):
         audit = Audit()
         purchases = PurchaseReceiptDraftService(PurchaseGateway())
+        official = OfficialPurchase()
         assistant = create_draft_assistant(
             model=Model(), query_service=CommercialQueries(), security_service=Security(),
             audit_service=audit, session_id="sessao-real",
             purchase_draft_service=purchases,
+            purchase_executor=NabiCodePurchaseAssistantGateway(official),
         )
         result = assistant.ask("Prepare o recebimento").tool_results[0]
         self.assertTrue(result.success)
         self.assertEqual(result.payload["operation_kind"], "PURCHASE_RECEIPT")
-        self.assertTrue(result.payload["execution_blocked"])
+        self.assertFalse(result.payload["execution_blocked"])
         self.assertFalse(result.payload["persisted"])
         challenge = assistant.review_draft(result.payload["draft_id"], result.payload["fingerprint"])
+        self.assertIs(
+            challenge.required_capability,
+            CapabilityLevel.REINFORCED_CONFIRMATION,
+        )
         draft, authorization = assistant.confirm_draft(
             challenge.token, result.payload["draft_id"], result.payload["fingerprint"]
         )
         self.assertEqual(draft.operation_kind, "PURCHASE_RECEIPT")
         self.assertEqual(authorization.fingerprint, draft.fingerprint)
+        self.assertIs(
+            authorization.capability,
+            CapabilityLevel.REINFORCED_CONFIRMATION,
+        )
         self.assertEqual(len(audit.events), 1)
+        second_challenge = assistant.review_draft(
+            result.payload["draft_id"], result.payload["fingerprint"]
+        )
+        executed, _ = assistant.confirm_and_execute_purchase(
+            second_challenge.token, result.payload["draft_id"], result.payload["fingerprint"]
+        )
+        self.assertEqual(executed.recebimento_id, 91)
+        self.assertEqual(len(official.calls), 1)
 
 
 if __name__ == "__main__": unittest.main()

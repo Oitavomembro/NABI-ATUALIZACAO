@@ -490,6 +490,23 @@ def initialize_database(
         )
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_recebimento_itens_recebimento ON recebimento_compra_itens(recebimento_id)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS assistant_operation_journal (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            idempotency_key TEXT NOT NULL UNIQUE,
+            operation_kind TEXT NOT NULL,
+            fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('PENDING','COMMITTED')),
+            result_json TEXT NOT NULL DEFAULT '',
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            committed_at TEXT NOT NULL DEFAULT ''
+        )
+    """)
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_assistant_operation_kind_status "
+        "ON assistant_operation_journal(operation_kind,status)"
+    )
 
     # Financeiro essencial integrado (schema 13).
     cursor.execute("""

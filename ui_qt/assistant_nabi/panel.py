@@ -339,10 +339,12 @@ class NabiAssistantPanel(QWidget):
             if result.success and result.tool_name in {
                 "vendas.criar_rascunho",
                 "vendas.sugerir_rascunho_por_estoque",
+                "compras.preparar_recebimento",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
-                    result.payload["draft_id"], result.payload["fingerprint"]
+                    result.payload["draft_id"], result.payload["fingerprint"],
+                    result.payload.get("operation_kind", "SALE"),
                 )
                 self._confirmation_token = None
                 self.review_draft_button.setVisible(True)
@@ -352,7 +354,7 @@ class NabiAssistantPanel(QWidget):
     def review_draft(self) -> None:
         if self._pending_draft is None:
             return
-        draft_id, fingerprint = self._pending_draft
+        draft_id, fingerprint, _operation_kind = self._pending_draft
         try:
             challenge = self._service.review_draft(draft_id, fingerprint)
         except Exception:
@@ -371,14 +373,19 @@ class NabiAssistantPanel(QWidget):
     def confirm_draft(self) -> None:
         if self._pending_draft is None or self._confirmation_token is None:
             return
-        draft_id, fingerprint = self._pending_draft
+        draft_id, fingerprint, operation_kind = self._pending_draft
         try:
-            draft, authorization = self._service.confirm_draft(
-                self._confirmation_token, draft_id, fingerprint
-            )
-            if self._draft_transfer is None:
-                raise RuntimeError("A transferência ao PDV não está configurada.")
-            self._draft_transfer(draft, authorization)
+            if operation_kind == "PURCHASE_RECEIPT":
+                result, _authorization = self._service.confirm_and_execute_purchase(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            else:
+                draft, authorization = self._service.confirm_draft(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+                if self._draft_transfer is None:
+                    raise RuntimeError("A transferência ao PDV não está configurada.")
+                self._draft_transfer(draft, authorization)
         except Exception:
             self._set_state("blocked", "Confirmação recusada")
             self.history.append("<b>Nabi:</b> A confirmação expirou ou o rascunho mudou.")
@@ -386,11 +393,18 @@ class NabiAssistantPanel(QWidget):
         self._confirmation_token = None
         self.confirm_draft_button.setVisible(False)
         self._pending_draft = None
-        self._set_state("completed", "Rascunho carregado no PDV")
-        self.history.append(
-            "<b>Nabi:</b> Rascunho carregado no PDV. Nenhuma venda foi registrada; "
-            "revise o carrinho e finalize pelo fluxo oficial de Pagamentos."
-        )
+        if operation_kind == "PURCHASE_RECEIPT":
+            self._set_state("completed", "Recebimento registrado")
+            self.history.append(
+                "<b>Nabi:</b> Recebimento confirmado pelo serviço oficial. "
+                f"Registro #{int(result.recebimento_id)}; pedido {result.status_pedido}."
+            )
+        else:
+            self._set_state("completed", "Rascunho carregado no PDV")
+            self.history.append(
+                "<b>Nabi:</b> Rascunho carregado no PDV. Nenhuma venda foi registrada; "
+                "revise o carrinho e finalize pelo fluxo oficial de Pagamentos."
+            )
 
     def stop_nabi(self) -> None:
         self._generation += 1
@@ -476,6 +490,20 @@ class NabiAssistantPanel(QWidget):
                 f"Total proposto: R$ {payload.get('total', '0.00')}",
                 f"Pagamento proposto: {payload.get('payment_method', '-')}",
                 "RASCUNHO — nenhuma venda foi registrada.",
+            ))
+            return "\n".join(lines)
+        if result.tool_name == "compras.preparar_recebimento":
+            lines = [
+                f"{item['quantity']}x {item['description']} — custo R$ {item['unit_cost']} "
+                f"— R$ {item['line_total']}"
+                for item in payload.get("items", ())
+            ]
+            lines.extend((
+                f"Pedido: {payload.get('order_id', '-')}",
+                f"Fornecedor: {payload.get('supplier_name', '-')}",
+                f"Total da entrada: R$ {payload.get('total', '0.00')}",
+                "EFEITOS: estoque e custo; financeiro somente quando indicado.",
+                "RASCUNHO — nenhum recebimento foi registrado.",
             ))
             return "\n".join(lines)
         if result.tool_name == "diagnostico.executar_testes":

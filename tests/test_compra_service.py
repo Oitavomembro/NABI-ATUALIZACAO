@@ -48,6 +48,12 @@ CREATE TABLE auditoria(
  id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT, usuario TEXT, modulo TEXT, acao TEXT,
  objeto TEXT, detalhes TEXT, resultado TEXT
 );
+CREATE TABLE assistant_operation_journal(
+ id INTEGER PRIMARY KEY AUTOINCREMENT,idempotency_key TEXT NOT NULL UNIQUE,
+ operation_kind TEXT NOT NULL,fingerprint TEXT NOT NULL,status TEXT NOT NULL,
+ result_json TEXT NOT NULL DEFAULT '',username TEXT NOT NULL,created_at TEXT NOT NULL,
+ committed_at TEXT NOT NULL DEFAULT ''
+);
 """
 
 
@@ -111,6 +117,50 @@ class CompraServiceTest(unittest.TestCase):
     def test_servico_nao_pode_ser_comprado_para_estoque(self):
         with self.assertRaises(ValueError):
             self.service.criar_pedido(1, [{'produto_id': 3, 'quantidade': 1, 'custo_unitario': 10}])
+
+    def test_recebimento_idempotente_retorna_commit_sem_repetir_efeitos(self):
+        pedido = self.service.criar_pedido(
+            1, [{'produto_id': 1, 'quantidade': 5, 'custo_unitario': 8}]
+        )
+        item = self.repo.obter_pedido(pedido)['itens'][0]
+        kwargs = dict(
+            idempotency_key="nabi:purchase:draft-1",
+            operation_fingerprint="a" * 64,
+        )
+        first = self.service.receber(
+            pedido, [{'pedido_item_id': item['id'], 'quantidade': 2}], **kwargs
+        )
+        repeated = self.service.receber(
+            pedido, [{'pedido_item_id': item['id'], 'quantidade': 2}], **kwargs
+        )
+        self.assertEqual(first, repeated)
+        self.assertEqual(self.estoque.buscar_produto(1)['estoque_atual'], 12)
+        self.assertEqual(
+            self.repo.obter_pedido(pedido)['itens'][0]['quantidade_recebida'], 2
+        )
+        with self.assertRaisesRegex(PermissionError, "outro conteúdo"):
+            self.service.receber(
+                pedido, [{'pedido_item_id': item['id'], 'quantidade': 1}],
+                idempotency_key=kwargs["idempotency_key"],
+                operation_fingerprint="b" * 64,
+            )
+
+    def test_falha_reverte_diario_idempotente_junto_com_estoque(self):
+        pedido = self.service.criar_pedido(
+            1, [{'produto_id': 1, 'quantidade': 1, 'custo_unitario': 8}]
+        )
+        item = self.repo.obter_pedido(pedido)['itens'][0]
+        with self.assertRaises(ValueError):
+            self.service.receber(
+                pedido, [{'pedido_item_id': item['id'], 'quantidade': 2}],
+                idempotency_key="nabi:purchase:failed",
+                operation_fingerprint="c" * 64,
+            )
+        row = self.repo.database.fetch_one(
+            "SELECT 1 FROM assistant_operation_journal WHERE idempotency_key=?",
+            ("nabi:purchase:failed",),
+        )
+        self.assertIsNone(row)
 
 
 if __name__ == '__main__':

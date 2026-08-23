@@ -47,7 +47,7 @@ def create_read_only_assistant(
 
 def create_draft_assistant(
     *, model, query_service, security_service, audit_service, session_id: str,
-    event_bus=None, purchase_draft_service=None,
+    event_bus=None, purchase_draft_service=None, purchase_executor=None,
 ) -> AssistantApplicationService:
     """Compõe consultas e rascunhos; não registra ferramentas mutáveis."""
     for value, message in (
@@ -75,4 +75,5 @@ def create_draft_assistant(
     return AssistantApplicationService(
         model=model, registry=registry, permissions=permissions,
         draft_service=draft_catalog, confirmation_service=confirmations,
+        purchase_executor=purchase_executor,
     )

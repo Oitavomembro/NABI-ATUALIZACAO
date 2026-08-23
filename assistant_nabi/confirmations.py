@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from threading import Lock
 
-from .contracts import AssistantActor
+from .contracts import AssistantActor, CapabilityLevel
 
 
 @dataclass(frozen=True, slots=True)
@@ -17,6 +17,7 @@ class ConfirmationChallenge:
     username: str
     session_id: str
     expires_at: datetime
+    required_capability: CapabilityLevel
 
 
 @dataclass(frozen=True, slots=True)
@@ -26,6 +27,7 @@ class ConfirmedDraftAuthorization:
     username: str
     session_id: str
     confirmed_at: datetime
+    capability: CapabilityLevel
 
 
 class DraftConfirmationService:
@@ -49,6 +51,11 @@ class DraftConfirmationService:
             username=actor.username,
             session_id=actor.session_id,
             expires_at=now + timedelta(seconds=self._ttl),
+            required_capability=(
+                CapabilityLevel.REINFORCED_CONFIRMATION
+                if draft.operation_kind == "PURCHASE_RECEIPT"
+                else CapabilityLevel.SIMPLE_CONFIRMATION
+            ),
         )
         with self._lock:
             previous = self._session_token.get(actor.session_id)
@@ -83,6 +90,7 @@ class DraftConfirmationService:
             username=actor.username,
             session_id=actor.session_id,
             confirmed_at=now,
+            capability=challenge.required_capability,
         )
 
     @staticmethod

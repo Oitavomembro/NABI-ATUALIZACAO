@@ -6,6 +6,7 @@ from decimal import Decimal
 
 from assistant_nabi import PurchaseReceiptDraftService, PurchaseReceiptItemRequest
 from assistant_nabi.purchase_gateway import NabiCodePurchaseAssistantGateway
+from assistant_nabi import CapabilityLevel
 
 
 class Gateway:
@@ -58,10 +59,24 @@ class PurchaseReceiptDraftTests(unittest.TestCase):
             self.service.create(7, (PurchaseReceiptItemRequest(11, "1", "1"),), generate_payable=True)
 
     def test_gateway_bloqueia_mutacao_ate_idempotencia_duravel(self):
-        service = type("Purchase", (), {"repository": object()})()
+        calls = []
+        repository = type("Repo", (), {})()
+        service = type("Purchase", (), {
+            "repository": repository,
+            "receber": lambda self, *args, **kwargs: calls.append((args, kwargs)) or "ok",
+        })()
         gateway = NabiCodePurchaseAssistantGateway(service)
-        with self.assertRaisesRegex(PermissionError, "idempotência persistente"):
-            gateway.receive()
+        draft = self.service.create(
+            7, (PurchaseReceiptItemRequest(11, "1", "8.50"),)
+        )
+        authorization = type("Authorization", (), {
+            "draft_id": draft.draft_id, "fingerprint": draft.fingerprint,
+            "username": "operador",
+            "capability": CapabilityLevel.REINFORCED_CONFIRMATION,
+        })()
+        self.assertEqual(gateway.execute(draft, authorization), "ok")
+        self.assertEqual(calls[0][1]["idempotency_key"], f"nabi:purchase:{draft.draft_id}")
+        self.assertEqual(calls[0][1]["operation_fingerprint"], draft.fingerprint)
 
 
 if __name__ == "__main__":

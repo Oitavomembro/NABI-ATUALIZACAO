@@ -51,6 +51,13 @@ class DraftService(Service):
         self.confirmations.append((token, draft_id, fingerprint))
         return object(), object()
 
+    def confirm_and_execute_purchase(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        result = type("Result", (), {
+            "recebimento_id": 77, "status_pedido": "PARCIAL",
+        })()
+        return result, object()
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
@@ -246,6 +253,31 @@ class NabiAssistantPanelTests(unittest.TestCase):
         ),)))
         self.assertFalse(panel.review_draft_button.isHidden())
         self.assertIn("RASCUNHO", panel.history.toPlainText())
+
+    def test_recebimento_exige_revisao_e_executa_pelo_servico_confirmado(self):
+        service = DraftService()
+        panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 9
+        panel._complete(9, AssistantTurn("Entrada", (ToolResult(
+            "req-purchase", "compras.preparar_recebimento", True,
+            {
+                "draft_id": "purchase-1", "fingerprint": "c" * 64,
+                "operation_kind": "PURCHASE_RECEIPT", "order_id": 7,
+                "supplier_name": "FORNECEDOR", "total": "34.00",
+                "items": [{
+                    "quantity": "4.0000", "description": "CAFÉ",
+                    "unit_cost": "8.50", "line_total": "34.00",
+                }],
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        self.assertIn("nenhum recebimento", panel.history.toPlainText())
+        panel.review_draft()
+        panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][1], "purchase-1")
+        self.assertIn("Registro #77", panel.history.toPlainText())
+        self.assertEqual(panel.status.text(), "Recebimento registrado")
 
 
 if __name__ == "__main__":

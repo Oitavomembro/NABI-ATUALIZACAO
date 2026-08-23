@@ -71,7 +71,7 @@ class PreparePurchaseReceiptTool:
                 for item in draft.items
             ],
             "requires_reinforced_confirmation": True,
-            "execution_blocked": True,
+            "execution_blocked": False,
             "persisted": False,
         }
 

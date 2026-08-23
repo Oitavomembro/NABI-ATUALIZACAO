@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from .contracts import CapabilityLevel
+
 
 class NabiCodePurchaseAssistantGateway:
-    """Leitura de compras; mutação permanece deliberadamente não exposta à IA."""
+    """Executa somente recebimento já confirmado pelo serviço oficial."""
 
     def __init__(self, purchase_service) -> None:
         if purchase_service is None:
@@ -16,7 +18,28 @@ class NabiCodePurchaseAssistantGateway:
             return None
         return order
 
-    def receive(self, *args, **kwargs):
-        raise PermissionError(
-            "Recebimento assistido bloqueado até existir idempotência persistente no backend."
+    def execute(self, draft, authorization):
+        if getattr(draft, "operation_kind", "") != "PURCHASE_RECEIPT":
+            raise TypeError("O rascunho não representa recebimento de compra.")
+        if (
+            authorization.draft_id != draft.draft_id
+            or authorization.fingerprint != draft.fingerprint
+        ):
+            raise PermissionError("A autorização não pertence a este recebimento.")
+        if authorization.capability is not CapabilityLevel.REINFORCED_CONFIRMATION:
+            raise PermissionError("O recebimento exige confirmação reforçada.")
+        return self._service.receber(
+            draft.order_id,
+            tuple({
+                "pedido_item_id": item.order_item_id,
+                "quantidade": format(item.quantity, "f"),
+                "custo_unitario": format(item.unit_cost, "f"),
+            } for item in draft.items),
+            documento=draft.document,
+            observacao="Recebimento confirmado pela Nabi",
+            usuario=authorization.username,
+            gerar_conta_pagar=draft.generate_payable,
+            data_vencimento=draft.due_date,
+            idempotency_key=f"nabi:purchase:{draft.draft_id}",
+            operation_fingerprint=draft.fingerprint,
         )

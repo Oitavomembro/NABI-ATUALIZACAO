@@ -30,6 +30,7 @@ class AssistantApplicationService:
         max_message_length: int = 2000,
         draft_service=None,
         confirmation_service=None,
+        purchase_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -38,6 +39,7 @@ class AssistantApplicationService:
         self._max_message_length = max(100, min(int(max_message_length), 10_000))
         self._drafts = draft_service
         self._confirmations = confirmation_service
+        self._purchase_executor = purchase_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -77,12 +79,29 @@ class AssistantApplicationService:
             raise RuntimeError("Confirmação de rascunho não está configurada.")
         actor = self._permissions.current_actor()
         draft = self._drafts.get(draft_id)
+        permission = {
+            "SALE": ("vendas", "create"),
+            "PURCHASE_RECEIPT": ("compras", "create"),
+        }.get(str(getattr(draft, "operation_kind", "")))
+        if permission is None or not self._permissions.allows(actor, *permission):
+            raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
         if draft.fingerprint != str(fingerprint or ""):
             raise PermissionError("O rascunho mudou depois da revisão.")
         authorization = self._confirmations.confirm(
             token=token, draft=draft, actor=actor
         )
         return draft, authorization
+
+    def confirm_and_execute_purchase(
+        self, token: str, draft_id: str, fingerprint: str
+    ):
+        if self._purchase_executor is None:
+            raise RuntimeError("Execução assistida de compras não está configurada.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        if getattr(draft, "operation_kind", "") != "PURCHASE_RECEIPT":
+            raise TypeError("O rascunho confirmado não é um recebimento de compra.")
+        result = self._purchase_executor.execute(draft, authorization)
+        return result, authorization
 
     def invalidate_confirmations(self) -> None:
         if self._confirmations is None:
