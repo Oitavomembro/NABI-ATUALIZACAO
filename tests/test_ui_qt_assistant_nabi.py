@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from pathlib import Path
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -43,6 +44,24 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(self.panel._generation, generation)
         self.assertFalse(self.panel.voice.isEnabled())
         self.assertIn("Digite", self.panel.status.text())
+        self.assertEqual(self.panel.status.property("nabiState"), "warning")
+
+    def test_mascote_oficial_tem_transparencia_real_e_descricao_acessivel(self):
+        asset = (
+            Path(__file__).resolve().parents[1]
+            / "ui_qt"
+            / "assistant_nabi"
+            / "assets"
+            / "nabi_mascot_blue_v2_transparent.png"
+        )
+        self.assertTrue(asset.is_file())
+        pixmap = self.panel.mascot.pixmap()
+        self.assertIsNotNone(pixmap)
+        self.assertFalse(pixmap.isNull())
+        image = pixmap.toImage()
+        self.assertTrue(image.hasAlphaChannel())
+        self.assertEqual(image.pixelColor(0, 0).alpha(), 0)
+        self.assertIn("Disponível", self.panel.mascot.accessibleDescription())
 
     def test_resultado_e_renderizado_sem_html_injetado(self):
         turn = AssistantTurn(
@@ -67,11 +86,13 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.panel.reactivate()
         self.assertTrue(self.panel.send.isEnabled())
         self.assertEqual(self.panel.status.text(), "Disponível")
+        self.assertEqual(self.panel.status.property("nabiState"), "available")
 
     def test_falha_segura_aparece_como_bloqueada(self):
         self.panel._generation = 2
         self.panel._complete(2, AssistantTurn("Modelo indisponível", safe_failure=True))
         self.assertEqual(self.panel.status.text(), "Bloqueada")
+        self.assertEqual(self.panel.status.property("nabiState"), "blocked")
 
     def test_renderiza_produtos_deterministicamente_e_escapa_dados(self):
         turn = AssistantTurn("Consulta concluída", (ToolResult(
@@ -106,6 +127,7 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertFalse(panel.message.isEnabled())
         self.assertFalse(panel.send.isEnabled())
         self.assertEqual(panel.status.text(), "Em preparação")
+        self.assertEqual(panel.status.property("nabiState"), "offline")
         self.assertIn("ainda não homologados", panel.history.toPlainText())
         panel.reactivate()
         self.assertFalse(panel.send.isEnabled())

@@ -1,7 +1,19 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QObject, QRunnable, Qt, QThreadPool, Signal
+from pathlib import Path
+
+from PySide6.QtCore import (
+    QEasingCurve,
+    QObject,
+    QPropertyAnimation,
+    QRunnable,
+    Qt,
+    QThreadPool,
+    Signal,
+)
+from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import (
+    QGraphicsOpacityEffect,
     QHBoxLayout,
     QLabel,
     QLineEdit,
@@ -52,18 +64,27 @@ class NabiAssistantPanel(QWidget):
 
         root = QVBoxLayout(self)
         header = QHBoxLayout()
-        self.mascot = QLabel("N")
+        self.mascot = QLabel()
         self.mascot.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.mascot.setFixedSize(42, 42)
+        self.mascot.setFixedSize(72, 72)
         self.mascot.setAccessibleName("Mascote Nabi")
+        self._load_mascot()
+        self._mascot_opacity = QGraphicsOpacityEffect(self.mascot)
+        self.mascot.setGraphicsEffect(self._mascot_opacity)
+        self._mascot_animation = QPropertyAnimation(
+            self._mascot_opacity, b"opacity", self
+        )
+        self._mascot_animation.setEasingCurve(QEasingCurve.Type.InOutSine)
         self.title = QLabel("NABI — ASSISTENTE")
         self.title.setStyleSheet("font-size: 16px; font-weight: 700;")
-        self.status = QLabel("Disponível")
+        self.status = QLabel()
         self.status.setAccessibleName("Estado da Nabi")
+        identity = QVBoxLayout()
+        identity.setSpacing(2)
+        identity.addWidget(self.title)
+        identity.addWidget(self.status)
         header.addWidget(self.mascot)
-        header.addWidget(self.title)
-        header.addStretch()
-        header.addWidget(self.status)
+        header.addLayout(identity, 1)
         root.addLayout(header)
 
         self.history = QTextBrowser()
@@ -93,6 +114,7 @@ class NabiAssistantPanel(QWidget):
         self.message.returnPressed.connect(self.submit)
         self.stop.clicked.connect(self.stop_nabi)
         self._apply_style()
+        self._set_state("available", "Disponível")
         if not getattr(service, "available", True):
             self._show_unavailable(
                 getattr(
@@ -113,23 +135,72 @@ class NabiAssistantPanel(QWidget):
             QPushButton#stopNabi { background: #b62324; font-weight: 700; }
             QLabel { color: #f0f6fc; }
         """)
-        self.mascot.setStyleSheet(
-            "background: #00d48a; color: #07130f; border-radius: 21px; font-weight: 900;"
+        self.mascot.setStyleSheet("background: transparent;")
+
+    def _load_mascot(self) -> None:
+        asset = (
+            Path(__file__).resolve().parent
+            / "assets"
+            / "nabi_mascot_blue_v2_transparent.png"
         )
+        pixmap = QPixmap(str(asset))
+        if pixmap.isNull():
+            self.mascot.setText("N")
+            self.mascot.setStyleSheet(
+                "background: #2478e5; border-radius: 36px; font-weight: 900;"
+            )
+            self.mascot.setToolTip("Mascote Nabi indisponível; assistente continua funcional.")
+            return
+        self.mascot.setPixmap(
+            pixmap.scaled(
+                self.mascot.size(),
+                Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+    def _set_state(self, state: str, text: str) -> None:
+        colors = {
+            "available": "#58d6ff",
+            "thinking": "#8ab4ff",
+            "completed": "#36d98b",
+            "warning": "#ffca5c",
+            "blocked": "#ff6b6b",
+            "stopped": "#a6adb7",
+            "offline": "#a6adb7",
+        }
+        animated = state in {"thinking"}
+        self.status.setText(text)
+        self.status.setProperty("nabiState", state)
+        self.status.setStyleSheet(
+            f"color: {colors.get(state, '#f0f6fc')}; font-weight: 700;"
+        )
+        description = f"Nabi: {text}"
+        self.status.setAccessibleDescription(description)
+        self.mascot.setAccessibleDescription(description)
+        self.mascot.setToolTip(description)
+        self._mascot_animation.stop()
+        self._mascot_opacity.setOpacity(1.0 if state != "offline" else 0.55)
+        if animated:
+            self._mascot_animation.setDuration(900)
+            self._mascot_animation.setStartValue(0.62)
+            self._mascot_animation.setEndValue(1.0)
+            self._mascot_animation.setLoopCount(-1)
+            self._mascot_animation.start()
 
     def submit(self) -> None:
         if self._busy or not self.send.isEnabled():
             return
         text = self.message.text().strip()
         if not text:
-            self.status.setText("Digite uma mensagem")
+            self._set_state("warning", "Digite uma mensagem")
             self.message.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         self._generation += 1
         generation = self._generation
         self._busy = True
         self._set_controls(False)
-        self.status.setText("Pensando…")
+        self._set_state("thinking", "Pensando…")
         self.history.append(f"<b>Você:</b> {self._escape(text)}")
         self.message.clear()
         worker = _AskWorker(generation, self._service, text)
@@ -148,7 +219,10 @@ class NabiAssistantPanel(QWidget):
             return
         self._busy = False
         self._set_controls(True)
-        self.status.setText("Bloqueada" if turn.safe_failure else "Concluído")
+        if turn.safe_failure:
+            self._set_state("blocked", "Bloqueada")
+        else:
+            self._set_state("completed", "Concluído")
         self.history.append(f"<b>Nabi:</b> {self._escape(turn.message)}")
         for result in turn.tool_results:
             state = "Concluída" if result.success else "Não executada"
@@ -164,7 +238,7 @@ class NabiAssistantPanel(QWidget):
         self._generation += 1
         self._busy = False
         self._set_controls(False)
-        self.status.setText("Parada pelo operador")
+        self._set_state("stopped", "Parada pelo operador")
         self.history.append("<b>Nabi:</b> Solicitações pendentes foram invalidadas.")
 
     def reactivate(self) -> None:
@@ -173,7 +247,7 @@ class NabiAssistantPanel(QWidget):
         self._generation += 1
         self._busy = False
         self._set_controls(True)
-        self.status.setText("Disponível")
+        self._set_state("available", "Disponível")
 
     def _set_controls(self, enabled: bool) -> None:
         self.message.setEnabled(enabled)
@@ -181,7 +255,7 @@ class NabiAssistantPanel(QWidget):
 
     def _show_unavailable(self, message: str) -> None:
         self._set_controls(False)
-        self.status.setText("Em preparação")
+        self._set_state("offline", "Em preparação")
         self.history.append(f"<b>Nabi:</b> {self._escape(message)}")
 
     @staticmethod
