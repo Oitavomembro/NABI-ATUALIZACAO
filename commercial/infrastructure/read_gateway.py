@@ -34,6 +34,7 @@ class NabiCodeCommercialReadGateway:
                 protocol=str(row.get("protocol") or ""),
                 fiscal_environment=str(row.get("fiscal_environment") or ""),
                 fiscal_authorized_at=str(row.get("fiscal_authorized_at") or ""),
+                customer_name="",
             )
             for row in rows
         )

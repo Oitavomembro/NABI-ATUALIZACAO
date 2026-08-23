@@ -171,7 +171,7 @@ class DailySalesDialog(QDialog):
         fiscal = record.fiscal_status or "NÃO FISCAL"
         return (
             "VENDA", f"#{record.sale_id}", record.occurred_at,
-            str(record.customer_id or "CONSUMIDOR FINAL"),
+            record.customer_name or str(record.customer_id or "CONSUMIDOR FINAL"),
             f"R$ {MoneyCodec.format_br(record.total)}", record.status or "—", fiscal,
         )
 

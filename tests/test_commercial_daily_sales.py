@@ -26,6 +26,9 @@ class _Receipts:
         self.calls.append((customer_id, items, total, kind, sale_id))
         return f"VENDA {sale_id}"
 
+    def customer(self, customer_id):
+        return type("Customer", (), {"name": "CLIENTE SETE"})()
+
 
 class _Printing:
     def __init__(self):
@@ -73,7 +76,10 @@ class DailySalesGatewayTests(unittest.TestCase):
 
     def test_lista_estado_real_e_reconstroi_segunda_via(self):
         sale = self.gateway.list_today()[0]
-        self.assertEqual((sale.sale_id, sale.customer_id, sale.total), (41, 7, Decimal("15.00")))
+        self.assertEqual(
+            (sale.sale_id, sale.customer_id, sale.customer_name, sale.total),
+            (41, 7, "CLIENTE SETE", Decimal("15.00")),
+        )
         self.assertEqual(self.gateway.preview_text(sale), "VENDA 41")
         items = self.receipts.calls[0][1]
         self.assertEqual([item["subtotal"] for item in items], [Decimal("10.00"), Decimal("5.00")])

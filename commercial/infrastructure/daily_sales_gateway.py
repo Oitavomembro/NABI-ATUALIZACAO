@@ -34,10 +34,11 @@ class NabiCodeDailySalesGateway:
         self._opener = opener or WindowsFileOpener()
         self._get_config = config_getter
 
-    @staticmethod
-    def _summary(row: dict) -> DailySaleSummary:
+    def _summary(self, row: dict) -> DailySaleSummary:
+        customer_id = row.get("cliente_id")
+        customer_name = self._receipts.customer(customer_id).name
         return DailySaleSummary(
-            sale_id=row["id"], customer_id=row.get("cliente_id"),
+            sale_id=row["id"], customer_id=customer_id,
             description=str(row.get("descricao") or ""), total=row["valor"],
             occurred_at=str(row.get("data") or ""),
             status=str(row.get("status_pagamento") or ""),
@@ -48,6 +49,7 @@ class NabiCodeDailySalesGateway:
             protocol=str(row.get("protocol") or ""),
             fiscal_environment=str(row.get("fiscal_environment") or ""),
             fiscal_authorized_at=str(row.get("fiscal_authorized_at") or ""),
+            customer_name=customer_name,
         )
 
     def list_today(self) -> tuple[DailySaleSummary, ...]:
