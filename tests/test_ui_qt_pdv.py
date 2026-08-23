@@ -15,7 +15,7 @@ from ui_qt.commercial.pdv_view_model import CheckoutInput, PDVViewModel
 try:
     from PySide6.QtCore import Qt
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QLabel, QPushButton
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
 except (ImportError, OSError) as qt_error:
@@ -203,6 +203,7 @@ class PDVQtTests(unittest.TestCase):
 
     def test_window_opens_and_customer_id_is_source_of_truth(self):
         self.assertTrue(self.window.isVisible())
+        self.assertIn("NABI VENDAS", self.window.windowTitle())
         self._select_customer()
         self.assertEqual(self.view_model.session.customer_id, 7)
         self.assertIn("CLIENTE SETE", self.window.customer_selected.text())
@@ -221,6 +222,33 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.window.cart.rowCount(), 1)
         self.assertEqual(self.view_model.total, Decimal("20.00"))
         self.assertIn("20,00", self.window.total_label.text())
+
+    def test_nabi_visual_hierarchy_and_shortcuts(self):
+        self.assertEqual(self.window.cart.columnCount(), 4)
+        self.assertEqual(
+            [self.window.cart.horizontalHeaderItem(index).text() for index in range(4)],
+            ["Produto / Serviço", "Qtd.", "Unitário", "Total"],
+        )
+        labels = [label.text() for label in self.window.findChildren(QLabel)]
+        buttons = [button.text() for button in self.window.findChildren(QPushButton)]
+        self.assertIn("▰  NABI VENDAS", labels)
+        self.assertIn("ITENS DA VENDA", labels)
+        self.assertIn("RESUMO DA VENDA", labels)
+        self.assertIn("Vendas do dia  [F7]", buttons)
+        self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
+        self.assertIn("FINALIZAR VENDA  [F9]", buttons)
+        shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
+        self.assertEqual(shortcuts, {"Esc", "F9", "Return"})
+
+    def test_enter_adds_loose_item_from_description(self):
+        self.window.loose_item.setChecked(True)
+        QTest.keyClicks(self.window.description, "Item pelo Enter")
+        self.window.price.set_value("12,50")
+        self.window.description.setFocus()
+        QTest.keyClick(self.window.description, Qt.Key.Key_Return)
+        QApplication.processEvents()
+        self.assertEqual(self.window.cart.rowCount(), 1)
+        self.assertEqual(self.view_model.total, Decimal("12.50"))
 
     def test_registered_product_and_quantity(self):
         self.window.product_search.setText("P9")

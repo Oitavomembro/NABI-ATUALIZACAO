@@ -85,7 +85,12 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database)
-        return run(container.application, argv)
+        return run(
+            container.application,
+            argv,
+            cash_label="Caixa ativo",
+            profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
+        )
     except Exception as error:
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")
         return 1
