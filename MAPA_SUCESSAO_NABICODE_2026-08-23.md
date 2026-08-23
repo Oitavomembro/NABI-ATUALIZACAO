@@ -920,6 +920,13 @@ Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
 - SHA-256 do executável: `1CA9E7417DD021B272F886FD94A99B0BC45F9B283FDB24ABA1B68C7197D02BC6`;
 - ativação física retornou código 0 e a reabertura avançou para
   `Entrar no NabiCode Fichario`, comprovando licença ativa;
+- decisão posterior do proprietário: a edição FICHÁRIO licenciada não exige
+  usuário/senha; `c242b87` reutiliza a sessão local oficial do NabiCode somente
+  depois do portão de licença e preserva permissões internas;
+- validação dessa mudança: `25 passed`, `compileall` e `git diff --check`;
+- portátil reconstruído, SHA-256
+  `3131F8A51D97340FFBFA071F801C0EF81BD4DDDD937FE63B432076FB3F228DE9`,
+  e homologado fisicamente abrindo direto em `NabiCode Fichario`, sem login;
 - chave privada e pasta externa de segredos não foram lidas, copiadas,
   versionadas ou empacotadas; nenhum instalador e nenhum push foram realizados.
 
