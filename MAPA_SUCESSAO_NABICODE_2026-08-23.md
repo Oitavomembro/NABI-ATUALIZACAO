@@ -1046,3 +1046,46 @@ Pendências deliberadas:
 - confirmar no artefato instalado, por inspeção de processos e banco de TESTE,
   que nenhum worker/arquivo/fila fiscal é iniciado ou criado;
 - nenhum push foi realizado.
+
+## Checkpoint FICHÁRIO — paridade operacional do projeto raiz
+
+Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
+
+- implementação: `217016d` — `feat: alinha edicao Fichario ao fluxo raiz`;
+- tela inicial substituiu a lista simples por cards no padrão visual NabiCode e
+  restaurou total de fichas, clientes em dia, clientes devendo, alerta com mais
+  de 60 dias e total a receber, usando `DashboardRepository` como autoridade;
+- lista de clientes restaurou as cores Legacy: branco sem saldo, amarelo acima
+  de R$ 0,005 até R$ 500 e vermelho acima de R$ 500; essas cores são faixas
+  visuais de saldo e não inventam atraso;
+- número da ficha voltou a ser o primeiro campo, com destaque e preenchimento
+  pela configuração canônica `proxima_ficha`; pesquisa inclui ficha, código,
+  nome, CPF, RG, telefone e endereço;
+- PDV da edição FICHÁRIO ficou exclusivamente em produto avulso: pesquisa,
+  catálogo e F2 ficam indisponíveis e uma política própria também recusa
+  `product_id` fora da GUI;
+- compra do FICHÁRIO exige uma ficha real; Consumidor Final é recusado na
+  política da edição antes da persistência;
+- botão `IMPORTAR FICHÁRIO ANTIGO` reutiliza `MySQLMigrationService`, separado
+  da restauração `.db` produzida pelo próprio NabiCode; fecha o PDV antes da
+  operação, analisa o `.sql`, apresenta prévia, exige confirmação e cria backup
+  automático antes da escrita;
+- decisão expressa do proprietário para a primeira importação externa: importar
+  cadastro, número da ficha e saldo atual, sem movimentações históricas antigas;
+  compras e recebimentos novos passam a formar o histórico no NabiCode;
+- backup real auditado sem alteração:
+  `C:\Users\famil\Desktop\bk_fichario_2026_08_01.sql`, SHA-256
+  `d236c2ef757d8698cc15ed55ff8454dcacdfb9fcb6a4a07edad9059e0f08aebf`;
+  reconhecidos 4.956 clientes, 32.410 vendas e 167.013 recebimentos, sem ficha,
+  código ou CPF duplicado;
+- prova em banco temporário: primeira execução inseriu 4.956 fichas únicas com
+  saldo total R$ 890.654,35, zero movimentos antigos e zero produtos; segunda
+  execução inseriu zero e atualizou as mesmas 4.956 fichas, comprovando
+  idempotência; nenhum banco real foi usado;
+- validação consolidada: `163 passed`, `7 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum instalador e nenhum push foram realizados.
+
+Próximo passo: abrir o FICHÁRIO pelo código atual para homologação visual dos
+cards, clientes, ficha, PDV avulso e prévia do importador. Não executar a
+importação no banco de produção antes da aprovação visual e de um backup manual.
