@@ -13,12 +13,12 @@ from .contracts import (
     ToolResult,
     ToolSchema,
 )
-from .registry import ReadOnlyToolRegistry
+from .registry import DraftToolRegistry, ReadOnlyToolRegistry
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 from .read_tools import register_commercial_read_tools
 from .application import AssistantApplicationService, UnavailableAssistantService
 from .local_provider import LocalOpenAICompatibleModelAdapter
-from .bootstrap import create_read_only_assistant
+from .bootstrap import create_draft_assistant, create_read_only_assistant
 from .activation import AuthenticatedAssistantActivation
 from .sale_drafts import SaleDraft, SaleDraftItem, SaleDraftItemRequest, SaleDraftService
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
@@ -50,6 +50,7 @@ __all__ = [
     "LLAMA_CPP_B10537_CPU_X64",
     "ModelArtifactManifest",
     "ReadOnlyToolRegistry",
+    "DraftToolRegistry",
     "RuntimeDirectoryManifest",
     "QWEN3_1_7B_Q4_K_M_CANDIDATE",
     "CurrentSessionPermissionAdapter",
@@ -60,6 +61,7 @@ __all__ = [
     "ToolSchema",
     "register_commercial_read_tools",
     "create_read_only_assistant",
+    "create_draft_assistant",
     "verify_model_artifact",
     "verify_runtime_directory",
 ]

@@ -27,6 +27,8 @@ class ParameterType(StrEnum):
     INTEGER = "INTEGER"
     DECIMAL_TEXT = "DECIMAL_TEXT"
     BOOLEAN = "BOOLEAN"
+    INTEGER_LIST = "INTEGER_LIST"
+    DECIMAL_TEXT_LIST = "DECIMAL_TEXT_LIST"
 
 
 def _required_text(value: object, field_name: str) -> str:
@@ -82,6 +84,23 @@ class ParameterDefinition:
         object.__setattr__(self, "allowed_values", allowed)
 
     def validate(self, value: Any) -> None:
+        if self.parameter_type in {
+            ParameterType.INTEGER_LIST,
+            ParameterType.DECIMAL_TEXT_LIST,
+        }:
+            if not isinstance(value, (list, tuple)) or not value:
+                raise ValueError(f"O parâmetro {self.name} deve ser uma lista não vazia.")
+            if len(value) > 50:
+                raise ValueError(f"O parâmetro {self.name} excede o limite de itens.")
+            scalar_type = (
+                ParameterType.INTEGER
+                if self.parameter_type is ParameterType.INTEGER_LIST
+                else ParameterType.DECIMAL_TEXT
+            )
+            scalar = ParameterDefinition(self.name, scalar_type)
+            for item in value:
+                scalar.validate(item)
+            return
         if self.parameter_type is ParameterType.TEXT:
             if not isinstance(value, str):
                 raise ValueError(f"O parâmetro {self.name} deve ser texto.")

@@ -29,7 +29,6 @@ class ReadOnlyToolRegistry:
         if definition.name in self._tools:
             raise ValueError(f"Ferramenta já registrada: {definition.name}.")
         self._tools[definition.name] = (definition, handler)
-
     def definitions(self, *, actor: AssistantActor) -> tuple[ToolDefinition, ...]:
         return tuple(
             definition
@@ -71,3 +70,19 @@ class ReadOnlyToolRegistry:
         result = ToolResult(request.request_id, request.tool_name, False, message=message)
         self._audit.record(actor=actor, request=request, result=result)
         return result
+
+
+class DraftToolRegistry(ReadOnlyToolRegistry):
+    """Aceita consultas e rascunhos, mas recusa qualquer mutação."""
+
+    def register(self, definition: ToolDefinition, handler: ReadToolPort) -> None:
+        if (definition.kind, definition.capability) not in {
+            (ToolKind.READ, CapabilityLevel.READ),
+            (ToolKind.DRAFT, CapabilityLevel.DRAFT),
+        }:
+            raise ValueError("A Fase 2 aceita somente consultas e rascunhos.")
+        if not isinstance(handler, ReadToolPort):
+            raise TypeError("O manipulador não cumpre a porta de ferramenta.")
+        if definition.name in self._tools:
+            raise ValueError(f"Ferramenta já registrada: {definition.name}.")
+        self._tools[definition.name] = (definition, handler)

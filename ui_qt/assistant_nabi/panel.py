@@ -387,6 +387,17 @@ class NabiAssistantPanel(QWidget):
                 f"Produto #{payload['product_id']} — estoque {payload['current_quantity']} — "
                 f"mínimo {payload['minimum_quantity']} — {payload['status']}"
             )
+        if result.tool_name == "vendas.criar_rascunho":
+            lines = [
+                f"{item['quantity']}x {item['description']} — R$ {item['line_total']}"
+                for item in payload.get("items", ())
+            ]
+            lines.extend((
+                f"Total proposto: R$ {payload.get('total', '0.00')}",
+                f"Pagamento proposto: {payload.get('payment_method', '-')}",
+                "RASCUNHO — nenhuma venda foi registrada.",
+            ))
+            return "\n".join(lines)
         if result.tool_name == "diagnostico.executar_testes":
             state = "APROVADA" if payload.get("passed") else "FALHOU"
             return f"Suíte {payload.get('suite', '')}: {state}\n{payload.get('output', '')}"

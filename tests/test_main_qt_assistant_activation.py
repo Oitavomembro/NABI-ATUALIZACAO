@@ -26,7 +26,7 @@ class MainQtAssistantActivationTests(unittest.TestCase):
             patch.object(main_qt, "AdminAuditService", return_value="auditoria"),
             patch.object(main_qt, "LocalLlamaServer", return_value=runtime) as runtime_cls,
             patch.object(
-                main_qt, "create_read_only_assistant", return_value="assistente"
+                main_qt, "create_draft_assistant", return_value="assistente"
             ) as assistant_factory,
         ):
             activation = main_qt._create_assistant_activation(

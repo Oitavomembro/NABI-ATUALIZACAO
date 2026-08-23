@@ -13,7 +13,7 @@ from assistant_nabi import (
     LocalLlamaServer,
     QWEN3_1_7B_Q4_K_M_CANDIDATE,
     UnavailableAssistantService,
-    create_read_only_assistant,
+    create_draft_assistant,
 )
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
@@ -48,7 +48,7 @@ def _create_assistant_activation(database, profile, container):
         )
 
     def assistant_factory(model, session_id):
-        return create_read_only_assistant(
+        return create_draft_assistant(
             model=model,
             query_service=container.query,
             security_service=security,
