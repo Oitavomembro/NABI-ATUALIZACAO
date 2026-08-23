@@ -71,7 +71,8 @@ Legenda:
 - [x] validação relacionada: 235 testes Qt/Commercial/backend e 335 subtestes aprovados; `compileall` e `git diff --check` aprovados;
 - [x] todos os botões comerciais visíveis no PDV Qt possuem ação real; o método e o rótulo provisórios foram removidos;
 - [~] suíte integral executada: 1693 testes e 385 subtestes aprovados, 1 ignorado e 3 falhas fora deste checkpoint — duas por ausência local de `brazilfiscalreport` em testes de DANFE e uma asserção textual Legacy antiga que ainda procura `entry_valor_venda.insert` após a migração já existente para `MoneyEntryBehavior.set_value`; nenhuma dessas áreas foi alterada por esta missão;
-- [~] homologação manual pendente para F7, filtros, Enter/Shift+Enter/Esc, segunda via/PDF/impressão, cancelamento local confirmado/recusado e bloqueio de venda fiscal;
+- [x] homologação manual aprovada para F7 e clique, filtros, Enter em transição única, Shift+Enter, Esc, bloqueio de auto-repeat, prévia, PDF, cancelamento local recusado/confirmado, repetição bloqueada, orçamento não cancelável e persistência após reiniciar; impressão física não foi executada por ausência de impressora;
+- [~] bloqueio visual de cancelamento fiscal permanece coberto por testes automatizados, mas não pôde ser reproduzido fisicamente porque o perfil TESTE não possuía venda fiscal na lista;
 - [ ] homologação física Windows do PDV completo;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
