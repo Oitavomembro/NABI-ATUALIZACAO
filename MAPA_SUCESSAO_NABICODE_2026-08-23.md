@@ -45,6 +45,7 @@ Legenda:
 - [~] alinhar as janelas Qt desse fluxo à aparência e à organização das equivalentes do Legacy, sem transportar regras fiscais ou decisões indevidas para a GUI;
 - [x] fronteira atual do PDV usa consulta de produtos e não oferece criação/edição de catálogo;
 - [x] produto avulso cria somente item de venda, sem `product_id`, cadastro de produto ou movimentação de estoque;
+- [x] checkpoint 1 protege a fronteira de produtos por teste arquitetural no commit `88ca3ff`: `ProductLookupPort` expõe somente `search/get`, e item avulso não chama escrita de catálogo/estoque; 16 testes focados, `compileall` e `git diff --check` aprovados;
 - [ ] pós-venda e comprovantes Qt;
 - [ ] operações completas do carrinho: editar, remover, desconto e atalhos;
 - [ ] orçamento Qt;
