@@ -33,10 +33,15 @@ class NabiCodeCheckoutGateway:
         if command.items_total != command.final_total:
             items = self.pdv_service.ratear_total_itens(items, command.final_total)
 
-        payments = [
-            {"forma": payment.method.value, "valor": payment.amount}
-            for payment in command.payment_plan.payments
-        ]
+        payments = []
+        for payment in command.payment_plan.payments:
+            entry = {"forma": payment.method.value, "valor": payment.amount}
+            if payment.method in {PaymentMethod.DEBIT, PaymentMethod.CREDIT_CARD}:
+                entry.update({
+                    "card_integration": 2,
+                    "card_authorization": payment.card_authorization,
+                })
+            payments.append(entry)
         if command.credit_terms is not None:
             credit_payment = next(
                 payment

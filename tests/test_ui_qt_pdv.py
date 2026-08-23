@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -10,14 +11,15 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from commercial.application.dto import CustomerRecord, ProductRecord
 from commercial.application.pdv_application_service import PDVApplicationService
 from commercial.application.ports import PersistedCheckout
-from commercial.domain.payments import PaymentMethod
+from commercial.domain.payments import Payment, PaymentMethod
 from ui_qt.commercial.pdv_view_model import CheckoutInput, PDVViewModel
 
 try:
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QPushButton
+    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
+    from ui_qt.commercial.checkout_dialog import CheckoutDialog
     from ui_qt.commercial.pdv_window import PDVWindow
     from ui_qt.commercial.widgets.money_edit import MoneyEdit
 except (ImportError, OSError) as qt_error:
@@ -110,6 +112,14 @@ class FakeCheckoutDialog:
 
 
 class PDVViewModelTests(unittest.TestCase):
+    def test_checkout_confirmado_nao_pode_ser_repetido(self):
+        view_model, gateway = self._prepared()
+        data = CheckoutInput(PaymentMethod.CASH, Decimal("100"))
+        self.assertTrue(view_model.checkout(data, user="Operador").committed)
+        with self.assertRaises(ValueError):
+            view_model.checkout(data, user="Operador")
+        self.assertEqual(len(gateway.commands), 1)
+
     def _prepared(self, error=None):
         view_model, gateway = make_view_model(error)
         view_model.select_customer(7)
@@ -214,6 +224,99 @@ class MoneyEditTests(unittest.TestCase):
         QTest.keyClick(edit, Qt.Key.Key_Delete)
         self.assertEqual(edit.text(), "24,00")
         self.assertEqual(edit.cursorPosition(), 1)
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
+class CheckoutDialogTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.qt = QApplication.instance() or QApplication([])
+
+    def setUp(self):
+        self.view_model, self.gateway = make_view_model()
+        self.view_model.select_customer(7)
+        self.view_model.add_loose_item("ITEM", "1", Decimal("100"))
+        self.dialog = CheckoutDialog(self.view_model)
+        self.dialog.show()
+        QApplication.processEvents()
+
+    def tearDown(self):
+        self.dialog.close()
+
+    def test_formas_valor_inicial_e_dinheiro_exato(self):
+        methods = {
+            self.dialog.method.itemData(index)
+            for index in range(self.dialog.method.count())
+        }
+        self.assertEqual(methods, set(PaymentMethod))
+        self.assertEqual(self.dialog.amount.value(), Decimal("100.00"))
+        preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(preview[1].change, Decimal("0.00"))
+
+    def test_dinheiro_acima_gera_troco_e_pix_insuficiente_bloqueia(self):
+        self.dialog.amount.set_value("120")
+        preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(preview[1].change, Decimal("20.00"))
+        self.dialog.method.setCurrentIndex(self.dialog.method.findData(PaymentMethod.PIX))
+        self.dialog.amount.set_value("99")
+        with self.assertRaisesRegex(ValueError, "não atingem"):
+            self.view_model.preview_checkout(self.dialog._candidate_input())
+
+    def test_cartoes_autorizacao_opcional_e_pagamento_misto(self):
+        self.dialog._payments = (
+            [Payment(PaymentMethod.DEBIT, "30"),
+             Payment(PaymentMethod.CREDIT_CARD, "30", "NSU1"),
+             Payment(PaymentMethod.OTHER, "10"),
+             Payment(PaymentMethod.CASH, "30")]
+        )
+        preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(preview[1].received, Decimal("100.00"))
+
+    def test_ajustes_percentuais_recalculam_total(self):
+        self.dialog.discount_type.setCurrentIndex(1)
+        self.dialog.discount.set_value("10")
+        self.dialog.surcharge_type.setCurrentIndex(1)
+        self.dialog.surcharge.set_value("10")
+        self.dialog.amount.set_value("99")
+        preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(preview[-1], Decimal("99.00"))
+
+    def test_crediario_sem_entrada_e_com_entrada(self):
+        due = date(2026, 9, 22)
+        no_entry = CheckoutInput(
+            payments=(Payment(PaymentMethod.STORE_CREDIT, "100"),),
+            installment_count=2, first_due_date=due,
+        )
+        self.assertEqual(self.view_model.preview_checkout(no_entry)[2].installment_count, 2)
+        with_entry = CheckoutInput(
+            payments=(Payment(PaymentMethod.PIX, "20"), Payment(PaymentMethod.STORE_CREDIT, "80")),
+            installment_count=3, first_due_date=due,
+        )
+        preview = self.view_model.preview_checkout(with_entry)
+        self.assertEqual(preview[2].down_payment, Decimal("20.00"))
+
+    def test_enter_shift_enter_e_auto_repeat(self):
+        self.dialog.method.setFocus()
+        QTest.keyClick(self.dialog.method, Qt.Key.Key_Return)
+        self.assertTrue(self.dialog.amount.hasFocus())
+        QTest.keyClick(
+            self.dialog.amount, Qt.Key.Key_Return, Qt.KeyboardModifier.ShiftModifier
+        )
+        self.assertTrue(self.dialog.method.hasFocus())
+        event = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "\r", True, 2,
+        )
+        QApplication.sendEvent(self.dialog.method, event)
+        self.assertTrue(self.dialog.method.hasFocus())
+
+    def test_revisao_exige_confirmacao_e_nao_persiste_sozinha(self):
+        with patch.object(QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes) as question:
+            self.dialog._review()
+        self.assertEqual(question.call_count, 1)
+        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Accepted)
+        self.assertIsNotNone(self.dialog.checkout_input())
+        self.assertEqual(self.gateway.commands, [])
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")

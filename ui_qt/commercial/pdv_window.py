@@ -660,7 +660,7 @@ class PDVWindow(QMainWindow):
             )
             self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
             return
-        dialog = CheckoutDialog(self.view_model.total, self)
+        dialog = CheckoutDialog(self.view_model, self)
         if dialog.exec() != CheckoutDialog.DialogCode.Accepted:
             self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
             return

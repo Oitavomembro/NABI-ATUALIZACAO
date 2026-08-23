@@ -72,6 +72,21 @@ class FakeTransactionService:
 
 
 class NabiCodeGatewayTests(unittest.TestCase):
+    def test_checkout_gateway_preserva_autorizacao_pos(self):
+        transaction = FakeTransactionService()
+        gateway = NabiCodeCheckoutGateway(transaction, FakeLegacyPDVService())
+        command = CheckoutCommand(
+            customer_id=7,
+            items=[CartItem("ITEM", 1, Decimal("100"))],
+            payment_plan=PaymentPlan([
+                Payment(PaymentMethod.CREDIT_CARD, Decimal("100"), "NSU123")
+            ]),
+        )
+        gateway.checkout(command, customer=CustomerRecord(7, "C7", "CLIENTE"), user="op")
+        payment = transaction.kwargs["payments"][0]
+        self.assertEqual(payment["card_integration"], 2)
+        self.assertEqual(payment["card_authorization"], "NSU123")
+
     def test_customer_gateway_pesquisa_e_obtem_por_id(self):
         repository = FakeCustomerRepository()
         gateway = NabiCodeCustomerGateway(repository)

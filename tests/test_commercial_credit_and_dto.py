@@ -16,6 +16,26 @@ from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
 
 class CommercialCreditTests(unittest.TestCase):
+    def test_formas_outros_cartoes_e_autorizacao_opcional(self):
+        self.assertEqual(Payment(PaymentMethod.OTHER, "10").method.value, "OUTROS")
+        self.assertEqual(Payment(PaymentMethod.DEBIT, "10").card_authorization, "")
+        card = Payment(PaymentMethod.CREDIT_CARD, "10", " NSU123 ")
+        self.assertEqual(card.card_authorization, "NSU123")
+        with self.assertRaisesRegex(ValueError, "20 caracteres"):
+            Payment(PaymentMethod.DEBIT, "10", "X" * 21)
+        with self.assertRaisesRegex(ValueError, "cartão"):
+            Payment(PaymentMethod.PIX, "10", "NSU")
+
+    def test_pagamento_misto_troco_e_soma_divergente(self):
+        plan = PaymentPlan([
+            Payment(PaymentMethod.PIX, "40"), Payment(PaymentMethod.CASH, "70")
+        ])
+        validation = plan.validate_against("100")
+        self.assertEqual(validation.received, Decimal("110.00"))
+        self.assertEqual(validation.change, Decimal("10.00"))
+        with self.assertRaisesRegex(ValueError, "não atingem"):
+            PaymentPlan([Payment(PaymentMethod.PIX, "99")]).validate_against("100")
+
     def test_uma_parcela(self):
         terms = CreditTerms.create(
             down_payment=Decimal("0"),

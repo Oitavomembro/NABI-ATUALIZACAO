@@ -2,11 +2,12 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, timedelta
-from decimal import Decimal
+from decimal import Decimal, ROUND_HALF_UP
 from typing import Iterable
 
 from commercial.domain.cart import CartItem
 from commercial.domain.credit import CreditTerms
+from commercial.domain.money import MoneyCodec
 from commercial.domain.payments import Payment, PaymentMethod, PaymentPlan
 
 from .dto import CheckoutCommand, CheckoutReceipt, CheckoutResult, CustomerRecord, ProductRecord
@@ -133,6 +134,86 @@ class PDVApplicationService:
             discount_amount=discount_amount,
             surcharge_amount=surcharge_amount,
         )
+
+    @staticmethod
+    def resolve_adjustments(
+        items_total: Decimal,
+        *,
+        discount: Decimal | int | str = Decimal("0"),
+        discount_type: str = "VALUE",
+        surcharge: Decimal | int | str = Decimal("0"),
+        surcharge_type: str = "VALUE",
+    ) -> tuple[Decimal, Decimal, Decimal]:
+        base_total = MoneyCodec.parse(items_total, field="subtotal")
+        discount_input = MoneyCodec.parse(discount, field="desconto")
+        surcharge_input = MoneyCodec.parse(surcharge, field="acréscimo")
+        if discount_input < 0 or surcharge_input < 0:
+            raise ValueError("Desconto e acréscimo não podem ser negativos.")
+        discount_kind = str(discount_type).strip().upper()
+        surcharge_kind = str(surcharge_type).strip().upper()
+        if discount_kind not in {"VALUE", "PERCENT"} or surcharge_kind not in {"VALUE", "PERCENT"}:
+            raise ValueError("Tipo de ajuste inválido.")
+        if discount_kind == "PERCENT":
+            if discount_input > 100:
+                raise ValueError("O desconto percentual não pode ultrapassar 100%.")
+            discount_amount = (base_total * discount_input / Decimal("100")).quantize(
+                MoneyCodec.CENT, rounding=ROUND_HALF_UP
+            )
+        else:
+            discount_amount = discount_input
+        if discount_amount > base_total:
+            raise ValueError("O desconto não pode ultrapassar o total da venda.")
+        adjusted_base = base_total - discount_amount
+        surcharge_amount = (
+            adjusted_base * surcharge_input / Decimal("100")
+            if surcharge_kind == "PERCENT"
+            else surcharge_input
+        ).quantize(MoneyCodec.CENT, rounding=ROUND_HALF_UP)
+        final_total = (adjusted_base + surcharge_amount).quantize(MoneyCodec.CENT)
+        if final_total <= 0:
+            raise ValueError("O total final deve ser maior que zero.")
+        return discount_amount, surcharge_amount, final_total
+
+    @classmethod
+    def configure_checkout(
+        cls,
+        session: PDVSession,
+        *,
+        payments: Iterable[Payment],
+        discount: Decimal | int | str = Decimal("0"),
+        discount_type: str = "VALUE",
+        surcharge: Decimal | int | str = Decimal("0"),
+        surcharge_type: str = "VALUE",
+        installment_count: int = 1,
+        first_due_date: date | None = None,
+        apply: bool = True,
+    ):
+        discount_amount, surcharge_amount, final_total = cls.resolve_adjustments(
+            session.items_total,
+            discount=discount,
+            discount_type=discount_type,
+            surcharge=surcharge,
+            surcharge_type=surcharge_type,
+        )
+        plan = PaymentPlan(tuple(payments))
+        validation = plan.validate_against(final_total)
+        terms = None
+        if plan.has_store_credit:
+            count = int(installment_count)
+            if count <= 0:
+                raise ValueError("A quantidade de parcelas deve ser maior que zero.")
+            due = first_due_date or date.today() + timedelta(days=30)
+            terms = CreditTerms.create(
+                down_payment=plan.entrance_value(final_total),
+                financed_value=plan.financed_value,
+                due_dates=tuple(due + timedelta(days=30 * index) for index in range(count)),
+            )
+        if apply:
+            session.set_adjustments(
+                discount_amount=discount_amount, surcharge_amount=surcharge_amount
+            )
+            session.set_payment_plan(plan, credit_terms=terms)
+        return plan, validation, terms, discount_amount, surcharge_amount, final_total
 
     @staticmethod
     def prepare_payments(session: PDVSession, payments: Iterable[Payment]) -> PaymentPlan:

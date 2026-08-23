@@ -1,74 +1,255 @@
 from __future__ import annotations
 
 from datetime import date, timedelta
+from decimal import Decimal
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QSpinBox, QWidget,
+    QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
+    QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget,
+    QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
-from commercial.domain.payments import PaymentMethod
-
-from .pdv_view_model import CheckoutInput
+from commercial.domain.money import MoneyCodec
+from commercial.domain.payments import Payment, PaymentMethod
+from .pdv_view_model import CheckoutInput, PDVViewModel
 from .widgets.money_edit import MoneyEdit
 
 
 class CheckoutDialog(QDialog):
-    def __init__(self, total, parent=None) -> None:
+    METHODS = (
+        ("Dinheiro", PaymentMethod.CASH), ("PIX", PaymentMethod.PIX),
+        ("Débito", PaymentMethod.DEBIT), ("Crédito", PaymentMethod.CREDIT_CARD),
+        ("Crediário", PaymentMethod.STORE_CREDIT), ("Outros", PaymentMethod.OTHER),
+    )
+
+    def __init__(self, view_model: PDVViewModel, parent=None) -> None:
         super().__init__(parent)
-        self.setWindowTitle("Finalizar venda")
+        self.view_model = view_model
+        self._payments: list[Payment] = []
+        self._confirmed_input: CheckoutInput | None = None
+        self.setWindowTitle("Pagamentos")
         self.setModal(True)
-        layout = QFormLayout(self)
+        self.resize(820, 680)
+        root = QVBoxLayout(self)
+        self.total_label = QLabel()
+        self.total_label.setStyleSheet("font-size: 20px; font-weight: 700;")
+        root.addWidget(self.total_label)
+
+        form = QFormLayout()
         self.method = QComboBox()
-        for label, method in (
-            ("Dinheiro", PaymentMethod.CASH), ("PIX", PaymentMethod.PIX),
-            ("Débito", PaymentMethod.DEBIT), ("Crédito", PaymentMethod.CREDIT_CARD),
-            ("Crediário", PaymentMethod.STORE_CREDIT),
-        ):
+        for label, method in self.METHODS:
             self.method.addItem(label, method)
         self.amount = MoneyEdit()
-        self.amount.set_value(total)
+        self.amount.set_value(view_model.total)
+        self.authorization = QLineEdit()
+        self.authorization.setMaxLength(20)
+        self.authorization.setPlaceholderText("NSU / autorização opcional")
+        self.add_payment = QPushButton("Adicionar pagamento")
+        form.addRow("Forma", self.method)
+        form.addRow("Valor", self.amount)
+        form.addRow("Autorização POS", self.authorization)
+        form.addRow(self.add_payment)
+        root.addLayout(form)
+
+        self.payment_table = QTableWidget(0, 3)
+        self.payment_table.setHorizontalHeaderLabels(["Forma", "Valor", "Autorização"])
+        root.addWidget(self.payment_table)
+        self.remove_payment = QPushButton("Remover pagamento selecionado")
+        root.addWidget(self.remove_payment)
+
+        adjustments = QHBoxLayout()
+        self.discount_type = QComboBox()
+        self.discount_type.addItem("Desconto em valor", "VALUE")
+        self.discount_type.addItem("Desconto em %", "PERCENT")
+        self.discount = MoneyEdit()
+        self.surcharge_type = QComboBox()
+        self.surcharge_type.addItem("Acréscimo em valor", "VALUE")
+        self.surcharge_type.addItem("Acréscimo em %", "PERCENT")
+        self.surcharge = MoneyEdit()
+        for widget in (self.discount_type, self.discount, self.surcharge_type, self.surcharge):
+            adjustments.addWidget(widget)
+        root.addLayout(adjustments)
+
         self.credit_box = QWidget()
-        credit_layout = QFormLayout(self.credit_box)
-        self.entrance_method = QComboBox()
-        for label, method in (
-            ("Dinheiro", PaymentMethod.CASH), ("PIX", PaymentMethod.PIX),
-            ("Débito", PaymentMethod.DEBIT), ("Crédito", PaymentMethod.CREDIT_CARD),
-        ):
-            self.entrance_method.addItem(label, method)
-        self.entrance = MoneyEdit()
+        credit = QFormLayout(self.credit_box)
         self.installments = QSpinBox()
         self.installments.setRange(1, 120)
         self.first_due = QDateEdit()
         self.first_due.setCalendarPopup(True)
         due = date.today() + timedelta(days=30)
         self.first_due.setDate(QDate(due.year, due.month, due.day))
-        credit_layout.addRow("Forma da entrada", self.entrance_method)
-        credit_layout.addRow("Entrada", self.entrance)
-        credit_layout.addRow("Parcelas", self.installments)
-        credit_layout.addRow("Primeiro vencimento", self.first_due)
-        layout.addRow("Forma", self.method)
-        layout.addRow("Valor / financiado", self.amount)
-        layout.addRow(self.credit_box)
-        buttons = QDialogButtonBox(
+        credit.addRow("Parcelas do crediário", self.installments)
+        credit.addRow("Primeiro vencimento", self.first_due)
+        root.addWidget(self.credit_box)
+
+        self.balance_label = QLabel()
+        self.error_label = QLabel()
+        self.error_label.setStyleSheet("color: #ff6b6b;")
+        root.addWidget(self.balance_label)
+        root.addWidget(self.error_label)
+        self.buttons = QDialogButtonBox(
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
-        buttons.accepted.connect(self.accept)
-        buttons.rejected.connect(self.reject)
-        layout.addRow(buttons)
+        self.buttons.button(QDialogButtonBox.StandardButton.Ok).setText("Revisar e confirmar")
+        root.addWidget(self.buttons)
+
         self.method.currentIndexChanged.connect(self._sync_method)
+        self.add_payment.clicked.connect(self._add_payment)
+        self.remove_payment.clicked.connect(self._remove_payment)
+        self.buttons.accepted.connect(self._review)
+        self.buttons.rejected.connect(self.reject)
+        for widget in (self.amount, self.discount, self.surcharge):
+            widget.textChanged.connect(self._refresh_totals)
+        for widget in (self.discount_type, self.surcharge_type):
+            widget.currentIndexChanged.connect(self._refresh_totals)
+        self._install_navigation()
         self._sync_method()
+        self._refresh_totals()
+        self.method.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _install_navigation(self) -> None:
+        self._navigation = (
+            self.method, self.amount, self.authorization, self.add_payment,
+            self.discount_type, self.discount, self.surcharge_type, self.surcharge,
+            self.installments, self.first_due,
+            self.buttons.button(QDialogButtonBox.StandardButton.Ok),
+        )
+        for widget in self._navigation:
+            widget.installEventFilter(self)
+
+    def _visible_navigation(self):
+        return [widget for widget in self._navigation if widget.isVisible() and widget.isEnabled()]
+
+    def eventFilter(self, watched, event) -> bool:
+        if (watched in self._navigation and event.type() == QEvent.Type.KeyPress
+                and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}):
+            event.accept()
+            if event.isAutoRepeat():
+                return True
+            flow = self._visible_navigation()
+            index = flow.index(watched)
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                flow[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
+            elif index == len(flow) - 1:
+                self._review()
+            else:
+                flow[index + 1].setFocus(Qt.FocusReason.TabFocusReason)
+            return True
+        return super().eventFilter(watched, event)
 
     def _sync_method(self) -> None:
-        self.credit_box.setVisible(self.method.currentData() is PaymentMethod.STORE_CREDIT)
+        method = self.method.currentData()
+        self.authorization.setVisible(method in {PaymentMethod.DEBIT, PaymentMethod.CREDIT_CARD})
+        self.credit_box.setVisible(method is PaymentMethod.STORE_CREDIT or any(
+            payment.method is PaymentMethod.STORE_CREDIT for payment in self._payments
+        ))
 
-    def checkout_input(self) -> CheckoutInput:
+    def _current_payment(self) -> Payment:
+        return Payment(self.method.currentData(), self.amount.value(), self.authorization.text())
+
+    def _add_payment(self) -> None:
+        try:
+            self._payments.append(self._current_payment())
+        except ValueError as error:
+            self.error_label.setText(str(error))
+            return
+        self.authorization.clear()
+        self._render_payments()
+        self._refresh_totals()
+
+    def _remove_payment(self) -> None:
+        row = self.payment_table.currentRow()
+        if row >= 0:
+            self._payments.pop(row)
+            self._render_payments()
+            self._refresh_totals()
+
+    def _render_payments(self) -> None:
+        self.payment_table.setRowCount(len(self._payments))
+        for row, payment in enumerate(self._payments):
+            values = (payment.method.value, MoneyCodec.format_br(payment.amount), payment.card_authorization)
+            for column, value in enumerate(values):
+                self.payment_table.setItem(row, column, QTableWidgetItem(value))
+        self._sync_method()
+
+    def _adjustment_data(self):
+        return {
+            "discount": self.discount.value(), "discount_type": self.discount_type.currentData(),
+            "surcharge": self.surcharge.value(), "surcharge_type": self.surcharge_type.currentData(),
+        }
+
+    def _candidate_input(self) -> CheckoutInput:
+        payments = tuple(self._payments) or (self._current_payment(),)
         selected = self.first_due.date()
         return CheckoutInput(
-            method=self.method.currentData(),
-            amount=self.amount.value(),
-            entrance_method=self.entrance_method.currentData(),
-            entrance_amount=self.entrance.value(),
-            installment_count=self.installments.value(),
+            payments=payments, installment_count=self.installments.value(),
             first_due_date=date(selected.year(), selected.month(), selected.day()),
+            **self._adjustment_data(),
         )
+
+    def _refresh_totals(self) -> None:
+        try:
+            discount, surcharge, final = self.view_model.application.resolve_adjustments(
+                self.view_model.session.items_total, **self._adjustment_data()
+            )
+            paid = sum((payment.amount for payment in self._payments), self.amount.value() if not self._payments else Decimal("0"))
+            difference = paid - final
+            self.balance_label.setText(
+                f"Troco potencial: R$ {MoneyCodec.format_br(difference)}" if difference >= 0
+                else f"Falta: R$ {MoneyCodec.format_br(-difference)}"
+            )
+            self.total_label.setText(
+                f"Subtotal R$ {MoneyCodec.format_br(self.view_model.session.items_total)}  •  "
+                f"Desconto R$ {MoneyCodec.format_br(discount)}  •  "
+                f"Acréscimo R$ {MoneyCodec.format_br(surcharge)}  •  Total R$ {MoneyCodec.format_br(final)}"
+            )
+            self.error_label.clear()
+        except ValueError as error:
+            self.error_label.setText(str(error))
+
+    def _summary(self, preview) -> str:
+        plan, validation, terms, discount, surcharge, final = preview
+        customer = self.view_model.selected_customer
+        items = "\n".join(
+            f"• {item.quantity} × {item.description}: R$ {MoneyCodec.format_br(item.subtotal)}"
+            for item in self.view_model.session.cart.items
+        )
+        payments = "\n".join(
+            f"• {payment.method.value}: R$ {MoneyCodec.format_br(payment.amount)}"
+            + (f" — autorização {payment.card_authorization}" if payment.card_authorization else "")
+            for payment in plan.payments
+        )
+        credit = "" if terms is None else (
+            f"\nCrediário: {terms.installment_count} parcela(s), primeiro vencimento "
+            f"{terms.installments[0].due_date:%d/%m/%Y}"
+        )
+        return (
+            f"Cliente: {customer.name if customer else 'Não selecionado'}\n\nItens:\n{items}\n\n"
+            f"Subtotal: R$ {MoneyCodec.format_br(self.view_model.session.items_total)}\n"
+            f"Desconto: R$ {MoneyCodec.format_br(discount)}\nAcréscimo: R$ {MoneyCodec.format_br(surcharge)}\n"
+            f"Total final: R$ {MoneyCodec.format_br(final)}\n\nPagamentos:\n{payments}\n"
+            f"Recebido: R$ {MoneyCodec.format_br(validation.received)}\n"
+            f"Troco: R$ {MoneyCodec.format_br(validation.change)}{credit}"
+        )
+
+    def _review(self) -> None:
+        try:
+            data = self._candidate_input()
+            preview = self.view_model.preview_checkout(data)
+        except (TypeError, ValueError) as error:
+            self.error_label.setText(str(error))
+            return
+        answer = QMessageBox.question(
+            self, "Confirmar venda", self._summary(preview),
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer is QMessageBox.StandardButton.Yes:
+            self._confirmed_input = data
+            self.accept()
+
+    def checkout_input(self) -> CheckoutInput:
+        if self._confirmed_input is None:
+            raise RuntimeError("A venda ainda não possui confirmação explícita.")
+        return self._confirmed_input

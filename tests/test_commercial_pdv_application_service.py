@@ -106,6 +106,43 @@ def prepared_cash_session(application):
 
 
 class PDVApplicationSessionTests(unittest.TestCase):
+    def test_ajustes_por_valor_percentual_e_limites(self):
+        app = make_application()
+        self.assertEqual(
+            app.resolve_adjustments(
+                Decimal("100"), discount="10", surcharge="5"
+            ),
+            (Decimal("10.00"), Decimal("5.00"), Decimal("95.00")),
+        )
+        self.assertEqual(
+            app.resolve_adjustments(
+                Decimal("100"), discount="10", discount_type="PERCENT",
+                surcharge="10", surcharge_type="PERCENT",
+            ),
+            (Decimal("10.00"), Decimal("9.00"), Decimal("99.00")),
+        )
+        with self.assertRaises(ValueError):
+            app.resolve_adjustments(Decimal("100"), discount="101", discount_type="PERCENT")
+        with self.assertRaises(ValueError):
+            app.resolve_adjustments(Decimal("100"), discount="100")
+
+    def test_configuracao_mista_valida_antes_de_mutar_sessao(self):
+        app = make_application()
+        session = app.new_session()
+        app.add_product(session, 10, quantity=2)
+        app.configure_checkout(
+            session,
+            payments=(Payment(PaymentMethod.PIX, "40"), Payment(PaymentMethod.CASH, "70")),
+        )
+        self.assertEqual(session.payment_plan.validate_against(session.total).change, Decimal("10.00"))
+
+        clean = app.new_session()
+        app.add_product(clean, 10, quantity=2)
+        with self.assertRaises(ValueError):
+            app.configure_checkout(clean, payments=(Payment(PaymentMethod.PIX, "99"),))
+        self.assertIsNone(clean.payment_plan)
+        self.assertEqual(clean.discount_amount, Decimal("0.00"))
+
     def test_consumidor_final_e_selecionado_por_id_real(self):
         application = make_application()
         session = application.new_session()

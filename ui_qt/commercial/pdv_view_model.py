@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import date, timedelta
+from datetime import date
 from decimal import Decimal, InvalidOperation
 
 from commercial.application.dto import CheckoutResult, CustomerRecord, ProductRecord
@@ -13,8 +13,14 @@ from commercial.domain.payments import Payment, PaymentMethod
 
 @dataclass(frozen=True, slots=True)
 class CheckoutInput:
-    method: PaymentMethod
-    amount: Decimal
+    method: PaymentMethod | None = None
+    amount: Decimal = Decimal("0.00")
+    payments: tuple[Payment, ...] = ()
+    card_authorization: str = ""
+    discount: Decimal = Decimal("0.00")
+    discount_type: str = "VALUE"
+    surcharge: Decimal = Decimal("0.00")
+    surcharge_type: str = "VALUE"
     entrance_method: PaymentMethod | None = None
     entrance_amount: Decimal = Decimal("0.00")
     installment_count: int = 1
@@ -93,25 +99,45 @@ class PDVViewModel:
     def remove_item(self, line_id: str) -> None:
         self.application.remove_item(self.session, line_id)
 
-    def checkout(self, data: CheckoutInput, *, user: str) -> CheckoutResult:
+    @staticmethod
+    def _payments(data: CheckoutInput) -> tuple[Payment, ...]:
+        if data.payments:
+            return tuple(data.payments)
+        if data.method is None:
+            raise ValueError("Informe ao menos uma forma de pagamento.")
         if data.method is PaymentMethod.STORE_CREDIT:
             entrance: tuple[Payment, ...] = ()
             if data.entrance_amount > MoneyCodec.ZERO:
                 if data.entrance_method in {None, PaymentMethod.STORE_CREDIT}:
                     raise ValueError("Informe uma forma válida para a entrada.")
                 entrance = (Payment(data.entrance_method, data.entrance_amount),)
-            first_due = data.first_due_date or date.today() + timedelta(days=30)
-            self.application.prepare_store_credit_schedule(
-                self.session,
-                entrance_payments=entrance,
-                financed_value=data.amount,
-                installment_count=data.installment_count,
-                first_due_date=first_due,
-            )
-        else:
-            self.application.prepare_payments(
-                self.session, (Payment(data.method, data.amount),)
-            )
+            return (*entrance, Payment(PaymentMethod.STORE_CREDIT, data.amount))
+        return (Payment(data.method, data.amount, data.card_authorization),)
+
+    def preview_checkout(self, data: CheckoutInput):
+        return self.application.configure_checkout(
+            self.session,
+            payments=self._payments(data),
+            discount=data.discount,
+            discount_type=data.discount_type,
+            surcharge=data.surcharge,
+            surcharge_type=data.surcharge_type,
+            installment_count=data.installment_count,
+            first_due_date=data.first_due_date,
+            apply=False,
+        )
+
+    def checkout(self, data: CheckoutInput, *, user: str) -> CheckoutResult:
+        self.application.configure_checkout(
+            self.session,
+            payments=self._payments(data),
+            discount=data.discount,
+            discount_type=data.discount_type,
+            surcharge=data.surcharge,
+            surcharge_type=data.surcharge_type,
+            installment_count=data.installment_count,
+            first_due_date=data.first_due_date,
+        )
         result = self.application.checkout(self.session, user=user)
         if result.session_consumed:
             self.selected_customer = None

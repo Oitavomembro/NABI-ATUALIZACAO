@@ -14,12 +14,14 @@ class PaymentMethod(str, Enum):
     DEBIT = "DEBITO"
     CREDIT_CARD = "CREDITO"
     STORE_CREDIT = "CREDIARIO"
+    OTHER = "OUTROS"
 
 
 @dataclass(frozen=True, slots=True)
 class Payment:
     method: PaymentMethod
     amount: Decimal
+    card_authorization: str = ""
 
     def __post_init__(self) -> None:
         try:
@@ -32,8 +34,14 @@ class Payment:
             raise ValueError(str(exc)) from exc
         if amount <= 0:
             raise ValueError("Cada pagamento deve ser maior que zero.")
+        authorization = str(self.card_authorization or "").strip()
+        if len(authorization) > 20:
+            raise ValueError("A autorização do cartão deve possuir no máximo 20 caracteres.")
+        if authorization and method not in {PaymentMethod.DEBIT, PaymentMethod.CREDIT_CARD}:
+            raise ValueError("Autorização só pode ser informada para cartão.")
         object.__setattr__(self, "method", method)
         object.__setattr__(self, "amount", amount)
+        object.__setattr__(self, "card_authorization", authorization)
 
 
 @dataclass(frozen=True, slots=True)
