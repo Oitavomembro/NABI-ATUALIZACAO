@@ -5,10 +5,26 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from assistant_nabi import ModelArtifactManifest, verify_model_artifact
+from assistant_nabi import (
+    ModelArtifactManifest,
+    QWEN3_1_7B_Q4_K_M_CANDIDATE,
+    verify_model_artifact,
+)
 
 
 class NabiModelArtifactTests(unittest.TestCase):
+    def test_catalogo_fixa_revisao_hash_tamanho_e_origem_do_candidato(self):
+        candidate = QWEN3_1_7B_Q4_K_M_CANDIDATE
+        self.assertEqual(candidate.quantization, "Q4_K_M")
+        self.assertEqual(len(candidate.source_revision), 40)
+        self.assertIn(candidate.source_revision, candidate.source_url)
+        self.assertEqual(candidate.size_bytes, 1_282_439_264)
+        self.assertEqual(
+            candidate.sha256,
+            "d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5",
+        )
+        self.assertEqual(candidate.license_id, "Apache-2.0")
+
     def manifest(self, content: bytes, **changes) -> ModelArtifactManifest:
         values = {
             "model_id": "qwen3-1.7b-instruct-q4",

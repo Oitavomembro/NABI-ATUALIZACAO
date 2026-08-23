@@ -107,7 +107,8 @@ Legenda:
 - [x] composição da Nabi somente leitura preparada com fábrica explícita: exige provedor local, fachada Commercial de consultas, `SecurityService`, auditoria administrativa e identificador de sessão; sem sessão o modelo não é chamado, e sem permissão nenhuma consulta é executada; validação ampliada com 200 testes e 326 subtestes aprovada;
 - [!] ativação real no `main_qt.py` permanece bloqueada até o Qt possuir login autenticado legítimo e o modelo local possuir origem, licença, hash e homologação física; é proibido usar `start_session_without_password` ou fabricar sessão para habilitar a Nabi;
 - [x] portão local de artefato GGUF implementado: manifesto exige modelo, arquivo, quantização, URL HTTPS sem credenciais, revisão imutável, licença, tamanho e SHA-256; ausência, truncamento ou adulteração falham fechados e nenhum download é realizado; validação ampliada com 204 testes e 336 subtestes aprovada;
-- [~] o portão de artefato ainda não contém origem/revisão/hash reais do Qwen baseline e não equivale a homologação do peso ou do `llama-server`;
+- [x] candidato Q4_K_M registrado sem download: `ggml-org/Qwen3-1.7B-GGUF`, revisão imutável `daeb8e2d528a760970442092f6bf1e55c3b659eb`, arquivo de 1.282.439.264 bytes, licença Apache-2.0 e SHA-256 `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`;
+- [~] o artefato registrado ainda não equivale a homologação do peso ou do `llama-server`: download controlado, hash local, avisos de terceiros, desempenho e avaliações físicas continuam pendentes;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.

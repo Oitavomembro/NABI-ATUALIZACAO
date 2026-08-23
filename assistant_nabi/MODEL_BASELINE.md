@@ -42,3 +42,21 @@ da pasta autorizada e quando tamanho e conteúdo coincidem exatamente.
 Esse verificador não escolhe a origem, não baixa o arquivo e não transforma um
 peso ainda não testado em modelo homologado. A revisão e o SHA-256 reais serão
 registrados somente depois da seleção explícita do artefato oficial.
+
+## Artefato candidato selecionado, ainda não baixado
+
+- conversão: `ggml-org/Qwen3-1.7B-GGUF`;
+- arquivo: `Qwen3-1.7B-Q4_K_M.gguf`;
+- quantização: `Q4_K_M`;
+- revisão imutável: `daeb8e2d528a760970442092f6bf1e55c3b659eb`;
+- tamanho publicado: `1.282.439.264` bytes;
+- SHA-256 publicado:
+  `d2387ca2dbfee2ffabce7120d3770dadca0b293052bc2f0e138fdc940d9bc7b5`;
+- licença declarada pelo repositório: `Apache-2.0`;
+- origem: organização `ggml-org`, mantenedora do `llama.cpp`.
+
+O repositório oficial `Qwen/Qwen3-1.7B-GGUF` observado oferece o peso Q8_0. A
+conversão Q4_K_M foi selecionada no `ggml-org` para reduzir memória e tamanho,
+sem alterar a origem do modelo-base Qwen. A promoção continua condicionada ao
+download manual controlado, conferência local do hash, avisos de terceiros,
+teste do runtime e avaliações físicas do NabiCode.

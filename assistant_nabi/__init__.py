@@ -20,6 +20,7 @@ from .application import AssistantApplicationService, UnavailableAssistantServic
 from .local_provider import LocalOpenAICompatibleModelAdapter
 from .bootstrap import create_read_only_assistant
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
+from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 
 __all__ = [
     "AssistantActor",
@@ -34,6 +35,7 @@ __all__ = [
     "LocalOpenAICompatibleModelAdapter",
     "ModelArtifactManifest",
     "ReadOnlyToolRegistry",
+    "QWEN3_1_7B_Q4_K_M_CANDIDATE",
     "CurrentSessionPermissionAdapter",
     "ToolDefinition",
     "ToolKind",
