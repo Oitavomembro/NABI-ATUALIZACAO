@@ -1344,3 +1344,25 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - modelo e runtime permanecem fora do Git/instalador. A homologação técnica em
   TESTE já está documentada, mas a ativação visual com licença/sessão reais e a
   decisão de redistribuição continuam pendentes. Nenhum push foi realizado.
+
+### Auditoria fiscal adversarial — matriz sem desempate silencioso
+
+- auditoria confirmou que produção continua corretamente bloqueada: faltam
+  homologação SEFAZ real acompanhada e dossiê físico com autorização, consulta,
+  DANFE, rejeição, eventos, contingência, reinício e pacote contábil;
+- lacunas declaradas de escopo (matriz tributária parcial, UFs/modelos não
+  homologados, NFS-e/IBPT/consultas cadastrais) continuam bloqueadores quando
+  aplicáveis; testes automatizados não equivalem a homologação externa;
+- correção offline: `364ca7d` — `fix: bloqueia ambiguidade na matriz fiscal`;
+- cadastro recusa regras ativas de mesma precedência com CEST sobreposto dentro
+  do mesmo emitente/destino/regime/NCM/operação, em transação imediata;
+- bancos antigos ambíguos falham fechados na resolução e informam IDs; `id DESC`
+  não decide mais qual tributação vence;
+- nenhuma alíquota, CST/CSOSN, prazo, certificado, produção ou comunicação SEFAZ
+  foi alterada;
+- validação fiscal focada: `131 passed`, `10 subtests passed`, zero falhas;
+  auditoria ampliada havia aprovado `157 passed`; `compileall` e
+  `git diff --check` aprovados;
+- próxima pendência auditável: autoria/versionamento imutável das aprovações
+  contábeis e enforcement documentado da contingência. Não implementar regra
+  jurídica sem fonte oficial e decisão explícita de escopo.
