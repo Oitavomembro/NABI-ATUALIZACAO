@@ -1470,3 +1470,34 @@ importação no banco de produção antes da aprovação visual e de um backup m
   depreciação externa do `BrazilFiscalReport`; nenhum representa falha funcional;
 - `compileall` dos módulos existentes e `git diff --check` aprovados;
 - produção fiscal continua bloqueada e nenhum push foi realizado.
+
+### Auditoria fiscal de autoria restante — cancelamento oficial
+
+- implementação: `08d025d` — `fix: autentica autoria do cancelamento fiscal`;
+- o inventário separou quatro naturezas que não podem ser unificadas:
+  - **identidade técnica autenticada:** operador que solicita mutação, confirma
+    condição operacional, reenvia, reconcilia ou cancela uma fila/documento;
+  - **responsável contábil declarado:** `approved_by` da matriz tributária, que
+    não prova quem operou o NabiCode;
+  - **autor fiscal externo:** CNPJ/CPF do emitente ou interessado usado nos XML
+    e eventos SEFAZ (`actor_document`), que não é usuário da aplicação;
+  - **dado histórico/sistêmico:** autoria já persistida na outbox/documentos,
+    backfill `NAO_INFORMADO` e recuperação automática, que não pode receber
+    identidade retroativa inventada;
+- fronteira única selecionada: `FiscalCancellationService.request`, por criar
+  evento oficial de cancelamento, registrar a confirmação de não circulação e
+  alterar o documento para `CANCELAMENTO_PENDENTE`;
+- o serviço agora exige `actor_provider` confiável, ligado no composition root a
+  `SecurityService.session.user.username`; ausência, expiração ou identidade
+  vazia falham fechadas antes da mutação;
+- a API não aceita mais `actor` livre. Metadados `requested_by`,
+  `no_circulation_confirmed_by` e o registro da outbox recebem exatamente a
+  identidade autenticada;
+- permanecem para checkpoints separados, sem alteração em massa: envio de
+  eventos/inutilização, reenvio/cancelamento/reconciliação da outbox, DFe,
+  importação/devolução e o fluxo antigo `FiscalSaleService.cancel_authorized`;
+- validação focada: `71 passed`; regressão fiscal relacionada: `409 passed`,
+  `10 subtests passed`, zero falhas e uma advertência externa de depreciação no
+  gerador DANFE; `compileall` e `git diff --check` aprovados;
+- regras tributárias, XML, prazos, endpoints, ambiente, transmissão e resposta
+  SEFAZ não foram alterados. Produção fiscal continua bloqueada.
