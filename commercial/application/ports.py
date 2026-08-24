@@ -182,7 +182,11 @@ class CustomerAccountPort(Protocol):
 class CustomerReceiptPort(Protocol):
     """Retorno significa recebimento confirmado integralmente na transação."""
 
-    def receive(self, command: CustomerReceiptCommand, *, user: str) -> PersistedCustomerReceipt: ...
+    def receive(
+        self, command: CustomerReceiptCommand, *, user: str,
+        idempotency_key: str | None = None,
+        operation_fingerprint: str | None = None,
+    ) -> PersistedCustomerReceipt: ...
 
 
 @runtime_checkable

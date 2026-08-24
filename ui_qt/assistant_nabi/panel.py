@@ -376,6 +376,7 @@ class NabiAssistantPanel(QWidget):
                 "compras.preparar_recebimento",
                 "compras.preparar_entrada_nfe_exata",
                 "clientes.preparar_cadastro",
+                "clientes.preparar_recebimento",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -425,6 +426,9 @@ class NabiAssistantPanel(QWidget):
             "CUSTOMER_CREATE": (
                 "Confira ficha, nome, documentos, contato, endereço e limite de crédito."
             ),
+            "CUSTOMER_RECEIPT": (
+                "Confira ficha, cliente, saldo anterior, valor, saldo restante, forma e data."
+            ),
         }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
         self.history.append(
             f"<b>Nabi:</b> {guidance} "
@@ -446,6 +450,10 @@ class NabiAssistantPanel(QWidget):
                 )
             elif operation_kind == "CUSTOMER_CREATE":
                 result, _authorization = self._service.confirm_and_execute_customer(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind == "CUSTOMER_RECEIPT":
+                result, _authorization = self._service.confirm_and_execute_customer_receipt(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -481,6 +489,12 @@ class NabiAssistantPanel(QWidget):
             self.history.append(
                 "<b>Nabi:</b> Cadastro confirmado pelo serviço oficial. "
                 f"Ficha {int(result.record_number)}; cliente #{int(result.customer_id)}."
+            )
+        elif operation_kind == "CUSTOMER_RECEIPT":
+            self._set_state("completed", "Recebimento registrado")
+            self.history.append(
+                "<b>Nabi:</b> Recebimento confirmado pelo serviço oficial. "
+                f"Movimento #{int(result.resource_id)}."
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")
@@ -727,6 +741,25 @@ class NabiAssistantPanel(QWidget):
                 "RASCUNHO — nenhuma entrada foi registrada e nenhuma consulta à SEFAZ ocorreu.",
             ))
             return "\n".join(lines)
+        if result.tool_name == "clientes.preparar_cadastro":
+            return "\n".join((
+                f"Ficha: {payload.get('record_number', '-')}",
+                f"Cliente: {payload.get('name', '-')}",
+                f"CPF: {payload.get('cpf') or '-'} — RG: {payload.get('rg') or '-'}",
+                f"Telefone: {payload.get('phone') or '-'}",
+                f"Endereço: {payload.get('address') or '-'}",
+                f"Limite: R$ {payload.get('credit_limit', '0.00')}",
+                "RASCUNHO — nenhum cliente foi cadastrado.",
+            ))
+        if result.tool_name == "clientes.preparar_recebimento":
+            return "\n".join((
+                f"Ficha: {payload.get('record_number', '-')} — {payload.get('customer_name', '-')}",
+                f"Saldo antes: R$ {payload.get('previous_balance', '0.00')}",
+                f"Valor recebido: R$ {payload.get('amount', '0.00')}",
+                f"Saldo restante: R$ {payload.get('expected_balance', '0.00')}",
+                f"Forma: {payload.get('payment_method', '-')} — Data: {payload.get('payment_date', '-')}",
+                "RASCUNHO — nenhum pagamento foi registrado.",
+            ))
         if result.tool_name == "diagnostico.executar_testes":
             state = "APROVADA" if payload.get("passed") else "FALHOU"
             return f"Suíte {payload.get('suite', '')}: {state}\n{payload.get('output', '')}"

@@ -177,6 +177,7 @@ class PersistedCustomerReceipt:
     previous_balance: Decimal
     new_balance: Decimal
     payment_method: str
+    idempotent_replay: bool = False
 
 
 @dataclass(frozen=True, slots=True)

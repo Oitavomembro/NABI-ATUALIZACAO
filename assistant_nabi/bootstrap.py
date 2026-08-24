@@ -13,6 +13,7 @@ from .purchase_tools import register_purchase_draft_tools
 from .nfe_entry_tools import register_nfe_entry_draft_tools
 from .ui_tools import register_ui_intent_tools
 from .customer_tools import register_customer_draft_tools
+from .customer_receipt_tools import register_customer_receipt_tools
 
 
 def create_read_only_assistant(
@@ -56,6 +57,7 @@ def create_draft_assistant(
     nfe_entry_draft_service=None, nfe_entry_executor=None,
     financial_query_service=None,
     customer_draft_service=None, customer_executor=None,
+    customer_receipt_draft_service=None, customer_receipt_executor=None,
 ) -> AssistantApplicationService:
     """Compõe consultas e rascunhos; não registra ferramentas mutáveis."""
     for value, message in (
@@ -80,6 +82,7 @@ def create_draft_assistant(
     draft_catalog = AssistantDraftCatalog(
         drafts, purchase_draft_service, nfe_entry_draft_service,
         customer_draft_service,
+        customer_receipt_draft_service,
     )
     confirmations = DraftConfirmationService()
     register_sale_draft_tools(registry, drafts)
@@ -89,10 +92,13 @@ def create_draft_assistant(
         register_nfe_entry_draft_tools(registry, nfe_entry_draft_service)
     if customer_draft_service is not None:
         register_customer_draft_tools(registry, customer_draft_service)
+    if customer_receipt_draft_service is not None:
+        register_customer_receipt_tools(registry, customer_receipt_draft_service)
     return AssistantApplicationService(
         model=model, registry=registry, permissions=permissions,
         draft_service=draft_catalog, confirmation_service=confirmations,
         purchase_executor=purchase_executor,
         nfe_entry_executor=nfe_entry_executor,
         customer_executor=customer_executor,
+        customer_receipt_executor=customer_receipt_executor,
     )

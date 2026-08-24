@@ -20,6 +20,8 @@ from assistant_nabi import (
     create_draft_assistant,
     CustomerRegistrationDraftService,
     NabiCodeCustomerRegistrationGateway,
+    CustomerReceiptDraftService,
+    NabiCodeCustomerReceiptAssistantGateway,
 )
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
@@ -62,6 +64,12 @@ def _create_assistant_activation(
     if customer_application is not None:
         customer_drafts = CustomerRegistrationDraftService(customer_application)
         customer_executor = NabiCodeCustomerRegistrationGateway(customer_application)
+    customer_receipt_drafts = customer_receipt_executor = None
+    if customer_application is not None and getattr(container, "actions", None) is not None:
+        customer_receipt_drafts = CustomerReceiptDraftService(customer_application)
+        customer_receipt_executor = NabiCodeCustomerReceiptAssistantGateway(
+            container.actions, customer_application
+        )
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -86,6 +94,8 @@ def _create_assistant_activation(
             nfe_entry_executor=nfe_entry_executor,
             customer_draft_service=customer_drafts,
             customer_executor=customer_executor,
+            customer_receipt_draft_service=customer_receipt_drafts,
+            customer_receipt_executor=customer_receipt_executor,
         )
 
     return AuthenticatedAssistantActivation(

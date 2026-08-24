@@ -48,6 +48,9 @@ from .confirmations import (
 from .customer_drafts import CustomerRegistrationDraft, CustomerRegistrationDraftService
 from .customer_gateway import NabiCodeCustomerRegistrationGateway
 from .customer_tools import PREPARE_CUSTOMER_REGISTRATION
+from .customer_receipt_drafts import CustomerReceiptDraft, CustomerReceiptDraftService
+from .customer_receipt_gateway import NabiCodeCustomerReceiptAssistantGateway
+from .customer_receipt_tools import PREPARE_CUSTOMER_RECEIPT
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -84,6 +87,10 @@ __all__ = [
     "CustomerRegistrationDraftService",
     "NabiCodeCustomerRegistrationGateway",
     "PREPARE_CUSTOMER_REGISTRATION",
+    "CustomerReceiptDraft",
+    "CustomerReceiptDraftService",
+    "NabiCodeCustomerReceiptAssistantGateway",
+    "PREPARE_CUSTOMER_RECEIPT",
     "DraftConfirmationService",
     "AssistantApplicationService",
     "AssistantTurn",
