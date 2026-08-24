@@ -1785,10 +1785,31 @@ class FiscalServiceTests(unittest.TestCase):
         item = self.service.enqueue_transmission(
             operation="autorizacao", xml=xml, actor="admin", model="65"
         )
-        self.service.cancel_transmission(item["id"], actor="admin", reason="Venda cancelada")
+        cancelled = self.service.cancel_transmission(item["id"], reason="Venda cancelada")
+        self.assertEqual(cancelled["cancelled_by"], "gerente")
 
         with self.assertRaisesRegex(ValueError, "cancelada"):
             self.service.retry_transmission(item["id"])
+
+    def test_cancelamento_local_da_fila_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.cancel_transmission(
+                "fila", actor="forjado", reason="Cancelamento local solicitado"
+            )
+
+    def test_cancelamento_local_da_fila_falha_fechado_antes_de_ler(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-cancelamento-fila",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.cancel_transmission(
+                    "fila", reason="Cancelamento local solicitado"
+                )
+        listed.assert_not_called()
 
     def test_fila_autorizacao_bloqueia_resposta_de_outra_chave(self):
         self.service.save_config({

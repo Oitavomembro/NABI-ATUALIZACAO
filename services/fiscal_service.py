@@ -3579,7 +3579,8 @@ class FiscalService:
             self._save_transmission_queue(rows)
         return {"scheduled": len(selected), "queue_ids": selected, "requested_at": now}
 
-    def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
+    def cancel_transmission(self, queue_id: str, *, reason: str) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = next((record for record in rows if str(record.get("id")) == str(queue_id)), None)
         if target is None:

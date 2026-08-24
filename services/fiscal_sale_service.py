@@ -447,7 +447,7 @@ class FiscalSaleService:
             return
         if str(row[1] or ""):
             self.fiscal_service.cancel_transmission(
-                str(row[1]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+                str(row[1]), reason="Venda cancelada antes da autorização fiscal."
             )
         if str(row[0] or ""):
             try:
