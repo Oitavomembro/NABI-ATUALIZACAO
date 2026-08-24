@@ -1520,3 +1520,21 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `359 subtests passed`; `compileall` e `git diff --check` aprovados;
 - pendência: composição global por sessão/permissão e homologação visual e das
   exportações no Windows, sem transportar o agendador Tk para a GUI Qt.
+
+### Checkpoint isolado — Administração de Usuários Qt
+
+- implementação de origem: `042c399` — `feat: adiciona administracao de usuarios no Qt`;
+- `UserAdministrationService` é a única porta da GUI e reutiliza o
+  `SecurityService`; identidade e autoridade vêm da sessão interna real;
+- sessão ausente/expirada e operador sem `technical/users` falham fechados;
+  ADMIN continua coberto pelo wildcard oficial;
+- criação, edição, senha e ativação preservam PBKDF2, username imutável e a
+  proteção que impede remover ou desativar o último administrador;
+- a GUI não importa banco, repositório, Legacy, Fiscal ou SEFAZ e controla
+  F3/F4/F5/Esc, Enter, Shift+Enter e auto-repeat;
+- edição livre de perfis/permissões permanece deliberadamente fora do escopo
+  para evitar escalada acidental;
+- validação na origem: `19 passed`; regressão relacionada: `182 passed`,
+  `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendências: composição/menu e homologação manual no Windows; qualquer editor
+  visual de capacidades exige decisão explícita posterior.
