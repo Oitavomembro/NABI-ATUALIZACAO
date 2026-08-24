@@ -779,7 +779,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             Path(APP_DIR) / "fiscal" / "email"
         )
         self.fiscal_dfe_service = FiscalDFeService(
-            self.fiscal_service, storage_dir=Path(APP_DIR) / "fiscal" / "dfe"
+            self.fiscal_service,
+            storage_dir=Path(APP_DIR) / "fiscal" / "dfe",
+            actor_provider=self._ator_fiscal_autenticado,
+            authorization_provider=lambda action: self.security.require("fiscal", action),
         )
         self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
@@ -12533,7 +12536,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
             if password is None:
                 return
-            actor = self._usuario_financeiro()
             key = str(row["access_key"])
             transmission_status.configure(
                 text="Enviando manifestação em segundo plano...", text_color="#d29922"
@@ -12542,7 +12544,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "Manifestação do destinatário",
                 lambda _context: self.fiscal_dfe_service.send_manifestation(
                     access_key=key, kind=kind, password=password,
-                    actor=actor, justification=justification,
+                    justification=justification,
                 ),
             )
 
