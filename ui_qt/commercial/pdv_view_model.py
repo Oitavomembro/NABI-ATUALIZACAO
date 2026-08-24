@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
-from assistant_nabi.confirmations import ConfirmedDraftAuthorization
-
 from commercial.application.dto import (
     BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord, SuspendedSale,
 )
@@ -44,6 +42,9 @@ class PDVViewModel:
 
     def load_assistant_draft(self, draft, authorization) -> None:
         """Transfere rascunho para uma sessão nova, sem checkout ou persistência."""
+        # Importação tardia mantém edições sem IA (como FICHÁRIO) independentes.
+        from assistant_nabi.confirmations import ConfirmedDraftAuthorization
+
         if not self.session.cart.is_empty:
             raise ValueError("Esvazie ou suspenda a venda atual antes de carregar o rascunho da Nabi.")
         temporary = self.application.new_session()

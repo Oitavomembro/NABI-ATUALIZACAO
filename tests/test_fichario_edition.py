@@ -87,6 +87,12 @@ def test_composicao_e_pacote_nao_iniciam_componentes_proibidos():
     assert "assistant_nabi" in spec  # exclusao explicita do pacote
     assert all(name in spec for name in ("_tcl_data", "_tk_data", "libtcl", "libtk"))
     assert "services.fiscal_service" not in spec  # pode ficar dormente; nao excluir import quebravel
+    pdv_view_model = (root / "ui_qt/commercial/pdv_view_model.py").read_text(
+        encoding="utf-8"
+    )
+    assert pdv_view_model.index("def load_assistant_draft") < pdv_view_model.index(
+        "from assistant_nabi.confirmations import ConfirmedDraftAuthorization"
+    )
 
 
 def test_instalador_preserva_dados_em_appdata():
