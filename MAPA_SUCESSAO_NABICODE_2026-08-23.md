@@ -1705,3 +1705,25 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendências: conexão ao shell/hub permanece fora deste checkpoint; homologação
   manual com fornecedores/produtos de TESTE é necessária. IA, Fiscal/SEFAZ,
   Fichário, licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — composição global dos módulos Qt
+
+- branch/worktree: `codex/composicao-modulos-qt`, derivada do consolidado
+  `0206209`, sem alterar a integração;
+- implementação `a6a9eb3` — `feat: conecta modulos administrativos ao Qt`;
+- o shell expõe uma única entrada `Módulos [F1]` e compõe Início, Clientes,
+  Produtos/Estoque, Fornecedores/Compras, Caixa, Financeiro, Relatórios e
+  Usuários exclusivamente por suas fachadas oficiais;
+- login Qt real é obrigatório no startup; usuário/senha passam por
+  `SecurityService.authenticate`, senha é limpa imediatamente e cancelamento
+  falha fechado. Sessão expirada exige reautenticação ao reabrir o hub;
+- módulos opcionais ausentes são omitidos sem impedir PDV ou Nabi; abertura do
+  hub possui trava de reentrada, atalhos não repetem automaticamente e cada
+  cartão revalida permissão/sessão antes de construir a janela;
+- `_create_assistant_activation`, composição licenciada, painel e arquivos
+  internos da IA não foram alterados; regressão ampliada anterior: `100 passed`,
+  `3 subtests passed`; validação final do wiring: `25 passed`; `compileall` e
+  `git diff --check` aprovados;
+- pendência: homologação manual do login, F1, oito cartões, expiração e retorno
+  ao PDV no Windows. Fiscal/SEFAZ, Fichário, licenciamento, instalador e banco
+  real não foram alterados.
