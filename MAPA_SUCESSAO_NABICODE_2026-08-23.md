@@ -2166,3 +2166,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   fiscal permanece bloqueada;
 - liberação de reserva continua síncrona e será autenticada pelo operador atual
   em checkpoint separado.
+
+### Auditoria fiscal de autoria — liberação da numeração
+
+- implementação: `285ed3e` — `fix: autentica liberacao da numeracao fiscal`;
+- a API `release_number` não aceita mais ator externo e exige sessão ativa com
+  permissão `fiscal/transmit` antes de abrir a transação; `released_by` registra
+  exclusivamente o operador atual autenticado;
+- venda fiscal, cancelamento local e devolução continuam fornecendo apenas o
+  motivo técnico da liberação, nunca a identidade;
+- motivo obrigatório, idempotência da reserva já liberada e bloqueios contra
+  número confirmado, transmissão iniciada ou resposta desconhecida foram
+  preservados;
+- testes focados: `6 passed`, `138 deselected`; regressão de
+  venda/cancelamento/outbox: `57 passed`; `compileall` e `git diff --check`
+  aprovados;
+- nenhuma rede SEFAZ, dado real, numeração de produção ou regra tributária foi
+  usada ou alterada. Produção fiscal permanece bloqueada;
+- reserva, confirmação e liberação de numeração deixam de aceitar autoria livre.
+  Registros legados permanecem históricos e não recebem identidade inventada.
