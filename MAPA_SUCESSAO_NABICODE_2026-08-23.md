@@ -823,4 +823,22 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
   mantendo somente as três ferramentas Commercial de leitura; o modelo GGUF
   continua não baixado e nenhuma mutation está autorizada.
 
+### Checkpoint IA Nabi — composição local somente leitura
+
+- commit: `bf843b4` — `feat: compoe Nabi local somente leitura`;
+- o composition root exige SecurityService, auditoria, CommercialQueryService e
+  session_id reais fornecidos pelo chamador; nenhuma autoridade substituta é
+  criada internamente;
+- o provedor local aceita somente endpoint HTTP loopback validado e registra
+  exclusivamente `produtos.pesquisar`, `produtos.consultar_estoque` e
+  `clientes.pesquisar`, todas READ;
+- existe composição indisponível sem rede que mantém os mesmos limites reais e
+  falha antes de consulta/auditoria quando não há modelo;
+- o composition root não importa banco, repositório, Fiscal, SEFAZ ou SQLite;
+  nenhuma mutation, download de pesos ou ligação ao startup foi feita;
+- validação: `47 passed`, `14 subtests passed`, `compileall` e
+  `git diff --check` aprovados no runtime Qt real;
+- próximo passo: fornecer sessão/auditoria reais no shell Qt integrado. Até isso
+  existir, a flag permanece OFF e o painel não recebe ferramentas.
+
 Não confundir automação inteligente com autoridade. A Nabi poderá planejar, consultar e operar ferramentas autorizadas, mas o NabiCode continuará sendo a fonte de verdade. Backend, permissões, validações, confirmação humana, transações e auditoria decidem o que realmente pode acontecer.
