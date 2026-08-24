@@ -86,8 +86,9 @@ def test_visual_produtos_mantem_id_real_e_destaca_dados_operacionais():
     assert dialog.selected_id() == 17
     assert "Código: M17" in dialog.selected_details.text()
     assert "ATIVO" in dialog.selected_details.text()
-    assert "#38c8ff" in dialog.selected_details.styleSheet()
-    assert "#090d13" in dialog.styleSheet()
+    assert "qlineargradient" in dialog.selected_details.styleSheet()
+    assert "#73c7dc" in dialog.selected_details.styleSheet()
+    assert "#111316" in dialog.styleSheet()
     dialog.close()
 
 

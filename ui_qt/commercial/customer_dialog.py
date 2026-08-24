@@ -16,22 +16,30 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog { background:#090d13; color:#edf7ff; }
-QLabel { color:#f0f6fc; }
-QLineEdit,QTextEdit,QComboBox,QTableWidget { background:#111923; color:#edf7ff;
- border:1px solid #263b50; border-radius:7px; selection-background-color:#1267a8; }
+QDialog { background:#111316; color:#e5e9ed; }
+QLabel { color:#e5e9ed; }
+QLineEdit,QTextEdit,QComboBox,QTableWidget {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #24282d,stop:1 #171a1e);
+ color:#f1f3f5; border:1px solid #555c63; border-radius:6px;
+ selection-background-color:#3d778d; }
 QLineEdit { min-height:38px; padding:0 9px; }
-QPushButton { background:#202e3c; color:#edf7ff; border:1px solid #31506a; border-radius:7px;
+QPushButton {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #596068,stop:0.45 #3a4046,stop:1 #272c31);
+ color:#f4f6f8; border:1px solid #747c84; border-radius:6px;
  min-height:38px; padding:0 14px; font-weight:700; }
-QPushButton:hover { background:#29445b; border-color:#37b9ef; }
+QPushButton:hover { border-color:#86c7d8; }
 QPushButton:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus {
- border:1px solid #38c8ff; }
-QPushButton#primary { background:#1267a8; border-color:#38c8ff; }
+ border:1px solid #73c7dc; }
+QPushButton#primary {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #4f7784,stop:1 #294852);
+ border-color:#73c7dc; }
 QPushButton#destructive { background:#7a252b; border-color:#d84a52; }
-QHeaderView::section { background:#182531; color:#dff7ff; padding:9px;
- border:0; border-right:1px solid #2b5069; border-bottom:1px solid #38c8ff;
+QHeaderView::section {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #50575e,stop:1 #292e33);
+ color:#f2f4f6; padding:9px; border:0; border-right:1px solid #686f76;
+ border-bottom:1px solid #73c7dc;
  font-weight:700; }
-QTableWidget { gridline-color:#263b50; alternate-background-color:#0d141c; }
+QTableWidget { gridline-color:#41474d; alternate-background-color:#1d2024; }
 """
 
 
@@ -65,7 +73,7 @@ class CustomerEditorDialog(QDialog):
         )
         self.record.setStyleSheet(
             f"font-size:{max(20, _customer_font_size() + 4)}px;font-weight:900;"
-            "color:#67dcff;border:2px solid #38c8ff"
+            "color:#f2f4f6;border:2px solid #73c7dc"
         )
         self.name = QLineEdit(customer.name if customer else "")
         self.code = QLineEdit(customer.code if customer else "")
@@ -151,7 +159,7 @@ class CustomerStatementDialog(QDialog):
         layout = QVBoxLayout(self)
         customer = statement.customer
         title = QLabel(f"FICHA {customer.record_number or '—'} — {customer.name}")
-        title.setStyleSheet("font-size:21px;font-weight:800;color:#67dcff")
+        title.setStyleSheet("font-size:21px;font-weight:800;color:#d9dee3")
         layout.addWidget(title)
         contact = QLabel(
             f"Endereço: {customer.address or '—'}   •   "
@@ -207,8 +215,8 @@ class CustomerManagementDialog(QDialog):
         title = QLabel("CLIENTES E FICHAS")
         title.setObjectName("sectionTitle")
         title.setStyleSheet(
-            "font-size:25px;font-weight:900;color:#67dcff;"
-            "border-bottom:2px solid #1687bd;padding:0 0 8px 2px"
+            "font-size:25px;font-weight:900;color:#d9dee3;"
+            "border-bottom:2px solid #73c7dc;padding:0 0 8px 2px"
         )
         layout.addWidget(title)
         if filter_title:
@@ -275,8 +283,9 @@ class CustomerManagementDialog(QDialog):
         self.selected_details.setObjectName("customerSelectedDetails")
         self.selected_details.setWordWrap(True)
         self.selected_details.setStyleSheet(
-            "background:#101a24;border:1px solid #2f6f91;border-left:4px solid #38c8ff;"
-            "border-radius:7px;padding:13px;color:#edf7ff;font-size:18px;font-weight:800;"
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #343a40,stop:1 #1d2125);"
+            "border:1px solid #666e75;border-left:4px solid #73c7dc;"
+            "border-radius:6px;padding:13px;color:#f1f3f5;font-size:18px;font-weight:800;"
         )
         layout.addWidget(self.selected_details)
         self.table.itemSelectionChanged.connect(self._show_selected_details)

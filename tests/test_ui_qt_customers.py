@@ -96,7 +96,8 @@ def test_visual_clientes_prioriza_ficha_e_dados_reais_sem_regra_nova(app):
     details = dialog.selected_details.text()
     assert details.startswith("Ficha 5507 — MARIA")
     assert "Endereço: RUA A" in details
-    assert "#38c8ff" in dialog.selected_details.styleSheet()
+    assert "qlineargradient" in dialog.selected_details.styleSheet()
+    assert "#73c7dc" in dialog.selected_details.styleSheet()
     assert "#d84a52" in dialog.styleSheet()
     dialog.close()
 

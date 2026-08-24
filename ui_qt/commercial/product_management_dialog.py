@@ -18,14 +18,14 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog{background:#090d13;color:#edf7ff;font-size:14px} QLabel{color:#edf7ff}
-QLineEdit,QComboBox,QTableWidget{background:#111923;color:#edf7ff;border:1px solid #263b50;border-radius:7px;selection-background-color:#1267a8}
-QLineEdit,QComboBox{min-height:40px;padding:0 9px} QPushButton{background:#202e3c;color:#edf7ff;border:1px solid #31506a;border-radius:7px;min-height:40px;padding:0 13px;font-weight:800}
-QPushButton:hover{background:#29445b;border-color:#37b9ef}
-QPushButton:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus{border:1px solid #38c8ff}
-QPushButton#primary{background:#1267a8;border-color:#38c8ff} QPushButton#warning{background:#73581a;border-color:#d9a928}
-QHeaderView::section{background:#182531;color:#dff7ff;padding:10px;border:0;border-right:1px solid #2b5069;border-bottom:1px solid #38c8ff;font-weight:800}
-QTableWidget{gridline-color:#263b50;alternate-background-color:#0d141c}
+QDialog{background:#111316;color:#e5e9ed;font-size:14px} QLabel{color:#e5e9ed}
+QLineEdit,QComboBox,QTableWidget{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #24282d,stop:1 #171a1e);color:#f1f3f5;border:1px solid #555c63;border-radius:6px;selection-background-color:#3d778d}
+QLineEdit,QComboBox{min-height:40px;padding:0 9px} QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #596068,stop:0.45 #3a4046,stop:1 #272c31);color:#f4f6f8;border:1px solid #747c84;border-radius:6px;min-height:40px;padding:0 13px;font-weight:800}
+QPushButton:hover{border-color:#86c7d8}
+QPushButton:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus{border:1px solid #73c7dc}
+QPushButton#primary{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #4f7784,stop:1 #294852);border-color:#73c7dc} QPushButton#warning{background:#73581a;border-color:#d9a928}
+QHeaderView::section{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #50575e,stop:1 #292e33);color:#f2f4f6;padding:10px;border:0;border-right:1px solid #686f76;border-bottom:1px solid #73c7dc;font-weight:800}
+QTableWidget{gridline-color:#41474d;alternate-background-color:#1d2024}
 """
 
 
@@ -69,7 +69,7 @@ class ProductEditorDialog(QDialog):
             self.current_stock.setEnabled(False)
             self.current_stock.setToolTip("Use Movimentar estoque para alterar o saldo.")
         self.description.setStyleSheet(
-            "font-size:18px;font-weight:900;color:#67dcff;border:2px solid #38c8ff"
+            "font-size:18px;font-weight:900;color:#f2f4f6;border:2px solid #73c7dc"
         )
         for label, widget in (
             ("Nome / descrição*", self.description), ("Código", self.code),
@@ -138,7 +138,7 @@ class StockMovementDialog(QDialog):
         self.setWindowTitle("Movimentar estoque"); self.setMinimumWidth(560); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel(product.description)
-        title.setStyleSheet("font-size:21px;font-weight:900;color:#67dcff")
+        title.setStyleSheet("font-size:21px;font-weight:900;color:#d9dee3")
         root.addWidget(title); root.addWidget(QLabel(f"Saldo atual: {_quantity_text(product.current_stock)}"))
         form = QFormLayout(); self.kind = QComboBox(); self.kind.addItems(("ENTRADA", "SAÍDA", "AJUSTE DE SALDO"))
         self.amount = QLineEdit(); self.amount.setPlaceholderText("0,0000")
@@ -222,7 +222,7 @@ class ProductManagementDialog(QDialog):
         self.setStyleSheet(STYLE); root = QVBoxLayout(self)
         title = QLabel("PRODUTOS E ESTOQUE")
         title.setObjectName("sectionTitle")
-        title.setStyleSheet("font-size:25px;font-weight:900;color:#67dcff;border-bottom:2px solid #1687bd;padding:0 0 8px 2px"); root.addWidget(title)
+        title.setStyleSheet("font-size:25px;font-weight:900;color:#d9dee3;border-bottom:2px solid #73c7dc;padding:0 0 8px 2px"); root.addWidget(title)
         guidance = QLabel("Nome, preço e estoque em destaque. Cadastros e movimentos usam IDs reais e os serviços oficiais.")
         guidance.setStyleSheet("color:#8b949e"); root.addWidget(guidance)
         search_row = QHBoxLayout(); self.search = QLineEdit(); self.search.setObjectName("productSearch"); self.search.setPlaceholderText("Buscar por nome, código ou código de barras")
@@ -243,8 +243,9 @@ class ProductManagementDialog(QDialog):
         self.selected_details.setObjectName("productSelectedDetails")
         self.selected_details.setWordWrap(True)
         self.selected_details.setStyleSheet(
-            "background:#101a24;border:1px solid #2f6f91;border-left:4px solid #38c8ff;"
-            "border-radius:7px;padding:13px;color:#edf7ff;font-size:17px;font-weight:800;"
+            "background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #343a40,stop:1 #1d2125);"
+            "border:1px solid #666e75;border-left:4px solid #73c7dc;"
+            "border-radius:6px;padding:13px;color:#f1f3f5;font-size:17px;font-weight:800;"
         )
         root.addWidget(self.selected_details)
         self.table.itemSelectionChanged.connect(self._show_selected_details)
