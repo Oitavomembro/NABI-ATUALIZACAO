@@ -167,6 +167,8 @@ class FiscalService:
         schema_dir: str | Path | None = None,
         http_post: Callable[..., Any] | None = None,
         secret_protector: Any | None = None,
+        actor_provider: Callable[[], str | None] | None = None,
+        authorization_provider: Callable[[str], bool] | None = None,
     ) -> None:
         self.connection_factory = connection_factory
         self.storage_dir = Path(storage_dir or (Path.home() / ".nabicode" / "fiscal"))
@@ -184,6 +186,8 @@ class FiscalService:
             self.http_post = None
         self._session_certificate_password: str | None = None
         self.secret_protector = secret_protector or WindowsDataProtector()
+        self._actor_provider = actor_provider
+        self._authorization_provider = authorization_provider
         self._managed_certificate_dir = self.storage_dir / "certificate"
         self._managed_certificate_path = self._managed_certificate_dir / "active.pfx"
         self._managed_secret_path = self._managed_certificate_dir / "active.secret"
@@ -3486,8 +3490,32 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def reconcile_unknown(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+    def _authenticated_outbox_actor(self, action: str) -> str:
+        if self._authorization_provider is None or not self._authorization_provider(action):
+            raise PermissionError(
+                "Uma sessão autenticada com permissão fiscal é obrigatória para alterar a fila fiscal."
+            )
+        if self._actor_provider is None:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para alterar a fila fiscal."
+            )
+        try:
+            actor = str(self._actor_provider() or "").strip()
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                "Não foi possível confirmar a identidade autenticada para alterar a fila fiscal."
+            ) from exc
+        if not actor:
+            raise PermissionError(
+                "A sessão autenticada não possui uma identidade válida."
+            )
+        return actor
+
+    def reconcile_unknown(self, queue_id: str) -> dict[str, Any]:
         """Agenda somente consulta por recibo/chave; nunca retransmite a autorização."""
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
         if target is None:
