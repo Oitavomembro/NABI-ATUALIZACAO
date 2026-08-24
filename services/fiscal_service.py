@@ -1002,8 +1002,11 @@ class FiscalService:
             "PRE_VENDA", items, cliente_id=customer_id, cliente_nome=customer_name
         )
 
-    def import_authorized_xml(self, xml: bytes | str, *, actor: str, require_signature: bool = True) -> dict[str, Any]:
+    def import_authorized_xml(
+        self, xml: bytes | str, *, require_signature: bool = True
+    ) -> dict[str, Any]:
         """Importa um XML autorizado externo após validações de integridade fiscal."""
+        actor = self._authenticated_outbox_actor("transmit")
         raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
         validation = self.validate_authorized_xml(raw, require_signature=require_signature)
         key = validation["access_key"]
@@ -1022,7 +1025,7 @@ class FiscalService:
             "response_access_key": key,
             "status_code": validation["status_code"],
             "message": "XML autorizado importado e validado.",
-            "actor": str(actor or "Sistema"),
+            "actor": actor,
             "created_at": datetime.now().isoformat(timespec="seconds"),
             "source": "IMPORTADO",
             "request_path": "",

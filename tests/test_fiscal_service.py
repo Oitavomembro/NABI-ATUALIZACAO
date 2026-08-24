@@ -2119,10 +2119,29 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["access_key"], key)
         self.assertTrue(validation["signature"]["valid"])
-        record = self.service.import_authorized_xml(processed, actor="admin")
+        record = self.service.import_authorized_xml(processed)
         self.assertEqual(record["source"], "IMPORTADO")
+        self.assertEqual(record["actor"], "gerente")
         self.assertTrue(Path(record["processed_path"]).is_file())
         self.assertEqual(len(record["processed_sha256"]), 64)
+
+    def test_importacao_de_xml_autorizado_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.import_authorized_xml(b"<xml/>", actor="forjado")
+
+    def test_importacao_de_xml_autorizado_falha_fechado_antes_de_validar(self):
+        storage = Path(self.tmp.name) / "sem-autorizacao-importacao-fiscal"
+        service = FiscalService(
+            self.connect,
+            storage_dir=storage,
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_authorized_xml") as validate:
+            with self.assertRaises(PermissionError):
+                service.import_authorized_xml(b"<xml/>")
+        validate.assert_not_called()
+        self.assertFalse((storage / "homologacao").exists())
 
     def test_email_do_destinatario_so_e_lido_de_xml_autorizado_valido(self):
         _key, processed = self._authorized_signed_xml()
@@ -2159,7 +2178,7 @@ class FiscalServiceTests(unittest.TestCase):
             '</infProt></protNFe></retEnviNFe>'
         )
         processed = self.service.merge_authorization_protocol(signed, response)
-        self.service.import_authorized_xml(processed, actor="admin")
+        self.service.import_authorized_xml(processed)
         pdv = PDVService(self.connect)
         draft = self.service.duplicate_authorized_to_pdv_draft(
             access_key=key, pdv_service=pdv
