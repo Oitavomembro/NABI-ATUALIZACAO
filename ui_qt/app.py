@@ -3,7 +3,8 @@ from __future__ import annotations
 import sys
 
 from PySide6.QtCore import Qt
-from PySide6.QtWidgets import QApplication, QDockWidget, QWidget
+from PySide6.QtGui import QAction, QKeySequence
+from PySide6.QtWidgets import QApplication, QDialog, QDockWidget, QMessageBox, QToolBar, QWidget
 
 from commercial.application.pdv_application_service import PDVApplicationService
 
@@ -22,6 +23,7 @@ def create_application(
     assistant_activation=None,
     nfe_entry_service=None,
     assistant_panel_factory=None,
+    administrative_hub_factory=None,
 ) -> tuple[QApplication, PDVWindow]:
     qt_application = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qt_application.setApplicationName("NabiCode")
@@ -29,6 +31,35 @@ def create_application(
     window = PDVWindow(
         PDVViewModel(application), cash_label=cash_label, profile_label=profile_label
     )
+    if administrative_hub_factory is not None:
+        toolbar = QToolBar("NabiCode", window)
+        toolbar.setObjectName("nabicodeModulesToolbar")
+        toolbar.setMovable(False)
+        action = QAction("Módulos  [F1]", window)
+        action.setShortcut(QKeySequence("F1"))
+        action.setAutoRepeat(False)
+        state = {"open": False}
+
+        def open_hub():
+            if state["open"]:
+                return
+            state["open"] = True
+            try:
+                hub = administrative_hub_factory(window)
+                if not isinstance(hub, QDialog):
+                    raise TypeError("O hub deve ser uma janela Qt.")
+                hub.exec()
+            except Exception as error:
+                QMessageBox.warning(window, "Módulos NabiCode", str(error))
+            finally:
+                state["open"] = False
+
+        action.triggered.connect(open_hub)
+        toolbar.addAction(action)
+        window.addToolBar(Qt.ToolBarArea.TopToolBarArea, toolbar)
+        window.nabicode_modules_toolbar = toolbar
+        window.nabicode_modules_action = action
+        window.open_administrative_hub = open_hub
     if assistant_service is not None and assistant_panel_factory is not None:
         window.close()
         raise ValueError("Forneça o serviço da Nabi ou uma fábrica de painel, não ambos.")
@@ -73,6 +104,7 @@ def run(
     assistant_activation=None,
     nfe_entry_service=None,
     assistant_panel_factory=None,
+    administrative_hub_factory=None,
 ) -> int:
     qt_application, window = create_application(
         application,
@@ -83,6 +115,7 @@ def run(
         assistant_activation=assistant_activation,
         nfe_entry_service=nfe_entry_service,
         assistant_panel_factory=assistant_panel_factory,
+        administrative_hub_factory=administrative_hub_factory,
     )
     window.show()
     return qt_application.exec()
