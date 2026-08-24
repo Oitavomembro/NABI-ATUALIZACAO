@@ -1033,6 +1033,23 @@ Não confundir automação inteligente com autoridade. A Nabi poderá planejar, 
 - próximo passo: integrar por merge normal na trilha consolidada e somente depois
   conectar a composição/UI em checkpoint coordenado, preservando os limites acima.
 
+### Integração consolidada — cobertura não fiscal assistida da Nabi
+
+- fornecedores/pedidos (`b73f009`), produtos/estoque (`c848dfe`) e Financeiro
+  (`2ef535e`) foram integrados por merges normais, com históricos preservados;
+- composição e painel foram conectados nos commits `e39eaf2` e `07f2032`;
+- após login real, a Nabi pode preparar e confirmar cadastro de fornecedor,
+  pedido, mercadoria comercial com estoque inicial zero, entrada/saída/ajuste
+  unitário de estoque, criação de título RECEBER/PAGAR e baixa por ID real;
+- todas essas mutações usam rascunho imutável, confirmação reforçada de uso
+  único, sessão/permissão real, revalidação, journal durável e transação atômica;
+- cancelamento/estorno financeiro, Caixa mutável, edição de produto/preço,
+  usuários/permissões, restauração e atualização permanecem manuais; a Nabi
+  somente consulta, orienta ou abre a Central oficial nesses limites;
+- regressão completa consolidada: `2095 passed`, `1 skipped`, `444 subtests
+  passed`, zero falhas e um aviso externo conhecido do BrazilFiscalReport;
+  `compileall` e `git diff --check` aprovados.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
