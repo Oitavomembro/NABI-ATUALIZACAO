@@ -700,8 +700,8 @@ class PDVWindow(QMainWindow):
     def _show_error(self, error: Exception) -> None:
         QMessageBox.warning(self, "NabiCode", str(error) or "Operação não concluída.")
 
-    def load_assistant_draft(self, draft, _authorization=None) -> None:
-        self.view_model.load_assistant_draft(draft)
+    def load_assistant_draft(self, draft, authorization=None) -> None:
+        self.view_model.load_assistant_draft(draft, authorization)
         customer = self.view_model.selected_customer
         reference = (
             customer.record_number

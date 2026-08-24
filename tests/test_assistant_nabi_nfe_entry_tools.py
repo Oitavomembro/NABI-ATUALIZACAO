@@ -91,7 +91,11 @@ class NFeEntryToolTests(unittest.TestCase):
                 challenge.token, result.payload["draft_id"], result.payload["fingerprint"]
             )
             self.assertEqual(executed["importacao_id"], 12)
-            self.assertIs(authorization.capability, CapabilityLevel.REINFORCED_CONFIRMATION)
+            with self.assertRaisesRegex(PermissionError, "já foi utilizada"):
+                authorization.consume(
+                    drafts.get(result.payload["draft_id"]),
+                    operation="NFE_ENTRY_IMPORT",
+                )
             self.assertEqual(len(imports.calls), 1)
 
 

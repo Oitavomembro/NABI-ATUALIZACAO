@@ -6,7 +6,8 @@ from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 
 from assistant_nabi import (
-    AssistantActor, DraftConfirmationService, SaleDraft, SaleDraftItem,
+    AssistantActor, ConfirmedDraftAuthorization, DraftConfirmationService,
+    SaleDraft, SaleDraftItem,
 )
 
 
@@ -62,6 +63,44 @@ class DraftConfirmationTests(unittest.TestCase):
         self.service.invalidate_session(self.actor.session_id)
         with self.assertRaises(PermissionError):
             self.service.confirm(token=second.token, draft=current, actor=self.actor)
+
+    def test_grant_nao_pode_ser_fabricado_e_vincula_operacao_sessao_e_uso_unico(self):
+        with self.assertRaises(TypeError):
+            ConfirmedDraftAuthorization()
+        current = draft()
+        challenge = self.service.issue(current, actor=self.actor)
+        grant = self.service.confirm(token=challenge.token, draft=current, actor=self.actor)
+        other = AssistantActor("operador", "OPERADOR", "sessao-2")
+        with self.assertRaisesRegex(PermissionError, "outro usuário ou sessão"):
+            grant.consume(current, operation="SALE", actor=other)
+        grant.consume(current, operation="SALE", actor=self.actor)
+        with self.assertRaisesRegex(PermissionError, "já foi utilizada"):
+            grant.consume(current, operation="SALE", actor=self.actor)
+
+    def test_operacao_errada_consumida_falha_fechado(self):
+        current = draft()
+        challenge = self.service.issue(current, actor=self.actor)
+        grant = self.service.confirm(token=challenge.token, draft=current, actor=self.actor)
+        with self.assertRaisesRegex(PermissionError, "outra operação"):
+            grant.consume(current, operation="PURCHASE_RECEIPT", actor=self.actor)
+        grant.consume(current, operation="SALE", actor=self.actor)
+
+    def test_grant_expira_e_e_invalidado_com_a_sessao(self):
+        current = draft()
+        challenge = self.service.issue(current, actor=self.actor)
+        expired = self.service.confirm(
+            token=challenge.token, draft=current, actor=self.actor
+        )
+        self.clock.now += timedelta(seconds=30)
+        with self.assertRaisesRegex(PermissionError, "expirou"):
+            expired.consume(current, operation="SALE", actor=self.actor)
+        challenge = self.service.issue(current, actor=self.actor)
+        invalidated = self.service.confirm(
+            token=challenge.token, draft=current, actor=self.actor
+        )
+        self.service.invalidate_session(self.actor.session_id)
+        with self.assertRaisesRegex(PermissionError, "não existe"):
+            invalidated.consume(current, operation="SALE", actor=self.actor)
 
 
 if __name__ == "__main__": unittest.main()

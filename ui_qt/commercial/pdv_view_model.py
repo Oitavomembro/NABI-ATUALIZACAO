@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal, InvalidOperation
 
+from assistant_nabi.confirmations import ConfirmedDraftAuthorization
+
 from commercial.application.dto import (
     BudgetDocument, CheckoutResult, CustomerRecord, ProductRecord, SuspendedSale,
 )
@@ -40,7 +42,7 @@ class PDVViewModel:
         self.selected_product: ProductRecord | None = None
         self.assistant_payment_method: PaymentMethod | None = None
 
-    def load_assistant_draft(self, draft) -> None:
+    def load_assistant_draft(self, draft, authorization) -> None:
         """Transfere rascunho para uma sessão nova, sem checkout ou persistência."""
         if not self.session.cart.is_empty:
             raise ValueError("Esvazie ou suspenda a venda atual antes de carregar o rascunho da Nabi.")
@@ -67,10 +69,14 @@ class PDVViewModel:
             "CREDIARIO": PaymentMethod.STORE_CREDIT,
             "OUTROS": PaymentMethod.OTHER,
         }
+        payment_method = methods[draft.payment_method]
+        if not isinstance(authorization, ConfirmedDraftAuthorization):
+            raise PermissionError("O rascunho da Nabi exige autorização confirmada.")
+        authorization.consume(draft, operation="SALE")
         self.session = temporary
         self.selected_customer = customer
         self.selected_product = None
-        self.assistant_payment_method = methods[draft.payment_method]
+        self.assistant_payment_method = payment_method
 
     @property
     def total(self) -> Decimal:

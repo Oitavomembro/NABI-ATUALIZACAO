@@ -100,9 +100,10 @@ class AssistantApplicationService:
     ):
         if self._purchase_executor is None:
             raise RuntimeError("Execução assistida de compras não está configurada.")
-        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        draft = self._drafts.get(draft_id)
         if getattr(draft, "operation_kind", "") != "PURCHASE_RECEIPT":
             raise TypeError("O rascunho confirmado não é um recebimento de compra.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._purchase_executor.execute(draft, authorization)
         return result, authorization
 
@@ -111,9 +112,10 @@ class AssistantApplicationService:
     ):
         if self._nfe_entry_executor is None:
             raise RuntimeError("Execução assistida de entrada por NF-e não está configurada.")
-        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        draft = self._drafts.get(draft_id)
         if getattr(draft, "operation_kind", "") != "NFE_ENTRY_IMPORT":
             raise TypeError("O rascunho confirmado não é uma entrada de NF-e.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._nfe_entry_executor.execute(draft, authorization)
         return result, authorization
 

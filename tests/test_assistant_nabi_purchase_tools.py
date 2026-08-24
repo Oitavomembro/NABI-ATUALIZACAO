@@ -45,7 +45,9 @@ class PurchaseGateway:
 
 
 class OfficialPurchase:
-    repository = SimpleNamespace()
+    repository = SimpleNamespace(
+        obter_pedido=lambda order_id: {"id": order_id, "status": "ABERTO"}
+    )
     def __init__(self): self.calls = []
     def receber(self, *args, **kwargs):
         self.calls.append((args, kwargs))

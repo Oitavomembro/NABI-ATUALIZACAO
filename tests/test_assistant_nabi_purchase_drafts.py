@@ -4,9 +4,11 @@ import unittest
 from copy import deepcopy
 from decimal import Decimal
 
-from assistant_nabi import PurchaseReceiptDraftService, PurchaseReceiptItemRequest
+from assistant_nabi import (
+    AssistantActor, DraftConfirmationService, PurchaseReceiptDraftService,
+    PurchaseReceiptItemRequest,
+)
 from assistant_nabi.purchase_gateway import NabiCodePurchaseAssistantGateway
-from assistant_nabi import CapabilityLevel
 
 
 class Gateway:
@@ -60,7 +62,9 @@ class PurchaseReceiptDraftTests(unittest.TestCase):
 
     def test_gateway_bloqueia_mutacao_ate_idempotencia_duravel(self):
         calls = []
-        repository = type("Repo", (), {})()
+        repository = type("Repo", (), {
+            "obter_pedido": lambda self, order_id: {"id": order_id, "status": "ABERTO"},
+        })()
         service = type("Purchase", (), {
             "repository": repository,
             "receber": lambda self, *args, **kwargs: calls.append((args, kwargs)) or "ok",
@@ -69,14 +73,31 @@ class PurchaseReceiptDraftTests(unittest.TestCase):
         draft = self.service.create(
             7, (PurchaseReceiptItemRequest(11, "1", "8.50"),)
         )
-        authorization = type("Authorization", (), {
-            "draft_id": draft.draft_id, "fingerprint": draft.fingerprint,
-            "username": "operador",
-            "capability": CapabilityLevel.REINFORCED_CONFIRMATION,
-        })()
+        broker = DraftConfirmationService()
+        actor = AssistantActor("operador", "OPERADOR", "sessao-1")
+        challenge = broker.issue(draft, actor=actor)
+        authorization = broker.confirm(token=challenge.token, draft=draft, actor=actor)
         self.assertEqual(gateway.execute(draft, authorization), "ok")
         self.assertEqual(calls[0][1]["idempotency_key"], f"nabi:purchase:{draft.draft_id}")
         self.assertEqual(calls[0][1]["operation_fingerprint"], draft.fingerprint)
+        with self.assertRaisesRegex(PermissionError, "já foi utilizada"):
+            gateway.execute(draft, authorization)
+
+    def test_gateway_recusa_autorizacao_fabricada(self):
+        repository = type("Repo", (), {
+            "obter_pedido": lambda self, order_id: {"id": order_id, "status": "ABERTO"},
+        })()
+        service = type("Purchase", (), {
+            "repository": repository,
+            "receber": lambda *args, **kwargs: self.fail("não deve persistir"),
+        })()
+        draft = self.service.create(7, (PurchaseReceiptItemRequest(11, "1", "8.50"),))
+        fake = type("Fake", (), {"draft_id": draft.draft_id, "fingerprint": draft.fingerprint})()
+        with self.assertRaisesRegex(PermissionError, "broker"):
+            NabiCodePurchaseAssistantGateway(service).execute(draft, fake)
+        fake_with_consume = type("Fake", (), {"consume": lambda *args, **kwargs: None})()
+        with self.assertRaisesRegex(PermissionError, "broker"):
+            NabiCodePurchaseAssistantGateway(service).execute(draft, fake_with_consume)
 
 
 if __name__ == "__main__":

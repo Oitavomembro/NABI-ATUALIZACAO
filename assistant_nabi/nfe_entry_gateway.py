@@ -3,8 +3,7 @@ from __future__ import annotations
 import hashlib
 from pathlib import Path
 
-from .contracts import CapabilityLevel
-
+from .confirmations import ConfirmedDraftAuthorization
 
 class NabiCodeNFeEntryAssistantGateway:
     """Executa entrada local confirmada pelo importador oficial, sem SEFAZ."""
@@ -18,13 +17,6 @@ class NabiCodeNFeEntryAssistantGateway:
     def execute(self, draft, authorization):
         if getattr(draft, "operation_kind", "") != "NFE_ENTRY_IMPORT":
             raise TypeError("O rascunho não representa entrada de NF-e.")
-        if (
-            authorization.draft_id != draft.draft_id
-            or authorization.fingerprint != draft.fingerprint
-        ):
-            raise PermissionError("A autorização não pertence a esta entrada de NF-e.")
-        if authorization.capability is not CapabilityLevel.REINFORCED_CONFIRMATION:
-            raise PermissionError("A entrada de NF-e exige confirmação reforçada.")
         source = Path(draft.source_path).resolve(strict=True)
         if hashlib.sha256(source.read_bytes()).hexdigest() != draft.source_sha256:
             raise PermissionError("O XML mudou depois da confirmação.")
@@ -39,11 +31,14 @@ class NabiCodeNFeEntryAssistantGateway:
             "margem": "0",
             "preco": "0",
         } for item in draft.items]
+        if not isinstance(authorization, ConfirmedDraftAuthorization):
+            raise PermissionError("A entrada de NF-e exige autorização emitida pelo broker.")
+        grant = authorization.consume(draft, operation="NFE_ENTRY_IMPORT")
         return self._imports.importar_atomicamente(
             document,
             arquivo_origem=source,
             itens=items,
-            usuario=authorization.username,
+            usuario=grant.username,
             idempotency_key=f"nabi:nfe:{draft.draft_id}",
             operation_fingerprint=draft.fingerprint,
         )

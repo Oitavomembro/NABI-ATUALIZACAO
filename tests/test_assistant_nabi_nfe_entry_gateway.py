@@ -7,7 +7,7 @@ from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
 
-from assistant_nabi import CapabilityLevel
+from assistant_nabi import AssistantActor, DraftConfirmationService
 from assistant_nabi.nfe_entry_drafts import NFeEntryImportDraft, NFeEntryImportDraftItem
 from assistant_nabi.nfe_entry_gateway import NabiCodeNFeEntryAssistantGateway
 
@@ -41,15 +41,19 @@ class NFeEntryGatewayTests(unittest.TestCase):
         )
         self.imports = Imports()
         self.gateway = NabiCodeNFeEntryAssistantGateway(Drafts("documento"), self.imports)
-        self.auth = SimpleNamespace(
-            draft_id="d1", fingerprint="a" * 64, username="Operador",
-            capability=CapabilityLevel.REINFORCED_CONFIRMATION,
+        self.broker = DraftConfirmationService()
+        self.actor = AssistantActor("Operador", "OPERADOR", "sessao-1")
+
+    def authorization(self):
+        challenge = self.broker.issue(self.draft, actor=self.actor)
+        return self.broker.confirm(
+            token=challenge.token, draft=self.draft, actor=self.actor
         )
 
     def tearDown(self): self.temp.cleanup()
 
     def test_executa_servico_oficial_com_vinculo_real_e_idempotencia(self):
-        result = self.gateway.execute(self.draft, self.auth)
+        result = self.gateway.execute(self.draft, self.authorization())
         self.assertEqual(result["importacao_id"], 7)
         document, call = self.imports.calls[0]
         self.assertEqual(document, "documento")
@@ -60,12 +64,12 @@ class NFeEntryGatewayTests(unittest.TestCase):
         self.assertEqual(call["operation_fingerprint"], "a" * 64)
 
     def test_recusa_autorizacao_divergente_e_xml_alterado(self):
-        bad = SimpleNamespace(**{**vars(self.auth), "fingerprint": "b" * 64})
-        with self.assertRaisesRegex(PermissionError, "não pertence"):
+        bad = SimpleNamespace(draft_id="d1", fingerprint="b" * 64)
+        with self.assertRaisesRegex(PermissionError, "broker"):
             self.gateway.execute(self.draft, bad)
         self.path.write_text("<alterado />", encoding="utf-8")
         with self.assertRaisesRegex(PermissionError, "mudou"):
-            self.gateway.execute(self.draft, self.auth)
+            self.gateway.execute(self.draft, self.authorization())
         self.assertEqual(self.imports.calls, [])
 
 

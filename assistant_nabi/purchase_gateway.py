@@ -1,7 +1,6 @@
 from __future__ import annotations
 
-from .contracts import CapabilityLevel
-
+from .confirmations import ConfirmedDraftAuthorization
 
 class NabiCodePurchaseAssistantGateway:
     """Executa somente recebimento já confirmado pelo serviço oficial."""
@@ -21,13 +20,11 @@ class NabiCodePurchaseAssistantGateway:
     def execute(self, draft, authorization):
         if getattr(draft, "operation_kind", "") != "PURCHASE_RECEIPT":
             raise TypeError("O rascunho não representa recebimento de compra.")
-        if (
-            authorization.draft_id != draft.draft_id
-            or authorization.fingerprint != draft.fingerprint
-        ):
-            raise PermissionError("A autorização não pertence a este recebimento.")
-        if authorization.capability is not CapabilityLevel.REINFORCED_CONFIRMATION:
-            raise PermissionError("O recebimento exige confirmação reforçada.")
+        if self.get_open_order(draft.order_id) is None:
+            raise ValueError("O pedido não está mais aberto para recebimento.")
+        if not isinstance(authorization, ConfirmedDraftAuthorization):
+            raise PermissionError("O recebimento exige autorização emitida pelo broker.")
+        grant = authorization.consume(draft, operation="PURCHASE_RECEIPT")
         return self._service.receber(
             draft.order_id,
             tuple({
@@ -37,7 +34,7 @@ class NabiCodePurchaseAssistantGateway:
             } for item in draft.items),
             documento=draft.document,
             observacao="Recebimento confirmado pela Nabi",
-            usuario=authorization.username,
+            usuario=grant.username,
             gerar_conta_pagar=draft.generate_payable,
             data_vencimento=draft.due_date,
             idempotency_key=f"nabi:purchase:{draft.draft_id}",

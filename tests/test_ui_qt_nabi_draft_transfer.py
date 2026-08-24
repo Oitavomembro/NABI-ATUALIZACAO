@@ -4,7 +4,9 @@ import unittest
 from decimal import Decimal
 from types import SimpleNamespace
 
-from assistant_nabi import SaleDraft, SaleDraftItem
+from assistant_nabi import (
+    AssistantActor, DraftConfirmationService, SaleDraft, SaleDraftItem,
+)
 from commercial.application.dto import CustomerRecord, ProductRecord
 from commercial.application.pdv_session import PDVSession
 from commercial.domain.cart import CartItem
@@ -37,10 +39,17 @@ def draft(*, price=Decimal("10"), customer_id=None, payment="PIX"):
     return SaleDraft("d1", "a" * 64, customer_id, payment, (item,), price * 2)
 
 
+def authorized(current):
+    broker = DraftConfirmationService()
+    actor = AssistantActor("operador", "OPERADOR", "sessao-1")
+    challenge = broker.issue(current, actor=actor)
+    return broker.confirm(token=challenge.token, draft=current, actor=actor)
+
+
 class NabiDraftTransferTests(unittest.TestCase):
     def test_carrega_atomicamente_sem_checkout_e_sugere_pagamento(self):
         app = Application(); vm = PDVViewModel(app)
-        vm.load_assistant_draft(draft())
+        current = draft(); vm.load_assistant_draft(current, authorized(current))
         self.assertEqual(len(vm.session.cart.items), 1)
         self.assertEqual(vm.selected_customer.customer_id, 1)
         self.assertIs(vm.assistant_payment_method, PaymentMethod.PIX)
@@ -48,13 +57,24 @@ class NabiDraftTransferTests(unittest.TestCase):
 
     def test_recusa_substituir_carrinho_e_preco_alterado(self):
         app = Application(); vm = PDVViewModel(app)
-        vm.load_assistant_draft(draft())
+        current = draft(); vm.load_assistant_draft(current, authorized(current))
         with self.assertRaisesRegex(ValueError, "Esvazie ou suspenda"):
-            vm.load_assistant_draft(draft())
+            other = draft(); vm.load_assistant_draft(other, authorized(other))
         empty = PDVViewModel(app)
         with self.assertRaisesRegex(ValueError, "mudou"):
-            empty.load_assistant_draft(draft(price=Decimal("11")))
+            changed = draft(price=Decimal("11"))
+            empty.load_assistant_draft(changed, authorized(changed))
         self.assertTrue(empty.session.cart.is_empty)
+
+    def test_recusa_transferencia_sem_grant_e_replay(self):
+        app = Application(); vm = PDVViewModel(app); current = draft()
+        with self.assertRaisesRegex(PermissionError, "autorização"):
+            vm.load_assistant_draft(current, None)
+        grant = authorized(current)
+        vm.load_assistant_draft(current, grant)
+        vm.session = app.new_session()
+        with self.assertRaisesRegex(PermissionError, "já foi utilizada"):
+            vm.load_assistant_draft(current, grant)
 
 
 if __name__ == "__main__": unittest.main()
