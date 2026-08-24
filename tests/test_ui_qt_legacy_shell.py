@@ -261,8 +261,8 @@ def test_cancelled_or_ineffective_reauthentication_fails_closed_without_loop(qt_
 def test_summary_worker_updates_values_and_reports_error(qt_application):
     values = SimpleNamespace(
         total_records=12, current_count=7, owing_count=3,
-        owing_value=Decimal("45.50"), alert_count=2,
-        alert_value=Decimal("80.00"),
+        owing_value=Decimal("12345.50"), alert_count=2,
+        alert_value=Decimal("1080.75"),
     )
     shell = NabiCodeShellWindow(
         Security(), (summary_module(lambda: values),), lambda: QMainWindow()
@@ -272,7 +272,8 @@ def test_summary_worker_updates_values_and_reports_error(qt_application):
         while "12" not in shell.summary_labels["total"].text() and time.monotonic() < deadline:
             qt_application.processEvents(); time.sleep(0.01)
         assert shell.summary_labels["total"].text() == "Total de Fichas: 12"
-        assert "R$ 45.50" in shell.summary_labels["owing"].text()
+        assert "R$ 12.345,50" in shell.summary_labels["owing"].text()
+        assert "R$ 1.080,75" in shell.summary_labels["alert"].text()
         shell._modules["dashboard"] = summary_module(lambda: (_ for _ in ()).throw(RuntimeError("falha")))
         shell.refresh_summary()
         deadline = time.monotonic() + 2

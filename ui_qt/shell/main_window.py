@@ -9,6 +9,8 @@ from PySide6.QtWidgets import (
     QPushButton, QStackedWidget, QVBoxLayout, QWidget,
 )
 
+from commercial.domain.money import MoneyCodec
+
 
 @dataclass(frozen=True, slots=True)
 class LegacyNavigationItem:
@@ -329,10 +331,10 @@ class NabiCodeShellWindow(QMainWindow):
         self.summary_labels["total"].setText(f"Total de Fichas: {summary.total_records}")
         self.summary_labels["current"].setText(f"Em Dia: {summary.current_count}")
         self.summary_labels["owing"].setText(
-            f"Devendo ({summary.owing_count}): R$ {summary.owing_value:.2f}"
+            f"Devendo ({summary.owing_count}): R$ {MoneyCodec.format_br(summary.owing_value)}"
         )
         self.summary_labels["alert"].setText(
-            f"Alerta >60d ({summary.alert_count}): R$ {summary.alert_value:.2f}"
+            f"Alerta >60d ({summary.alert_count}): R$ {MoneyCodec.format_br(summary.alert_value)}"
         )
 
     def _summary_unavailable(self, value):
