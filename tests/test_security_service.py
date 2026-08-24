@@ -108,11 +108,11 @@ class SecurityServiceTests(unittest.TestCase):
 
 
 
-    def test_usuario_sem_senha_pode_autenticar_com_campo_vazio(self):
-        self.service.create_user("caixa", "Caixa", "", "OPERADOR")
-        self.assertIsNotNone(self.service.authenticate("caixa", ""))
-        self.service.logout()
-        self.assertIsNone(self.service.authenticate("caixa", "qualquer"))
+    def test_novo_usuario_nao_pode_ser_criado_sem_senha(self):
+        with self.assertRaises(ValueError):
+            self.service.create_user("caixa", "Caixa", "", "OPERADOR")
+        with self.assertRaises(ValueError):
+            self.service.create_user("caixa", "Caixa", "curta", "OPERADOR")
 
     def test_sessao_automatica_sem_senha(self):
         sessao = self.service.start_session_without_password("admin")
@@ -205,5 +205,19 @@ class InitialSecuritySetupTests(unittest.TestCase):
             self.service.complete_existing_installation_migration(
                 username="admin", current_password="nova-segura", new_password="outra-segura",
             )
+
+    def test_migracao_desativa_contas_legadas_sem_senha(self):
+        self.service.bootstrap_admin(hashlib.sha256(b"senha-antiga").hexdigest())
+        state = self.service._load()
+        state["users"]["caixa"] = {
+            "display_name": "Caixa", "profile": "OPERADOR", "active": True,
+            "password": {"algorithm": "none"},
+        }
+        self.service._save(state)
+        self.service.complete_existing_installation_migration(
+            username="admin", current_password="senha-antiga", new_password="nova-segura",
+        )
+        self.assertFalse(self.service.get_user("caixa").active)
+        self.assertIsNone(self.service.authenticate("caixa", ""))
 
 if __name__ == "__main__": unittest.main()

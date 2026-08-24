@@ -14197,7 +14197,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ctk.CTkOptionMenu(editor, variable=perfil_var, values=perfis or ["OPERADOR"]).pack(fill="x", padx=28)
             ativo_var = ctk.BooleanVar(value=atual_user.active if atual_user else True)
             ctk.CTkCheckBox(editor, text="Usuário ativo", variable=ativo_var).pack(anchor="w", padx=28, pady=12)
-            ctk.CTkLabel(editor, text="Senha (opcional)" if not atual_user else "Nova senha (vazia mantém a atual)").pack(anchor="w", padx=28, pady=(2, 3))
+            ctk.CTkLabel(editor, text="Senha (mínimo 8 caracteres)" if not atual_user else "Nova senha (vazia mantém a atual)").pack(anchor="w", padx=28, pady=(2, 3))
             senha_ent = ctk.CTkEntry(editor, show="●", height=38); senha_ent.pack(fill="x", padx=28)
             def salvar_usuario_editor():
                 try:

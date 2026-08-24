@@ -28,11 +28,11 @@ def test_sessao_admin_cria_edita_senha_e_desativa_usuario(tmp_path):
     application = UserAdministrationService(security)
     created = application.create(UserDraft(" Maria ", "Maria", "OPERADOR", True, "senha123"))
     assert created.username == "maria"
-    updated = application.update("maria", UserDraft("maria", "Maria Silva", "GERENTE", True, "nova456"))
+    updated = application.update("maria", UserDraft("maria", "Maria Silva", "GERENTE", True, "nova4567"))
     assert updated.display_name == "Maria Silva" and updated.profile == "GERENTE"
     application.toggle_active("maria")
     assert not application.get_user("maria").active
-    security.logout(); assert security.authenticate("maria", "nova456") is None
+    security.logout(); assert security.authenticate("maria", "nova4567") is None
 
 
 def test_operador_nao_administra_usuarios_mesmo_informando_dados_validos(tmp_path):

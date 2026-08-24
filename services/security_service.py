@@ -141,6 +141,11 @@ class SecurityService:
             if not self.verify_password(current_password, data.get("password") or {}):
                 raise PermissionError("A senha administrativa atual não confere.")
             data["password"] = self.hash_password(new_password)
+            for other_username, other_data in users.items():
+                if other_username == username:
+                    continue
+                if (other_data.get("password") or {}).get("algorithm") == "none":
+                    other_data["active"] = False
             state["users"] = users
             connection.execute(
                 "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
@@ -156,7 +161,7 @@ class SecurityService:
                 (
                     datetime.now().strftime("%d/%m/%Y %H:%M:%S"), username,
                     "SEGURANCA", "MIGRACAO_CREDENCIAL_LEGADA", username,
-                    "Credencial administrativa antiga validada e substituída.", "SUCESSO",
+                    "Credencial administrativa substituída; contas antigas sem senha foram desativadas.", "SUCESSO",
                 ),
             )
             connection.commit()
@@ -251,6 +256,8 @@ class SecurityService:
     def create_user(self, username: str, display_name: str, password: str, profile: str, *, active: bool = True) -> SecurityUser:
         username = self._normalize_username(username)
         profile = str(profile).strip().upper()
+        if len(str(password or "")) < 8:
+            raise ValueError("A senha do usuário deve ter ao menos 8 caracteres.")
         state = self._load()
         if username in state["users"]:
             raise ValueError("Usuário já cadastrado.")
@@ -264,6 +271,8 @@ class SecurityService:
         return self.get_user(username)
 
     def set_password(self, username: str, password: str) -> None:
+        if len(str(password or "")) < 8:
+            raise ValueError("A nova senha deve ter ao menos 8 caracteres.")
         state = self._load(); username = self._normalize_username(username)
         if username not in state["users"]:
             raise ValueError("Usuário inexistente.")
