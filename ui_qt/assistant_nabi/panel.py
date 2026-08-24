@@ -106,6 +106,7 @@ class NabiAssistantPanel(QWidget):
         draft_transfer=None,
         nfe_entry_service=None,
         product_search_opener=None,
+        module_hub_opener=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -116,6 +117,7 @@ class NabiAssistantPanel(QWidget):
         self._draft_transfer = draft_transfer
         self._nfe_entry_service = nfe_entry_service
         self._product_search_opener = product_search_opener
+        self._module_hub_opener = module_hub_opener
         self._workers: set[_AskWorker] = set()
         self._pending_draft = None
         self._confirmation_token = None
@@ -402,6 +404,13 @@ class NabiAssistantPanel(QWidget):
                         self.history.append(
                             "<b>Nabi:</b> Saia do modo Produto avulso para pesquisar o catálogo."
                         )
+            if result.success and result.tool_name == "interface.abrir_modulos":
+                if self._module_hub_opener is None:
+                    self.history.append(
+                        "<b>Nabi:</b> A Central de Módulos não está disponível nesta tela."
+                    )
+                else:
+                    self._module_hub_opener()
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def review_draft(self) -> None:
@@ -732,6 +741,8 @@ class NabiAssistantPanel(QWidget):
                 f"Pesquisa ampliada solicitada para: {term}"
                 if term else "Pesquisa ampliada solicitada."
             )
+        if result.tool_name == "interface.abrir_modulos":
+            return "Abertura da Central de Módulos solicitada."
         if result.tool_name in {
             "vendas.criar_rascunho",
             "vendas.sugerir_rascunho_por_estoque",

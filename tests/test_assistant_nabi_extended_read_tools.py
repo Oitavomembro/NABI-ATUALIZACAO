@@ -219,3 +219,21 @@ def test_intencao_de_pesquisa_nao_seleciona_produto_nem_recebe_id():
     assert result.success
     assert result.payload == {"action": "OPEN_PRODUCT_SEARCH", "term": "café"}
     assert not invented_id.success
+
+
+def test_intencao_de_modulos_nao_aceita_destino_ou_acao_inventada():
+    permissions = Permissions()
+    registry = DraftToolRegistry(permissions=permissions, audit=Audit())
+    register_ui_intent_tools(registry)
+    actor = AssistantActor("operador", "OPERADOR", "sessão")
+
+    result = registry.execute(
+        ToolRequest("interface.abrir_modulos", {}), actor=actor
+    )
+    invented = registry.execute(ToolRequest(
+        "interface.abrir_modulos", {"module": "usuarios", "action": "create"}
+    ), actor=actor)
+
+    assert result.success
+    assert result.payload == {"action": "OPEN_MODULE_HUB"}
+    assert not invented.success

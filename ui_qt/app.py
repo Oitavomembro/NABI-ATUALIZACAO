@@ -77,6 +77,7 @@ def create_application(
                 product_search_opener=getattr(
                     window, "open_assistant_product_search", None
                 ),
+                module_hub_opener=getattr(window, "open_administrative_hub", None),
             )
         dock = QDockWidget("Nabi", window)
         dock.setObjectName("nabiAssistantDock")

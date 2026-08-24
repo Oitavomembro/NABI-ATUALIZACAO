@@ -24,6 +24,7 @@ class FakeWindow(QMainWindow):
         super().__init__()
         self.docks = []
         self.product_search_terms = []
+        self.module_hub_calls = 0
 
     def addDockWidget(self, area, dock):
         self.docks.append((area, dock))
@@ -34,6 +35,9 @@ class FakeWindow(QMainWindow):
     def open_assistant_product_search(self, term=""):
         self.product_search_terms.append(term)
         return True
+
+    def open_administrative_hub(self):
+        self.module_hub_calls += 1
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
@@ -119,6 +123,26 @@ class QtApplicationAssistantTests(unittest.TestCase):
             {"action": "OPEN_PRODUCT_SEARCH", "term": "café"},
         ),)))
         self.assertEqual(window.product_search_terms, ["café"])
+        window.close()
+
+    def test_intencao_da_nabi_abre_apenas_a_central_de_modulos(self):
+        class Service:
+            available = True
+
+        with (
+            patch.object(qt_app, "PDVWindow", FakeWindow),
+            patch.object(qt_app, "PDVViewModel", lambda application: application),
+        ):
+            _, window = qt_app.create_application(
+                object(), [], assistant_service=Service(),
+            )
+        panel = window.nabi_assistant_dock.widget()
+        panel._generation = 8
+        panel._complete(8, AssistantTurn("Abrindo módulos.", (ToolResult(
+            "request-2", "interface.abrir_modulos", True,
+            {"action": "OPEN_MODULE_HUB"},
+        ),)))
+        self.assertEqual(window.module_hub_calls, 1)
         window.close()
 
 

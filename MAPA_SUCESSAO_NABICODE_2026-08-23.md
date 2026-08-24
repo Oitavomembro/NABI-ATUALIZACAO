@@ -206,6 +206,10 @@ Legenda:
   50/100 registros e payload mínimo; CNPJ, observações e usuário interno não são
   enviados ao modelo. Nenhuma criação ou recebimento foi acrescentado por esta
   porta de leitura;
+- [x] intenção segura `interface.abrir_modulos` adicionada: a Nabi pode abrir
+  somente a Central de Módulos oficial; o schema vazio rejeita módulo, ação,
+  senha, caminho ou confirmação inventados. Usuários/permissões, restauração e
+  atualização continuam exclusivamente manuais dentro de suas telas autorizadas;
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
 - [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
