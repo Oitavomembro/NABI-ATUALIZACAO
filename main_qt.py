@@ -24,6 +24,8 @@ from assistant_nabi import (
     NabiCodeCustomerReceiptAssistantGateway,
 )
 from commercial.infrastructure.runtime import create_commercial_container
+from commercial.application.report_application_service import ReportApplicationService
+from commercial.infrastructure.report_gateway import NabiCodeReportGateway
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from database import DatabaseManager
 from database.schema_initializer import initialize_database
@@ -31,6 +33,7 @@ from database.sqlite_connection import backup_database
 from services.network_config_service import NetworkConfigService, NetworkPaths
 from services.admin_audit_service import AdminAuditService
 from services.security_service import SecurityService
+from services.report_service import ReportService
 from repositories.system_repository import SystemRepository
 from repositories import NFeImportRepository
 from services import NFeImportService
@@ -82,6 +85,13 @@ def _create_assistant_activation(
         customer_receipt_executor = NabiCodeCustomerReceiptAssistantGateway(
             container.actions, customer_application
         )
+    profile_paths = getattr(profile, "paths", None)
+    report_output = getattr(profile_paths, "pdfs", profile.app_dir / "pdfs")
+    report_service = ReportApplicationService(NabiCodeReportGateway(ReportService(
+        database.connect,
+        output_dir=report_output / "relatorios",
+        authorize=lambda _action, _report: security.require("relatorios", "view"),
+    )))
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -97,6 +107,7 @@ def _create_assistant_activation(
             model=model,
             query_service=container.query,
             financial_query_service=getattr(container, "financial_query", None),
+            report_service=report_service,
             security_service=security,
             audit_service=audit,
             session_id=session_id,
