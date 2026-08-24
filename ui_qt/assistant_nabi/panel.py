@@ -714,6 +714,35 @@ class NabiAssistantPanel(QWidget):
                 f"R$ {item['open_amount']} — {item['status']}"
                 for item in items
             )
+        if result.tool_name == "compras.listar_fornecedores":
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhum fornecedor encontrado."
+            return "\n".join(
+                f"Fornecedor #{item['supplier_id']} — {item['name']} — "
+                f"{'ativo' if item['active'] else 'inativo'}"
+                for item in items
+            )
+        if result.tool_name == "compras.listar_pedidos":
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhum pedido de compra encontrado."
+            return "\n".join(
+                f"Pedido #{item['order_id']} — {item['supplier_name']} — "
+                f"{item['status']} — R$ {item['total']} — pendente {item['pending_quantity']}"
+                for item in items
+            )
+        if result.tool_name == "compras.consultar_pedido":
+            lines = [
+                f"Pedido #{payload['order_id']} — {payload['supplier_name']} — {payload['status']}"
+            ]
+            lines.extend(
+                f"{item['code']} — {item['description']} — pedido {item['ordered_quantity']} "
+                f"— recebido {item['received_quantity']} — pendente {item['pending_quantity']} "
+                f"— custo R$ {item['unit_cost']}"
+                for item in payload.get("items", ())
+            )
+            return "\n".join(lines)
         if result.tool_name == "relatorios.consultar_indicadores":
             return "\n".join((
                 f"Período: {payload['start_date']} a {payload['end_date']}",

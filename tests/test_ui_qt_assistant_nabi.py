@@ -226,6 +226,26 @@ class NabiAssistantPanelTests(unittest.TestCase):
             "P7 — CAFÉ — atual 1.0000 — mínimo 3.0000",
         )
 
+    def test_renderiza_compras_sem_campos_ocultos(self):
+        suppliers = ToolResult("r-s", "compras.listar_fornecedores", True, {
+            "items": [{"supplier_id": 2, "name": "NABI", "active": True}],
+        })
+        orders = ToolResult("r-o", "compras.listar_pedidos", True, {
+            "items": [{"order_id": 7, "supplier_name": "NABI", "status": "ABERTO",
+                       "total": "20.50", "pending_quantity": "2.0000"}],
+        })
+        detail = ToolResult("r-d", "compras.consultar_pedido", True, {
+            "order_id": 7, "supplier_name": "NABI", "status": "PARCIAL",
+            "items": [{"code": "P5", "description": "CAFÉ",
+                       "ordered_quantity": "3.0000", "received_quantity": "1.0000",
+                       "pending_quantity": "2.0000", "unit_cost": "8.25"}],
+        })
+        self.assertEqual(
+            self.panel._result_text(suppliers), "Fornecedor #2 — NABI — ativo"
+        )
+        self.assertIn("Pedido #7 — NABI — ABERTO", self.panel._result_text(orders))
+        self.assertIn("P5 — CAFÉ", self.panel._result_text(detail))
+
     def test_intencao_abre_pesquisa_por_porta_explicita_uma_vez(self):
         opened = []
         panel = NabiAssistantPanel(
