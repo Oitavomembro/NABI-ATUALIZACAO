@@ -2185,3 +2185,19 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   usada ou alterada. Produção fiscal permanece bloqueada;
 - reserva, confirmação e liberação de numeração deixam de aceitar autoria livre.
   Registros legados permanecem históricos e não recebem identidade inventada.
+
+### Auditoria fiscal de autoria — inutilização de faixa
+
+- implementação: `0e3439c` — `fix: autentica inutilizacao fiscal`;
+- `FiscalService.inutilize_numbers` não aceita mais ator externo e exige sessão
+  ativa com permissão `fiscal/transmit` antes de validar, assinar ou transmitir;
+- a Central Fiscal fornece apenas ano, modelo, série, intervalo, justificativa e
+  senha do certificado; autoria do evento vem exclusivamente da sessão;
+- validações de faixa/justificativa, XML oficial, assinatura, ambiente, endpoint,
+  resposta e histórico do evento foram preservados;
+- testes focados: `4 passed`, `142 deselected`; regressão de Central,
+  segurança e outbox: `34 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, numeração de produção, dado real ou regra tributária
+  foi usada ou alterada. Produção fiscal permanece bloqueada;
+- eventos fiscais gerais (`send_event`) ainda recebem ator externo e devem ser
+  migrados com cuidado porque são consumidos por cancelamento, CC-e e devolução.
