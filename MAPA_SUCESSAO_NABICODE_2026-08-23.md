@@ -1470,3 +1470,28 @@ importação no banco de produção antes da aprovação visual e de um backup m
   depreciação externa do `BrazilFiscalReport`; nenhum representa falha funcional;
 - `compileall` dos módulos existentes e `git diff --check` aprovados;
 - produção fiscal continua bloqueada e nenhum push foi realizado.
+
+### FICHÁRIO R21 — relógio do Windows e exclusão cadastral segura
+
+- implementação: `8708891` — `feat: adiciona relogio e exclusao segura ao
+  Fichario`; revisão: `082ff3c` — `build: avanca Fichario para revisao 21`;
+- o rodapé agora lê `QDateTime.currentDateTime()` e atualiza a cada segundo,
+  exibindo a data e hora correntes do Windows; `BUILD_INFO.txt` permanece apenas
+  como identificação imutável do pacote;
+- a área Clientes oferece `Excluir cadastro vazio [Del]`, exige permissão de
+  edição e confirmação digitada `EXCLUIR` com ficha e nome visíveis;
+- Consumidor Final, saldo devedor ou qualquer vínculo comercial impedem a
+  exclusão. Somente cadastro sem movimentos pode ser removido, junto de eventos
+  puramente cadastrais; dados financeiros e históricos comerciais são preservados;
+- validação focada: `67 passed`, `5 subtests passed`; suíte completa final:
+  `1.912 passed`, `1 skipped`, `2 warnings`, `412 subtests passed`, zero falhas;
+- instalador offline R21 reconstruído em
+  `build_output/fichario/installer/NabiCode_Fichario_2.5.1_Setup_Offline.exe`,
+  `120.317.258` bytes, SHA-256
+  `7481858F704556DDDD51528A380B9154C3D2DB213AB313E9EB5E4AFC4E64A4F3`;
+- auditoria do artefato confirmou revisão `21`, build `24/08/2026 06:37:40`,
+  Qt `qwindows.dll`, Tcl/Tk e ausência de chave privada/licença de cliente;
+- não foi criado ZIP R20→R21: a chave temporária que assinou a R20 foi apagada
+  corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
+  permanente de atualização por cerimônia segura para permitir R21→R22 sem
+  reconstruir instalador. Nenhum bypass de assinatura foi introduzido.
