@@ -8,7 +8,10 @@ from .nfe_devolucao_repository import NFeDevolucaoRepository
 from .estoque_repository import EstoqueRepository
 from .compra_repository import CompraRepository
 from .cliente_repository import ClientePage, ClienteRepository, ClienteSuggestion
-from .dashboard_repository import ClientSummary, DashboardIndicators, DayMovement, DayHistory, DashboardRepository
+from .dashboard_repository import (
+    ClientSummary, DashboardIndicators, DayMovement, DayHistory, DayHistoryPage,
+    DashboardRepository,
+)
 from .admin_audit_repository import AdminAuditRepository
 from .emitted_document_repository import EmittedDocument, EmittedDocumentRepository
 from .receipt_repository import ReceiptRepository
