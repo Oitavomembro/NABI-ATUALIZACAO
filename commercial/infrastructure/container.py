@@ -43,6 +43,8 @@ class CommercialContainer:
     product_application: ProductApplicationService | None = None
     stock_actions: StockActionService | None = None
     purchase_service: object | None = None
+    product_service: object | None = None
+    stock_service: object | None = None
 
     @classmethod
     def from_existing(
@@ -136,4 +138,5 @@ class CommercialContainer:
             application, customers, products, checkout, query, actions,
             customer_application, financial_query, financial_actions,
             product_application, stock_actions, purchase_service,
+            produto_service, estoque_service,
         )

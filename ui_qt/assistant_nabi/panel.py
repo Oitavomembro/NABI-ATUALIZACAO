@@ -379,6 +379,10 @@ class NabiAssistantPanel(QWidget):
                 "compras.preparar_entrada_nfe_exata",
                 "clientes.preparar_cadastro",
                 "clientes.preparar_recebimento",
+                "compras.preparar_fornecedor",
+                "compras.preparar_pedido",
+                "produtos.preparar_cadastro",
+                "estoque.preparar_movimento",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -438,6 +442,12 @@ class NabiAssistantPanel(QWidget):
             "CUSTOMER_RECEIPT": (
                 "Confira ficha, cliente, saldo anterior, valor, saldo restante, forma e data."
             ),
+            "SUPPLIER_CREATE": "Confira nome, razão social, documento e contato do fornecedor.",
+            "PURCHASE_ORDER_CREATE": "Confira fornecedor, produtos, quantidades, custos e total.",
+            "PRODUCT_CREATE": "Confira código, descrição, preços e estoque mínimo. O saldo inicial será zero.",
+            "STOCK_RECEIVE": "Confira produto, saldo anterior, quantidade de entrada, novo saldo e motivo.",
+            "STOCK_REMOVE": "Confira produto, saldo anterior, quantidade de saída, novo saldo e motivo.",
+            "STOCK_ADJUST": "Confira produto, saldo anterior, novo saldo absoluto e motivo.",
         }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
         self.history.append(
             f"<b>Nabi:</b> {guidance} "
@@ -463,6 +473,20 @@ class NabiAssistantPanel(QWidget):
                 )
             elif operation_kind == "CUSTOMER_RECEIPT":
                 result, _authorization = self._service.confirm_and_execute_customer_receipt(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind == "SUPPLIER_CREATE":
+                result, _authorization = self._service.confirm_and_execute_supplier(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind == "PURCHASE_ORDER_CREATE":
+                result, _authorization = self._service.confirm_and_execute_purchase_order(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind in {
+                "PRODUCT_CREATE", "STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST",
+            }:
+                result, _authorization = self._service.confirm_and_execute_product_stock(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -504,6 +528,27 @@ class NabiAssistantPanel(QWidget):
             self.history.append(
                 "<b>Nabi:</b> Recebimento confirmado pelo serviço oficial. "
                 f"Movimento #{int(result.resource_id)}."
+            )
+        elif operation_kind == "SUPPLIER_CREATE":
+            self._set_state("completed", "Fornecedor cadastrado")
+            self.history.append(
+                f"<b>Nabi:</b> Fornecedor #{int(result)} cadastrado pelo serviço oficial."
+            )
+        elif operation_kind == "PURCHASE_ORDER_CREATE":
+            self._set_state("completed", "Pedido criado")
+            self.history.append(
+                f"<b>Nabi:</b> Pedido de compra #{int(result)} criado pelo serviço oficial."
+            )
+        elif operation_kind == "PRODUCT_CREATE":
+            self._set_state("completed", "Produto cadastrado")
+            self.history.append(
+                f"<b>Nabi:</b> Produto #{int(result)} cadastrado com estoque inicial zero."
+            )
+        elif operation_kind in {"STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST"}:
+            self._set_state("completed", "Estoque movimentado")
+            self.history.append(
+                "<b>Nabi:</b> Movimento de estoque confirmado pelo serviço oficial. "
+                f"Movimento #{int(result['movement_id'])}; saldo {result['resulting_balance']}."
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")
@@ -743,6 +788,40 @@ class NabiAssistantPanel(QWidget):
                 for item in payload.get("items", ())
             )
             return "\n".join(lines)
+        if result.tool_name == "compras.preparar_fornecedor":
+            return "\n".join((
+                f"Fornecedor: {payload['name']}",
+                f"Razão social: {payload.get('legal_name') or '-'}",
+                f"Documento: {payload.get('document') or '-'}",
+                f"Contato: {payload.get('phone') or '-'} | {payload.get('email') or '-'}",
+                "RASCUNHO — nenhum fornecedor foi cadastrado.",
+            ))
+        if result.tool_name == "compras.preparar_pedido":
+            lines = [
+                f"{item['quantity']}x {item['code']} — {item['description']} — "
+                f"custo R$ {item['unit_cost']} — R$ {item['line_total']}"
+                for item in payload.get("items", ())
+            ]
+            lines.extend((
+                f"Fornecedor: {payload['supplier_name']}",
+                f"Total proposto: R$ {payload['total']}",
+                "RASCUNHO — nenhum pedido foi criado.",
+            ))
+            return "\n".join(lines)
+        if result.tool_name == "produtos.preparar_cadastro":
+            return "\n".join((
+                f"Produto: {payload.get('code') or '-'} — {payload['description']}",
+                f"Venda R$ {payload['sale_price']} — custo R$ {payload['cost_price']}",
+                f"Estoque inicial: {payload['current_stock']} — mínimo {payload['minimum_stock']}",
+                "RASCUNHO — nenhum produto foi cadastrado.",
+            ))
+        if result.tool_name == "estoque.preparar_movimento":
+            return "\n".join((
+                f"Produto #{payload['product_id']} — {payload['product_code']} — {payload['product_description']}",
+                f"Saldo anterior: {payload['previous_balance']} — novo saldo: {payload['new_balance']}",
+                f"Motivo: {payload['reason']}",
+                "RASCUNHO — nenhum estoque foi movimentado.",
+            ))
         if result.tool_name == "relatorios.consultar_indicadores":
             return "\n".join((
                 f"Período: {payload['start_date']} a {payload['end_date']}",

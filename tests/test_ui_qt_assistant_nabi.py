@@ -246,6 +246,30 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("Pedido #7 — NABI — ABERTO", self.panel._result_text(orders))
         self.assertIn("P5 — CAFÉ", self.panel._result_text(detail))
 
+    def test_renderiza_rascunhos_de_fornecedor_pedido_produto_e_estoque(self):
+        supplier = ToolResult("s", "compras.preparar_fornecedor", True, {
+            "name": "NABI", "legal_name": "NABI LTDA", "document": "123",
+            "phone": "71", "email": "a@b.com",
+        })
+        order = ToolResult("o", "compras.preparar_pedido", True, {
+            "supplier_name": "NABI", "total": "20.00",
+            "items": [{"quantity": "2", "code": "P1", "description": "CAFÉ",
+                       "unit_cost": "10.00", "line_total": "20.00"}],
+        })
+        product = ToolResult("p", "produtos.preparar_cadastro", True, {
+            "code": "P1", "description": "CAFÉ", "sale_price": "15.00",
+            "cost_price": "10.00", "current_stock": "0.0000",
+            "minimum_stock": "2.0000",
+        })
+        stock = ToolResult("e", "estoque.preparar_movimento", True, {
+            "product_id": 1, "product_code": "P1", "product_description": "CAFÉ",
+            "previous_balance": "5.0000", "new_balance": "7.0000", "reason": "COMPRA",
+        })
+        self.assertIn("nenhum fornecedor", self.panel._result_text(supplier))
+        self.assertIn("Total proposto: R$ 20.00", self.panel._result_text(order))
+        self.assertIn("estoque inicial: 0.0000", self.panel._result_text(product).casefold())
+        self.assertIn("novo saldo: 7.0000", self.panel._result_text(stock))
+
     def test_intencao_abre_pesquisa_por_porta_explicita_uma_vez(self):
         opened = []
         panel = NabiAssistantPanel(

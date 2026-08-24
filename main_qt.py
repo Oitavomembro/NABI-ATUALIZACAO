@@ -22,7 +22,13 @@ from assistant_nabi import (
     NabiCodeCustomerRegistrationGateway,
     CustomerReceiptDraftService,
     NabiCodeCustomerReceiptAssistantGateway,
+    NabiCodeProcurementAssistantGateway,
+    NabiCodeProductStockAssistantGateway,
+    ProductStockDraftService,
+    PurchaseOrderDraftService,
+    SupplierRegistrationDraftService,
 )
+from administration.product_management_service import ProductManagementService
 from commercial.infrastructure.runtime import create_commercial_container
 from commercial.application.report_application_service import ReportApplicationService
 from commercial.application.cash_application_service import CashApplicationService
@@ -37,6 +43,7 @@ from services.admin_audit_service import AdminAuditService
 from services.security_service import SecurityService
 from services.report_service import ReportService
 from services.cash_service import CashService
+from services.assisted_product_stock_service import AssistedProductStockService
 from repositories.system_repository import SystemRepository
 from repositories.fornecedor_repository import FornecedorRepository
 from administration.purchase_management_service import PurchaseManagementService
@@ -73,10 +80,31 @@ def _create_assistant_activation(
     ia_root = profile.app_dir / "ia"
     purchase_drafts = purchase_executor = None
     purchase_query_service = None
+    supplier_drafts = purchase_order_drafts = procurement_executor = None
     if getattr(container, "purchase_service", None) is not None:
         purchase_drafts, purchase_executor = create_purchase_assistant_components(container)
         purchase_query_service = PurchaseManagementService(
             container.purchase_service, FornecedorRepository(database), security
+        )
+        supplier_drafts = SupplierRegistrationDraftService()
+        purchase_order_drafts = PurchaseOrderDraftService(purchase_query_service)
+        procurement_executor = NabiCodeProcurementAssistantGateway(
+            purchase_query_service
+        )
+    product_stock_drafts = product_stock_executor = None
+    if all(getattr(container, name, None) is not None for name in (
+        "product_application", "stock_actions", "product_service", "stock_service"
+    )):
+        assisted_stock = AssistedProductStockService(
+            container.product_service, container.stock_service
+        )
+        product_management = ProductManagementService(
+            container.product_application, container.stock_actions, security,
+            assisted_stock,
+        )
+        product_stock_drafts = ProductStockDraftService(product_management)
+        product_stock_executor = NabiCodeProductStockAssistantGateway(
+            product_management
         )
     nfe_entry_executor = None
     if nfe_entry_service is not None and nfe_import_service is not None:
@@ -130,6 +158,11 @@ def _create_assistant_activation(
             purchase_draft_service=purchase_drafts,
             purchase_executor=purchase_executor,
             purchase_query_service=purchase_query_service,
+            supplier_draft_service=supplier_drafts,
+            purchase_order_draft_service=purchase_order_drafts,
+            procurement_executor=procurement_executor,
+            product_stock_draft_service=product_stock_drafts,
+            product_stock_executor=product_stock_executor,
             nfe_entry_draft_service=nfe_entry_service,
             nfe_entry_executor=nfe_entry_executor,
             customer_draft_service=customer_drafts,

@@ -156,7 +156,36 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         self.assertEqual(factory.call_args.kwargs["purchase_draft_service"], "rascunhos-compra")
         self.assertEqual(factory.call_args.kwargs["purchase_executor"], "executor-compra")
         self.assertEqual(factory.call_args.kwargs["purchase_query_service"], "consultas-compra")
+        self.assertIsNotNone(factory.call_args.kwargs["supplier_draft_service"])
+        self.assertIsNotNone(factory.call_args.kwargs["purchase_order_draft_service"])
+        self.assertIsNotNone(factory.call_args.kwargs["procurement_executor"])
         self.assertIs(factory.call_args.kwargs["financial_query_service"], financial_query)
+
+    def test_composicao_injeta_produtos_estoque_assistidos_somente_com_backend_completo(self):
+        database = SimpleNamespace(connect=Mock())
+        profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
+        container = SimpleNamespace(
+            query=object(), product_application=object(), stock_actions=object(),
+            product_service=object(), stock_service=object(),
+        )
+        security = Mock(); security.authenticate.return_value = object()
+        system = Mock(); system.get_config.return_value = "hash"
+        runtime = Mock(); runtime.create_model_adapter.return_value = "modelo"
+        with (
+            patch.object(main_qt, "SystemRepository", return_value=system),
+            patch.object(main_qt, "SecurityService", return_value=security),
+            patch.object(main_qt, "AdminAuditService", return_value="auditoria"),
+            patch.object(main_qt, "LocalLlamaServer", return_value=runtime),
+            patch.object(main_qt, "AssistedProductStockService", return_value="atomico"),
+            patch.object(main_qt, "ProductManagementService", return_value="gerenciamento"),
+            patch.object(main_qt, "ProductStockDraftService", return_value="rascunhos-estoque"),
+            patch.object(main_qt, "NabiCodeProductStockAssistantGateway", return_value="executor-estoque"),
+            patch.object(main_qt, "create_draft_assistant", return_value="assistente") as factory,
+        ):
+            activation = main_qt._create_assistant_activation(database, profile, container)
+            activation.activate("op", "senha")
+        self.assertEqual(factory.call_args.kwargs["product_stock_draft_service"], "rascunhos-estoque")
+        self.assertEqual(factory.call_args.kwargs["product_stock_executor"], "executor-estoque")
 
     def test_composicao_injeta_entrada_nfe_sem_iniciar_runtime_ou_sefaz(self):
         database = SimpleNamespace(connect=Mock())
