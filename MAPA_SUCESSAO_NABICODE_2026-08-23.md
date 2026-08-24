@@ -1827,3 +1827,16 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   painel Nabi;
 - validação integrada: `59 passed`, `4 subtests passed`; `compileall` e
   `git diff --check` aprovados; homologação manual do painel permanece pendente.
+
+### Checkpoint IA Nabi — consulta segura do Caixa atual
+
+- a ferramenta somente leitura `caixa.consultar_atual` usa
+  `CashApplicationService.current`; o terminal vem da configuração local e o
+  usuário vem do ator autenticado da sessão em cada execução;
+- o payload contém apenas estado, identificador/abertura e totais monetários
+  canônicos; movimentos, observações, documentos e usuários de terceiros não
+  são enviados ao modelo;
+- a ferramenta não abre ou fecha caixa e não registra suprimento, sangria ou
+  qualquer mutação; ausência do serviço mantém a capacidade indisponível;
+- validação ampliada Nabi/Caixa: `162 passed`, `38 subtests passed`, zero falhas;
+  `compileall` e `git diff --check` aprovados.
