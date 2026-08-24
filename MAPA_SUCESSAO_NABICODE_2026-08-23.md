@@ -1578,3 +1578,29 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - `main_qt.py` e `ui_qt/app.py` permaneceram intocados porque seguem reservados
   à trilha IA; próximo passo é conectar este hub ao shell somente após liberação
   coordenada desses arquivos e então homologar visualmente no Windows.
+
+### Checkpoint isolado — Produtos e Estoque Qt
+
+- branch/worktree: `codex/produtos-estoque-qt`, derivada da integração limpa
+  `c8c7bdf`, sem alterar a branch consolidada;
+- fronteira de autoridade em `323e405` — `feat: protege administracao de
+  produtos e estoque`: `ProductManagementService` deriva ator exclusivamente da
+  sessão real, exige `produtos:view/create/edit`, falha fechado e nunca aceita
+  usuário livre da GUI;
+- interface em `a8ccbd7` — `feat: adiciona produtos e estoque no Qt`: pesquisa
+  ampla por nome/código/barras, cadastro, edição, entrada, saída, ajuste e
+  histórico usam somente `ProductApplicationService`/`StockActionService` e
+  transportam `product_id` real;
+- nome, preço e estoque possuem fonte e colunas prioritárias, seguindo a
+  linguagem visual escura e operacional do Legacy; edição de cadastro não muda
+  saldo ocultamente — estoque existente só é alterado pela ação explícita de
+  movimentação com revisão e confirmação humana;
+- Enter executa uma ação, Shift+Enter retorna, Esc fecha a janela corrente e
+  auto-repeat é consumido; MoneyEdit e decimais brasileiros permanecem no fluxo;
+- validação focada inicial: `66 passed`; regressão ampliada de Produtos,
+  Estoque, pesquisa acessível e PDV: `183 passed`, `2 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- pendências: conexão ao hub/shell permanece fora deste checkpoint por
+  coordenação com a IA; homologação visual/manual com catálogo real ainda é
+  obrigatória. Fiscal/SEFAZ, IA, Fichário, licenciamento e banco real não foram
+  alterados.
