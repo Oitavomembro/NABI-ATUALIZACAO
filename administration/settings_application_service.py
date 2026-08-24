@@ -26,6 +26,12 @@ class PrintingSettingsSnapshot:
     values: Mapping[str, str]
 
 
+@dataclass(frozen=True, slots=True)
+class StoreIdentitySnapshot:
+    name: str
+    receipt_footer: str
+
+
 class SettingsApplicationService:
     """Porta autenticada para as configurações não fiscais do Qt."""
 
@@ -177,6 +183,38 @@ class SettingsApplicationService:
         self._require("view")
         sample = "NabiCode\nCOMPROVANTE DE TESTE\n" + "=" * 42 + "\n1x Produto de demonstração\nTOTAL: R$ 100,00"
         return ReceiptTemplateService.render(sample, model)
+
+    def load_store_identity(self) -> StoreIdentitySnapshot:
+        self._require("view")
+        return StoreIdentitySnapshot(
+            name=self.system_repository.get_config(
+                "nome_loja", "NabiCode — Gerenciador de Crediário"
+            ).strip(),
+            receipt_footer=self.system_repository.get_config(
+                "rodape_cupom", "Guarde este comprovante.\nObrigado pela preferência!"
+            ).strip(),
+        )
+
+    def save_store_identity(self, *, name: str, receipt_footer: str) -> StoreIdentitySnapshot:
+        self._require("edit")
+        clean_name = self._clean_text(name, field="O nome da loja", maximum=120, multiline=False)
+        clean_footer = self._clean_text(
+            receipt_footer, field="O rodapé do comprovante", maximum=500, multiline=True
+        )
+        self.system_repository.set_configs(
+            {"nome_loja": clean_name, "rodape_cupom": clean_footer}
+        )
+        return self.load_store_identity()
+
+    @staticmethod
+    def _clean_text(value: str, *, field: str, maximum: int, multiline: bool) -> str:
+        text = str(value or "").replace("\r\n", "\n").replace("\r", "\n").strip()
+        if not multiline: text = " ".join(text.split())
+        if not text: raise ValueError(f"{field} é obrigatório.")
+        if len(text) > maximum: raise ValueError(f"{field} deve possuir no máximo {maximum} caracteres.")
+        if any(ord(char) < 32 and char != "\n" for char in text):
+            raise ValueError(f"{field} contém caracteres de controle inválidos.")
+        return text
 
     @staticmethod
     def _validated_directory(value: str, *, required: bool) -> str:

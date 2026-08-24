@@ -111,3 +111,17 @@ def test_impressao_normaliza_formato_e_salva_sem_disparar_spooler(tmp_path):
     assert saved.values["formato_impressao_recibo"] == "Cupom 80 mm"
     assert system.values["impressora_recibo"] == "Térmica TESTE"
     assert "COMPROVANTE DE TESTE" in application.preview_receipt("Moderno")
+
+
+def test_identidade_da_loja_e_atomica_e_nao_aceita_campos_vazios(tmp_path):
+    application,_security,system,*_=service(tmp_path)
+    saved=application.save_store_identity(name="  LOJA   TESTE  ",receipt_footer="Obrigado!\r\nVolte sempre.")
+    assert saved.name=="LOJA TESTE" and saved.receipt_footer=="Obrigado!\nVolte sempre."
+    assert system.values["nome_loja"]=="LOJA TESTE"
+    with pytest.raises(ValueError): application.save_store_identity(name=" ",receipt_footer="OK")
+
+
+def test_identidade_da_loja_rejeita_controle_e_excesso(tmp_path):
+    application,*_=service(tmp_path)
+    with pytest.raises(ValueError): application.save_store_identity(name="LOJA\x00",receipt_footer="OK")
+    with pytest.raises(ValueError): application.save_store_identity(name="LOJA",receipt_footer="x"*501)

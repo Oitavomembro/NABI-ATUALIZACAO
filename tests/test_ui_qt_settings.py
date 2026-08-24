@@ -36,6 +36,8 @@ class Application:
         self.backups += 1; return SimpleNamespace(created=("C:\\Teste\\backup.db",))
     def run_diagnostics(self):
         self.diagnostics += 1; return {"aprovado": True}, "SISTEMA APROVADO"
+    def load_store_identity(self): return SimpleNamespace(name="LOJA TESTE",receipt_footer="OBRIGADO")
+    def save_store_identity(self,**values): self.saved.append(values); return SimpleNamespace(name=values["name"],receipt_footer=values["receipt_footer"])
     def load_printing(self):
         values={"modelo_cupom_visual":"Clássico","impressao_fonte":"Helvetica","impressao_fonte_tamanho":"10","impressao_corte_automatico":"1","impressao_tipo_corte":"PARCIAL","impressao_linhas_antes_corte":"4"}
         for category, default in {"recibo":"Cupom 80 mm","entrega":"Cupom 80 mm","ficha":"A4","historico":"A4","fechamento":"A4"}.items():
@@ -93,6 +95,16 @@ def test_shift_enter_e_auto_repeat_nao_salvam_impressao():
     assert dialog.eventFilter(dialog.save_printing, _enter(shift=True)) is True
     assert dialog.eventFilter(dialog.save_printing, _enter(repeat=True)) is True
     assert application.saved == []
+    dialog.close()
+
+
+def test_identidade_comercial_carrega_e_salva_sem_campos_fiscais():
+    application=Application(); dialog=SettingsDialog(application)
+    assert dialog.store_name.text()=="LOJA TESTE"
+    dialog.store_name.setText("NOVA LOJA")
+    with patch("ui_qt.administration.settings_dialog.QMessageBox.information"):
+        dialog._save_store_identity()
+    assert application.saved[-1]=={"name":"NOVA LOJA","receipt_footer":"OBRIGADO"}
     dialog.close()
 
 
