@@ -25,7 +25,6 @@ from assistant_nabi import (
 )
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
-from core.app_version import load_app_version
 from database import DatabaseManager
 from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database
@@ -224,8 +223,6 @@ def main(argv=None) -> int:
         module_actions = build_administrative_modules(
             container, database, profile, module_security,
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
-            app_version=load_app_version("2.5.1", source_file=__file__),
-            schema_version=SCHEMA_VERSION,
         )
         administrative_hub_factory = _administrative_hub_factory(
             module_security, module_actions
