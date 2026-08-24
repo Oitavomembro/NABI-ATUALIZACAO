@@ -2841,3 +2841,25 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   aprovados;
 - nenhum instalador ou pacote foi gerado. A validação física em máquina limpa e
   a homologação manual continuam obrigatórias antes de qualquer release.
+
+### Build Windows local da candidata consolidada
+
+- fonte exata: `codex/integracao-nabi-pdv` no commit `97940c9`, reproduzida em
+  worktree detached curto `C:\NB\NCFinal` porque o validador recusou corretamente
+  o caminho original com 83 caracteres;
+- auditoria do build: versão `2.5.1`, distribuição `NabiCode_v2_5_1`;
+- PyInstaller `6.21.0` com Python `3.14.7` gerou o executável e executou o smoke
+  de versão com resultado `2.5.1`;
+- Inno Setup `6.7.3` gerou localmente
+  `NabiCode_2.5.1_Setup_Offline.exe`, tamanho `82.665.034` bytes, SHA-256
+  `DAECB7156A2CD1C720F354F79B18F9846E70786330FF3498C262DD74D27597D6`;
+- `SHA256SUMS.txt` foi produzido ao lado do instalador. O artefato permanece
+  somente local em `C:\NB\NCFinal\build_output\installer` e não foi versionado,
+  publicado, executado nem instalado;
+- avisos do empacotamento ficaram limitados a DLLs opcionais antigas do
+  PyOpenGL dependentes de `MSVCR90.dll`; o backend selecionado e empacotado é
+  Qt/PySide6 e o pipeline oficial concluiu com sucesso;
+- pendência impeditiva: instalar em máquina/perfil de TESTE, validar primeiro
+  acesso, atualização/reparo/desinstalação, persistência/backup e fluxos manuais.
+  Sem essa evidência, o pacote não é release comercial e produção fiscal segue
+  bloqueada.
