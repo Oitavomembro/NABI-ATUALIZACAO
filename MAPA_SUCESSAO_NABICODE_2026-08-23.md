@@ -1838,3 +1838,20 @@ importação no banco de produção antes da aprovação visual e de um backup m
   não fiscal para confirmar nome/rodapé. Nenhum push foi feito porque a etapa
   ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
   instalador e banco real não foram alterados.
+
+### Auditoria de prontidão para integração da sequência administrativa Qt
+
+- ponta sequencial auditada: `e702e3a` em `codex/identidade-loja-qt`; ela contém
+  Configurações, Impressão, Ajuda, Auditoria e Identificação Comercial, com seus
+  respectivos commits documentais preservados;
+- comparação somente leitura contra `codex/integracao-nabi-pdv` em `1a3f0f9`
+  encontrou ancestral comum `3751c3a`;
+- o ajuste dispensável do startup foi removido em `e702e3a` —
+  `refactor: evita sobreposicao no startup Qt`; 19 testes de composição/startup
+  passaram e `git diff --check` foi aprovado;
+- após a correção, nenhum arquivo de código é alterado simultaneamente pelas duas
+  trilhas; a única reconciliação prevista no merge normal é este mapa, que deve
+  preservar integralmente as evidências Qt e IA;
+- integração, merge e promoção continuam reservados à conversa coordenadora.
+  Nenhum push foi feito, pois todos os checkpoints desta sequência ainda possuem
+  homologação visual/manual pendente.
