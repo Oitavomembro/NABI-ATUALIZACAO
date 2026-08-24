@@ -12229,7 +12229,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         start_number=int(entries["start"].get()),
                         end_number=int(entries["end"].get()),
                         justification=entries["justification"].get().strip(),
-                        password=password, actor=self._usuario_financeiro(),
+                        password=password,
                     )
                     if not response.success:
                         raise ValueError(

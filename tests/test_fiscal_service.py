@@ -1463,11 +1463,39 @@ class FiscalServiceTests(unittest.TestCase):
             self.assertTrue(self.service.consult_document(access_key=key, password=self.password).success)
             event_response, _ = self.service.send_event(event_type="CCE", access_key=key, sequence=1, password=self.password, actor="admin", correction="Corrigir descrição complementar do produto.")
             self.assertTrue(event_response.success)
-            inut_response, _ = self.service.inutilize_numbers(year=2026, model="55", series=1, start_number=20, end_number=21, justification="Faixa não utilizada por falha operacional.", password=self.password, actor="admin")
+            inut_response, _ = self.service.inutilize_numbers(year=2026, model="55", series=1, start_number=20, end_number=21, justification="Faixa não utilizada por falha operacional.", password=self.password)
             self.assertTrue(inut_response.success)
         finally:
             self.service.transmit = original_transmit
         self.assertEqual(calls, ["autorizacao", "consulta", "evento", "inutilizacao"])
+
+    def test_inutilizacao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.inutilize_numbers(
+                year=2026, model="55", series=1, start_number=20,
+                end_number=21, justification="Faixa não utilizada pelo sistema.",
+                password=self.password, actor="forjado",
+            )
+
+    def test_inutilizacao_falha_fechado_antes_de_validar_ou_transmitir(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-inutilizacao",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_ready") as ready, patch.object(
+            service, "transmit"
+        ) as transmit:
+            with self.assertRaises(PermissionError):
+                service.inutilize_numbers(
+                    year=2026, model="55", series=1, start_number=20,
+                    end_number=21,
+                    justification="Faixa não utilizada pelo sistema.",
+                    password=self.password,
+                )
+        ready.assert_not_called()
+        transmit.assert_not_called()
 
     def test_contingencia_exige_justificativa_e_recalcula_chave(self):
         xml, original_key = self.service.build_document_xml(

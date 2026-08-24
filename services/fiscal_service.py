@@ -3711,7 +3711,10 @@ class FiscalService:
         record = self.register_event(access_key=access_key, event_type=event_type, response=response, request_xml=envelope, actor=actor)
         return response, record
 
-    def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str, actor: str) -> tuple[FiscalResponse, dict[str, Any]]:
+    def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str) -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="inutilizar a numeração fiscal"
+        )
         problems = self.validate_ready(operation="inutilizacao", model=model)
         if problems:
             raise ValueError("; ".join(problems))
