@@ -1558,3 +1558,20 @@ importação no banco de produção antes da aprovação visual e de um backup m
   reimplementar serviços;
 - homologação visual/manual no Windows permanece necessária para todos os cinco
   diálogos; nenhum push realizado.
+
+### Checkpoint isolado — hub administrativo Qt preparado
+
+- implementação local: `763dbdc` — `feat: prepara hub administrativo Qt`;
+- novo `AdministrativeModuleHub` reúne Clientes, Caixa, Financeiro, Relatórios e
+  Usuários por descritores/fábricas, sem importar banco ou persistência na GUI;
+- identidade e autorização são obtidas exclusivamente da sessão do
+  `SecurityService`; sessão ausente/expirada e permissão negada falham fechadas,
+  e a identidade nunca é aceita como texto da tela filha;
+- visual usa os cartões escuros, contraste verde Nabi, dimensões amplas e
+  linguagem operacional do Legacy; Enter abre exatamente uma janela,
+  Shift+Enter retorna, Esc fecha o hub e auto-repeat é consumido;
+- validação focada do hub e dos cinco módulos: `29 passed`; `compileall` e
+  `git diff --check` aprovados;
+- `main_qt.py` e `ui_qt/app.py` permaneceram intocados porque seguem reservados
+  à trilha IA; próximo passo é conectar este hub ao shell somente após liberação
+  coordenada desses arquivos e então homologar visualmente no Windows.
