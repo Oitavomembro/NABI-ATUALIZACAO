@@ -1326,3 +1326,21 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendência física: confirmar a elevação UAC e a atualização dentro de uma
   instalação real em `Program Files`; o motor e o roundtrip em cópia gravável
   estão comprovados. Nenhum push foi realizado.
+
+### Integração final local — FICHÁRIO R20 + checkpoints Nabi
+
+- merge local: `62492f8`, pais `323e601` (FICHÁRIO R20) e `b10928a`
+  (IA opcional/composição somente leitura); históricos preservados;
+- a composição avançada já existente foi mantida: autenticação real, runtime
+  llama.cpp local, rascunhos de venda, recebimento de compras e entrada por XML
+  continuam separados do fluxo oficial e das confirmações humanas;
+- o novo dock opcional aceita serviço oficial ou fábrica explícita, nunca ambos;
+  padrão sem Nabi continua sem painel, rede ou dependência do modelo;
+- composition root básico registra exatamente as três consultas READ iniciais,
+  com endpoint loopback, sessão e auditoria reais obrigatórias;
+- todas as suítes Nabi/painel após a resolução: `118 passed`, `38 subtests`;
+- suíte completa integrada: `1.888 passed`, `1 skipped`, `412 subtests passed`,
+  zero falhas; `compileall` e `git diff --check` aprovados;
+- modelo e runtime permanecem fora do Git/instalador. A homologação técnica em
+  TESTE já está documentada, mas a ativação visual com licença/sessão reais e a
+  decisão de redistribuição continuam pendentes. Nenhum push foi realizado.
