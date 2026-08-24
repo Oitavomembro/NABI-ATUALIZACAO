@@ -2286,3 +2286,25 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - `compileall` e `git diff --check` aprovados; Fiscal/SEFAZ não teve regra,
   comunicação, prazo ou persistência alterada; Fichário não foi alterado;
 - nenhum push foi realizado neste checkpoint.
+
+### Segurança — migração assistida de instalações antigas
+
+- implementação no commit `e25f527`, branch `codex/seguranca-primeiro-acesso`;
+- bases oficiais antigas que possuem usuários, mas não possuem o marcador
+  `configuracao_inicial_concluida_v1`, não recebem mais sessão administrativa
+  automática;
+- antes de qualquer módulo, Qt e Legacy exigem um administrador ativo, validam
+  sua credencial persistida e obrigam a substituição por senha de no mínimo oito
+  caracteres; cancelar encerra a abertura em modo fail-closed;
+- a migração usa transação `BEGIN IMMEDIATE`, grava o novo hash PBKDF2 e o
+  marcador juntos, não abre sessão implícita, registra
+  `MIGRACAO_CREDENCIAL_LEGADA` e só pode ser consumida uma vez;
+- depois da migração, o login normal é obrigatório. Instalações oficiais já
+  configuradas também autenticam antes da construção/liberação dos módulos;
+- o Fichário permanece explicitamente separado e conserva sua decisão de abrir
+  sem login, coberta pelos testes próprios da edição;
+- validação focada inicial: `55 passed`; regressão completa: `2108 passed`, `1
+  skipped`, `444 subtests passed`, com uma única colisão textual de callback em
+  teste antigo; callback renomeado e repetição final das áreas afetadas: `60
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhum push foi realizado.
