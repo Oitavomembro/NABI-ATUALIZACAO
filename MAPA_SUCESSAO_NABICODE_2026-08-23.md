@@ -1870,3 +1870,27 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - repetição integral final: `2034 passed`, `1 skipped`, `2 warnings`, `444
   subtests passed`, zero falhas; os avisos são a classe auxiliar já conhecida e
   uma depreciação externa do `BrazilFiscalReport` no DANFE.
+
+### Auditoria fiscal de autoria — reconciliação da outbox
+
+- implementação: `bcf606c` — `fix: autentica reconciliacao da outbox fiscal`;
+- a fronteira selecionada foi exclusivamente `FiscalService.reconcile_unknown`,
+  que antes aceitava `actor` livre e persistia esse texto como solicitante ao
+  reagendar uma resposta fiscal desconhecida;
+- a API não aceita mais ator fornecido pela GUI: identidade e autorização são
+  obtidas por portas confiáveis ligadas a `SecurityService.session` e à
+  permissão real `fiscal/transmit`;
+- ausência, expiração, permissão negada, identidade vazia ou falha do provedor
+  encerram a operação antes de ler/alterar a fila; texto forjado não é gravado;
+- a reconciliação preserva o contrato anterior: consulta somente recibo ou
+  chave existente, nunca retransmite a autorização desconhecida, e mantém
+  idempotência, XML, endpoints, ambiente, prazos e respostas desconhecidas;
+- testes do serviço fiscal: `125 passed`, `10 subtests passed`; regressão
+  outbox/worker/Central/cancelamento/venda/segurança: `100 passed`; regressão
+  fiscal ampliada: `324 passed`, `10 subtests passed`, zero falhas e apenas a
+  depreciação externa já conhecida do `BrazilFiscalReport` no DANFE;
+- `compileall` e `git diff --check` aprovados; nenhum dado real, segredo,
+  certificado ou licença foi incluído;
+- reenvio manual, cancelamento local da fila e demais fronteiras de autoria
+  continuam pendentes para checkpoints separados. Produção fiscal permanece
+  bloqueada e este checkpoint não declara conformidade geral.
