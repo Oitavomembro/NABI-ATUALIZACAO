@@ -1973,3 +1973,31 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - nenhum dado pessoal, certificado, chave completa, CNPJ, chave de acesso ou
   protocolo visível foi transportado. Nenhuma chamada à SEFAZ foi executada por
   esta auditoria e produção fiscal continua bloqueada.
+
+### Auditoria fiscal de autoria — manifestação do destinatário DF-e
+
+- implementação: `9957108` — `fix: autentica autoria da manifestacao dfe`;
+- causa: `FiscalDFeService.send_manifestation` aceitava `actor` livre do
+  chamador e só o repassava ao histórico depois de assinar e transmitir o
+  evento, sem validar sessão/permissão na fronteira do serviço;
+- a API não aceita mais ator externo. Antes de consultar documentos, assinar ou
+  acessar a rede, exige identidade da sessão ativa e permissão real
+  `fiscal/transmit`, fornecidas por portas ligadas a `SecurityService`;
+- ausência de porta, permissão negada, ator vazio ou falha de obtenção da sessão
+  encerram a operação com `PermissionError` antes de qualquer leitura operacional
+  ou transmissão; texto `actor` forjado é rejeitado pela assinatura da API;
+- a Central Fiscal deixou de obter/passar `_usuario_financeiro()` para essa
+  mutação. O serviço registra exclusivamente o usuário autenticado confirmado;
+- tipos oficiais de manifestação, justificativa mínima, assinatura, envelope,
+  endpoint, idempotência de Ciência/conclusivas e tratamento da resposta não
+  foram alterados;
+- validação: `14 passed` focados; regressão relacionada em blocos com `150 passed`
+  e `10 subtests passed`, `36 passed` e `61 passed`; `compileall` e
+  `git diff --check` aprovados. A tentativa de executar todo o conjunto em um
+  único processo foi encerrada pelo ambiente sem resumo; os mesmos arquivos
+  concluíram separadamente sem falhas;
+- nenhum segredo, certificado, dado real ou chamada SEFAZ foi usado. Produção
+  fiscal permanece bloqueada e não há declaração de conformidade geral;
+- próximas fronteiras independentes ainda pendentes incluem reenvio/consulta
+  manual da outbox, cancelamento local da fila e autoria da importação manual de
+  XML. Corrigir no máximo uma fronteira por checkpoint, sem fallback `Sistema`.
