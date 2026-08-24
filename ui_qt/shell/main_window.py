@@ -47,6 +47,34 @@ QPushButton:disabled { color:#8b949e; background:#21262d; }
 """
 
 
+METALLIC_AUX_BUTTON_STYLE = """
+QPushButton {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,
+  stop:0 #626970,stop:0.42 #42484e,stop:1 #272c31);
+ color:#f4f6f8; border:1px solid #747c84; border-left:4px solid #73c7dc;
+ border-bottom:3px solid #1c2024; border-radius:7px; text-align:left;
+ padding:0 13px; font-weight:800;
+}
+QPushButton:hover { border-color:#9bd5e3; border-left:4px solid #9bd5e3; }
+QPushButton:pressed {
+ background:#292e33; border-bottom:1px solid #1c2024; padding-top:2px;
+}
+QPushButton:focus { border:2px solid #dce2e7; border-left:4px solid #73c7dc; }
+QPushButton:disabled { background:#282c30; color:#858c92; border-color:#464c52; }
+"""
+
+METALLIC_PANIC_BUTTON_STYLE = """
+QPushButton {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,
+  stop:0 #a13b42,stop:0.5 #7a252b,stop:1 #4f171c);
+ color:#ffffff; border:1px solid #d65b63; border-bottom:3px solid #351014;
+ border-radius:7px; font-weight:900;
+}
+QPushButton:hover { border-color:#ff858b; }
+QPushButton:focus { border:2px solid #ffffff; }
+"""
+
+
 NAVIGATION_SUBTITLES = {
     "dashboard": "Visão geral e movimento do dia",
     "vendas": "PDV, pagamentos e comprovantes",
@@ -160,18 +188,18 @@ class NabiCodeShellWindow(QMainWindow):
                 continue
             button = QPushButton(module.label)
             button.setAccessibleName(module.label)
-            button.setStyleSheet("background:#21262d;text-align:left;min-height:34px")
+            button.setStyleSheet(METALLIC_AUX_BUTTON_STYLE)
             button.clicked.connect(
                 lambda _checked=False, selected=module.module_id: self.open_module(selected)
             )
             root.addWidget(button)
             self.favorite_buttons[module.module_id] = button
         root.addStretch()
-        self.help_button = QPushButton("Central de Ajuda"); self.help_button.setStyleSheet("background:#1f6feb")
+        self.help_button = QPushButton("Central de Ajuda"); self.help_button.setStyleSheet(METALLIC_AUX_BUTTON_STYLE)
         self.help_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.help_button)
-        self.support_button = QPushButton("Ajuda / suporte"); self.support_button.setStyleSheet("background:#2ea043")
+        self.support_button = QPushButton("Ajuda / suporte"); self.support_button.setStyleSheet(METALLIC_AUX_BUTTON_STYLE)
         self.support_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.support_button)
-        self.panic_button = QPushButton("Pânico  [Ctrl+Shift+P]"); self.panic_button.setStyleSheet("background:#b62324")
+        self.panic_button = QPushButton("Pânico  [Ctrl+Shift+P]"); self.panic_button.setStyleSheet(METALLIC_PANIC_BUTTON_STYLE)
         self.panic_button.clicked.connect(self.close); root.addWidget(self.panic_button)
         footer = QLabel("NabiCode"); footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setStyleSheet("color:#8b949e;font-size:10px"); root.addWidget(footer)
@@ -179,12 +207,12 @@ class NabiCodeShellWindow(QMainWindow):
 
     def _build_header(self, store_name, profile_label):
         row = QHBoxLayout(); row.setSpacing(12); self.menu_toggle = QPushButton("Menu  ✕")
-        self.menu_toggle.setStyleSheet("background:#161b22"); self.menu_toggle.clicked.connect(self.toggle_side_menu)
+        self.menu_toggle.setStyleSheet(METALLIC_AUX_BUTTON_STYLE); self.menu_toggle.clicked.connect(self.toggle_side_menu)
         row.addWidget(self.menu_toggle)
         title = QLabel(str(store_name).upper()); title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;letter-spacing:1px"); row.addWidget(title, 1)
         profile = QLabel(profile_label); profile.setStyleSheet("color:#8b949e;font-size:12px;font-weight:700"); row.addWidget(profile)
-        self.history_button = QPushButton("Histórico"); self.history_button.setStyleSheet("background:#161b22")
+        self.history_button = QPushButton("Histórico"); self.history_button.setStyleSheet(METALLIC_AUX_BUTTON_STYLE)
         self.history_button.clicked.connect(lambda: self.open_module("auditoria")); row.addWidget(self.history_button)
         return row
 

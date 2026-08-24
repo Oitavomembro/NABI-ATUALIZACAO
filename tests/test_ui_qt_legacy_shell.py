@@ -144,6 +144,29 @@ def test_extra_module_goes_to_sidebar_without_reordering_legacy(qt_application):
         shell.close()
 
 
+def test_botoes_auxiliares_usam_o_mesmo_acabamento_metalico(qt_application):
+    extra = AdministrativeModule(
+        "Usuários", "Administração", "Ctrl+U", "technical", "users",
+        lambda p: QDialog(p), "usuarios",
+    )
+    shell = NabiCodeShellWindow(
+        Security(), (dashboard_module(), extra), lambda: QMainWindow()
+    )
+    try:
+        for button in (
+            shell.help_button, shell.support_button, shell.menu_toggle,
+            shell.history_button, shell.favorite_buttons["usuarios"],
+        ):
+            style = button.styleSheet()
+            assert "qlineargradient" in style
+            assert "#626970" in style
+            assert "#73c7dc" in style
+        assert "#a13b42" in shell.panic_button.styleSheet()
+        assert "#626970" not in shell.panic_button.styleSheet()
+    finally:
+        shell.close()
+
+
 def test_primary_module_is_embedded_and_reused_in_shell(qt_application):
     created = []
     def factory(parent):
