@@ -2888,6 +2888,9 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - correção visual solicitada pelo proprietário: `bc9a646` substitui o azul
   dominante por acabamento metálico em aço/grafite, cabeçalhos prateados e
   botões com relevo; azul/ciano permanece somente como filete discreto de foco;
+- botões auxiliares do shell foram uniformizados em `36875de`: Ajuda,
+  Ajuda/suporte, Favoritos, Menu e Histórico usam o mesmo aço/grafite; Pânico
+  permanece vermelho por ser uma ação crítica;
 - Clientes e Produtos adotam metal grafite/preto, trilhas finas azul/ciano,
   foco visível, tabelas alternadas e colunas responsivas; vermelho permanece
   reservado à exclusão segura e aos alertas já existentes;
@@ -2912,3 +2915,17 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   de serviço, permissão e política de vínculos antes da interface;
 - homologação visual/manual no Windows permanece necessária. IA Nabi,
   Fiscal/SEFAZ, FICHÁRIO, licenciamento e banco real não foram alterados.
+
+#### Diretriz visual global solicitada pelo proprietário
+
+- aplicar progressivamente o mesmo acabamento metálico a menus, submenus,
+  cartões, diálogos e áreas administrativas de todo o Qt;
+- preservar integralmente a tela de Vendas já aprovada; qualquer melhoria em
+  seus botões deve ser somente visual e homologada separadamente;
+- incluir também menus secretos/restritos somente na camada visual, sem
+  torná-los visíveis, criar atalhos, enfraquecer permissões ou revelar funções;
+- vermelho deve permanecer reservado a exclusão, pânico, bloqueio e alertas;
+- cada módulo deve ser tratado em checkpoint isolado, sem transportar regras do
+  FICHÁRIO, alterar serviços ou misturar a modernização com Fiscal/SEFAZ/IA;
+- a composição global e os módulos fora desta branch precisam ser coordenados
+  com a conversa integradora para evitar colisão de arquivos.
