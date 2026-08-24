@@ -7,6 +7,7 @@ from typing import Any
 from database import DatabaseManager
 from database.sqlite_introspection import table_exists
 from repositories.decimal_storage import DecimalStorage
+from product_identifiers import normalize_gtin
 
 
 class NFeImportRepository:
@@ -72,9 +73,10 @@ class NFeImportRepository:
         margem_real, margem_decimal = DecimalStorage.pair(preparado["margem"], field="margem")
         fator_real, fator_decimal = DecimalStorage.pair(preparado["fator"], field="fator de conversão")
         product_name = str(preparado.get("descricao") or item.descricao or "").strip().upper()
-        product_barcode = str(
-            preparado.get("codigo_barras") or item.codigo_barras or ""
-        ).strip()
+        product_barcode = normalize_gtin(
+            preparado.get("codigo_barras")
+            if "codigo_barras" in preparado else item.codigo_barras
+        )
         product_ncm = str(preparado.get("ncm") or item.ncm or "").strip()
         product_cest = str(preparado.get("cest") or item.cest or "").strip()
         product_columns = {
@@ -158,7 +160,8 @@ class NFeImportRepository:
                atualizado_em=? WHERE id=?""",
             (fornecedor_id, unidade_id, unidade_compra_id, fator_real, fator_decimal, custo_real, custo_decimal,
              margem_real, margem_decimal, preco_real, preco_decimal,
-             str(preparado.get("codigo_barras") or item.codigo_barras or ""), str(preparado.get("codigo_barras") or item.codigo_barras or ""),
+             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
+             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
              str(preparado.get("ncm") or item.ncm or ""), str(preparado.get("ncm") or item.ncm or ""),
              str(preparado.get("cest") or item.cest or ""), str(preparado.get("cest") or item.cest or ""), agora, int(produto_id)),
         )

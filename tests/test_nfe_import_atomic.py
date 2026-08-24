@@ -60,6 +60,52 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(titulo["origem"], "NFE_XML")
         self.assertEqual(titulo["valor_original"], 25)
 
+    def test_linhas_repetidas_da_mesma_nota_reutilizam_produto_criado(self):
+        repeated = NFeDocument(
+            chave="CHAVE-REPETIDA", numero="88", fornecedor="Fornecedor", cnpj="123",
+            data_emissao="2026-08-24", valor_total=140.85,
+            itens=(
+                NFeItem("2001162CR4", "REFRIG IT COLA PET 2L", 3, "PAC", 35.2133333333,
+                        ncm="22021000", cfop="5405", cest="0301001", codigo_barras="7898377662418", valor_total=105.64),
+                NFeItem("2001162CR4", "REFRIG IT COLA PET 2L", 1, "PAC", 35.21,
+                        ncm="22021000", cfop="5910", cest="0301001", codigo_barras="7898377662418", valor_total=35.21),
+            ),
+        )
+        items = [dict(self.preparados[0], codigo="2001162CR4", descricao="REFRIG IT COLA PET 2L",
+                      quantidade=item.quantidade, custo=item.valor_unitario, preco=item.valor_unitario,
+                      unidade="PAC", codigo_barras=item.codigo_barras, ncm=item.ncm, cest=item.cest)
+                 for item in repeated.itens]
+
+        result = self.service.importar_atomicamente(repeated, arquivo_origem="repetida.xml", itens=items)
+
+        self.assertEqual((result["itens_criados"], result["itens_vinculados"]), (1, 1))
+        self.assertEqual(self.repo.database.fetch_one("SELECT COUNT(*) n FROM produtos")["n"], 1)
+        self.assertEqual(self.repo.database.fetch_one("SELECT estoque_atual FROM produtos")["estoque_atual"], 4)
+        self.assertEqual(self.repo.database.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 2)
+
+    def test_sem_gtin_nao_colide_entre_produtos_distintos(self):
+        self.repo.database.execute(
+            "CREATE UNIQUE INDEX idx_barcode_test ON produtos(codigo_barras) WHERE codigo_barras<>''"
+        )
+        document = NFeDocument(
+            chave="CHAVE-SEM-GTIN", numero="89", fornecedor="Fornecedor", cnpj="123",
+            data_emissao="2026-08-24", valor_total=30,
+            itens=(
+                NFeItem("A", "PRODUTO A", 1, "UN", 10, codigo_barras="SEM GTIN", valor_total=10),
+                NFeItem("B", "PRODUTO B", 1, "UN", 20, codigo_barras="SEM GTIN", valor_total=20),
+            ),
+        )
+        items = [dict(self.preparados[0], codigo=item.codigo, descricao=item.descricao,
+                      quantidade=1, custo=item.valor_unitario, preco=item.valor_unitario,
+                      codigo_barras=item.codigo_barras)
+                 for item in document.itens]
+
+        result = self.service.importar_atomicamente(document, arquivo_origem="sem-gtin.xml", itens=items)
+
+        self.assertEqual(result["itens_criados"], 2)
+        barcodes = self.repo.database.fetch_all("SELECT codigo_barras FROM produtos ORDER BY codigo")
+        self.assertEqual([row["codigo_barras"] for row in barcodes], ["", ""])
+
     def test_conferencia_pode_corrigir_ncm_cest_e_codigo_de_barras_antes_de_criar(self):
         self.preparados[0].update({
             "codigo_barras": "7891234567890",

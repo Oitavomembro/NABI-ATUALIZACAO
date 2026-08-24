@@ -30,7 +30,7 @@ from database import DatabaseManager, DatabaseMaintenanceService
 from repositories import CadastroAuxiliarRepository, CategoriaRepository, ProdutoRepository, NFeImportRepository, NFeDevolucaoRepository, EstoqueRepository, FinanceiroRepository, CompraRepository, ClienteRepository, ClientHistoryRepository, SystemRepository
 from repositories.decimal_storage import DecimalStorage, DecimalStorageError
 from services.financeiro_calculator import FinanceiroCalculator
-from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalDFeService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, FiscalTaxRuleService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, MoneyEntryBehavior, SearchEntryBehavior
+from services import CobrancaService, NFeImportService, NFeXMLService, NFeDevolucaoService, NFePackagingFactorService, normalize_gtin, ProdutoService, ProductApplicationError, ProductApplicationService, ProductAuxiliaryCreateCommand, ProductFormBinding, ProductFormControls, ProductPricingController, ProductPricingControls, SystemDiagnostics, UIPreferencesService, EstoqueService, XMLConferenceService, ActivityService, FactoryResetService, DeveloperToolsService, SecurityService, PDVService, FinanceiroService, FinanceiroViewData, CompraService, ReportService, FiscalService, FiscalDFeService, FiscalEmailService, FiscalNCMCatalogService, FiscalCESTCatalogService, FiscalTaxRuleService, NetworkConfigService, NetworkPaths, MySQLMigrationService, CustomerMaintenanceService, CustomerRegistrationService, AdminAuditService, PDVTransactionService, MoneyEntryBehavior, SearchEntryBehavior
 from services.fiscal_sale_service import FiscalSaleService
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.fiscal_preflight_service import FiscalPreflightService
@@ -4864,6 +4864,18 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         recebido_label.grid(row=0, column=0, sticky="ew", padx=10, pady=(8, 4))
         fator_var, fator_entry = campo_editor(aba_estoque, "Conteúdo por embalagem recebida", 1, "1")
+        sugestao_fator_frame = ctk.CTkFrame(fator_entry.master, fg_color="#10243a", corner_radius=7)
+        sugestao_fator_frame.pack(fill="x", pady=(6, 0))
+        sugestao_fator_label = ctk.CTkLabel(
+            sugestao_fator_frame, text="Nabi: nenhuma sugestão local.", anchor="w",
+            justify="left", wraplength=320, text_color="#9ecbff",
+        )
+        sugestao_fator_label.pack(fill="x", padx=8, pady=(6, 2))
+        usar_sugestao_fator = ctk.CTkButton(
+            sugestao_fator_frame, text="Usar sugestão da Nabi", height=28,
+            fg_color="#1f6feb", state="disabled",
+        )
+        usar_sugestao_fator.pack(fill="x", padx=8, pady=(2, 7))
         custo_var, custo_entry = campo_editor(aba_estoque, "Custo por unidade de estoque", 2)
         margem_var, margem_entry = campo_editor(aba_estoque, "Margem sobre custo (%)", 3, "30")
         preco_var, preco_entry = campo_editor(aba_estoque, "Preço de venda", 4)
@@ -4938,6 +4950,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         analises_por_indice = {analise.index: analise for analise in analises}
         for analise in analises:
             item = analise.item
+            sugestao_embalagem = NFePackagingFactorService.suggest_from_description(item.descricao)
             produto = PRODUTO_SERVICE.buscar(analise.produto_id) if analise.produto_id else None
             fator_padrao = float(produto.get("fator_conversao", 1) or 1) if produto else 1.0
             if fator_padrao <= 0:
@@ -4961,10 +4974,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "produto_id": analise.produto_id if analise.status != "NOVO" else None,
                 "codigo": str(item.codigo or item.codigo_barras or "").strip(),
                 "descricao": str(item.descricao or "").strip().upper(),
-                "codigo_barras": str(item.codigo_barras or "").strip(),
+                "codigo_barras": normalize_gtin(item.codigo_barras),
                 "ncm": str(item.ncm or "").strip(),
                 "cest": str(item.cest or "").strip(),
                 "origem_mercadoria": str(getattr(item, "origem_mercadoria", "") or "").strip(),
+                "sugestao_embalagem": sugestao_embalagem,
             }
             if revisao_importacao_id is not None:
                 produto_vinculado = vinculos_revisao.get(analise.index)
@@ -4974,6 +4988,19 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 configuracoes[analise.index]["acao"] = "ATUALIZAR"
 
         estado = {"indice": None, "carregando": False, "sincronizando": False}
+
+        def aplicar_sugestao_fator():
+            indice = estado["indice"]
+            if indice is None:
+                return
+            sugestao = configuracoes[indice].get("sugestao_embalagem")
+            if sugestao is None:
+                return
+            fator_var.set(format_number_br(sugestao.factor))
+            fator_entry.focus_set()
+            fator_entry.select_range(0, "end")
+
+        usar_sugestao_fator.configure(command=aplicar_sugestao_fator)
 
         def calcular_resumo():
             pendencias = XMLConferenceService.validar_todos(configuracoes, exigir_preco=True)
@@ -5126,7 +5153,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             acao_var.set(cfg.get("acao") or "")
             codigo_var.set(cfg.get("codigo") or analise.item.codigo)
             descricao_var.set(cfg.get("descricao") or analise.item.descricao.upper())
-            barras_var.set(cfg.get("codigo_barras") or analise.item.codigo_barras)
+            barras_var.set(normalize_gtin(cfg.get("codigo_barras")))
             ncm_var.set(cfg.get("ncm") or analise.item.ncm)
             cest_var.set(cfg.get("cest") or analise.item.cest)
             origem_var.set(cfg.get("origem_mercadoria") or getattr(analise.item, "origem_mercadoria", ""))
@@ -5161,6 +5188,22 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                       f"{cfg.get('unidade_compra') or 'UN'} (somente leitura)")
             )
             fator_var.set(format_number_br(cfg["fator"]))
+            sugestao = cfg.get("sugestao_embalagem")
+            if sugestao is None:
+                sugestao_fator_label.configure(
+                    text="Nabi: não encontrei fator seguro na descrição. Confirme manualmente."
+                )
+                usar_sugestao_fator.configure(state="disabled")
+            else:
+                conteudo = (
+                    f" de {format_number_br(sugestao.content)} {sugestao.content_unit}"
+                    if sugestao.content is not None else ""
+                )
+                sugestao_fator_label.configure(text=(
+                    f"Nabi sugere 1 embalagem = {format_number_br(sugestao.factor)} unidades{conteudo}.\n"
+                    f"Confiança {sugestao.confidence.lower()}: {sugestao.evidence} Confirme antes de usar."
+                ))
+                usar_sugestao_fator.configure(state="normal")
             custo_var.set(format_number_br(cfg["custo"], 2))
             margem_var.set(format_number_br(cfg["margem"], 2))
             preco_var.set(format_number_br(cfg["preco"], 2))

@@ -9,6 +9,7 @@ from threading import Lock
 from uuid import uuid4
 
 from services.nfe_xml_service import NFeXMLService
+from services.nfe_packaging_factor_service import NFePackagingFactorService
 
 
 @dataclass(frozen=True, slots=True)
@@ -28,6 +29,9 @@ class NFeEntryDraftItem:
     quantity: str
     unit: str
     unit_cost: str
+    suggested_conversion_factor: str
+    factor_confidence: str
+    factor_evidence: str
     match_status: str
     suggested_product_id: int | None
     match_criterion: str
@@ -133,6 +137,9 @@ class NFeEntryDraftService:
                     "index": item.index, "supplier_code": item.supplier_code,
                     "description": item.description, "quantity": item.quantity,
                     "unit": item.unit, "unit_cost": item.unit_cost,
+                    "suggested_conversion_factor": item.suggested_conversion_factor,
+                    "factor_confidence": item.factor_confidence,
+                    "factor_evidence": item.factor_evidence,
                     "match_status": item.match_status,
                     "suggested_product_id": item.suggested_product_id,
                     "match_criterion": item.match_criterion,
@@ -289,6 +296,9 @@ class NFeEntryDraftService:
     @staticmethod
     def _item(analysis) -> NFeEntryDraftItem:
         xml_item = analysis.item
+        factor_suggestion = NFePackagingFactorService.suggest_from_description(
+            xml_item.descricao
+        )
         candidates = tuple(NFeEntryCandidate(
             int(candidate.produto_id), str(candidate.codigo or ""),
             str(candidate.nome or ""), str(candidate.criterio or ""),
@@ -298,6 +308,9 @@ class NFeEntryDraftService:
             int(analysis.index), str(xml_item.codigo or ""),
             str(xml_item.descricao or ""), format(float(xml_item.quantidade), ".4f"),
             str(xml_item.unidade or ""), format(float(xml_item.valor_unitario), ".2f"),
+            format(factor_suggestion.factor, "f") if factor_suggestion else "",
+            factor_suggestion.confidence if factor_suggestion else "",
+            factor_suggestion.evidence if factor_suggestion else "",
             str(analysis.status or ""),
             int(analysis.produto_id) if analysis.produto_id is not None else None,
             str(analysis.criterio or ""), candidates,

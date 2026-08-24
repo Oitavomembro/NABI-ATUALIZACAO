@@ -87,6 +87,15 @@ class NFeEntryDraftTests(unittest.TestCase):
         self.assertEqual(str(draft.items[0].stock_quantity), "24.0000")
         self.assertEqual(self.imports.mutations, 0)
 
+    def test_nabi_expoe_sugestao_de_embalagem_sem_confirmar_por_conta_propria(self):
+        self.path.write_text(XML.replace("<xProd>Café</xProd>", "<xProd>ITALAQUINHO 27X200ML</xProd>"), encoding="utf-8")
+        draft = self.service.prepare_selected_file(self.path)
+        item = draft.items[0]
+        self.assertEqual(item.suggested_conversion_factor, "27")
+        self.assertEqual(item.factor_confidence, "ALTA")
+        self.assertIn("27X200ML", item.factor_evidence)
+        self.assertFalse(draft.executable)
+
     def test_bloqueia_fator_omitido_xml_alterado_e_vinculo_nao_exato(self):
         review = self.service.prepare_selected_file(self.path)
         with self.assertRaisesRegex(ValueError, "todos os itens"):
