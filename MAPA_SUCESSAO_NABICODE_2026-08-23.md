@@ -2874,8 +2874,10 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - inspeção visual isolada no Windows aprovada tecnicamente, sem banco real e sem
   contornar o portão de licença. Testes focados finais: `35 passed`;
   `compileall` e `git diff --check` aprovados;
-- a apresentação final da Nabi deverá ser uma mascote azul flutuante, sem
-  moldura de janela, com balão recolhível e estados visuais de escuta,
-  pensamento, execução, confirmação e erro. O painel atual continua sendo
-  protótipo funcional até esse checkpoint; não copiar personagem, relógio,
-  voz ou arte de terceiros.
+- a apresentação flutuante da Nabi foi implementada no commit `3f455fd`: a
+  mascote azul permanece recolhida sobre o shell, sem dock ou moldura de janela,
+  e revela o painel escrito existente somente em balão tecnológico recolhível;
+- motor, ferramentas, permissões, confirmações, falha fechada e botão de parada
+  permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
+  arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
+  `compileall` e `git diff --check`.
