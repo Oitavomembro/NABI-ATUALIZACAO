@@ -2279,10 +2279,10 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   operacionais. Atualização e desinstalação preservam banco, configurações e
   backups; exclusão deliberada continua restrita ao fluxo autenticado dentro do
   aplicativo;
-- validação focada final: `59 passed`; regressão completa: `2104 passed`, `1
-  skipped`, `444 subtests passed` e uma única falha de expectativa antiga do
-  próprio teste do desinstalador, atualizada e reaprovada em seguida; somando a
-  repetição dirigida, todas as verificações afetadas ficaram verdes;
+- validação focada final: `59 passed`; regressão completa repetida após atualizar
+  a expectativa antiga do desinstalador: `2105 passed`, `1 skipped`, `444
+  subtests passed`, zero falhas e apenas a depreciação externa já conhecida do
+  `BrazilFiscalReport`;
 - `compileall` e `git diff --check` aprovados; Fiscal/SEFAZ não teve regra,
   comunicação, prazo ou persistência alterada; Fichário não foi alterado;
 - nenhum push foi realizado neste checkpoint.
