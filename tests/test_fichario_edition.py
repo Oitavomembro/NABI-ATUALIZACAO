@@ -124,6 +124,20 @@ def test_menu_visivel_e_backup_diario_configuravel():
     assert "getExistingDirectory" in preferences
     assert "OneDrive" in preferences
     assert "interface/font_size" in preferences
+    assert "Aplicar atualização assinada" in shell
+
+
+def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
+    root = Path(__file__).parents[1]
+    build = (root / "build_tools/build_fichario.py").read_text(encoding="utf-8")
+    spec = (root / "build_tools/pyinstaller/nabicode_fichario.spec").read_text(encoding="utf-8")
+    runtime = (root / "fichario/update_runtime.py").read_text(encoding="utf-8")
+    assert "NabiCode_Fichario_Updater" in build
+    assert "BUILD_INFO.txt" in build and "BUILD_INFO.txt" in spec
+    assert "trusted_public_keys.json" in spec
+    assert "antes_atualizacao" in runtime
+    assert "validate_installed_files" in runtime
+    assert "ROLLBACK_PENDENTE" in runtime
 
 
 def test_recebimento_separa_revisao_confirmacao_e_oferece_comprovante_oficial():

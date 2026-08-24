@@ -7,11 +7,17 @@ from pathlib import Path
 from typing import Any
 import zipfile
 
+from services.update_signature import load_public_catalog, verify_update_manifest
+
 
 class UpdatePackageValidationService:
-    def __init__(self, current_version: str, current_revision: int = 0) -> None:
+    def __init__(
+        self, current_version: str, current_revision: int = 0,
+        *, trusted_public_keys: str | Path,
+    ) -> None:
         self.current_version = str(current_version).strip()
         self.current_revision = max(0, int(current_revision))
+        self.trusted_public_keys = Path(trusted_public_keys).expanduser().resolve()
 
     @staticmethod
     def version_tuple(value: str) -> tuple[int, ...]:
@@ -36,6 +42,9 @@ class UpdatePackageValidationService:
             if "manifest.json" not in names:
                 raise ValueError("O pacote não contém manifest.json.")
             manifest = json.loads(archive.read("manifest.json").decode("utf-8"))
+            if not isinstance(manifest, dict):
+                raise ValueError("Manifesto da atualização inválido.")
+            verify_update_manifest(manifest, load_public_catalog(self.trusted_public_keys))
             if manifest.get("product") != "NabiCode":
                 raise ValueError("O pacote não pertence ao NabiCode.")
             target_version = str(manifest.get("version") or "").strip()

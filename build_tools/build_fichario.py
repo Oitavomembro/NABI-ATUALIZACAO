@@ -4,6 +4,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+from datetime import datetime
 from pathlib import Path
 
 
@@ -42,8 +43,22 @@ def main(argv=None) -> int:
     version = (ROOT / "VERSAO.txt").read_text(encoding="utf-8-sig").strip()
     dist = OUTPUT / "dist"; work = OUTPUT / "work"
     if args.target in {"app", "all"}:
+        OUTPUT.mkdir(parents=True, exist_ok=True)
+        (OUTPUT / "BUILD_INFO.txt").write_text(
+            datetime.now().strftime("%d/%m/%Y %H:%M:%S") + "\n", encoding="utf-8",
+        )
         run([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
              "--distpath", str(dist), "--workpath", str(work), str(SPEC)])
+        helper_dist = OUTPUT / "helper_dist"
+        run([
+            sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
+            "--onefile", "--noconsole", "--name", "NabiCode_Fichario_Updater",
+            "--distpath", str(helper_dist), "--workpath", str(OUTPUT / "helper_work"),
+            "--specpath", str(OUTPUT / "helper_spec"),
+            "--paths", str(ROOT), str(ROOT / "build_tools" / "fichario_update_helper.py"),
+        ])
+        distribution = dist / f"NabiCode_Fichario_v{version.replace('.', '_')}"
+        shutil.copy2(helper_dist / "NabiCode_Fichario_Updater.exe", distribution)
     if args.target in {"installer", "all"}:
         iscc = Path(args.iscc).resolve() if args.iscc else Path(
             shutil.which("ISCC.exe") or ""

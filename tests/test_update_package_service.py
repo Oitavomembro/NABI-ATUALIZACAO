@@ -1,4 +1,5 @@
 import hashlib
+import base64
 import json
 import tempfile
 import unittest
@@ -7,8 +8,12 @@ from pathlib import Path
 
 from unittest import mock
 
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
 from services.update_package_service import UpdatePackageService, _original_process_alive
 from core.runtime_profile import DatabaseUsageLock
+from services.update_signature import sign_update_manifest
 
 
 class UpdatePackageServiceTests(unittest.TestCase):
@@ -18,6 +23,15 @@ class UpdatePackageServiceTests(unittest.TestCase):
         self.install = self.root / "install"
         self.app = self.root / "appdata"
         self.install.mkdir()
+        self.signer = Ed25519PrivateKey.generate()
+        public = self.signer.public_key().public_bytes(
+            serialization.Encoding.Raw, serialization.PublicFormat.Raw,
+        )
+        catalog = self.install / "licensing" / "trusted_public_keys.json"
+        catalog.parent.mkdir()
+        catalog.write_text(json.dumps({
+            "schema": 1, "keys": {"update-test": base64.b64encode(public).decode("ascii")},
+        }), encoding="utf-8")
         self.service = UpdatePackageService(app_dir=self.app, install_dir=self.install, current_version="2.4.37")
 
     def tearDown(self):
@@ -38,12 +52,26 @@ class UpdatePackageServiceTests(unittest.TestCase):
             "files": manifest_files,
             "remove": remove or [],
         }
+        manifest = sign_update_manifest(manifest, key_id="update-test", signer=self.signer)
         package = self.root / "update.zip"
         with zipfile.ZipFile(package, "w") as archive:
             archive.writestr("manifest.json", json.dumps(manifest))
             for name, data in files.items():
                 archive.writestr(f"payload/{name}", data)
         return package
+
+    def test_rejects_unsigned_or_tampered_manifest(self):
+        package = self.make_package()
+        tampered = self.root / "tampered.zip"
+        with zipfile.ZipFile(package, "r") as archive:
+            manifest = json.loads(archive.read("manifest.json"))
+            manifest["revision"] = 99
+            entries = {name: archive.read(name) for name in archive.namelist() if name != "manifest.json"}
+        with zipfile.ZipFile(tampered, "w") as archive:
+            archive.writestr("manifest.json", json.dumps(manifest))
+            for name, data in entries.items(): archive.writestr(name, data)
+        with self.assertRaisesRegex(ValueError, "Assinatura"):
+            self.service.validate(tampered)
 
     def test_validates_version_source_and_hashes(self):
         package = self.make_package()

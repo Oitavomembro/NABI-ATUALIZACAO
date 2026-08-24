@@ -17,7 +17,10 @@ from services.update_package_validation_service import UpdatePackageValidationSe
 class UpdatePackageService:
     """Validação, preparação, auditoria e recuperação de pacotes incrementais."""
 
-    def __init__(self, *, app_dir: str | os.PathLike[str], install_dir: str | os.PathLike[str], current_version: str) -> None:
+    def __init__(
+        self, *, app_dir: str | os.PathLike[str], install_dir: str | os.PathLike[str],
+        current_version: str, trusted_public_keys: str | os.PathLike[str] | None = None,
+    ) -> None:
         self.app_dir = Path(app_dir).expanduser().resolve()
         self.install_dir = Path(install_dir).expanduser().resolve()
         self.current_version = str(current_version).strip()
@@ -25,9 +28,17 @@ class UpdatePackageService:
         self.state_file = self.app_dir / "estado_atualizacao.json"
         self.history_file = self.app_dir / "historico_atualizacoes.jsonl"
         self.current_revision = self._read_current_revision()
+        catalog = Path(trusted_public_keys).resolve() if trusted_public_keys else self._catalog_path()
         self.validation_service = UpdatePackageValidationService(
-            self.current_version, self.current_revision
+            self.current_version, self.current_revision, trusted_public_keys=catalog,
         )
+
+    def _catalog_path(self) -> Path:
+        candidates = (
+            self.install_dir / "licensing" / "trusted_public_keys.json",
+            self.install_dir / "_internal" / "licensing" / "trusted_public_keys.json",
+        )
+        return next((path for path in candidates if path.is_file()), candidates[0])
 
     def _read_current_revision(self) -> int:
         for path in (self.install_dir / "REVISAO.txt", self.install_dir / "_internal" / "REVISAO.txt"):
@@ -242,4 +253,38 @@ def apply_prepared_update(
     if source_main:
         command.append(source_main)
     subprocess.Popen(command, cwd=str(install_dir))
+    return 0
+
+
+def rollback_prepared_update(
+    state_file: str, *, pid: int, launcher: str, source_main: str | None = None,
+    process_started_at: float | None = None,
+) -> int:
+    """Restaura arquivos pelo helper externo depois que o app atualizado fecha."""
+    import subprocess
+    import time
+
+    state_path = Path(state_file).expanduser().resolve()
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    deadline = time.time() + 120
+    while time.time() < deadline:
+        if not _original_process_alive(pid, process_started_at): break
+        time.sleep(0.5)
+    else:
+        state.update(status="FALHA", error="O processo atualizado não encerrou no prazo.")
+        UpdatePackageService.atomic_json(state_path, state)
+        return 2
+    try:
+        service = object.__new__(UpdatePackageService)
+        service.install_dir = Path(state["install_dir"])
+        UpdatePackageService.restore_files(service, state)
+        state.update(status="ROLLBACK_CONCLUIDO", rolled_back_at=datetime.now().isoformat(timespec="seconds"))
+        UpdatePackageService.atomic_json(state_path, state)
+    except Exception as error:
+        state.update(status="FALHA_CRITICA", rollback_error=str(error))
+        UpdatePackageService.atomic_json(state_path, state)
+        return 3
+    command = [launcher]
+    if source_main: command.append(source_main)
+    subprocess.Popen(command, cwd=str(Path(state["install_dir"])))
     return 0

@@ -14,6 +14,7 @@ from fichario.license_dialog import FicharioLicenseDialog
 from fichario.profile import configure_fichario_profile
 from fichario.runtime import initialize_fichario_database
 from fichario.shell import FicharioWindow
+from fichario.update_runtime import FicharioUpdateRuntime
 from licensing.restricted_commands import handle_restricted_command
 from licensing.runtime import build_runtime_license_service
 from repositories.system_repository import SystemRepository
@@ -42,6 +43,9 @@ def main(argv=None) -> int:
         lock.acquire()
         database = DatabaseManager(database_path, logger=logging.getLogger("NabiCode.Fichario"))
         initialize_fichario_database(database, profile)
+        update_result = FicharioUpdateRuntime(profile, database_path).validate_after_restart()
+        if update_result and update_result.get("restart_required"):
+            return 4
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
         system = SystemRepository(database.connect)
         security = SecurityService(database.connect)
@@ -51,6 +55,13 @@ def main(argv=None) -> int:
             container, database, profile, security, session
         )
         window.show()
+        if update_result and update_result.get("ok"):
+            QTimer.singleShot(0, lambda: QMessageBox.information(
+                window, "Atualização concluída",
+                f"Versão {update_result['report']['versao']} — "
+                f"revisão {update_result['report']['revisao']} validada.\n"
+                "Banco e vínculos preservados.",
+            ))
         timer = QTimer(qt); timer.setInterval(60_000)
 
         def monitor_license() -> None:

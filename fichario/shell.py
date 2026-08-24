@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import sys
+from pathlib import Path
+
 from PySide6.QtCore import QDate, QTimer, Qt
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
+    QApplication, QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
     QVBoxLayout, QWidget,
 )
@@ -22,6 +25,7 @@ from .preferences_dialog import (
     FicharioPreferencesDialog, configured_backup_directory, fichario_settings,
     interface_font_size,
 )
+from .update_runtime import FicharioUpdateRuntime
 
 
 class LoginDialog(QDialog):
@@ -72,6 +76,7 @@ class FicharioWindow(QMainWindow):
         system_menu.addSeparator()
         system_menu.addAction("Criar backup", self.create_backup)
         system_menu.addAction("Restaurar backup", self.restore_backup)
+        system_menu.addAction("Aplicar atualização assinada", self.apply_update)
         system_menu.addSeparator()
         system_menu.addAction("Backup diário e tamanho das letras", self.open_preferences)
         system_menu.addAction("Informações da instalação", self.show_settings)
@@ -298,6 +303,44 @@ class FicharioWindow(QMainWindow):
         )
         self.close()
 
+    def apply_update(self) -> None:
+        if self._pdv is not None and self._pdv.isVisible():
+            QMessageBox.warning(
+                self, "Atualização", "Feche a tela de Vendas antes de atualizar.",
+            ); return
+        source, _ = QFileDialog.getOpenFileName(
+            self, "Selecionar atualização assinada", str(self.profile.app_dir / "atualizacoes"),
+            "Atualização NabiCode (*.zip)",
+        )
+        if not source: return
+        runtime = FicharioUpdateRuntime(self.profile, self.database.database_path)
+        try:
+            manifest = runtime.package_service.validate(source)
+        except Exception as error:
+            QMessageBox.critical(self, "Atualização recusada", str(error)); return
+        answer = QMessageBox.question(
+            self, "Confirmar atualização",
+            f"Pacote assinado e íntegro.\n\nVersão: {manifest['version']}\n"
+            f"Revisão: {manifest.get('revision', 0)}\nChave: {manifest.get('key_id')}\n\n"
+            "Será criado um backup completo antes da troca. Continuar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes: return
+        try:
+            _manifest, state, backup = runtime.prepare(source)
+            runtime.launch_helper(state)
+        except Exception as error:
+            QMessageBox.critical(
+                self, "Atualização não iniciada",
+                f"Nenhum arquivo do programa foi substituído.\n\n{error}",
+            ); return
+        QMessageBox.information(
+            self, "Atualização preparada",
+            f"Backup validado em:\n{backup}\n\nO NabiCode será fechado, atualizado e reaberto.",
+        )
+        QApplication.instance().quit()
+
     def _maintenance(self) -> DatabaseMaintenanceService:
         return DatabaseMaintenanceService(
             self.database.database_path, configured_backup_directory(self.profile),
@@ -309,8 +352,18 @@ class FicharioWindow(QMainWindow):
         )
 
     def show_settings(self) -> None:
+        install = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
+        build_info = "desenvolvimento local"
+        for candidate in (
+            install / "BUILD_INFO.txt", install / "_internal" / "BUILD_INFO.txt",
+            install / "build_output" / "fichario" / "BUILD_INFO.txt",
+        ):
+            try:
+                build_info = candidate.read_text(encoding="utf-8-sig").strip(); break
+            except OSError:
+                continue
         QMessageBox.information(
             self, "Instalacao Fichario",
             f"Perfil: {self.profile.label}\nDados: {self.profile.app_dir}\n"
-            f"Banco: {self.database.database_path}",
+            f"Banco: {self.database.database_path}\nBuild: {build_info}",
         )

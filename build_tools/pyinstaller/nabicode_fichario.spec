@@ -18,6 +18,7 @@ datas = [
     (str(revision_file), "."),
     (str(production_profile), "."),
     (str(project_root / "licensing" / "trusted_public_keys.json"), "licensing"),
+    (str(project_root / "build_output" / "fichario" / "BUILD_INFO.txt"), "."),
 ]
 
 # Python 3.14 distribui Tcl/Tk em ZIPs. O hook atual do PyInstaller procura
