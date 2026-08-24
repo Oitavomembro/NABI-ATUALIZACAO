@@ -1476,8 +1476,8 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - implementação: `8708891` — `feat: adiciona relogio e exclusao segura ao
   Fichario`; revisão: `082ff3c` — `build: avanca Fichario para revisao 21`;
 - o rodapé agora lê `QDateTime.currentDateTime()` e atualiza a cada segundo,
-  exibindo a data e hora correntes do Windows; `BUILD_INFO.txt` permanece apenas
-  como identificação imutável do pacote;
+  exibindo somente a data e hora correntes do Windows; a identificação de
+  build não é mais mostrada na interface (`f125783`);
 - a área Clientes oferece `Excluir cadastro vazio [Del]`, exige permissão de
   edição e confirmação digitada `EXCLUIR` com ficha e nome visíveis;
 - Consumidor Final, saldo devedor ou qualquer vínculo comercial impedem a
@@ -1487,10 +1487,13 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `1.912 passed`, `1 skipped`, `2 warnings`, `412 subtests passed`, zero falhas;
 - instalador offline R21 reconstruído em
   `build_output/fichario/installer/NabiCode_Fichario_2.5.1_Setup_Offline.exe`,
-  `120.317.258` bytes, SHA-256
-  `7481858F704556DDDD51528A380B9154C3D2DB213AB313E9EB5E4AFC4E64A4F3`;
-- auditoria do artefato confirmou revisão `21`, build `24/08/2026 06:37:40`,
-  Qt `qwindows.dll`, Tcl/Tk e ausência de chave privada/licença de cliente;
+  `120.327.275` bytes, SHA-256
+  `C06EDE2FD7ACB7F169E839A5709F0FB5519670E013555C1762369AFBF6F5C6D3`;
+- a dependência inicial indevida da IA no pacote Fichário foi removida em
+  `6bb266a`; o executável reconstruído permaneceu aberto no teste de fumaça;
+- auditoria do artefato confirmou revisão `21`, Qt `qwindows.dll`, Tcl/Tk e
+  ausência de chave privada/licença de cliente; o único `.pem` incluído é o
+  catálogo público de autoridades certificadoras da dependência `certifi`;
 - não foi criado ZIP R20→R21: a chave temporária que assinou a R20 foi apagada
   corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
   permanente de atualização por cerimônia segura para permitir R21→R22 sem
