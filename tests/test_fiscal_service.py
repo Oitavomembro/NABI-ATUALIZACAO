@@ -42,7 +42,7 @@ class FiscalServiceTests(unittest.TestCase):
             self.connect,
             storage_dir=Path(self.tmp.name) / "docs",
             actor_provider=lambda: "gerente",
-            authorization_provider=lambda action: action == "transmit",
+            authorization_provider=lambda action: action in {"configure", "transmit"},
         )
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
@@ -322,8 +322,8 @@ class FiscalServiceTests(unittest.TestCase):
     def test_numeração_inicial_define_proximo_numero_uma_unica_vez(self):
         initialized = self.service.initialize_numbering(
             model="55", series=4, next_number=321, environment="HOMOLOGACAO",
-            actor="admin",
         )
+        self.assertEqual(initialized["actor"], "gerente")
         self.assertEqual(initialized["next_number"], 321)
         scope = self.service.numbering_scope(
             model="55", series=4, environment="HOMOLOGACAO"
@@ -337,13 +337,13 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "já foi iniciada"):
             self.service.initialize_numbering(
                 model="55", series=4, next_number=500,
-                environment="HOMOLOGACAO", actor="admin",
+                environment="HOMOLOGACAO",
             )
 
     def test_numeração_inicial_isola_ambiente_modelo_e_serie(self):
         self.service.initialize_numbering(
             model="65", series=2, next_number=90,
-            environment="HOMOLOGACAO", actor="admin",
+            environment="HOMOLOGACAO",
         )
         production = self.service.numbering_scope(
             model="65", series=2, environment="PRODUCAO"
@@ -353,6 +353,24 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertFalse(production["initialized"])
         self.assertFalse(other_model["initialized"])
+
+    def test_numeração_inicial_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.initialize_numbering(
+                model="55", series=1, next_number=1, actor="forjado"
+            )
+
+    def test_numeração_inicial_exige_permissao_configure_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-configuracao-numeracao",
+            actor_provider=lambda: "gerente",
+            authorization_provider=lambda action: action == "transmit",
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.initialize_numbering(model="55", series=1, next_number=1)
+        load.assert_not_called()
 
     def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
         expected_regimes = {

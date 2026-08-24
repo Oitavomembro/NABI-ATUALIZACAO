@@ -447,8 +447,11 @@ class FiscalService:
 
     def initialize_numbering(
         self, *, model: str, series: int, next_number: int,
-        actor: str, environment: str | None = None,
+        environment: str | None = None,
     ) -> dict[str, Any]:
+        actor = self._authenticated_fiscal_actor(
+            "configure", operation="configurar a numeração fiscal"
+        )
         model = str(model)
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
@@ -3495,14 +3498,14 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def _authenticated_outbox_actor(self, action: str) -> str:
+    def _authenticated_fiscal_actor(self, action: str, *, operation: str) -> str:
         if self._authorization_provider is None or not self._authorization_provider(action):
             raise PermissionError(
-                "Uma sessão autenticada com permissão fiscal é obrigatória para alterar a fila fiscal."
+                f"Uma sessão autenticada com permissão fiscal é obrigatória para {operation}."
             )
         if self._actor_provider is None:
             raise PermissionError(
-                "Uma sessão autenticada é obrigatória para alterar a fila fiscal."
+                f"Uma sessão autenticada é obrigatória para {operation}."
             )
         try:
             actor = str(self._actor_provider() or "").strip()
@@ -3510,13 +3513,18 @@ class FiscalService:
             raise
         except Exception as exc:
             raise PermissionError(
-                "Não foi possível confirmar a identidade autenticada para alterar a fila fiscal."
+                f"Não foi possível confirmar a identidade autenticada para {operation}."
             ) from exc
         if not actor:
             raise PermissionError(
                 "A sessão autenticada não possui uma identidade válida."
             )
         return actor
+
+    def _authenticated_outbox_actor(self, action: str) -> str:
+        return self._authenticated_fiscal_actor(
+            action, operation="alterar a fila fiscal"
+        )
 
     def reconcile_unknown(self, queue_id: str) -> dict[str, Any]:
         """Agenda somente consulta por recibo/chave; nunca retransmite a autorização."""

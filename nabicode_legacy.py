@@ -11173,7 +11173,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     record = self.fiscal_service.initialize_numbering(
                         model=code, series=int(series_entry.get()),
                         next_number=int(next_entry.get()), environment=selected_environment(),
-                        actor=self._usuario_financeiro(),
                     )
                     registrar_auditoria(
                         self._usuario_financeiro(), "INICIAR_NUMERACAO_FISCAL", "Fiscal",
