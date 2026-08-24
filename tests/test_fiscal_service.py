@@ -38,7 +38,12 @@ class FiscalServiceTests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         conn.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         conn.commit(); conn.close()
-        self.service = FiscalService(self.connect, storage_dir=Path(self.tmp.name) / "docs")
+        self.service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "docs",
+            actor_provider=lambda: "gerente",
+            authorization_provider=lambda action: action == "transmit",
+        )
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         self._create_pfx(self.pfx_path, self.password)
@@ -1911,9 +1916,37 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(unknown["status"], "RESPOSTA_DESCONHECIDA")
         with self.assertRaisesRegex(ValueError, "consultado"):
             self.service.retry_transmission(item["id"], actor="gerente")
-        reconciled = self.service.reconcile_unknown(item["id"], actor="gerente")
+        reconciled = self.service.reconcile_unknown(item["id"])
         self.assertEqual(reconciled["operation"], "consulta")
         self.assertEqual(reconciled["reconciliation_for"], "autorizacao")
+        self.assertEqual(reconciled["reconciliation_requested_by"], "gerente")
+
+    def test_reconciliacao_desconhecida_falha_fechada_antes_de_alterar_fila(self):
+        key = "8" * 44
+        item = self.service.enqueue_transmission(
+            operation="autorizacao",
+            xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
+            actor="historico",
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0]["status"] = "RESPOSTA_DESCONHECIDA"
+        self.service._save_transmission_queue(rows)
+        before = self.service.list_transmission_queue()
+
+        untrusted = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem_sessao",
+            actor_provider=lambda: "texto-forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with self.assertRaisesRegex(PermissionError, "permissão fiscal"):
+            untrusted.reconcile_unknown(item["id"])
+
+        self.assertEqual(untrusted.list_transmission_queue(), before)
+
+    def test_reconciliacao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'actor'"):
+            self.service.reconcile_unknown("fila", actor="forjado-pela-gui")
 
     def test_reinicio_apos_inicio_de_envio_exige_reconciliacao(self):
         key = "4" * 44

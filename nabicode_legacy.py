@@ -765,7 +765,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         registrar_auditoria("Sistema", "INICIALIZAR", APP_VERSION, APP_VERSION_LABEL, "SUCESSO")
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
-        self.fiscal_service = FiscalService(conectar_banco, storage_dir=os.path.join(APP_DIR, "fiscal"))
+        self.fiscal_service = FiscalService(
+            conectar_banco,
+            storage_dir=os.path.join(APP_DIR, "fiscal"),
+            actor_provider=self._ator_fiscal_autenticado,
+            authorization_provider=lambda action: self.security.require("fiscal", action),
+        )
         self.fiscal_outbox_worker = FiscalOutboxWorker(
             self.fiscal_service, logger=logger
         )
@@ -12022,9 +12027,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     messagebox.showinfo("Central fiscal", "Este documento foi cancelado e não pode ser reenviado.", parent=janela)
                     return
                 if queue.get("id") and queue.get("status") == "RESPOSTA_DESCONHECIDA":
-                    self.fiscal_service.reconcile_unknown(
-                        str(queue["id"]), actor=self._usuario_financeiro()
-                    )
+                    self.fiscal_service.reconcile_unknown(str(queue["id"]))
                 elif queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
                     self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
                 else:

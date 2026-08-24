@@ -2023,3 +2023,68 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - merge final: `4a812e7` — `merge: integra identidade da loja e auditoria Qt`;
 - permanecem pendentes somente as homologações visuais/manuais já descritas em
   cada checkpoint. A integração não constitui release fiscal.
+### Auditoria fiscal de autoria — reconciliação da outbox
+
+- implementação: `bcf606c` — `fix: autentica reconciliacao da outbox fiscal`;
+- a fronteira selecionada foi exclusivamente `FiscalService.reconcile_unknown`,
+  que antes aceitava `actor` livre e persistia esse texto como solicitante ao
+  reagendar uma resposta fiscal desconhecida;
+- a API não aceita mais ator fornecido pela GUI: identidade e autorização são
+  obtidas por portas confiáveis ligadas a `SecurityService.session` e à
+  permissão real `fiscal/transmit`;
+- ausência, expiração, permissão negada, identidade vazia ou falha do provedor
+  encerram a operação antes de ler/alterar a fila; texto forjado não é gravado;
+- a reconciliação preserva o contrato anterior: consulta somente recibo ou
+  chave existente, nunca retransmite a autorização desconhecida, e mantém
+  idempotência, XML, endpoints, ambiente, prazos e respostas desconhecidas;
+- testes do serviço fiscal: `125 passed`, `10 subtests passed`; regressão
+  outbox/worker/Central/cancelamento/venda/segurança: `100 passed`; regressão
+  fiscal ampliada: `324 passed`, `10 subtests passed`, zero falhas e apenas a
+  depreciação externa já conhecida do `BrazilFiscalReport` no DANFE;
+- `compileall` e `git diff --check` aprovados; nenhum dado real, segredo,
+  certificado ou licença foi incluído;
+- reenvio manual, cancelamento local da fila e demais fronteiras de autoria
+  continuam pendentes para checkpoints separados. Produção fiscal permanece
+  bloqueada e este checkpoint não declara conformidade geral.
+
+### Evidência operacional externa — entrada de compra por XML
+
+- vídeo recebido em `2026-08-24`, duração `00:01:31.07`, resolução `1600x900`,
+  SHA-256 `A80F9FA593F20653258CE24660153535EF7534C8EF295A7013DAB0A2EB45FCEA`;
+- a gravação mostra outro sistema operado por AnyDesk e serve somente como
+  referência de fluxo. Ela não prova regra jurídica, conformidade do NabiCode,
+  resposta da SEFAZ para o NabiCode nem homologação de produção;
+- apesar de ter sido inicialmente descrita como cancelamento, a varredura dos
+  `5.462` quadros e das mudanças de cena não encontrou pedido de cancelamento,
+  justificativa, protocolo de cancelamento, `cStat` de evento, estorno de
+  estoque ou reversão financeira;
+- o fluxo efetivamente observado foi: colar chave de acesso de 44 dígitos,
+  consultar a NF-e no Portal Nacional, resolver o hCaptcha manualmente, escolher
+  certificado do Windows, baixar o XML, revisar emitente/nota/item/tributos,
+  decidir movimentação de estoque, unidade e fator de conversão, revisar conta
+  a pagar, ajustar custo/preço e confirmar a importação;
+- no exemplo de um item, uma embalagem comercial foi convertida por fator `25`
+  para `25` unidades de estoque, com custo unitário recalculado a partir do
+  total. O valor da nota permaneceu igual no estoque/financeiro; isso é
+  evidência de experiência operacional, não uma regra universal de conversão;
+- o NabiCode já possui os blocos correspondentes: `FiscalDFeService` para
+  Distribuição DF-e/manifestação, `NFeXMLService` para leitura do XML e
+  `NFeImportService` para vínculo, fator, estoque e financeiro na mesma
+  transação idempotente. Não deve reproduzir navegação automatizada do Portal,
+  hCaptcha ou seleção visual de certificado quando existe serviço oficial;
+- lacuna de autoria separada: `FiscalDFeService.send_manifestation` ainda aceita
+  `actor` livre e a Central Fiscal o fornece externamente. Deve receber ator e
+  permissão da sessão autenticada em checkpoint próprio, antes de qualquer
+  mutação ou rede, sem alterar tipos/prazos dos eventos;
+- lacuna financeira separada: a importação atual cria no máximo um título e usa
+  a data de emissão como vencimento. Antes de buscar paridade visual, auditar
+  duplicatas/parcelas reais do XML e permitir revisão explícita das condições
+  financeiras; não fabricar vencimento, parcelamento ou obrigação ausente;
+- o fallback histórico `usuario="Sistema"` na importação também deve ser
+  removido de fronteiras manuais: operador técnico vem da sessão; fornecedor,
+  emitente e responsável contábil continuam identidades distintas;
+- pendência física útil: gravar separadamente um cancelamento fiscal real em
+  HOMOLOGAÇÃO, mostrando solicitação, justificativa, envio, retorno, protocolo,
+  consulta posterior e reflexos comerciais. O vídeo atual não cobre essa prova;
+- nenhum dado visível do certificado, chave completa de acesso, CNPJ ou nome de
+  pessoa foi transportado para o repositório. Produção fiscal continua bloqueada.
