@@ -2242,3 +2242,24 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - a identidade comercial ainda recebida pelo serviço superior de devolução para
   seus efeitos próprios permanece separada da autoria técnica fiscal e requer
   auditoria própria antes de eventual remoção.
+
+### Auditoria fiscal de autoria — reversão de estoque da devolução cancelada
+
+- implementação: `361b412` — `fix: vincula reversao ao ator fiscal autenticado`;
+- causa: depois de um cancelamento oficial aceito, o serviço de devolução ainda
+  aceitava um segundo `actor` livre para atribuir a reversão local do estoque;
+- `cancelar_devolucao_oficial` não aceita mais identidade externa. A reversão
+  usa exclusivamente o ator autenticado persistido no evento retornado por
+  `FiscalService.send_event`;
+- se um adaptador não fornecer essa evidência, o cancelamento fiscal aceito é
+  preservado como `CANCELADA_PENDENTE_ESTOQUE`, nenhuma movimentação é criada e
+  não há fallback `Sistema`. A recuperação fica explícita para tratamento
+  posterior;
+- testes focados da devolução: `37 passed`; regressão de devolução, autorização,
+  cancelamento, venda e outbox/worker: `267 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- emissão da devolução e recuperações manuais/em lote ainda possuem identidade
+  comercial livre para efeitos de estoque e seguem pendentes de desenho único de
+  sessão, sem autoridade paralela.
