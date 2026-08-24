@@ -8,10 +8,12 @@ from types import SimpleNamespace
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from assistant_nabi import AssistantTurn, ToolResult, UnavailableAssistantService
+from commercial.application.pdv_session import PDVSession
 
 try:
-    from PySide6.QtWidgets import QApplication
+    from PySide6.QtWidgets import QApplication, QDockWidget
     from ui_qt.assistant_nabi import NabiAssistantPanel
+    from ui_qt.app import create_application
 except (ImportError, OSError) as error:
     QT_AVAILABLE = False
     QT_ERROR = str(error)
@@ -377,6 +379,72 @@ class NabiAssistantPanelTests(unittest.TestCase):
         before = panel.history.toPlainText()
         panel._nfe_entry_complete(20, None, ValueError("não mostrar"))
         self.assertEqual(panel.history.toPlainText(), before)
+
+
+@unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
+class NabiAssistantShellIntegrationTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.app = QApplication.instance() or QApplication([])
+
+    def test_startup_padrao_nao_cria_nem_tenta_criar_painel(self):
+        called = []
+
+        class Application:
+            new_session = staticmethod(PDVSession)
+
+        _qt, window = create_application(Application(), argv=[])
+        try:
+            self.assertEqual(window.findChildren(QDockWidget, "nabiAssistantDock"), [])
+            self.assertFalse(hasattr(window, "nabi_assistant_dock"))
+            self.assertEqual(called, [])
+        finally:
+            window.close()
+
+    def test_opt_in_cria_painel_lateral_removivel_com_servico_fornecido(self):
+        class Application:
+            new_session = staticmethod(PDVSession)
+
+        service = Service()
+        calls = []
+
+        def factory(parent):
+            calls.append(parent)
+            return NabiAssistantPanel(service, parent)
+
+        _qt, window = create_application(
+            Application(), argv=[], assistant_panel_factory=factory
+        )
+        try:
+            dock = window.nabi_assistant_dock
+            self.assertEqual(calls, [window])
+            self.assertIsInstance(dock.widget(), NabiAssistantPanel)
+            self.assertTrue(
+                dock.features() & QDockWidget.DockWidgetFeature.DockWidgetClosable
+            )
+            dock.close()
+            self.assertFalse(dock.isVisible())
+        finally:
+            window.close()
+
+    def test_factory_invalida_falha_sem_instalar_area_parcial(self):
+        class Application:
+            new_session = staticmethod(PDVSession)
+
+        with self.assertRaisesRegex(TypeError, "QWidget"):
+            create_application(
+                Application(), argv=[], assistant_panel_factory=lambda _parent: object()
+            )
+
+    def test_servico_e_factory_nao_podem_disputar_o_mesmo_dock(self):
+        class Application:
+            new_session = staticmethod(PDVSession)
+
+        with self.assertRaisesRegex(ValueError, "não ambos"):
+            create_application(
+                Application(), argv=[], assistant_service=Service(),
+                assistant_panel_factory=lambda parent: NabiAssistantPanel(Service(), parent),
+            )
 
 
 if __name__ == "__main__":

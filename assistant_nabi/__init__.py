@@ -18,7 +18,15 @@ from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapte
 from .read_tools import register_commercial_read_tools
 from .ui_tools import OPEN_PRODUCT_SEARCH, register_ui_intent_tools
 from .application import AssistantApplicationService, UnavailableAssistantService
+from .unavailable_provider import (
+    AssistantProviderUnavailableError,
+    UnavailableLanguageModelAdapter,
+)
 from .local_provider import LocalOpenAICompatibleModelAdapter
+from .composition import (
+    create_local_read_only_assistant_service,
+    create_unavailable_read_only_assistant_service,
+)
 from .bootstrap import create_draft_assistant, create_read_only_assistant
 from .activation import AuthenticatedAssistantActivation
 from .sale_drafts import SaleDraft, SaleDraftItem, SaleDraftItemRequest, SaleDraftService
@@ -73,6 +81,7 @@ __all__ = [
     "AssistantApplicationService",
     "AssistantTurn",
     "UnavailableAssistantService",
+    "AssistantProviderUnavailableError",
     "AdminAssistantAuditAdapter",
     "CapabilityLevel",
     "ParameterDefinition",
@@ -99,4 +108,7 @@ __all__ = [
     "create_draft_assistant",
     "verify_model_artifact",
     "verify_runtime_directory",
+    "UnavailableLanguageModelAdapter",
+    "create_local_read_only_assistant_service",
+    "create_unavailable_read_only_assistant_service",
 ]
