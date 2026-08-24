@@ -1060,7 +1060,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 campo.insert(0, valor)
             campos[chave] = campo
 
-        def concluir(event=None):
+        def concluir_configuracao(event=None):
             if campos["senha"].get() != campos["confirmacao"].get():
                 messagebox.showwarning("Configuração inicial", "As senhas não coincidem.", parent=janela)
                 campos["senha"].delete(0, "end"); campos["confirmacao"].delete(0, "end")
@@ -1079,13 +1079,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return "break"
 
         botao = ctk.CTkButton(
-            janela, text="Concluir configuração [Enter]", command=concluir,
+            janela, text="Concluir configuração [Enter]", command=concluir_configuracao,
             fg_color="#2ea043", height=42,
         )
         botao.pack(fill="x", padx=32, pady=22)
         janela.protocol("WM_DELETE_WINDOW", janela.destroy)
         campos["loja"].focus_set()
-        janela.bind("<Return>", concluir)
+        janela.bind("<Return>", concluir_configuracao)
         self.wait_window(janela)
         return resultado["ok"]
 
