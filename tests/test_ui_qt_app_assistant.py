@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from assistant_nabi import UnavailableAssistantService
+from assistant_nabi import AssistantTurn, ToolResult, UnavailableAssistantService
 
 try:
     from PySide6.QtWidgets import QApplication, QMainWindow
@@ -23,12 +23,17 @@ class FakeWindow(QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__()
         self.docks = []
+        self.product_search_terms = []
 
     def addDockWidget(self, area, dock):
         self.docks.append((area, dock))
 
     def load_assistant_draft(self, draft, authorization=None):
         return None
+
+    def open_assistant_product_search(self, term=""):
+        self.product_search_terms.append(term)
+        return True
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
@@ -92,6 +97,28 @@ class QtApplicationAssistantTests(unittest.TestCase):
         self.assertIs(panel._nfe_entry_service, nfe_entry)
         self.assertFalse(panel.prepare_nfe_entry_button.isHidden())
         self.assertFalse(panel.prepare_nfe_entry_button.isEnabled())
+        window.close()
+
+    def test_intencao_da_nabi_chega_a_porta_explicita_do_pdv(self):
+        class Service:
+            available = True
+
+        with (
+            patch.object(qt_app, "PDVWindow", FakeWindow),
+            patch.object(qt_app, "PDVViewModel", lambda application: application),
+        ):
+            _, window = qt_app.create_application(
+                object(), [], assistant_service=Service()
+            )
+        panel = window.nabi_assistant_dock.widget()
+        panel._generation = 7
+        panel._complete(7, AssistantTurn("Abrindo pesquisa.", (ToolResult(
+            "request-1",
+            "interface.abrir_pesquisa_produtos",
+            True,
+            {"action": "OPEN_PRODUCT_SEARCH", "term": "café"},
+        ),)))
+        self.assertEqual(window.product_search_terms, ["café"])
         window.close()
 
 
