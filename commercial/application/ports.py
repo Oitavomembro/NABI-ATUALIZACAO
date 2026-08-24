@@ -27,6 +27,7 @@ from .product_dto import (
     ProductDetails, ProductStockSummary, ProductUpdateCommand,
     StockAdjustmentCommand, StockMovementCommand, StockMovementSummary,
 )
+from .report_dto import ReportDocument, ReportIndicators, ReportOption, ReportQuery, ReportSummary
 
 
 @dataclass(frozen=True, slots=True)
@@ -232,3 +233,16 @@ class StockActionPort(Protocol):
 @runtime_checkable
 class StockEventPort(Protocol):
     def stock_event(self, event) -> None: ...
+
+
+@runtime_checkable
+class ReportReadPort(Protocol):
+    """Relatórios oficiais sem expor conexão, SQL ou objetos do serviço Legacy."""
+
+    def available_reports(self) -> tuple[ReportOption, ...]: ...
+    def generate(self, query: ReportQuery, *, actor: str) -> ReportDocument: ...
+    def summary(self, document: ReportDocument) -> ReportSummary: ...
+    def indicators(self, start_date: str, end_date: str) -> ReportIndicators: ...
+    def export(
+        self, document: ReportDocument, fmt: str, destination: str, *, actor: str
+    ) -> str: ...
