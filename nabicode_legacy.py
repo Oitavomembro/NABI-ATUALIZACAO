@@ -12032,7 +12032,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if queue.get("id") and queue.get("status") == "RESPOSTA_DESCONHECIDA":
                     self.fiscal_service.reconcile_unknown(str(queue["id"]))
                 elif queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
-                    self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
+                    self.fiscal_service.retry_transmission(str(queue["id"]))
                 else:
                     self.fiscal_sale_service.enqueue_pending(
                         sale_id=int(row["sale_id"]), actor=self._usuario_financeiro()

@@ -1788,7 +1788,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.service.cancel_transmission(item["id"], actor="admin", reason="Venda cancelada")
 
         with self.assertRaisesRegex(ValueError, "cancelada"):
-            self.service.retry_transmission(item["id"], actor="admin")
+            self.service.retry_transmission(item["id"])
 
     def test_fila_autorizacao_bloqueia_resposta_de_outra_chave(self):
         self.service.save_config({
@@ -1915,7 +1915,7 @@ class FiscalServiceTests(unittest.TestCase):
             self.service.transmit = original
         self.assertEqual(unknown["status"], "RESPOSTA_DESCONHECIDA")
         with self.assertRaisesRegex(ValueError, "consultado"):
-            self.service.retry_transmission(item["id"], actor="gerente")
+            self.service.retry_transmission(item["id"])
         reconciled = self.service.reconcile_unknown(item["id"])
         self.assertEqual(reconciled["operation"], "consulta")
         self.assertEqual(reconciled["reconciliation_for"], "autorizacao")
@@ -2025,9 +2025,25 @@ class FiscalServiceTests(unittest.TestCase):
         finally:
             self.service.transmit = original
         self.assertEqual(failed["status"], "FALHA")
-        reopened = self.service.retry_transmission(item["id"], actor="gerente")
+        reopened = self.service.retry_transmission(item["id"])
         self.assertEqual(reopened["status"], "PENDENTE")
         self.assertEqual(reopened["retried_by"], "gerente")
+
+    def test_reenvio_manual_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.retry_transmission("fila", actor="forjado")
+
+    def test_reenvio_manual_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-reenvio",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.retry_transmission("fila")
+        listed.assert_not_called()
 
 
 

@@ -3446,7 +3446,8 @@ class FiscalService:
         finally:
             conn.close()
 
-    def retry_transmission(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+    def retry_transmission(self, queue_id: str) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = None
         for record in rows:
