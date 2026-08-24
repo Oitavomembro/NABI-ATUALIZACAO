@@ -1384,3 +1384,27 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - o MOC 7.0, Anexo III, também exige transmissão das NF-e em contingência
   imediatamente após cessar a falha, observando a legislação. Modelo 55 não deve
   reutilizar automaticamente a regra do modelo 65.
+
+### Checkpoint fiscal offline — histórico técnico das regras
+
+- implementação: `b177fdb` — `feat: versiona historico tecnico das regras fiscais`;
+- schema `20 → 21` usa o backup pré-migração existente e cria
+  `fiscal_tax_rule_revisions` append-only, com revisão única por regra, payload
+  canônico, hash encadeado, ator técnico, motivo e data/hora;
+- regras antigas recebem backfill idempotente `LEGACY_SEM_TRILHA` e
+  `NAO_INFORMADO`, sem inventar autor ou aprovação;
+- criação, alteração e desativação gravam a regra e a revisão na mesma
+  transação; falha no journal reverte tudo; concorrência não duplica revisão;
+- triggers recusam UPDATE/DELETE normal no histórico e a verificação detecta
+  adulteração parcial da cadeia;
+- IDs e API existentes foram preservados; backup e atualizador Fichário foram
+  alinhados ao schema 21, com teste que impede retorno acidental ao schema 20;
+- limite probatório explícito: SHA-256 encadeado comprova integridade técnica
+  local, não identidade jurídica, assinatura ou não repúdio contra administrador
+  com controle total do banco/código;
+- validações: `37 passed` no conjunto mínimo schema/Fichário, `148 passed` e
+  `10 subtests` na regressão fiscal afetada; suíte completa final:
+  `1.898 passed`, `1 skipped`, `412 subtests passed`, zero falhas;
+- nenhuma alíquota, CST/CSOSN, certificado, produção ou comunicação SEFAZ foi
+  alterada. O próximo passo é ligar `actor` à sessão autenticada real sem
+  confundir operador do sistema com responsável contábil declarado.
