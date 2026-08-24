@@ -1074,6 +1074,26 @@ Não confundir automação inteligente com autoridade. A Nabi poderá planejar, 
   adicionar limitação persistente de tentativas; completar auditoria das
   confirmações da Nabi.
 
+#### Extensão ao Legacy oficial
+
+- implementação: `e95e201` — `feat: exige primeiro acesso seguro no Legacy`;
+- ajuste de regressão textual, sem mudança funcional: `ab7e2cc`;
+- instalação nova não cria mais o administrador padrão: abre configuração
+  restrita, grava empresa/CNPJ/e-mail e primeiro administrador atomicamente e
+  exige autenticação real antes de construir/liberar os módulos e iniciar o
+  worker fiscal;
+- inatividade encerra a sessão configurada e exige nova autenticação; autorização
+  sem sessão abre o login e falha fechada quando o operador cancela;
+- compatibilidade automática permanece temporariamente somente para bases
+  anteriores ao marcador `configuracao_inicial_concluida_v1`, evitando bloquear
+  instalações existentes durante uma atualização; sua migração será uma etapa
+  assistida separada;
+- FICHÁRIO não foi alterado e mantém sua regra exclusiva;
+- testes focados finais: `37 passed`; regressão integral repetida:
+  `2102 passed`, `1 skipped`, `444 subtests passed`, zero falhas e um aviso
+  externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
