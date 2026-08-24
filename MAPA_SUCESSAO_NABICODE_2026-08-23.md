@@ -2325,3 +2325,23 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   passed`; `compileall` e `git diff --check` aprovados;
 - nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
   foi usado ou alterado. Produção fiscal permanece bloqueada.
+
+### Auditoria fiscal de autoria — enfileiramento técnico legado
+
+- implementação: `114e272` — `fix: autentica enfileiramento fiscal`;
+- a API legada `FiscalService.enqueue_transmission`, ainda coberta para
+  compatibilidade e testes, deixou de aceitar ator externo e exige sessão ativa
+  com `fiscal/transmit` antes de validar XML ou ler/gravar a fila;
+- o ator persistido no item é sempre o operador autenticado. O worker continua
+  consumindo essa identidade capturada e não depende de sessão viva;
+- deduplicação por chave, contingência, resposta desconhecida, tentativas,
+  consulta de recibo, reenvio manual e bloqueio de produção foram preservados;
+- testes focados de fila/reconciliação/contingência: `30 passed`, `122
+  deselected`; regressão fiscal, outbox/worker, venda, Central e segurança: `224
+  passed`, `10 subtests passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- `store_document`, `register_event` e `register_rejection` conservam ator como
+  primitivas internas porque recebem a identidade já capturada por operação ou
+  worker. Torná-las portas públicas de sessão quebraria a autoria assíncrona;
+  usos externos futuros devem passar por fachadas autenticadas.
