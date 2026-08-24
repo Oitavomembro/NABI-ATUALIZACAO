@@ -16,9 +16,17 @@ class CurrentSessionPermissionAdapter:
         session = getattr(self._security, "session", None)
         if session is None or self._security.is_expired():
             raise PermissionError("Não existe sessão autenticada ativa para a Nabi.")
-        user = session.user
-        if not bool(getattr(user, "active", False)):
+        lookup = getattr(self._security, "get_user", None)
+        try:
+            user = lookup(session.user.username) if callable(lookup) else session.user
+        except (ValueError, KeyError):
+            user = None
+        if user is None or not bool(getattr(user, "active", False)):
+            logout = getattr(self._security, "logout", None)
+            if callable(logout):
+                logout("IA_NABI_USUARIO_REVOGADO")
             raise PermissionError("O usuário atual está inativo.")
+        session.user = user
         return AssistantActor(user.username, user.profile, self._session_id)
 
     def allows(self, actor: AssistantActor, module: str, action: str) -> bool:

@@ -88,6 +88,91 @@ class SecurityService:
         }
         self._save(state)
 
+    def has_users(self) -> bool:
+        """Informa se a instalação já possui uma identidade administrativa."""
+
+        return bool(self._load()["users"])
+
+    def complete_initial_setup(
+        self,
+        *,
+        username: str,
+        display_name: str,
+        password: str,
+        store_name: str,
+        document: str = "",
+        email: str = "",
+    ) -> SecurityUser:
+        """Consome o primeiro acesso e cria o administrador sem sessão implícita.
+
+        A verificação e a gravação usam a mesma transação para que duas
+        instâncias concorrentes não consigam concluir o primeiro acesso.
+        """
+
+        username = self._normalize_username(username)
+        display_name = str(display_name or "").strip() or username
+        store_name = str(store_name or "").strip()
+        document = "".join(character for character in str(document or "") if character.isdigit())
+        email = str(email or "").strip()
+        if not store_name:
+            raise ValueError("Informe o nome da empresa ou loja.")
+        if len(str(password or "")) < 8:
+            raise ValueError("A senha inicial deve ter ao menos 8 caracteres.")
+        if document and len(document) != 14:
+            raise ValueError("O CNPJ deve possuir 14 dígitos ou ficar vazio.")
+        if email and ("@" not in email or email.startswith("@") or email.endswith("@")):
+            raise ValueError("Informe um e-mail válido ou deixe o campo vazio.")
+
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.CONFIG_KEY,)
+            ).fetchone()
+            raw = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            loaded = json.loads(raw or "{}")
+            state = {
+                "users": dict(loaded.get("users") or {}),
+                "profiles": dict(loaded.get("profiles") or {}),
+            }
+            if state["users"]:
+                raise PermissionError("A configuração inicial já foi concluída.")
+            for name, permissions in DEFAULT_PERMISSIONS.items():
+                state["profiles"].setdefault(name, permissions)
+            state["users"][username] = {
+                "display_name": display_name,
+                "profile": "ADMIN",
+                "active": True,
+                "password": self.hash_password(password),
+            }
+            values = {
+                self.CONFIG_KEY: json.dumps(state, ensure_ascii=False, sort_keys=True),
+                "nome_loja": store_name,
+                "cnpj": document,
+                "email": email,
+                "configuracao_inicial_concluida_v1": "1",
+            }
+            connection.executemany(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                tuple(values.items()),
+            )
+            connection.execute(
+                "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    datetime.now().strftime("%d/%m/%Y %H:%M:%S"), username,
+                    "SEGURANCA", "CONFIGURACAO_INICIAL", username,
+                    "Primeiro administrador e identificação básica configurados.", "SUCESSO",
+                ),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        self.session = None
+        return self.get_user(username)
+
     def create_user(self, username: str, display_name: str, password: str, profile: str, *, active: bool = True) -> SecurityUser:
         username = self._normalize_username(username)
         profile = str(profile).strip().upper()
@@ -174,7 +259,20 @@ class SecurityService:
     def require(self, module: str, action: str = "view") -> bool:
         if not self.session or self.is_expired():
             return False
-        state = self._load(); profile = state["profiles"].get(self.session.user.profile, {})
+        state = self._load()
+        persisted = state["users"].get(self.session.user.username)
+        if not persisted or not bool(persisted.get("active")):
+            self.logout("SESSAO_REVOGADA")
+            return False
+        current_user = SecurityUser(
+            self.session.user.username,
+            persisted.get("display_name") or self.session.user.username,
+            persisted.get("profile") or "OPERADOR",
+            True,
+        )
+        if current_user != self.session.user:
+            self.session.user = current_user
+        profile = state["profiles"].get(current_user.profile, {})
         if "*" in profile and "*" in profile["*"]:
             return True
         actions = profile.get(str(module), [])
