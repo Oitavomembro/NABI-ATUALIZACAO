@@ -2879,3 +2879,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   pensamento, execução, confirmação e erro. O painel atual continua sendo
   protótipo funcional até esse checkpoint; não copiar personagem, relógio,
   voz ou arte de terceiros.
+
+### Harmonização visual isolada — Clientes e Produtos Qt
+
+- branch/worktree: `codex/clientes-produtos-qt-visual`, derivada exatamente de
+  `ead18da9d6b5217481db1ef8050e05ac18b207e0`, sem alterar a composição;
+- implementação: `f2cdef1` — `style: harmoniza clientes e produtos no Qt`;
+- Clientes e Produtos adotam metal grafite/preto, trilhas finas azul/ciano,
+  foco visível, tabelas alternadas e colunas responsivas; vermelho permanece
+  reservado à exclusão segura e aos alertas já existentes;
+- ficha e `customer_id` real continuam sendo a identidade do cliente; nome,
+  preço e estoque ganharam prioridade visual em Produtos, preservando
+  `product_id` real, busca, paginação, permissões e serviços oficiais;
+- a faixa fixa do item selecionado mostra os dados operacionais principais sem
+  consultar banco ou introduzir regra do FICHÁRIO;
+- cadastro, edição, ficha, exclusão segura de cliente, movimentação e histórico
+  continuam com os mesmos contratos e atalhos; Enter executa uma ação,
+  Shift+Enter retorna, Esc fecha a janela atual e auto-repeat é consumido;
+- validação direta: `19 passed`; regressão ampliada de Clientes, Produtos,
+  Estoque, pesquisa e PDV: `195 passed`, `7 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- pendência coordenada: os cartões laterais do Início já podem abrir
+  `CustomerManagementDialog` com `customer_provider`/`filter_title`, mas o
+  wiring de cada cartão ao filtro equivalente do FICHÁRIO pertence ao shell e
+  não foi alterado neste checkpoint;
+- lacuna comprovada: a porta administrativa atual de Produtos expõe consulta,
+  cadastro, edição e movimentos, mas não exclusão/inativação. Não foi criado
+  botão fictício nem acesso direto ao banco; essa ação exige checkpoint próprio
+  de serviço, permissão e política de vínculos antes da interface;
+- homologação visual/manual no Windows permanece necessária. IA Nabi,
+  Fiscal/SEFAZ, FICHÁRIO, licenciamento e banco real não foram alterados.
