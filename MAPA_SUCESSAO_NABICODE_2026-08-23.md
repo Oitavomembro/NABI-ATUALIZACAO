@@ -1536,6 +1536,34 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendência física: homologar com usuário real autorizado e confirmar visualmente
   revisão, recusa, ficha concorrente e repetição após falha simulada no Windows.
 
+### Checkpoint IA Nabi — recebimento assistido de clientes
+
+- implementação: `52d22dc` — `feat: adiciona recebimento assistido de clientes`;
+- `clientes.preparar_recebimento` aceita exclusivamente `customer_id` real,
+  valor decimal textual, forma fechada, data ISO e observação limitada;
+- a preparação consulta o serviço oficial de Clientes e mostra ficha, nome,
+  saldo anterior, valor recebido e saldo restante; não grava pagamento, parcela,
+  movimento, caixa ou financeiro;
+- valor zero, valor acima do saldo, forma desconhecida, data inválida e cliente
+  sem dívida são recusados antes da confirmação;
+- a execução exige `financeiro/pay`, usuário e sessão reais, confirmação reforçada
+  temporária, fingerprint exato e autorização opaca de uso único;
+- imediatamente antes da mutação, o saldo é consultado novamente; qualquer
+  mudança invalida o rascunho e exige nova revisão;
+- o fluxo usa `CommercialActionService`, `NabiCodeCustomerReceiptGateway` e
+  `FinanceiroService`; a IA não recebe banco, repositório nem serviço fiscal;
+- `assistant_operation_journal` registra `CUSTOMER_RECEIPT` na mesma transação;
+  repetição da mesma chave/conteúdo devolve o movimento original sem nova baixa
+  nem novo evento, conteúdo divergente é recusado e falha reverte diário e saldo;
+- painel Qt renderiza os valores determinísticos antes da revisão e informa o
+  movimento somente depois do commit oficial;
+- validação focada: `60 passed`; regressão IA/recebimentos: `143 passed`, `38
+  subtests passed`; compatibilidade Commercial/Fichário: `25 passed`;
+  regressão conjunta final com Dashboard: `172 passed`, `38 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma alteração Fiscal/SEFAZ e nenhum push; homologação manual com usuário e
+  dados TESTE permanece necessária para foco, recibo/impressão e falha simulada.
+
 ### Checkpoint isolado — Relatórios comerciais Qt
 
 - implementação de origem: `2c6b5b7` — `feat: adiciona relatorios comerciais no Qt`;
