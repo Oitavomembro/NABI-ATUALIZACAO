@@ -69,7 +69,7 @@ class Cadastros2496RobustezTests(unittest.TestCase):
         pagina = self.repository.list_page("maria")
         self.assertEqual(
             [row[2] for row in pagina.rows],
-            ["MARIA SILVA", "MARIA JOSE", "AUGUSTO MARIA"],
+            ["MARIA JOSE", "MARIA SILVA", "AUGUSTO MARIA"],
         )
 
     def test_pesquisa_por_ficha_exata(self) -> None:

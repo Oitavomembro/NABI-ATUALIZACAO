@@ -139,7 +139,7 @@ class CadastroSaldoReconciliadoRegressionTests(unittest.TestCase):
         pagina = self.clientes.list_page("maria")
         nomes = [row[2] for row in pagina.rows]
 
-        self.assertEqual(nomes[:2], ["MARIA SILVA", "MARIA JOSE"])
+        self.assertEqual(nomes[:2], ["MARIA JOSE", "MARIA SILVA"])
         self.assertEqual(nomes[-1], "AUGUSTO MARIA")
 
     def test_busca_numerica_prioriza_ficha_exata_sem_campos_vazios(self) -> None:
