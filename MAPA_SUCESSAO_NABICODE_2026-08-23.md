@@ -2821,3 +2821,23 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   chaves permanentes, revisão jurídica e dossiê/homologação oficial SEFAZ Bahia.
   Não há outro checkpoint automatizável de alto valor identificado sem invadir
   as trilhas reservadas de IA/Fichário ou inventar evidência fiscal.
+
+### Correção documental — liberação sem senha mestra
+
+- implementação: `11d330a` — `docs: remove orientacao de senha mestra`;
+- o guia vigente de liberação Gestão deixou de recomendar login opcional ou
+  credencial universal do fabricante e agora exige sessão autenticada,
+  credenciais individuais do cliente e primeiro acesso/migração assistidos;
+- `ESTADO_ATUAL.md` e as auditorias 2.4.39/2.4.40 receberam aviso explícito de
+  que são registros históricos e que suas menções antigas à senha mestra não
+  representam o contrato atual;
+- teste documental impede o retorno das orientações obsoletas; validação:
+  `23 passed`; auditoria oficial do build Windows: `ok`, versão `2.5.1`,
+  distribuição `NabiCode_v2_5_1`; `git diff --check` aprovado;
+- endurecimento complementar: `266f1ee` — `fix: serializa configuracao
+  inicial`; `complete_initial_setup` agora executa `BEGIN IMMEDIATE` antes de
+  ler o estado, cumprindo o contrato de impedir duas conclusões concorrentes;
+  regressão de segurança/startup: `46 passed`; `compileall` e diff-check
+  aprovados;
+- nenhum instalador ou pacote foi gerado. A validação física em máquina limpa e
+  a homologação manual continuam obrigatórias antes de qualquer release.
