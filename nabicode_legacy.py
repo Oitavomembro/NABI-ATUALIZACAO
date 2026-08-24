@@ -810,6 +810,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fiscal_cancellation_service = FiscalCancellationService(
             self.fiscal_service,
             cancel_commercial_sale=cancel_commercial_after_fiscal,
+            actor_provider=self._ator_fiscal_autenticado,
         )
         self.fiscal_outbox_worker.result_handler = (
             self.fiscal_cancellation_service.handle_worker_result
@@ -7588,11 +7589,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if password is None:
             return
         sale_id = int(venda["id"])
-        actor = self._usuario_financeiro()
-
         try:
             queued = self.fiscal_cancellation_service.request(
-                sale_id=sale_id, password=password, actor=actor,
+                sale_id=sale_id, password=password,
                 justification=justification, no_circulation_confirmed=True,
                 user_has_permission=True,
             )

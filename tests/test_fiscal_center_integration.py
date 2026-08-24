@@ -20,6 +20,19 @@ def test_central_fiscal_exibe_vendas_pendencias_e_reenvio():
     assert "queue_ids=queue_ids" in block
 
 
+def test_cancelamento_pdv_autorizado_deriva_actor_da_sessao_no_servico():
+    composition = SOURCE.split(
+        "self.fiscal_cancellation_service = FiscalCancellationService", 1
+    )[1].split("self.fiscal_outbox_worker.on_result", 1)[0]
+    block = SOURCE.split(
+        "def _cancelar_venda_fiscal_autorizada_pdv", 1
+    )[1].split("def cancelar_venda_pdv", 1)[0]
+
+    assert "actor_provider=self._ator_fiscal_autenticado" in composition
+    assert "fiscal_cancellation_service.request(" in block
+    assert "actor=" not in block
+
+
 def test_central_fiscal_reune_entradas_saidas_e_preserva_compras_operacionais():
     block = SOURCE.split("def abrir_central_fiscal", 1)[1].split("def fazer_backup_config_agora", 1)[0]
     assert "Central Fiscal — entradas, saídas e documentos" in block

@@ -42,11 +42,32 @@ class FiscalCancellationService:
         fiscal_service: Any,
         *,
         cancel_commercial_sale: Callable[[int, str], None] | None = None,
+        actor_provider: Callable[[], str | None] | None = None,
     ) -> None:
         self.fiscal_service = fiscal_service
         self.connection_factory = fiscal_service.connection_factory
         self.outbox = FiscalOutboxService(self.connection_factory)
         self.cancel_commercial_sale = cancel_commercial_sale
+        self._actor_provider = actor_provider
+
+    def _authenticated_actor(self) -> str:
+        if self._actor_provider is None:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para solicitar cancelamento fiscal."
+            )
+        try:
+            actor = str(self._actor_provider() or "").strip()
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                "Não foi possível confirmar a sessão autenticada para o cancelamento fiscal."
+            ) from exc
+        if not actor:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para solicitar cancelamento fiscal."
+            )
+        return actor
 
     @staticmethod
     def _aware(value: Any) -> datetime:
@@ -202,12 +223,12 @@ class FiscalCancellationService:
         *,
         sale_id: int,
         password: str,
-        actor: str,
         justification: str,
         no_circulation_confirmed: bool,
         user_has_permission: bool,
         now: datetime | None = None,
     ) -> dict[str, Any]:
+        actor = self._authenticated_actor()
         reason = str(justification or "").strip()
         if not 15 <= len(reason) <= 255:
             raise ValueError("Justificativa deve possuir entre 15 e 255 caracteres.")
@@ -242,9 +263,9 @@ class FiscalCancellationService:
             "event_type": "CANCELAMENTO", "event_sequence": 1,
             "event_id": event_id, "justification": reason,
             "no_circulation_confirmed": True,
-            "no_circulation_confirmed_by": str(actor or "Sistema"),
+            "no_circulation_confirmed_by": actor,
             "no_circulation_confirmed_at": timestamp,
-            "requested_by": str(actor or "Sistema"), "requested_at": timestamp,
+            "requested_by": actor, "requested_at": timestamp,
             "authorized_at": eligible["authorized_at"],
             "authorization_protocol": str(eligible["protocol"]),
             "deadline_at": eligible["deadline_at"],
@@ -268,7 +289,7 @@ class FiscalCancellationService:
                 operation="evento", model=str(eligible["model"]), reservation_id="",
                 xml_b64=base64.b64encode(envelope).decode("ascii"),
                 original_xml_b64=base64.b64encode(envelope).decode("ascii"),
-                actor=str(actor or "Sistema"), max_attempts=1,
+                actor=actor, max_attempts=1,
                 legacy_id=f"cancelamento:{key}:1", created_at=timestamp,
                 metadata=metadata,
             )
