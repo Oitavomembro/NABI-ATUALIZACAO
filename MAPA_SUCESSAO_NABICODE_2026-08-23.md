@@ -2309,6 +2309,17 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   passed`; `compileall` e `git diff --check` aprovados;
 - nenhum push foi realizado.
 
+### Segurança — limitação de confirmações gerenciais
+
+- implementação no commit `c91d88c`, branch `codex/seguranca-primeiro-acesso`;
+- confirmações por senha de administrador/gerente agora compartilham limitação
+  persistente: cinco falhas bloqueiam novas tentativas por 60 segundos, inclusive
+  em outra instância ou após reabrir a interface;
+- durante o bloqueio, até uma senha correta é recusada; sucesso anterior ao
+  limite limpa a contagem; falha e bloqueio ficam registrados na auditoria;
+- validação focada: `32 passed`; `compileall` e `git diff --check` aprovados;
+- nenhum push foi realizado.
+
 ### Segurança — política de senha para usuários
 
 - implementação no commit `7eaa112`, branch `codex/seguranca-primeiro-acesso`;

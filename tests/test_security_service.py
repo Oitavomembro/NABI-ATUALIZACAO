@@ -43,6 +43,19 @@ class SecurityServiceTests(unittest.TestCase):
         self.assertTrue(self.service.confirm_manager_password("senha456"))
         self.assertFalse(self.service.confirm_manager_password("errada"))
 
+    def test_cinco_confirmacoes_gerenciais_invalidas_bloqueiam_outra_instancia(self):
+        self.service.create_user("gerente", "Gerente", "senha456", "GERENTE")
+        for _ in range(5):
+            self.assertFalse(self.service.confirm_manager_password("errada"))
+        other = SecurityService(self.factory)
+        self.assertFalse(other.confirm_manager_password("senha456"))
+        connection = self.factory()
+        details = [row[0] for row in connection.execute(
+            "SELECT detalhes FROM log_acesso_admin ORDER BY id DESC LIMIT 2"
+        )]
+        connection.close()
+        self.assertTrue(any("CONFIRMACAO_GERENTE_BLOQUEADA" in item for item in details))
+
     def test_desativacao_bloqueia_login(self):
         self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
         self.service.set_user_active("caixa", False)

@@ -46,6 +46,7 @@ class SecurityService:
     INITIAL_SETUP_KEY = "configuracao_inicial_concluida_v1"
     MAX_LOGIN_FAILURES = 5
     LOGIN_COOLDOWN_SECONDS = 60
+    MANAGER_CONFIRMATION_THROTTLE_ID = "__confirmacao_gerencial__"
 
     def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int = 15) -> None:
         self.connection_factory = connection_factory
@@ -400,12 +401,18 @@ class SecurityService:
         return "*" in actions or str(action) in actions
 
     def confirm_manager_password(self, password: str) -> bool:
+        throttle_id = self.MANAGER_CONFIRMATION_THROTTLE_ID
+        if self._login_is_blocked(throttle_id):
+            self._log_login("", False, "CONFIRMACAO_GERENTE_BLOQUEADA")
+            return False
         state = self._load()
         for username, data in state["users"].items():
             if data.get("active") and data.get("profile") in {"ADMIN", "GERENTE"} and self.verify_password(password, data.get("password", {})):
                 self._log_login(username, True, "CONFIRMACAO_GERENTE")
+                self._record_login_attempt(throttle_id, True)
                 return True
         self._log_login("", False, "CONFIRMACAO_GERENTE")
+        self._record_login_attempt(throttle_id, False)
         return False
 
 
