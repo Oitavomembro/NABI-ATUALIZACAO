@@ -1259,3 +1259,31 @@ importação no banco de produção antes da aprovação visual e de um backup m
   testes físicos de reinstalação e atualização no Windows;
 - este requisito está planejado, mas ainda não foi declarado concluído nem deve
   ser confundido com a geração atual do EXE de homologação.
+
+### Checkpoint FICHÁRIO — atualização assinada R20 e instalador final
+
+- implementação inicial: `78740e1` — porta de atualização Ed25519, preparação,
+  comprovante de estado, aplicação externa e recuperação;
+- build visível: `a8d7af2` — revisão `20`, data e hora do build centralizadas no
+  rodapé e preservadas também em Informações;
+- endurecimento: `4fbeeff` — helper elevado pelo UAC, instalação derivada do
+  próprio executável, estado e caminhos confinados, pacote/assinatura/hash
+  revalidados, staging verificado e rollback protegido dentro da instalação;
+- teste real em cópia: pacote assinado atualizou `2.5.1 R19` para `2.5.1 R20`,
+  alterou o build de `23/08/2026 21:09:51` para `23/08/2026 21:46:27`, aplicou
+  `1.208` arquivos e preservou o cliente marcador no banco;
+- chave privada Ed25519 usada apenas para homologação foi apagada depois da
+  assinatura; o artefato contém somente catálogo público, Qt/Tcl/Tk e nenhuma
+  chave privada ou banco de cliente;
+- validação automatizada do endurecimento: `27 passed`, além dos `33 passed`
+  obtidos na auditoria focada; `compileall` e `git diff --check` aprovados;
+- atualização homologada:
+  `build_output/fichario/updates/NabiCode_Fichario_ATUALIZACAO_2_5_1_R20_HOMOLOGACAO.zip`,
+  SHA-256 `A784E61BBD6AB88F2BD61CD65CB03978085F4437FBD02E762BCED70158745B2D`;
+- instalador final:
+  `build_output/fichario/installer/NabiCode_Fichario_2.5.1_Setup_Offline.exe`,
+  `120.311.926` bytes, SHA-256
+  `0AF44032F21D3BEB2021964D788FE6449206057D46B6A762257C8DC2229ECF5A`;
+- pendência física: confirmar a elevação UAC e a atualização dentro de uma
+  instalação real em `Program Files`; o motor e o roundtrip em cópia gravável
+  estão comprovados. Nenhum push foi realizado.
