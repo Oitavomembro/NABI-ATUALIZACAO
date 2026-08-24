@@ -167,7 +167,9 @@ Legenda:
 - [x] peso e runtime locais foram baixados somente no perfil TESTE, verificados por origem, licença, revisão e SHA-256 e submetidos à homologação física inicial; login Qt real, avaliações prolongadas e decisão de empacotamento continuam pendentes;
 - [~] Fase 2: núcleo imutável `1d9b092`, exposição tipada `e775982`, confirmação vinculada `0eb076c` e transferência segura ao PDV `76f5634` implementados; homologação manual do fluxo completo e critérios objetivos de sugestão por estoque/valor continuam pendentes;
 - [~] Fase 3: recebimento de compra e entrada local de NF-e com vínculo exato possuem execução confirmada e idempotente; expansão para outros módulos permanece pendente;
-- [ ] cobertura progressiva de Clientes, Estoque, Caixa, Financeiro e Relatórios;
+- [~] cobertura progressiva: cadastro assistido de Clientes implementado; consultas
+  de Estoque, Caixa e Financeiro já existem; ações mutáveis restantes e Relatórios
+  continuam condicionados a portas oficiais, confirmação e idempotência próprias;
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
 - [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
@@ -1507,6 +1509,32 @@ importação no banco de produção antes da aprovação visual e de um backup m
   corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
   permanente de atualização por cerimônia segura para permitir R21→R22 sem
   reconstruir instalador. Nenhum bypass de assinatura foi introduzido.
+
+### Checkpoint IA Nabi — cadastro assistido de clientes
+
+- implementação: `88ece83` — `feat: adiciona cadastro assistido de clientes na Nabi`;
+- a ferramenta tipada `clientes.preparar_cadastro` apenas cria rascunho em
+  memória, com ficha explícita, dados revisáveis e SHA-256 canônico; nenhuma
+  gravação ocorre durante a conversa ou preparação;
+- execução exige permissão real `clientes/create`, revisão, confirmação
+  reforçada temporária vinculada a usuário, sessão, rascunho e fingerprint, e
+  autorização opaca de uso único;
+- a mutação usa `CustomerApplicationService` e `CustomerRegistrationService`;
+  o modelo não recebe repositório, conexão ou acesso direto ao banco;
+- `assistant_operation_journal` protege a criação na mesma transação: repetição
+  da mesma chave e conteúdo devolve o mesmo cliente, conteúdo divergente é
+  recusado e rollback não deixa cliente nem diário pendente;
+- ficha concorrente é revalidada antes da gravação; código omitido recebe valor
+  determinístico ligado à operação, sem depender do relógio;
+- o painel mostra ficha, nome, documentos, contato, endereço e limite para
+  revisão e informa o identificador somente depois do commit oficial;
+- validação: `138 passed`, `43 subtests passed` na regressão IA/Clientes e `47
+  passed`, `5 subtests passed` na composição/painel/idempotência; `compileall` e
+  `git diff --check` aprovados; após reunir Produtos/Estoque e o hub, a regressão
+  conjunta final aprovou `161 passed` e `43 subtests passed`;
+- nenhuma importação Fiscal/SEFAZ foi adicionada; nenhum push foi realizado;
+- pendência física: homologar com usuário real autorizado e confirmar visualmente
+  revisão, recusa, ficha concorrente e repetição após falha simulada no Windows.
 
 ### Checkpoint isolado — Relatórios comerciais Qt
 
