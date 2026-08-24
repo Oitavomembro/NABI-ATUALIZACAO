@@ -5,7 +5,7 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
 from PySide6.QtCore import QTimer
 
 from assistant_nabi import (
@@ -35,10 +35,22 @@ from repositories.system_repository import SystemRepository
 from repositories import NFeImportRepository
 from services import NFeImportService
 from ui_qt.app import run
+from ui_qt.administration import (
+    AdministrativeModuleHub, ApplicationLoginDialog, build_administrative_modules,
+)
 from licensing.gate import Capability
 from licensing.runtime import evaluate_runtime_gate, startup_block_message
 
 SCHEMA_VERSION = 21
+
+
+def _administrative_hub_factory(security, modules):
+    def create(parent):
+        if security.session is None or security.is_expired():
+            if ApplicationLoginDialog(security, parent).exec() != QDialog.DialogCode.Accepted:
+                raise PermissionError("Autenticação cancelada. Os módulos permanecem bloqueados.")
+        return AdministrativeModuleHub(security, modules, parent)
+    return create
 
 
 def _create_assistant_activation(
@@ -203,6 +215,18 @@ def main(argv=None) -> int:
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
         _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
+        system = SystemRepository(database.connect)
+        module_security = SecurityService(database.connect)
+        module_security.bootstrap_admin(system.get_config("admin_senha_hash"))
+        if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
+            return 5
+        module_actions = build_administrative_modules(
+            container, database, profile, module_security,
+            terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
+        )
+        administrative_hub_factory = _administrative_hub_factory(
+            module_security, module_actions
+        )
         assistant_service, assistant_activation, nfe_entry_service = (
             _create_licensed_assistant(database, profile, container, license_gate)
         )
@@ -253,6 +277,7 @@ def main(argv=None) -> int:
             assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,
+            administrative_hub_factory=administrative_hub_factory,
         )
     except Exception as error:
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")
