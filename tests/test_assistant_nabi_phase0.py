@@ -17,6 +17,7 @@ from assistant_nabi import (
     ToolKind,
     ToolRequest,
     ToolSchema,
+    UnavailableLanguageModelAdapter,
     register_commercial_read_tools,
 )
 from commercial.application.dto import CustomerRecord, ProductRecord
@@ -441,6 +442,34 @@ class NabiApplicationServiceTests(unittest.TestCase):
         turn = service.ask("ajude")
         self.assertTrue(turn.safe_failure)
         self.assertIn("NabiCode continua funcionando", turn.message)
+
+    def test_provider_inerte_sem_modelo_falha_seguro(self):
+        service = AssistantApplicationService(
+            model=UnavailableLanguageModelAdapter(),
+            registry=self.registry,
+            permissions=self.permissions,
+        )
+        turn = service.ask("ajude")
+        self.assertTrue(turn.safe_failure)
+        self.assertEqual(self.queries.calls, [])
+        self.assertEqual(self.audit.events, [])
+
+    def test_ausencia_de_sessao_bloqueia_antes_de_consultar_modelo(self):
+        class NoSessionPermissions(Permissions):
+            def current_actor(self):
+                raise PermissionError("sem sessão")
+
+        model = Model(ModelReply("não deve ser chamado"))
+        permissions = NoSessionPermissions()
+        registry = ReadOnlyToolRegistry(permissions=permissions, audit=self.audit)
+        register_commercial_read_tools(registry, self.queries)
+        service = AssistantApplicationService(
+            model=model, registry=registry, permissions=permissions
+        )
+        turn = service.ask("procure café")
+        self.assertTrue(turn.safe_failure)
+        self.assertEqual(model.calls, [])
+        self.assertEqual(self.queries.calls, [])
 
     def test_resposta_sem_contrato_e_mensagem_invalida_falham_seguro(self):
         service, _model = self.service({"message": "texto livre"})
