@@ -25,3 +25,18 @@ def test_matriz_nao_inventa_aliquota_e_exige_senha_para_alterar():
     assert "Código de benefício fiscal aprovado (8 ou 10 caracteres" in block
     assert 'f"cBenef {rule.benefit_code or \'-\'}' in block
     assert "Produção continua bloqueada" in block
+
+
+def test_actor_tecnico_vem_da_sessao_e_nao_de_texto_da_gui():
+    composition = SOURCE.split(
+        "self.fiscal_tax_rule_service = FiscalTaxRuleService", 1
+    )[1].split("self.fiscal_service.tax_rule_service", 1)[0]
+    block = SOURCE.split("def abrir_regras_tributarias_bahia", 1)[1].split(
+        "def abrir_central_fiscal", 1
+    )[0]
+
+    assert "actor_provider=self._ator_fiscal_autenticado" in composition
+    assert "def _ator_fiscal_autenticado" in block
+    assert "security.is_expired()" in block
+    assert ".save(values, actor=" not in block
+    assert ".deactivate(rule_id, actor=" not in block

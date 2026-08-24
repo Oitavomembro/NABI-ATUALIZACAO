@@ -5,7 +5,7 @@ from datetime import datetime
 from decimal import Decimal, InvalidOperation
 import hashlib
 import json
-from typing import Any, Mapping
+from typing import Any, Callable, Mapping
 
 
 @dataclass(frozen=True)
@@ -43,8 +43,33 @@ class FiscalTaxRuleService:
     }
     VALID_OPERATION_KINDS = {"VENDA"}
 
-    def __init__(self, connection_factory) -> None:
+    def __init__(
+        self,
+        connection_factory,
+        *,
+        actor_provider: Callable[[], str | None] | None = None,
+    ) -> None:
         self.connection_factory = connection_factory
+        self._actor_provider = actor_provider
+
+    def _authenticated_actor(self) -> str:
+        if self._actor_provider is None:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para alterar regras fiscais."
+            )
+        try:
+            actor = str(self._actor_provider() or "").strip()
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                "Não foi possível confirmar a sessão autenticada para a operação fiscal."
+            ) from exc
+        if not actor:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para alterar regras fiscais."
+            )
+        return actor
 
     @classmethod
     def normalize(cls, values: Mapping[str, Any]) -> dict[str, Any]:
@@ -130,8 +155,9 @@ class FiscalTaxRuleService:
 
     def save(
         self, values: Mapping[str, Any], *, rule_id: int | None = None,
-        actor: str = "", change_reason: str = "",
+        change_reason: str = "",
     ) -> FiscalTaxRule:
+        actor = self._authenticated_actor()
         data = self.normalize(values)
         now = datetime.now().astimezone().isoformat()
         connection = self.connection_factory()
@@ -321,8 +347,9 @@ class FiscalTaxRuleService:
             connection.close()
 
     def deactivate(
-        self, rule_id: int, *, actor: str = "", change_reason: str = ""
+        self, rule_id: int, *, change_reason: str = ""
     ) -> None:
+        actor = self._authenticated_actor()
         connection = self.connection_factory()
         try:
             connection.execute("BEGIN IMMEDIATE")

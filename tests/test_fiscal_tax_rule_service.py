@@ -42,7 +42,9 @@ def service():
         connection.executescript(SCHEMA)
         connection.commit()
         connection.close()
-        yield FiscalTaxRuleService(lambda: sqlite3.connect(path))
+        yield FiscalTaxRuleService(
+            lambda: sqlite3.connect(path), actor_provider=lambda: "operador"
+        )
 
 
 def rule(**changes):
@@ -161,11 +163,11 @@ def test_resolucao_de_dados_antigos_ambiguos_falha_fechado_sem_usar_id_desc(serv
         )
 
 
-def test_historico_tecnico_encadeia_create_update_e_deactivate_sem_mudar_api(service):
-    saved = service.save(rule(), actor="operador", change_reason="cadastro aprovado")
+def test_historico_tecnico_encadeia_create_update_e_deactivate(service):
+    saved = service.save(rule(), change_reason="cadastro aprovado")
     updated = service.save(
         rule(name="Venda regular revisada"), rule_id=saved.id,
-        actor="gerente", change_reason="revisão técnica",
+        change_reason="revisão técnica",
     )
     service.deactivate(updated.id)
 
@@ -173,16 +175,58 @@ def test_historico_tecnico_encadeia_create_update_e_deactivate_sem_mudar_api(ser
     revisions = service.list_revisions(saved.id)
     assert [item["event_kind"] for item in revisions] == ["CREATED", "UPDATED", "DEACTIVATED"]
     assert [item["revision_number"] for item in revisions] == [1, 2, 3]
-    assert revisions[0]["actor"] == "operador"
+    assert [item["actor"] for item in revisions] == ["operador"] * 3
     assert revisions[1]["previous_hash"] == revisions[0]["current_hash"]
     assert service.verify_revision_chain(saved.id) == {
         "valid": True, "rule_id": saved.id, "revision_count": 3,
     }
 
 
-def test_actor_ausente_e_registrado_sem_inventar_identidade(service):
+def test_mutacao_sem_provedor_de_sessao_falha_fechada(service):
+    untrusted = FiscalTaxRuleService(service.connection_factory)
+
+    with pytest.raises(PermissionError, match="sessão autenticada"):
+        untrusted.save(rule())
+
+    assert service.list_rules(include_inactive=True) == []
+
+
+def test_mutacao_sem_identidade_na_sessao_falha_fechada(service):
+    unauthenticated = FiscalTaxRuleService(
+        service.connection_factory, actor_provider=lambda: None
+    )
+
+    with pytest.raises(PermissionError, match="sessão autenticada"):
+        unauthenticated.save(rule())
+
+    assert service.list_rules(include_inactive=True) == []
+
+
+def test_actor_tecnico_vem_do_provedor_e_nao_da_regra(service):
+    saved = service.save({**rule(), "actor": "forjado-pela-gui"})
+
+    assert service.list_revisions(saved.id)[0]["actor"] == "operador"
+    assert service.list_revisions(saved.id)[0]["actor"] != saved.approved_by
+
+
+def test_api_de_mutacao_recusa_actor_livre(service):
+    with pytest.raises(TypeError, match="unexpected keyword argument 'actor'"):
+        service.save(rule(), actor="forjado")
+
+    assert service.list_rules(include_inactive=True) == []
+
+
+def test_desativacao_sem_sessao_preserva_regra_ativa(service):
     saved = service.save(rule())
-    assert service.list_revisions(saved.id)[0]["actor"] == "NAO_INFORMADO"
+    unauthenticated = FiscalTaxRuleService(
+        service.connection_factory, actor_provider=lambda: ""
+    )
+
+    with pytest.raises(PermissionError, match="sessão autenticada"):
+        unauthenticated.deactivate(saved.id)
+
+    assert service.get(saved.id).id == saved.id
+    assert len(service.list_revisions(saved.id)) == 1
 
 
 def test_historico_e_append_only_e_adulteracao_e_detectada(service):

@@ -784,7 +784,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
             cache_path=Path(APP_DIR) / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
         )
-        self.fiscal_tax_rule_service = FiscalTaxRuleService(conectar_banco)
+        self.fiscal_tax_rule_service = FiscalTaxRuleService(
+            conectar_banco,
+            actor_provider=self._ator_fiscal_autenticado,
+        )
         self.fiscal_service.tax_rule_service = self.fiscal_tax_rule_service
         self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
@@ -11478,6 +11481,26 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(actions, text="Desativar regra informada", fg_color="#da3633", command=deactivate_rule).pack(side="left", fill="x", expand=True, padx=(4, 0))
         refresh_rules()
         reveal_prepared_toplevel_when_idle(janela, maximize=True)
+
+    def _ator_fiscal_autenticado(self):
+        security = getattr(self, "security", None)
+        session = getattr(security, "session", None)
+        user = getattr(session, "user", None)
+        if (
+            security is None
+            or session is None
+            or security.is_expired()
+            or not getattr(user, "active", False)
+        ):
+            raise PermissionError(
+                "Uma sessão autenticada ativa é obrigatória para alterar regras fiscais."
+            )
+        username = str(getattr(user, "username", "") or "").strip()
+        if not username:
+            raise PermissionError(
+                "A sessão autenticada não possui uma identidade válida."
+            )
+        return username
 
     def abrir_central_fiscal(self):
         if not self._autorizar("fiscal", "view"):
