@@ -38,17 +38,17 @@ def build_administrative_modules(
     app_version="2.5.1", schema_version=21,
 ):
     modules=[];dashboard=DashboardApplicationService(DashboardRepository(database),security)
-    modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p)))
-    if getattr(container,"customer_application",None):modules.append(AdministrativeModule("Clientes","Cadastro, busca, edição e fichas","F3","clientes","view",lambda p:CustomerManagementDialog(container.customer_application,parent=p)))
+    modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True)))
+    if getattr(container,"customer_application",None):modules.append(AdministrativeModule("Clientes","Cadastro, busca, edição e fichas","F3","clientes","view",lambda p:CustomerManagementDialog(container.customer_application,parent=p),"clientes"))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
-        service=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p:ProductManagementDialog(service,p)))
+        service=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):
-        service=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","F5","compras","view",lambda p:PurchaseDialog(service,p)))
-    cash=CashService(database.connect);modules.append(AdministrativeModule("Caixa","Abertura, movimentos e fechamento","F6","financeiro","view",lambda p:CashDialog(CashApplicationService(cash,terminal=terminal,user=_username(security)),p)))
-    if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","F7","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p)))
+        service=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p:PurchaseDialog(service,p),"compras"))
+    cash=CashService(database.connect);modules.append(AdministrativeModule("Caixa","Abertura, movimentos e fechamento","","financeiro","view",lambda p:CashDialog(CashApplicationService(cash,terminal=terminal,user=_username(security)),p),"caixa"))
+    if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p),"financeiro"))
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
-    modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","F8","relatorios","view",lambda p:ReportDialog(reports,_username(security),p)))
-    users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p)))
+    modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","","relatorios","view",lambda p:ReportDialog(reports,_username(security),p),"relatorios"))
+    users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p),"usuarios"))
     system = SystemRepository(database.connect)
     backups = BackupService(
         database_path=database.database_path,
@@ -77,15 +77,15 @@ def build_administrative_modules(
     )
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",
-        "configs", "view", lambda p: SettingsDialog(settings, p),
+        "configs", "view", lambda p: SettingsDialog(settings, p), "configs",
     ))
     modules.append(AdministrativeModule(
         "Ajuda", "Atalhos e orientação dos módulos", "Ctrl+H",
-        "dashboard", "view", lambda p: HelpDialog(parent=p),
+        "dashboard", "view", lambda p: HelpDialog(parent=p), "ajuda",
     ))
     audit = AuditApplicationService(AdminAuditService(database.connect), security)
     modules.append(AdministrativeModule(
         "Auditoria", "Histórico de login e segurança", "Ctrl+L",
-        "technical", "audit", lambda p: AuditDialog(audit, p),
+        "technical", "audit", lambda p: AuditDialog(audit, p), "auditoria",
     ))
     return tuple(modules)

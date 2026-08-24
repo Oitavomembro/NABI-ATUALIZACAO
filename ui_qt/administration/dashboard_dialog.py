@@ -39,8 +39,14 @@ class DashboardLoadWorker(QRunnable):
 class DashboardDialog(QDialog):
     """Início somente leitura, paginado e carregado fora da thread da interface."""
 
-    def __init__(self, application, parent=None, *, worker_pool=None, page_size: int = 50) -> None:
+    def __init__(
+        self, application, parent=None, *, worker_pool=None, page_size: int = 50,
+        embedded: bool = False,
+    ) -> None:
         super().__init__(parent); self.application = application
+        self.embedded = bool(embedded)
+        if self.embedded:
+            self.setWindowFlags(Qt.WindowType.Widget)
         self.pool = worker_pool or QThreadPool.globalInstance()
         self.page_size = max(10, min(int(page_size), 100)); self.offset = 0
         self.total_records = 0; self._generation = 0; self._workers = []
@@ -75,13 +81,20 @@ class DashboardDialog(QDialog):
         root.addWidget(self.table, 1)
         footer = QHBoxLayout(); self.page_label = QLabel("Página 1")
         self.previous = QPushButton("← Anterior  [PgUp]"); self.next = QPushButton("Próxima  [PgDn] →")
-        self.refresh = QPushButton("Atualizar  [F5]"); close = QPushButton("Fechar  [Esc]")
+        self.refresh = QPushButton("Atualizar")
         self.previous.clicked.connect(self.previous_page); self.next.clicked.connect(self.next_page)
-        self.refresh.clicked.connect(self.reload); close.clicked.connect(self.reject)
+        self.refresh.clicked.connect(self.reload)
         footer.addWidget(self.page_label); footer.addStretch()
-        for button in (self.previous, self.next, self.refresh, close): footer.addWidget(button)
+        for button in (self.previous, self.next, self.refresh): footer.addWidget(button)
+        if not self.embedded:
+            close = QPushButton("Fechar  [Esc]")
+            close.clicked.connect(self.reject)
+            footer.addWidget(close)
         root.addLayout(footer); self._shortcuts = []
-        for key, callback in (("F5", self.reload), ("PgUp", self.previous_page), ("PgDown", self.next_page), ("Esc", self.reject)):
+        shortcuts = [("PgUp", self.previous_page), ("PgDown", self.next_page)]
+        if not self.embedded:
+            shortcuts.extend((("F5", self.reload), ("Esc", self.reject)))
+        for key, callback in shortcuts:
             shortcut = QShortcut(QKeySequence(key), self); shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback); self._shortcuts.append(shortcut)
         self.reload()

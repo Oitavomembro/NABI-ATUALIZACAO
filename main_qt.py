@@ -36,6 +36,7 @@ from commercial.application.cash_application_service import CashApplicationServi
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
 from core.app_version import load_app_version
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
+from core.qt_startup_splash import QtStartupSplash
 from database import DatabaseManager
 from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database
@@ -50,7 +51,7 @@ from repositories.fornecedor_repository import FornecedorRepository
 from administration.purchase_management_service import PurchaseManagementService
 from repositories import NFeImportRepository
 from services import NFeImportService
-from ui_qt.app import run
+from ui_qt.app import run_shell
 from ui_qt.administration import (
     AdministrativeModuleHub, ApplicationLoginDialog, InitialSetupDialog,
     LegacySecurityMigrationDialog,
@@ -309,6 +310,7 @@ def main(argv=None) -> int:
     network_mode = configuration.get("modo") == "rede"
     network_role = str(configuration.get("papel") or "local")
     lock = DatabaseUsageLock(database_path, f"{profile.profile}-QT")
+    splash = QtStartupSplash()
     try:
         lock.acquire()
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
@@ -316,6 +318,9 @@ def main(argv=None) -> int:
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
         system = SystemRepository(database.connect)
         module_security = SecurityService(database.connect)
+        # O splash canônico cobre a preparação real e sai antes do primeiro
+        # diálogo obrigatório, exatamente como no fluxo do Legacy.
+        splash.close()
         if first_install:
             if module_security.has_users():
                 raise RuntimeError("O banco novo já possui usuário; configuração inicial recusada.")
@@ -333,9 +338,6 @@ def main(argv=None) -> int:
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
             app_version=load_app_version("2.5.1", source_file=__file__),
             schema_version=SCHEMA_VERSION,
-        )
-        administrative_hub_factory = _administrative_hub_factory(
-            module_security, module_actions
         )
         assistant_service, assistant_activation, nfe_entry_service = (
             _create_licensed_assistant(
@@ -382,20 +384,24 @@ def main(argv=None) -> int:
 
         license_timer.timeout.connect(monitor_license)
         license_timer.start()
-        return run(
+        return run_shell(
             container.application,
+            module_security,
+            module_actions,
             argv,
+            store_name=str(system.get_config("nome_loja") or "NabiCode"),
             cash_label="Caixa ativo",
             profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
             assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,
-            administrative_hub_factory=administrative_hub_factory,
         )
     except Exception as error:
+        splash.close()
         QMessageBox.critical(None, "NabiCode", str(error) or "Não foi possível iniciar o PDV Qt.")
         return 1
     finally:
+        splash.close()
         lock.release()
 
 

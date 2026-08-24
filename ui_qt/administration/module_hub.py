@@ -31,6 +31,8 @@ class AdministrativeModule:
     permission_module: str
     permission_action: str
     factory: Callable[[QWidget], QDialog]
+    module_id: str = ""
+    embedded_factory: Callable[[QWidget], QWidget] | None = None
 
 
 class AdministrativeModuleHub(QDialog):
