@@ -2197,3 +2197,440 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - pendência de integração: composição no shell/painel deve ocorrer somente em
   checkpoint coordenado, preservando o estado seguro quando o executor não for
   fornecido.
+### Evidência operacional externa — venda e emissão de NFC-e
+
+- vídeo recebido em `2026-08-24`, duração `00:00:56.02`, resolução `1600x900`,
+  `3.359` quadros e SHA-256
+  `C50D2A3334A2449EE4162C676144FF499C7DE73CCF330B5C2D2C3C99FA8B11CC`;
+- a gravação mostra outro emissor em sessão remota AnyDesk e serve apenas como
+  referência operacional/visual. Não comprova conformidade do NabiCode, não
+  substitui documentação oficial e não autoriza produção fiscal;
+- foram observadas duas vendas de um item: a primeira usa um fechamento rápido
+  com valor pago já preenchido; a segunda abre a tela completa de pagamento,
+  com lista de formas, valor, troco, desconto, acréscimo e restante;
+- o fluxo visível é: localizar produto, selecionar item, formar o cupom, revisar
+  quantidade/valor/total, escolher o fechamento, informar pagamento, aguardar a
+  emissão, abrir a pré-visualização do DANFE NFC-e e somente então retornar ao
+  estado `CAIXA LIVRE` para nova venda;
+- o DANFE mostrado contém QR Code, chave/consulta, protocolo e data/hora de
+  autorização, mas esses valores pertencem ao estabelecimento filmado e não
+  foram transcritos para o projeto;
+- experiência útil para o NabiCode: fechamento rápido e pagamento detalhado são
+  duas apresentações da mesma operação fiscal; nenhuma delas pode criar duas
+  vendas, transmitir duas vezes ou marcar sucesso antes de uma resposta fiscal
+  terminal comprovada. Impressão/visualização é pós-autorização e não deve ser
+  confundida com a autoridade da SEFAZ;
+- o vídeo não exibe XML assinado/enviado, ambiente de homologação, `cStat`/
+  `xMotivo`, tratamento de rejeição, timeout, resposta desconhecida, consulta de
+  recibo/chave, contingência, reinício, reimpressão ou reconciliação. Esses itens
+  permanecem PENDENTES e não podem ser inferidos da animação `Aguarde` nem do
+  DANFE visível;
+- também não há demonstração de múltiplos itens, consumidor identificado,
+  desconto/acréscimo efetivo, pagamento misto, cartão/PIX, cancelamento da tela
+  de pagamento, falha de impressão ou recuperação após queda. Vídeos adicionais
+  podem documentar esses fluxos, mas regras fiscais continuam dependentes de
+  fonte oficial e testes próprios;
+- nenhum dado pessoal, certificado, chave completa, CNPJ, chave de acesso ou
+  protocolo visível foi transportado. Nenhuma chamada à SEFAZ foi executada por
+  esta auditoria e produção fiscal continua bloqueada.
+
+### Auditoria fiscal de autoria — manifestação do destinatário DF-e
+
+- implementação: `9957108` — `fix: autentica autoria da manifestacao dfe`;
+- causa: `FiscalDFeService.send_manifestation` aceitava `actor` livre do
+  chamador e só o repassava ao histórico depois de assinar e transmitir o
+  evento, sem validar sessão/permissão na fronteira do serviço;
+- a API não aceita mais ator externo. Antes de consultar documentos, assinar ou
+  acessar a rede, exige identidade da sessão ativa e permissão real
+  `fiscal/transmit`, fornecidas por portas ligadas a `SecurityService`;
+- ausência de porta, permissão negada, ator vazio ou falha de obtenção da sessão
+  encerram a operação com `PermissionError` antes de qualquer leitura operacional
+  ou transmissão; texto `actor` forjado é rejeitado pela assinatura da API;
+- a Central Fiscal deixou de obter/passar `_usuario_financeiro()` para essa
+  mutação. O serviço registra exclusivamente o usuário autenticado confirmado;
+- tipos oficiais de manifestação, justificativa mínima, assinatura, envelope,
+  endpoint, idempotência de Ciência/conclusivas e tratamento da resposta não
+  foram alterados;
+- validação: `14 passed` focados; regressão relacionada em blocos com `150 passed`
+  e `10 subtests passed`, `36 passed` e `61 passed`; `compileall` e
+  `git diff --check` aprovados. A tentativa de executar todo o conjunto em um
+  único processo foi encerrada pelo ambiente sem resumo; os mesmos arquivos
+  concluíram separadamente sem falhas;
+- nenhum segredo, certificado, dado real ou chamada SEFAZ foi usado. Produção
+  fiscal permanece bloqueada e não há declaração de conformidade geral;
+- próximas fronteiras independentes ainda pendentes incluem reenvio/consulta
+  manual da outbox, cancelamento local da fila e autoria da importação manual de
+  XML. Corrigir no máximo uma fronteira por checkpoint, sem fallback `Sistema`.
+
+### Auditoria fiscal de autoria — reenvio manual da outbox
+
+- implementação: `79ae421` — `fix: autentica reenvio manual fiscal`;
+- causa: `FiscalService.retry_transmission` aceitava `actor` livre e persistia
+  esse texto em `retried_by` ao reabrir uma fila que o worker poderia transmitir;
+- a API deixou de aceitar ator externo e chama `_authenticated_outbox_actor`
+  antes de listar ou alterar a fila, exigindo identidade ativa e permissão real
+  `fiscal/transmit` já ligadas a `SecurityService` no runtime Legacy;
+- ausência de sessão/permissão falha fechada antes de ler a fila; texto forjado
+  é rejeitado pela assinatura da API e a Central Fiscal não passa mais
+  `_usuario_financeiro()` para essa operação;
+- permanecem intactas as barreiras que proíbem reabrir documento concluído,
+  cancelado, com transmissão iniciada ou `RESPOSTA_DESCONHECIDA`; esta última
+  continua obrigatoriamente no fluxo de consulta/reconciliação, nunca reenvio;
+- validação diretamente relacionada: `4 passed`, `123 deselected`; regressão de
+  outbox/worker/Central/cancelamento/venda/segurança: `103 passed`;
+  `compileall` e `git diff --check` aprovados. A execução integral isolada de
+  `test_fiscal_service.py` foi encerrada pelo ambiente sem resumo; os testes do
+  reenvio e toda a regressão relacionada concluíram separadamente sem falhas;
+- nenhuma chamada SEFAZ, dado real, XML fiscal, segredo ou regra tributária foi
+  alterada. Produção fiscal permanece bloqueada;
+- consulta manual de recibo, cancelamento local de transmissão e autoria da
+  importação manual de XML continuam checkpoints independentes pendentes.
+
+### Auditoria fiscal de autoria — consulta manual de recibo
+
+- implementação: `83ccbf5` — `fix: autentica consulta manual de recibo`;
+- causa: `FiscalService.force_receipt_check` aceitava `actor` do chamador e
+  gravava esse texto ao reagendar uma consulta de recibo na outbox;
+- agora identidade e permissão `fiscal/transmit` são verificadas antes de ler a
+  fila; a API não aceita ator externo e a Central Fiscal não fornece mais texto
+  de usuário para a operação;
+- a operação continua sendo exclusivamente consulta de recibo existente: não
+  converte autorização sem recibo, não reenvia NFC-e/NF-e e não atua em item
+  concluído ou cancelado;
+- testes focados: `4 passed`, `125 deselected`; regressão de
+  outbox/worker/Central/cancelamento/venda/segurança: `103 passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma rede SEFAZ, XML, endpoint, prazo, regra tributária ou dado real foi
+  alterado. Produção fiscal permanece bloqueada;
+- cancelamento local da transmissão e autoria da importação manual de XML
+  continuam pendentes para checkpoints separados.
+
+### Auditoria fiscal de autoria — cancelamento local da outbox
+
+- implementação: `ed4d9d7` — `fix: autentica cancelamento local da outbox`;
+- causa: `FiscalService.cancel_transmission` aceitava autoria livre mesmo ao
+  marcar localmente como cancelada uma fila que ainda poderia ser processada;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de ler ou alterar a fila. `FiscalSaleService` conserva
+  seu ator autenticado somente para a operação distinta de liberar numeração;
+- continuam proibidos o cancelamento local de transmissão concluída, iniciada
+  ou de resultado desconhecido. Nesses casos a consulta SEFAZ permanece
+  obrigatória antes de qualquer decisão comercial;
+- testes focados: `3 passed`, `128 deselected`; regressão de venda fiscal,
+  cancelamento oficial, outbox/worker, Central e segurança: `100 passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma chamada SEFAZ, XML, endpoint, prazo, regra tributária ou dado real foi
+  alterado. Produção fiscal permanece bloqueada;
+- autoria da importação manual de XML e retransmissão em lote de contingência
+  permanecem checkpoints independentes pendentes.
+
+### Auditoria fiscal de autoria — retransmissão em lote de contingência
+
+- implementação: `49cb679` — `fix: autentica retransmissao de contingencia`;
+- causa: `FiscalService.retry_contingency_batch` aceitava `actor` livre ao
+  reagendar várias NFC-e de contingência para processamento posterior;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de listar ou alterar a fila; a Central Fiscal deixou
+  de fornecer `_usuario_financeiro()`;
+- a seleção continua restrita a modelo `65`, emissão em contingência e operações
+  de autorização/recibo ainda não concluídas, canceladas, iniciadas ou de
+  resposta desconhecida. XML, `tpEmis`, prazos e worker não foram alterados;
+- testes focados: `3 passed`, `130 deselected`; regressão de
+  outbox/worker/Central/venda/segurança: `72 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real ou regra fiscal foi usada ou alterada. Produção
+  fiscal permanece bloqueada;
+- autoria da importação manual de XML permanece como próximo checkpoint
+  independente de alto risco.
+
+### Auditoria fiscal de autoria — arquivo de XML autorizado externo
+
+- implementação: `704b542` — `fix: autentica importacao de xml fiscal`;
+- escopo deliberadamente separado: esta fronteira é
+  `FiscalService.import_authorized_xml`, que valida e arquiva no índice fiscal um
+  XML externo já autorizado. Não é a entrada comercial de compra por XML;
+- a API deixou de aceitar ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de validar o XML, criar diretórios ou gravar índice;
+  autoria persistida vem exclusivamente da sessão;
+- assinatura, chave, protocolo, ambiente, modelo, hash e validações de
+  integridade existentes foram preservados;
+- testes focados: `7 passed`, `128 deselected`; regressão de documento fiscal,
+  outbox, venda, Central e segurança: `46 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real, XML de cliente ou regra tributária foi usada ou
+  alterada. Produção fiscal permanece bloqueada;
+- bloqueio de composição ainda aberto: `NFeImportService.importar_atomicamente`
+  atende tanto o Legacy quanto o gateway confirmado da Nabi. Autenticá-lo exige
+  coordenação com `main_qt.py`/gateway para existir uma única porta de sessão;
+  esta branch não pode alterar esses arquivos e não deve introduzir autoridade
+  paralela ou fallback `Sistema`.
+
+### Auditoria fiscal de autoria — reserva de numeração
+
+- implementação: `281c28c` — `fix: autentica reserva de numeracao fiscal`;
+- causa: `FiscalService.reserve_number` aceitava ator livre e o gravava na
+  reserva antes de emissão de NF-e/NFC-e;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de iniciar a transação de numeração. Venda fiscal e
+  devolução continuam fornecendo modelo/série/ambiente, mas não identidade;
+- sequência monotônica, escopo ambiente/modelo/série, TTL, recuperação de
+  reserva expirada, bloqueio de reutilização e vínculo a documento fiscal foram
+  preservados;
+- testes focados: `15 passed`, `122 deselected`; regressão de venda,
+  cancelamento e outbox: `80 passed`; `compileall` e `git diff --check`
+  aprovados;
+- nenhuma rede SEFAZ, dado real, regra tributária ou numeração de produção foi
+  usada. Produção fiscal permanece bloqueada;
+- confirmação/liberação de reserva e inicialização manual da numeração ainda
+  recebem ator explícito e devem ser auditadas em checkpoints independentes.
+
+### Auditoria fiscal de autoria — inicialização da numeração
+
+- implementação: `f015aea` — `fix: autentica inicializacao da numeracao fiscal`;
+- causa: `FiscalService.initialize_numbering` aceitava ator livre numa operação
+  humana irreversível para o escopo ambiente/modelo/série;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  específica `fiscal/configure` antes de abrir a transação. A confirmação por
+  senha mestra na interface permanece apenas reforço de intenção, nunca fonte de
+  identidade ou autorização;
+- validações de modelo, série, próximo número, ambiente, inicialização única e
+  proibição de reconfigurar sequência existente foram preservadas;
+- a autenticação fiscal comum foi generalizada internamente para mensagens
+  coerentes por operação; as fronteiras já corrigidas da outbox continuam usando
+  a mesma permissão `fiscal/transmit`;
+- testes focados de inicialização/reserva: `18 passed`, `121 deselected`;
+  regressão de venda/outbox/segurança: `36 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma numeração real, rede SEFAZ ou regra tributária foi usada ou alterada.
+  Produção fiscal permanece bloqueada;
+- confirmação/liberação assíncrona de reserva exige desenho que preserve a
+  identidade confiável capturada na origem sem depender de sessão viva do
+  worker; não remover seus parâmetros até existir essa capacidade interna.
+
+### Auditoria fiscal de autoria — confirmação assíncrona da numeração
+
+- implementação: `13ba3a8` — `fix: preserva autoria na confirmacao fiscal`;
+- arquitetura: a confirmação não exige sessão viva do worker e não aceita um
+  novo ator. Ela reutiliza exclusivamente a identidade autenticada capturada em
+  `reserve_number`, na mesma reserva vinculada à chave autorizada;
+- reservas legadas ainda abertas sem identidade de origem falham fechadas e
+  permanecem `RESERVADO`; não é criada identidade retroativa nem fallback
+  `Sistema`. Reservas já confirmadas preservam a idempotência anterior;
+- correspondência de modelo, série, número e chave, além das barreiras contra
+  confirmação de reserva liberada ou chave divergente, foram preservadas;
+- o caminho síncrono e o worker removem o parâmetro externo `actor` ao confirmar;
+  o histórico `confirmed_by` deriva da reserva confiável;
+- testes focados: `4 passed`, `137 deselected`; regressão de
+  outbox/worker/venda: `49 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real, XML ou regra tributária foi alterada. Produção
+  fiscal permanece bloqueada;
+- liberação de reserva continua síncrona e será autenticada pelo operador atual
+  em checkpoint separado.
+
+### Auditoria fiscal de autoria — liberação da numeração
+
+- implementação: `285ed3e` — `fix: autentica liberacao da numeracao fiscal`;
+- a API `release_number` não aceita mais ator externo e exige sessão ativa com
+  permissão `fiscal/transmit` antes de abrir a transação; `released_by` registra
+  exclusivamente o operador atual autenticado;
+- venda fiscal, cancelamento local e devolução continuam fornecendo apenas o
+  motivo técnico da liberação, nunca a identidade;
+- motivo obrigatório, idempotência da reserva já liberada e bloqueios contra
+  número confirmado, transmissão iniciada ou resposta desconhecida foram
+  preservados;
+- testes focados: `6 passed`, `138 deselected`; regressão de
+  venda/cancelamento/outbox: `57 passed`; `compileall` e `git diff --check`
+  aprovados;
+- nenhuma rede SEFAZ, dado real, numeração de produção ou regra tributária foi
+  usada ou alterada. Produção fiscal permanece bloqueada;
+- reserva, confirmação e liberação de numeração deixam de aceitar autoria livre.
+  Registros legados permanecem históricos e não recebem identidade inventada.
+
+### Auditoria fiscal de autoria — inutilização de faixa
+
+- implementação: `0e3439c` — `fix: autentica inutilizacao fiscal`;
+- `FiscalService.inutilize_numbers` não aceita mais ator externo e exige sessão
+  ativa com permissão `fiscal/transmit` antes de validar, assinar ou transmitir;
+- a Central Fiscal fornece apenas ano, modelo, série, intervalo, justificativa e
+  senha do certificado; autoria do evento vem exclusivamente da sessão;
+- validações de faixa/justificativa, XML oficial, assinatura, ambiente, endpoint,
+  resposta e histórico do evento foram preservados;
+- testes focados: `4 passed`, `142 deselected`; regressão de Central,
+  segurança e outbox: `34 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, numeração de produção, dado real ou regra tributária
+  foi usada ou alterada. Produção fiscal permanece bloqueada;
+- eventos fiscais gerais (`send_event`) ainda recebem ator externo e devem ser
+  migrados com cuidado porque são consumidos por cancelamento, CC-e e devolução.
+
+### Auditoria fiscal de autoria — eventos fiscais comuns
+
+- implementação: `8bf9495` — `fix: autentica eventos fiscais`;
+- `FiscalService.send_event` deixou de aceitar ator externo e exige sessão ativa
+  com permissão `fiscal/transmit` antes de validar, assinar ou transmitir;
+- CC-e, cancelamento de venda e cancelamento de devolução fornecem somente os
+  dados próprios do evento. O histórico técnico é sempre atribuído ao operador
+  confirmado pelo serviço;
+- elegibilidade, protocolo, sequência, justificativa/correção, assinatura,
+  endpoint, XML e resposta SEFAZ foram preservados. As identidades declaradas do
+  documento e responsáveis contábeis não foram confundidas com operador técnico;
+- testes focados: `3 passed`, `145 deselected`; regressão de venda,
+  cancelamento, devolução e outbox/worker: `115 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma transmissão real, dado real ou regra tributária foi usada ou alterada.
+  Produção fiscal permanece bloqueada;
+- serviços superiores que ainda usam `actor` para efeitos comerciais próprios
+  (por exemplo reversão de estoque da devolução) continuam pendentes de auditoria
+  separada; não são mais capazes de forjar a autoria do evento fiscal.
+
+### Auditoria fiscal de autoria — autorização síncrona de documento
+
+- implementação: `17e2572` — `fix: autentica autoria da autorizacao fiscal`;
+- `FiscalService.authorize_document` deixou de aceitar ator externo e exige
+  sessão ativa com permissão `fiscal/transmit` antes de validar prontidão,
+  assinar XML, criar arquivos ou transmitir;
+- o registro do documento autorizado/rejeitado recebe exclusivamente a
+  identidade confirmada pelo serviço. A devolução oficial fornece somente XML,
+  chave, certificado, modelo e reserva, nunca a autoria técnica;
+- validações de chave, ambiente, modelo e reserva, QR Code NFC-e, assinatura,
+  schema, endpoint, protocolo, armazenamento íntegro e confirmação monotônica da
+  numeração foram preservadas;
+- testes focados: `12 passed`, `138 deselected`; devolução: `35 passed`;
+  regressão fiscal ampliada: `285 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, XML de cliente ou regra tributária foi
+  usada ou alterada. Produção fiscal permanece bloqueada;
+- a identidade comercial ainda recebida pelo serviço superior de devolução para
+  seus efeitos próprios permanece separada da autoria técnica fiscal e requer
+  auditoria própria antes de eventual remoção.
+
+### Auditoria fiscal de autoria — reversão de estoque da devolução cancelada
+
+- implementação: `361b412` — `fix: vincula reversao ao ator fiscal autenticado`;
+- causa: depois de um cancelamento oficial aceito, o serviço de devolução ainda
+  aceitava um segundo `actor` livre para atribuir a reversão local do estoque;
+- `cancelar_devolucao_oficial` não aceita mais identidade externa. A reversão
+  usa exclusivamente o ator autenticado persistido no evento retornado por
+  `FiscalService.send_event`;
+- se um adaptador não fornecer essa evidência, o cancelamento fiscal aceito é
+  preservado como `CANCELADA_PENDENTE_ESTOQUE`, nenhuma movimentação é criada e
+  não há fallback `Sistema`. A recuperação fica explícita para tratamento
+  posterior;
+- testes focados da devolução: `37 passed`; regressão de devolução, autorização,
+  cancelamento, venda e outbox/worker: `267 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- emissão da devolução e recuperações manuais/em lote ainda possuem identidade
+  comercial livre para efeitos de estoque e seguem pendentes de desenho único de
+  sessão, sem autoridade paralela.
+
+### Auditoria fiscal de autoria — baixa de estoque da devolução autorizada
+
+- implementação: `9af5618` — `fix: vincula baixa ao ator fiscal autenticado`;
+- `NFeDevolucaoService.emitir_devolucao_oficial` não aceita mais ator externo.
+  A autoria do histórico e da baixa de estoque vem exclusivamente do registro
+  devolvido por `FiscalService.authorize_document`, já autenticado na sessão;
+- se a autorização for aceita sem a evidência de autoria, o estado externo é
+  preservado como `AUTORIZADA_PENDENTE_ESTOQUE`, nenhuma baixa é feita e não há
+  fallback `Sistema`;
+- rejeições continuam preservadas sem produzir efeito de estoque; erros antes de
+  existir registro fiscal não recebem identidade retroativa inventada;
+- testes focados da devolução: `39 passed`; regressão de devolução, autorização,
+  venda, cancelamento e outbox/worker: `269 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- recuperações manuais/em lote dos efeitos pendentes continuam recebendo ator
+  livre e são a próxima fronteira isolada. Elas não devem ganhar um segundo
+  provedor de segurança; precisam consumir a sessão oficial na composição.
+
+### Auditoria fiscal de autoria — recuperação de estoque pendente
+
+- implementação: `4ca25de` — `fix: autentica recuperacao de estoque fiscal`;
+- as recuperações individual e em lote não aceitam mais ator externo nem usam
+  `Sistema`. Ambas exigem, antes de consultar ou alterar estoque, a porta de
+  sessão/permissão já composta em `FiscalService` com `fiscal/transmit`;
+- `FiscalService.require_authenticated_actor` apenas expõe a mesma autoridade
+  fail-closed existente para efeitos locais fiscais coordenados; não cria outro
+  provedor, fallback ou permissão;
+- o lote autentica uma vez e preserva a mesma identidade em todas as tentativas,
+  inclusive no histórico de falha. Idempotência, estados pendentes e tratamento
+  parcial do lote foram preservados;
+- testes focados da devolução: `41 passed`; regressão de devolução, autorização,
+  venda, cancelamento, outbox/worker e segurança: `281 passed`, `10 subtests
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- o ciclo oficial de devolução deixa de aceitar autoria livre na autorização,
+  baixa, cancelamento, reversão e recuperação. A entrada comercial por XML segue
+  bloqueada para checkpoint coordenado com a composição Nabi/Legacy.
+
+### Auditoria fiscal de autoria — mutações da venda fiscal
+
+- implementação: `a10a9f4` — `fix: autentica mutacoes da venda fiscal`;
+- `FiscalSaleService.prepare` e `cancel_authorized` perderam parâmetros de ator
+  que não eram usados; reserva e evento já exigem a sessão oficial no serviço;
+- persistência transacional do rascunho/outbox, enfileiramento pendente e
+  finalização local do cancelamento não aceitam mais identidade externa. Cada
+  fronteira exige `fiscal/transmit` e captura o operador autenticado antes de
+  qualquer gravação ou consulta mutável;
+- a identidade capturada na transação continua armazenada na outbox para o
+  worker assíncrono, sem exigir sessão viva posterior nem criar fallback;
+- a venda comercial continua usando seu usuário próprio para estoque/financeiro,
+  separado da autoria técnica fiscal. Idempotência do documento/fila,
+  contingência, número reservado e bloqueios de resposta desconhecida foram
+  preservados;
+- testes focados de venda/outbox: `29 passed`; regressão de venda, outbox/worker,
+  autorização, cancelamento, Central e segurança: `253 passed`, `10 subtests
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada.
+
+### Auditoria fiscal de autoria — enfileiramento técnico legado
+
+- implementação: `114e272` — `fix: autentica enfileiramento fiscal`;
+- a API legada `FiscalService.enqueue_transmission`, ainda coberta para
+  compatibilidade e testes, deixou de aceitar ator externo e exige sessão ativa
+  com `fiscal/transmit` antes de validar XML ou ler/gravar a fila;
+- o ator persistido no item é sempre o operador autenticado. O worker continua
+  consumindo essa identidade capturada e não depende de sessão viva;
+- deduplicação por chave, contingência, resposta desconhecida, tentativas,
+  consulta de recibo, reenvio manual e bloqueio de produção foram preservados;
+- testes focados de fila/reconciliação/contingência: `30 passed`, `122
+  deselected`; regressão fiscal, outbox/worker, venda, Central e segurança: `224
+  passed`, `10 subtests passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- `store_document`, `register_event` e `register_rejection` conservam ator como
+  primitivas internas porque recebem a identidade já capturada por operação ou
+  worker. Torná-las portas públicas de sessão quebraria a autoria assíncrona;
+  usos externos futuros devem passar por fachadas autenticadas.
+
+### Encerramento da trilha isolada de autoria fiscal
+
+- auditoria final por assinatura e chamadas confirmou que reserva, inicialização,
+  confirmação/liberação de número, autorização, eventos, inutilização, DFe,
+  importação de XML autorizado externo, outbox, venda fiscal e ciclo oficial de
+  devolução não aceitam mais autoria livre em suas fronteiras mutáveis;
+- `FiscalOutboxService.enqueue_in_transaction`, `store_document`,
+  `register_event`, `register_rejection` e o histórico de regras tributárias são
+  primitivas internas que preservam a identidade confiável capturada antes da
+  transação ou pelo worker. Não devem consultar sessão viva no processamento
+  assíncrono;
+- bloqueio coordenado restante: `NFeImportService.importar_atomicamente`,
+  `estornar_importacao`, `excluir_importacao` e
+  `revisar_produtos_importados` ainda precisam de uma porta única de sessão e
+  permissões. O serviço é composto separadamente no Legacy e em `main_qt.py`, e
+  o gateway `assistant_nabi/nfe_entry_gateway.py` atualmente fornece
+  `grant.username`. A correção exige checkpoint conjunto na branch consolidada,
+  sem aceitar o nome do grant como autoridade final e sem criar provedor
+  paralelo nesta branch;
+- suíte integral dos arquivos fiscais/NF-e: `444 passed`, `10 subtests passed`;
+  `compileall` completo e `git diff --check` aprovados;
+- não houve chamada real à SEFAZ, uso de banco real, alteração de regra legal,
+  XML, endpoint, prazo ou liberação de produção. Homologação fiscal física e
+  produção continuam expressamente bloqueadas;
+- próximo passo seguro: integrar esta branch por merge normal na consolidada,
+  repetir a suíte completa e somente então executar o checkpoint coordenado da
+  entrada de NF-e com SecurityService e broker Nabi compartilhando a mesma
+  autoridade de sessão.

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from types import SimpleNamespace
 
 from services.fiscal_outbox_service import FiscalOutboxService
 from services.fiscal_sale_service import FiscalSaleDraft, FiscalSaleService
@@ -30,6 +31,9 @@ class FiscalOutboxServiceTests(unittest.TestCase):
         connection.commit(); connection.close()
         self.factory = lambda: sqlite3.connect(self.db, timeout=2)
         self.service = FiscalOutboxService(self.factory)
+        self.sale_service = FiscalSaleService(SimpleNamespace(
+            require_authenticated_actor=lambda action, operation: "caixa"
+        ))
 
     def tearDown(self):
         self.temp.cleanup()
@@ -66,7 +70,7 @@ class FiscalOutboxServiceTests(unittest.TestCase):
         connection = self.factory()
         connection.execute("INSERT INTO movimentacoes(id,tipo) VALUES(1,'COMPRA')")
         draft = FiscalSaleDraft("R-1", "29" + "1" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
-        FiscalSaleService.persist_draft(connection, sale_id, draft, actor="caixa")
+        self.sale_service.persist_draft(connection, sale_id, draft)
         connection.commit()
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM fiscal_sale_documents").fetchone()[0], 1)
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM fiscal_outbox").fetchone()[0], 1)
@@ -80,7 +84,7 @@ class FiscalOutboxServiceTests(unittest.TestCase):
         sale_id = connection.execute("INSERT INTO movimentacoes(tipo) VALUES('COMPRA')").lastrowid
         draft = FiscalSaleDraft("R-X", "29" + "2" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
         with self.assertRaises(sqlite3.IntegrityError):
-            FiscalSaleService.persist_draft(connection, sale_id, draft, actor="caixa")
+            self.sale_service.persist_draft(connection, sale_id, draft)
         connection.rollback()
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM movimentacoes").fetchone()[0], 0)
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM fiscal_sale_documents").fetchone()[0], 0)

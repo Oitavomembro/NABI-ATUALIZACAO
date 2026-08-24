@@ -9,7 +9,7 @@ import uuid
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from lxml import etree
 
@@ -52,10 +52,54 @@ class FiscalDFeService:
     }
     CONCLUSIVE = {"CONFIRMACAO", "DESCONHECIMENTO", "NAO_REALIZADA"}
 
-    def __init__(self, fiscal_service: Any, *, storage_dir: str | Path) -> None:
+    def __init__(
+        self,
+        fiscal_service: Any,
+        *,
+        storage_dir: str | Path,
+        actor_provider: Callable[[], str | None] | None = None,
+        authorization_provider: Callable[[str], bool] | None = None,
+    ) -> None:
         self.fiscal_service = fiscal_service
         self.storage_dir = Path(storage_dir)
+        self._actor_provider = actor_provider
+        self._authorization_provider = authorization_provider
         self.storage_dir.mkdir(parents=True, exist_ok=True)
+
+    def _authenticated_actor(self, action: str) -> str:
+        if self._authorization_provider is None:
+            raise PermissionError(
+                "Uma sessão autenticada com permissão fiscal é obrigatória para manifestar DF-e."
+            )
+        try:
+            authorized = bool(self._authorization_provider(action))
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                "Não foi possível confirmar a permissão fiscal para manifestar DF-e."
+            ) from exc
+        if not authorized:
+            raise PermissionError(
+                "A sessão autenticada não possui permissão para manifestar DF-e."
+            )
+        if self._actor_provider is None:
+            raise PermissionError(
+                "Uma sessão autenticada é obrigatória para manifestar DF-e."
+            )
+        try:
+            actor = str(self._actor_provider() or "").strip()
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                "Não foi possível confirmar a identidade autenticada para manifestar DF-e."
+            ) from exc
+        if not actor:
+            raise PermissionError(
+                "A sessão autenticada não possui uma identidade válida."
+            )
+        return actor
 
     def state(self) -> dict[str, str]:
         raw = self.fiscal_service._get_setting(self.CONFIG_KEY)
@@ -263,8 +307,9 @@ class FiscalDFeService:
 
     def send_manifestation(
         self, *, access_key: str, kind: str, password: str,
-        actor: str, justification: str = "",
+        justification: str = "",
     ) -> tuple[Any, dict[str, Any]]:
+        actor = self._authenticated_actor("transmit")
         key = self.fiscal_service._normalize_access_key(access_key)
         if not any(row.get("access_key") == key for row in self.list_documents()):
             raise ValueError("A NF-e recebida não foi localizada na distribuição DF-e.")

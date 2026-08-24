@@ -447,8 +447,11 @@ class FiscalService:
 
     def initialize_numbering(
         self, *, model: str, series: int, next_number: int,
-        actor: str, environment: str | None = None,
+        environment: str | None = None,
     ) -> dict[str, Any]:
+        actor = self._authenticated_fiscal_actor(
+            "configure", operation="configurar a numeração fiscal"
+        )
         model = str(model)
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
@@ -497,10 +500,10 @@ class FiscalService:
         *,
         model: str,
         series: int,
-        actor: str,
         environment: str | None = None,
         ttl_minutes: int = 30,
     ) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         model = str(model).strip()
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
@@ -555,7 +558,7 @@ class FiscalService:
         finally:
             conn.close()
 
-    def confirm_number(self, reservation_id: str, *, access_key: str, actor: str) -> dict[str, Any]:
+    def confirm_number(self, reservation_id: str, *, access_key: str) -> dict[str, Any]:
         key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para confirmar numeração.")
@@ -573,6 +576,11 @@ class FiscalService:
                 return dict(record)
             if record.get("status") != "RESERVADO":
                 raise ValueError("A numeração não está disponível para confirmação.")
+            reserved_by = str(record.get("actor") or "").strip()
+            if not reserved_by:
+                raise PermissionError(
+                    "A reserva fiscal não possui uma identidade autenticada de origem."
+                )
             expected_model = key[20:22]
             expected_series = int(key[22:25])
             expected_number = int(key[25:34])
@@ -582,7 +590,7 @@ class FiscalService:
                 "status": "CONFIRMADO",
                 "access_key": key,
                 "confirmed_at": datetime.now(timezone.utc).isoformat(),
-                "confirmed_by": str(actor or "").strip(),
+                "confirmed_by": reserved_by,
             })
             self._save_numbering_conn(conn, data)
             conn.commit()
@@ -593,9 +601,12 @@ class FiscalService:
         finally:
             conn.close()
 
-    def release_number(self, reservation_id: str, *, actor: str, reason: str) -> dict[str, Any]:
+    def release_number(self, reservation_id: str, *, reason: str) -> dict[str, Any]:
         if not str(reason).strip():
             raise ValueError("Motivo da liberação da numeração é obrigatório.")
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="liberar a numeração fiscal"
+        )
         conn = self.connection_factory()
         try:
             conn.execute("BEGIN IMMEDIATE")
@@ -1002,8 +1013,11 @@ class FiscalService:
             "PRE_VENDA", items, cliente_id=customer_id, cliente_nome=customer_name
         )
 
-    def import_authorized_xml(self, xml: bytes | str, *, actor: str, require_signature: bool = True) -> dict[str, Any]:
+    def import_authorized_xml(
+        self, xml: bytes | str, *, require_signature: bool = True
+    ) -> dict[str, Any]:
         """Importa um XML autorizado externo após validações de integridade fiscal."""
+        actor = self._authenticated_outbox_actor("transmit")
         raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
         validation = self.validate_authorized_xml(raw, require_signature=require_signature)
         key = validation["access_key"]
@@ -1022,7 +1036,7 @@ class FiscalService:
             "response_access_key": key,
             "status_code": validation["status_code"],
             "message": "XML autorizado importado e validado.",
-            "actor": str(actor or "Sistema"),
+            "actor": actor,
             "created_at": datetime.now().isoformat(timespec="seconds"),
             "source": "IMPORTADO",
             "request_path": "",
@@ -2985,13 +2999,15 @@ class FiscalService:
         *,
         operation: str,
         xml: bytes | str,
-        actor: str,
         access_key: str = "",
         model: str = "55",
         reservation_id: str = "",
         max_attempts: int = 5,
         retry_minutes: int = 5,
     ) -> dict[str, Any]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="enfileirar uma transmissão fiscal"
+        )
         operation = str(operation or "").strip().lower()
         if operation not in {"autorizacao", "consulta", "recibo", "evento", "inutilizacao"}:
             raise ValueError("Operação fiscal inválida para a fila de transmissão.")
@@ -3276,7 +3292,6 @@ class FiscalService:
                         if reservation_id:
                             self.confirm_number(
                                 reservation_id, access_key=queued_key,
-                                actor=str(record.get("actor", "")),
                             )
                     elif operation == "evento":
                         event_type = str(record.get("event_type") or "EVENTO").upper()
@@ -3446,7 +3461,8 @@ class FiscalService:
         finally:
             conn.close()
 
-    def retry_transmission(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+    def retry_transmission(self, queue_id: str) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = None
         for record in rows:
@@ -3471,8 +3487,9 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def force_receipt_check(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+    def force_receipt_check(self, queue_id: str) -> dict[str, Any]:
         """Agenda consulta imediata de recibo já existente sem reenviar a NF-e/NFC-e."""
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
         if target is None:
@@ -3490,14 +3507,14 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def _authenticated_outbox_actor(self, action: str) -> str:
+    def _authenticated_fiscal_actor(self, action: str, *, operation: str) -> str:
         if self._authorization_provider is None or not self._authorization_provider(action):
             raise PermissionError(
-                "Uma sessão autenticada com permissão fiscal é obrigatória para alterar a fila fiscal."
+                f"Uma sessão autenticada com permissão fiscal é obrigatória para {operation}."
             )
         if self._actor_provider is None:
             raise PermissionError(
-                "Uma sessão autenticada é obrigatória para alterar a fila fiscal."
+                f"Uma sessão autenticada é obrigatória para {operation}."
             )
         try:
             actor = str(self._actor_provider() or "").strip()
@@ -3505,13 +3522,22 @@ class FiscalService:
             raise
         except Exception as exc:
             raise PermissionError(
-                "Não foi possível confirmar a identidade autenticada para alterar a fila fiscal."
+                f"Não foi possível confirmar a identidade autenticada para {operation}."
             ) from exc
         if not actor:
             raise PermissionError(
                 "A sessão autenticada não possui uma identidade válida."
             )
         return actor
+
+    def require_authenticated_actor(self, action: str, *, operation: str) -> str:
+        """Expõe a mesma autoridade de sessão a efeitos locais fiscais coordenados."""
+        return self._authenticated_fiscal_actor(action, operation=operation)
+
+    def _authenticated_outbox_actor(self, action: str) -> str:
+        return self._authenticated_fiscal_actor(
+            action, operation="alterar a fila fiscal"
+        )
 
     def reconcile_unknown(self, queue_id: str) -> dict[str, Any]:
         """Agenda somente consulta por recibo/chave; nunca retransmite a autorização."""
@@ -3544,8 +3570,9 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def retry_contingency_batch(self, *, actor: str) -> dict[str, Any]:
+    def retry_contingency_batch(self) -> dict[str, Any]:
         """Reagenda em lote somente documentos NFC-e emitidos em contingência."""
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         now = datetime.now(timezone.utc).isoformat()
         selected: list[str] = []
@@ -3577,7 +3604,8 @@ class FiscalService:
             self._save_transmission_queue(rows)
         return {"scheduled": len(selected), "queue_ids": selected, "requested_at": now}
 
-    def cancel_transmission(self, queue_id: str, *, actor: str, reason: str) -> dict[str, Any]:
+    def cancel_transmission(self, queue_id: str, *, reason: str) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = next((record for record in rows if str(record.get("id")) == str(queue_id)), None)
         if target is None:
@@ -3603,10 +3631,12 @@ class FiscalService:
         xml: bytes | str,
         access_key: str,
         password: str,
-        actor: str,
         model: str = "55",
         reservation_id: str = "",
     ) -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="autorizar um documento fiscal"
+        )
         problems = self.validate_ready(operation="autorizacao", model=model)
         if problems:
             raise ValueError("; ".join(problems))
@@ -3655,7 +3685,7 @@ class FiscalService:
             actor=actor,
         )
         if reservation_id and response.success:
-            numbering = self.confirm_number(reservation_id, access_key=key, actor=actor)
+            numbering = self.confirm_number(reservation_id, access_key=key)
             record = dict(record)
             record["numbering"] = numbering
         return response, record
@@ -3671,7 +3701,10 @@ class FiscalService:
         self.validate_official_xml(xml, document_type="consulta")
         return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
-    def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, actor: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
+    def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="transmitir um evento fiscal"
+        )
         key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
         problems = self.validate_ready(operation="evento", model=model)
@@ -3689,7 +3722,10 @@ class FiscalService:
         record = self.register_event(access_key=access_key, event_type=event_type, response=response, request_xml=envelope, actor=actor)
         return response, record
 
-    def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str, actor: str) -> tuple[FiscalResponse, dict[str, Any]]:
+    def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str) -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="inutilizar a numeração fiscal"
+        )
         problems = self.validate_ready(operation="inutilizacao", model=model)
         if problems:
             raise ValueError("; ".join(problems))
