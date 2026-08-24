@@ -1604,3 +1604,26 @@ importação no banco de produção antes da aprovação visual e de um backup m
   coordenação com a IA; homologação visual/manual com catálogo real ainda é
   obrigatória. Fiscal/SEFAZ, IA, Fichário, licenciamento e banco real não foram
   alterados.
+
+### Checkpoint isolado — Dashboard / Início Qt
+
+- branch/worktree: `codex/dashboard-inicio-qt`, derivada do consolidado
+  `ad51ae4`, sem alterar a integração;
+- backend em `5bd7eb6` — `feat: pagina dashboard com permissao real`:
+  `DashboardApplicationService` exige sessão válida e `dashboard:view`, e
+  `DashboardRepository.day_history_page` limita de 1 a 200 registros, usa
+  `LIMIT/OFFSET` e calcula os totais completos do dia no banco;
+- interface em `cd4a767` — `feat: adiciona inicio paginado no Qt`: cartões de
+  vendas do dia, recebimentos de fichas, cobranças vencidas e produtos ativos,
+  além do Histórico de Movimentações do Dia aprovado no Legacy;
+- a consulta roda em `QThreadPool`, nunca no construtor/thread da interface;
+  gerações atrasadas são descartadas e paginação fica limitada a 100 itens por
+  solicitação; teste com 5.000 movimentos materializou somente 50 linhas;
+- janela é somente leitura, possui F5/PgUp/PgDown/Esc, foco visível, tabela
+  acessível e consome Enter/auto-repeat sem executar mutação;
+- testes focados: `33 passed`; regressão ampliada de Dashboard, relatórios,
+  segurança, preferências e separação venda/recebimento: `97 passed`;
+  `compileall` e `git diff --check` aprovados;
+- pendências: conexão ao shell/hub permanece coordenada fora deste checkpoint e
+  homologação visual/manual no Windows ainda é necessária. IA, Fiscal/SEFAZ,
+  Fichário, licenciamento, instalador e banco real não foram alterados.
