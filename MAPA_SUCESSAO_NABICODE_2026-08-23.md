@@ -2008,3 +2008,18 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - integração, merge e promoção continuam reservados à conversa coordenadora.
   Nenhum push foi feito, pois todos os checkpoints desta sequência ainda possuem
   homologação visual/manual pendente.
+
+### Integração consolidada — sequência administrativa Qt
+
+- a sequência Configurações, Impressão, Ajuda, Auditoria Administrativa e
+  Identificação Comercial foi integrada por merges normais na branch
+  `codex/integracao-nabi-pdv`, preservando os históricos das trilhas;
+- conflitos ficaram limitados ao mapa e ao teste de composição e foram
+  reconciliados preservando também a versão do aplicativo, a inclusão da pasta
+  fiscal no backup e o módulo Auditoria;
+- validação focada da integração: `63 passed`;
+- regressão completa: `2061 passed`, `1 skipped`, `444 subtests passed`, zero
+  falhas; `compileall` e `git diff --check` aprovados;
+- merge final: `4a812e7` — `merge: integra identidade da loja e auditoria Qt`;
+- permanecem pendentes somente as homologações visuais/manuais já descritas em
+  cada checkpoint. A integração não constitui release fiscal.
