@@ -38,6 +38,8 @@ from services.security_service import SecurityService
 from services.report_service import ReportService
 from services.cash_service import CashService
 from repositories.system_repository import SystemRepository
+from repositories.fornecedor_repository import FornecedorRepository
+from administration.purchase_management_service import PurchaseManagementService
 from repositories import NFeImportRepository
 from services import NFeImportService
 from ui_qt.app import run
@@ -70,8 +72,12 @@ def _create_assistant_activation(
     audit = AdminAuditService(database.connect, logging.getLogger("NabiCode.NabiAudit"))
     ia_root = profile.app_dir / "ia"
     purchase_drafts = purchase_executor = None
+    purchase_query_service = None
     if getattr(container, "purchase_service", None) is not None:
         purchase_drafts, purchase_executor = create_purchase_assistant_components(container)
+        purchase_query_service = PurchaseManagementService(
+            container.purchase_service, FornecedorRepository(database), security
+        )
     nfe_entry_executor = None
     if nfe_entry_service is not None and nfe_import_service is not None:
         nfe_entry_executor = NabiCodeNFeEntryAssistantGateway(
@@ -123,6 +129,7 @@ def _create_assistant_activation(
             session_id=session_id,
             purchase_draft_service=purchase_drafts,
             purchase_executor=purchase_executor,
+            purchase_query_service=purchase_query_service,
             nfe_entry_draft_service=nfe_entry_service,
             nfe_entry_executor=nfe_entry_executor,
             customer_draft_service=customer_drafts,

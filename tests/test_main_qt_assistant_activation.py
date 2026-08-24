@@ -144,6 +144,10 @@ class MainQtAssistantActivationTests(unittest.TestCase):
                 main_qt, "create_purchase_assistant_components",
                 return_value=("rascunhos-compra", "executor-compra"),
             ) as purchase_factory,
+            patch.object(
+                main_qt, "PurchaseManagementService",
+                return_value="consultas-compra",
+            ),
             patch.object(main_qt, "create_draft_assistant", return_value="assistente") as factory,
         ):
             activation = main_qt._create_assistant_activation(database, profile, container)
@@ -151,6 +155,7 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         purchase_factory.assert_called_once_with(container)
         self.assertEqual(factory.call_args.kwargs["purchase_draft_service"], "rascunhos-compra")
         self.assertEqual(factory.call_args.kwargs["purchase_executor"], "executor-compra")
+        self.assertEqual(factory.call_args.kwargs["purchase_query_service"], "consultas-compra")
         self.assertIs(factory.call_args.kwargs["financial_query_service"], financial_query)
 
     def test_composicao_injeta_entrada_nfe_sem_iniciar_runtime_ou_sefaz(self):

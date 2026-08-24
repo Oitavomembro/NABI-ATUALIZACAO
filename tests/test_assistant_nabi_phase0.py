@@ -27,7 +27,7 @@ from commercial.application.product_dto import ProductStockSummary
 from decimal import Decimal
 from assistant_nabi.read_tools import PRODUCT_SEARCH
 from assistant_nabi.diagnostic_tools import (
-    RUN_TEST_SUITE, RunTestSuiteTool, TestExecution,
+    RUN_TEST_SUITE, RunTestSuiteTool, SuiteExecution,
 )
 
 
@@ -564,7 +564,7 @@ class Runner:
 
     def run(self, suite):
         self.calls.append(suite)
-        return TestExecution(suite, 0, "Ran 28 tests - OK")
+        return SuiteExecution(suite, 0, "Ran 28 tests - OK")
 
 
 class NabiDiagnosticToolTests(unittest.TestCase):

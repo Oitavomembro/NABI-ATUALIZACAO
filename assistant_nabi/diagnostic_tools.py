@@ -32,7 +32,7 @@ RUN_TEST_SUITE = ToolDefinition(
 
 
 @dataclass(frozen=True, slots=True)
-class TestExecution:
+class SuiteExecution:
     suite: str
     return_code: int
     output: str
@@ -60,7 +60,7 @@ class FixedSuiteTestRunner:
             "qt_commercial": ("-m", "unittest", "tests.test_ui_qt_pdv"),
         }
 
-    def run(self, suite: str) -> TestExecution:
+    def run(self, suite: str) -> SuiteExecution:
         command = self._commands.get(str(suite))
         if command is None:
             raise ValueError("Suíte de testes não autorizada.")
@@ -79,9 +79,9 @@ class FixedSuiteTestRunner:
             )
         except subprocess.TimeoutExpired as error:
             output = f"{error.stdout or ''}\n{error.stderr or ''}"[-20_000:]
-            return TestExecution(str(suite), -1, output, True)
+            return SuiteExecution(str(suite), -1, output, True)
         output = f"{completed.stdout}\n{completed.stderr}"[-20_000:]
-        return TestExecution(str(suite), completed.returncode, output)
+        return SuiteExecution(str(suite), completed.returncode, output)
 
 
 class RunTestSuiteTool:

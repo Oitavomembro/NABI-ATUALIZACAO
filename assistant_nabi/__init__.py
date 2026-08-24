@@ -53,6 +53,10 @@ from .customer_receipt_gateway import NabiCodeCustomerReceiptAssistantGateway
 from .customer_receipt_tools import PREPARE_CUSTOMER_RECEIPT
 from .report_tools import REPORT_INDICATORS, register_report_read_tools
 from .cash_tools import CASH_CURRENT, register_cash_read_tools
+from .purchase_read_tools import (
+    GET_PURCHASE_ORDER, LIST_PURCHASE_ORDERS, LIST_SUPPLIERS,
+    register_purchase_read_tools,
+)
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -122,6 +126,10 @@ __all__ = [
     "register_commercial_read_tools",
     "register_report_read_tools",
     "register_cash_read_tools",
+    "LIST_SUPPLIERS",
+    "LIST_PURCHASE_ORDERS",
+    "GET_PURCHASE_ORDER",
+    "register_purchase_read_tools",
     "OPEN_PRODUCT_SEARCH",
     "register_ui_intent_tools",
     "create_read_only_assistant",

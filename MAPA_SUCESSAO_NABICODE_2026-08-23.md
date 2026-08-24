@@ -201,6 +201,11 @@ Legenda:
 - [~] cobertura progressiva: cadastro assistido de Clientes implementado; consultas
   de Estoque, Caixa e Financeiro já existem; ações mutáveis restantes e Relatórios
   continuam condicionados a portas oficiais, confirmação e idempotência próprias;
+- [x] consultas de Compras adicionadas por fachada autorizada: fornecedores,
+  pedidos e detalhes usam sessão/permissão `compras:view`, IDs reais, limites de
+  50/100 registros e payload mínimo; CNPJ, observações e usuário interno não são
+  enviados ao modelo. Nenhuma criação ou recebimento foi acrescentado por esta
+  porta de leitura;
 - [~] ferramenta administrativa de testes com catálogo fixo implementada na branch da IA; aceita somente suítes nomeadas, sem terminal/comando livre, e sua primeira execução real da suíte `ia_nabi` passou;
 - [x] validação da fundação IA: 31 testes próprios aprovados; validação ampliada posterior com 74 testes Commercial e 88 testes combinados PDV Qt/Nabi aprovados, sem falhas ou ignorados, além de `compileall` e `git diff --check`;
 - [x] checkpoint de conexão do painel ao shell Qt: ausência de serviço preserva o shell anterior; ausência de modelo/sessão exibe o painel em preparação com entrada bloqueada sem impedir o PDV; 40 testes IA/painel e 155 testes Qt/Commercial com 311 subtestes aprovados, além de `compileall`, `git diff --check` e ausência de importações Fiscal/SEFAZ na Nabi;
