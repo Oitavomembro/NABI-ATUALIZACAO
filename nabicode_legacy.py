@@ -813,7 +813,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
             )
             self.fiscal_sale_service.finalize_local_cancellation(
-                sale_id=int(sale_id), actor=str(actor or "Sistema")
+                sale_id=int(sale_id)
             )
         self.fiscal_cancellation_service = FiscalCancellationService(
             self.fiscal_service,
@@ -7558,7 +7558,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
             )
             self.fiscal_sale_service.finalize_local_cancellation(
-                sale_id=int(venda["id"]), actor=actor
+                sale_id=int(venda["id"])
             )
         except (ValueError, RuntimeError) as exc:
             messagebox.showerror("Cancelar venda", str(exc), parent=parent); return
@@ -7785,7 +7785,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 rascunho_fiscal = self.fiscal_sale_service.prepare(
                     items=[dict(item) for item in itens_finalizados],
                     payments=pagamentos,
-                    actor=usuario_venda,
                     recipient=destinatario_fiscal,
                     destination=destino_fiscal,
                     contingency_reason=self._pdv_contingency_reason,
@@ -7809,7 +7808,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 user=usuario_venda,
                 after_sale_in_transaction=(
                     (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
-                        connection, sale_id, rascunho_fiscal, actor=usuario_venda
+                        connection, sale_id, rascunho_fiscal
                     )) if rascunho_fiscal is not None else None
                 ),
             )
@@ -12029,7 +12028,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     self.fiscal_service.retry_transmission(str(queue["id"]))
                 else:
                     self.fiscal_sale_service.enqueue_pending(
-                        sale_id=int(row["sale_id"]), actor=self._usuario_financeiro()
+                        sale_id=int(row["sale_id"])
                     )
             password = self._obter_senha_certificado(
                 parent=janela, title="Transmitir documentos fiscais"
@@ -12109,13 +12108,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
             def work(_context):
                 self.fiscal_sale_service.cancel_authorized(
-                    sale_id=sale_id, password=password, actor=actor, justification=justification
+                    sale_id=sale_id, password=password, justification=justification
                 )
                 self.pdv_transaction_service.cancel_sale(
                     sale_id, user=actor,
                     before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
                 )
-                self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id, actor=actor)
+                self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id)
                 return sale_id
 
             task = TASK_MANAGER.submit("Cancelar venda fiscal autorizada", work)
