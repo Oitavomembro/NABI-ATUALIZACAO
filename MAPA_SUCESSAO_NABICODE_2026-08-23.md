@@ -988,6 +988,28 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 
 Não confundir automação inteligente com autoridade. A Nabi poderá planejar, consultar e operar ferramentas autorizadas, mas o NabiCode continuará sendo a fonte de verdade. Backend, permissões, validações, confirmação humana, transações e auditoria decidem o que realmente pode acontecer.
 
+### Checkpoint IA Nabi — Produtos e Estoque assistidos
+
+- branch isolada: `codex/ia-produtos-estoque-assistida`;
+- base confirmada: `0a4091075c9478bfa9c7855ffa4b43238fddc122`;
+- implementação: `5d14497` — `feat: adiciona produtos e estoque assistidos a Nabi`;
+- a Nabi prepara cadastro comercial de mercadoria com estoque inicial zero e
+  movimentos unitários `STOCK_RECEIVE`, `STOCK_REMOVE` e `STOCK_ADJUST` por ID
+  real de produto;
+- rascunhos são imutáveis, possuem SHA-256 determinístico e exigem confirmação
+  reforçada de uso único, vinculada à sessão e ao usuário reais;
+- mutação e `assistant_operation_journal` são confirmados na mesma transação;
+  repetição da mesma chave retorna o resultado persistido, fingerprint divergente
+  falha fechado e qualquer exceção reverte efeito e diário juntos;
+- produto assistido não recebe estoque inicial, saldo negativo ou campos fiscais;
+  atualização de produto/preço, exclusão/inativação, inventário em massa e toda
+  operação fiscal permanecem manuais;
+- nenhuma conexão foi feita em `main_qt.py`, `ui_qt/app.py` ou painel nesta trilha;
+- validação: 43 testes focados + 3 subtestes e regressão ampliada de 189 testes +
+  38 subtestes, além de `compileall` e `git diff --check`, todos aprovados;
+- próximo passo: integrar por merge normal na trilha consolidada e somente depois
+  conectar a composição/UI em checkpoint coordenado, preservando os limites acima.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
