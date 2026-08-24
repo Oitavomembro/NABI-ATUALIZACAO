@@ -451,7 +451,6 @@ class NFeDevolucaoService:
         document: Mapping[str, Any],
         item_overrides: Mapping[int, Mapping[str, Any]] | None,
         password: str,
-        actor: str,
         reservation_id: str = "",
     ) -> dict[str, Any]:
         """Gera, assina e transmite a NF-e de devolução, registrando seu ciclo fiscal."""
@@ -462,7 +461,6 @@ class NFeDevolucaoService:
         if current_status in {"CANCELADA", "CANCELADA_PENDENTE_ESTOQUE"}:
             raise ValueError("Devolução cancelada não pode ser autorizada novamente.")
 
-        actor_name = str(actor or "Sistema")
         attempts = list(current.get("attempts") or [])
         xml, access_key = self.preparar_documento_fiscal(
             devolucao_id, fiscal_service=fiscal_service, issuer=issuer, document=document,
@@ -471,7 +469,7 @@ class NFeDevolucaoService:
         request_hash = sha256(xml).hexdigest()
         attempt = {
             "attempted_at": datetime.now().isoformat(timespec="seconds"),
-            "actor": actor_name,
+            "actor": "",
             "access_key": access_key,
             "request_sha256": request_hash,
             "reservation_id": str(reservation_id or ""),
@@ -482,7 +480,7 @@ class NFeDevolucaoService:
         }
         try:
             response, fiscal_record = fiscal_service.authorize_document(
-                xml=xml, access_key=access_key, password=password, actor=actor_name, model="55",
+                xml=xml, access_key=access_key, password=password, model="55",
                 reservation_id=reservation_id,
             )
         except Exception as exc:
@@ -491,7 +489,6 @@ class NFeDevolucaoService:
             state = dict(current)
             state.update({
                 "access_key": access_key,
-                "actor": actor_name,
                 "attempts": attempts[-100:],
                 "events": list(current.get("events") or []),
                 "last_error": str(exc),
@@ -501,11 +498,13 @@ class NFeDevolucaoService:
             raise
 
         status = "AUTORIZADA" if response.success else "REJEITADA"
+        actor_name = str(fiscal_record.get("actor") or "").strip()
         attempt.update({
             "result": status,
             "status_code": str(response.status_code or ""),
             "message": str(response.message or ""),
             "protocol": str(response.protocol or ""),
+            "actor": actor_name,
         })
         attempts.append(attempt)
         state = {
@@ -522,6 +521,16 @@ class NFeDevolucaoService:
         }
         if not response.success:
             return self.repository.salvar_estado_fiscal(devolucao_id, state, status=status)
+
+        if not actor_name:
+            state["last_error"] = (
+                "NF-e autorizada, mas o registro fiscal não contém autoria "
+                "técnica autenticada para baixar o estoque."
+            )
+            self.repository.salvar_estado_fiscal(
+                devolucao_id, state, status="AUTORIZADA_PENDENTE_ESTOQUE"
+            )
+            raise RuntimeError(state["last_error"])
 
         # A autorização fiscal é externa; os efeitos locais ficam explicitamente
         # pendentes até que a baixa de estoque seja concluída com auditoria.
@@ -555,14 +564,14 @@ class NFeDevolucaoService:
 
     def cancelar_devolucao_oficial(
         self, devolucao_id: int, *, fiscal_service: FiscalService, password: str,
-        actor: str, justification: str, sequence: int = 1
+        justification: str, sequence: int = 1
     ) -> dict[str, Any]:
         state = self.repository.carregar_estado_fiscal(devolucao_id)
         if str(state.get("status") or "").upper() not in {"AUTORIZADA", "AUTORIZADA_PENDENTE_ESTOQUE"}:
             raise ValueError("Somente devolução autorizada pode ser cancelada oficialmente.")
         response, event = fiscal_service.send_event(
             event_type="CANCELAMENTO", access_key=str(state.get("access_key") or ""),
-            sequence=int(sequence), password=password, actor=actor,
+            sequence=int(sequence), password=password,
             protocol=str(state.get("protocol") or ""), justification=justification,
         )
         events = list(state.get("events") or [])
@@ -572,9 +581,19 @@ class NFeDevolucaoService:
         state["last_event_message"] = response.message
         if not response.success:
             return self.repository.salvar_estado_fiscal(devolucao_id, state, status="AUTORIZADA")
+        actor_name = str(event.get("actor") or "").strip()
+        if not actor_name:
+            state["last_error"] = (
+                "Cancelamento fiscal aceito, mas o evento não contém autoria "
+                "técnica autenticada para reverter o estoque."
+            )
+            self.repository.salvar_estado_fiscal(
+                devolucao_id, state, status="CANCELADA_PENDENTE_ESTOQUE"
+            )
+            raise RuntimeError(state["last_error"])
         try:
             state["stock_reversal"] = self.repository.reverter_saida_estoque(
-                devolucao_id, usuario=str(actor or "Sistema")
+                devolucao_id, usuario=actor_name
             )
         except Exception as exc:
             state["last_error"] = f"Cancelamento fiscal aceito, mas a reversão de estoque falhou: {exc}"
@@ -585,12 +604,21 @@ class NFeDevolucaoService:
         return self.repository.salvar_estado_fiscal(devolucao_id, state, status="CANCELADA")
 
     def recuperar_efeito_estoque_pendente(
-        self, devolucao_id: int, *, actor: str = "Sistema"
+        self, devolucao_id: int, *, fiscal_service: FiscalService
     ) -> dict[str, Any]:
         """Conclui, de forma idempotente, o efeito local de uma operação fiscal já aceita."""
+        actor_name = fiscal_service.require_authenticated_actor(
+            "transmit", operation="recuperar o efeito de estoque de uma devolução fiscal"
+        )
+        return self._recuperar_efeito_estoque_pendente(
+            int(devolucao_id), actor_name=actor_name
+        )
+
+    def _recuperar_efeito_estoque_pendente(
+        self, devolucao_id: int, *, actor_name: str
+    ) -> dict[str, Any]:
         estado = self.repository.carregar_estado_fiscal(int(devolucao_id))
         status = str(estado.get("status") or "").strip().upper()
-        actor_name = str(actor or "Sistema").strip() or "Sistema"
         if status == "AUTORIZADA_PENDENTE_ESTOQUE":
             efeito = self.repository.aplicar_saida_estoque(int(devolucao_id), usuario=actor_name)
             estado["stock_effect"] = efeito
@@ -622,22 +650,27 @@ class NFeDevolucaoService:
         raise ValueError("A devolução não possui efeito de estoque pendente para recuperação.")
 
     def recuperar_pendencias_estoque(
-        self, *, actor: str = "Sistema", limite: int = 200
+        self, *, fiscal_service: FiscalService, limite: int = 200
     ) -> dict[str, Any]:
         """Tenta concluir todas as pendências locais sem interromper o lote no primeiro erro."""
+        actor_name = fiscal_service.require_authenticated_actor(
+            "transmit", operation="recuperar efeitos de estoque de devoluções fiscais"
+        )
         concluidas: list[int] = []
         falhas: list[dict[str, Any]] = []
         for item in self.repository.listar_pendencias_estoque(limite=limite):
             devolucao_id = int(item["id"])
             try:
-                self.recuperar_efeito_estoque_pendente(devolucao_id, actor=actor)
+                self._recuperar_efeito_estoque_pendente(
+                    devolucao_id, actor_name=actor_name
+                )
                 concluidas.append(devolucao_id)
             except Exception as exc:
                 estado = self.repository.carregar_estado_fiscal(devolucao_id)
                 estado["last_error"] = str(exc)
                 estado.setdefault("local_recovery", []).append({
                     "action": "RECUPERAR_ESTOQUE",
-                    "actor": str(actor or "Sistema"),
+                    "actor": actor_name,
                     "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "result": "ERRO",
                     "message": str(exc),

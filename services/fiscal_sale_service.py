@@ -46,7 +46,7 @@ class FiscalSaleService:
 
     def prepare(
         self, *, items: Sequence[Mapping[str, Any]], payments: Sequence[Mapping[str, Any]],
-        actor: str, recipient: Mapping[str, Any] | None = None, destination: int = 1,
+        recipient: Mapping[str, Any] | None = None, destination: int = 1,
         issued_at: datetime | None = None, contingency_reason: str = "",
         certificate_password: str = "",
     ) -> FiscalSaleDraft:
@@ -66,7 +66,7 @@ class FiscalSaleService:
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
         reservation = self.fiscal_service.reserve_number(
-            model=model, series=series, actor=actor, environment=environment
+            model=model, series=series, environment=environment
         )
         try:
             issuer = dict(config.get("issuer") or {})
@@ -114,7 +114,7 @@ class FiscalSaleService:
             )
         except Exception:
             self.fiscal_service.release_number(
-                str(reservation["id"]), actor=actor,
+                str(reservation["id"]),
                 reason="Falha ao preparar documento antes da venda.",
             )
             raise
@@ -273,8 +273,12 @@ class FiscalSaleService:
             raise ValueError("Informe ao menos uma forma de pagamento para o documento fiscal.")
         return details
 
-    @staticmethod
-    def persist_draft(connection: Any, sale_id: int, draft: FiscalSaleDraft, *, actor: str = "") -> dict[str, Any]:
+    def persist_draft(
+        self, connection: Any, sale_id: int, draft: FiscalSaleDraft
+    ) -> dict[str, Any]:
+        actor = self.fiscal_service.require_authenticated_actor(
+            "transmit", operation="registrar uma venda na fila fiscal"
+        )
         now = datetime.now().astimezone().isoformat()
         cursor = connection.execute(
             """INSERT INTO fiscal_sale_documents
@@ -297,7 +301,10 @@ class FiscalSaleService:
             ),
         )
 
-    def enqueue_pending(self, *, sale_id: int, actor: str) -> dict[str, Any]:
+    def enqueue_pending(self, *, sale_id: int) -> dict[str, Any]:
+        actor = self.fiscal_service.require_authenticated_actor(
+            "transmit", operation="enfileirar uma venda fiscal pendente"
+        )
         connection = self.fiscal_service.connection_factory()
         try:
             row = connection.execute(
@@ -434,7 +441,10 @@ class FiscalSaleService:
             (new_status, datetime.now().astimezone().isoformat(), int(sale_id)),
         )
 
-    def finalize_local_cancellation(self, *, sale_id: int, actor: str) -> None:
+    def finalize_local_cancellation(self, *, sale_id: int) -> None:
+        self.fiscal_service.require_authenticated_actor(
+            "transmit", operation="finalizar o cancelamento local de uma venda fiscal"
+        )
         connection = self.fiscal_service.connection_factory()
         try:
             row = connection.execute(
@@ -447,12 +457,12 @@ class FiscalSaleService:
             return
         if str(row[1] or ""):
             self.fiscal_service.cancel_transmission(
-                str(row[1]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+                str(row[1]), reason="Venda cancelada antes da autorização fiscal."
             )
         if str(row[0] or ""):
             try:
                 self.fiscal_service.release_number(
-                    str(row[0]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+                    str(row[0]), reason="Venda cancelada antes da autorização fiscal."
                 )
             except ValueError as exc:
                 if "confirmada" not in str(exc).lower():
@@ -468,7 +478,7 @@ class FiscalSaleService:
             connection.close()
 
     def cancel_authorized(
-        self, *, sale_id: int, password: str, actor: str, justification: str
+        self, *, sale_id: int, password: str, justification: str
     ) -> dict[str, Any]:
         connection = self.fiscal_service.connection_factory()
         try:
@@ -484,7 +494,7 @@ class FiscalSaleService:
             raise ValueError("A venda selecionada não possui documento autorizado para cancelar.")
         response, event = self.fiscal_service.send_event(
             event_type="CANCELAMENTO", access_key=str(row[0]), sequence=1,
-            password=password, actor=actor, protocol=str(row[1]),
+            password=password, protocol=str(row[1]),
             justification=str(justification or "").strip(),
         )
         if not response.success:

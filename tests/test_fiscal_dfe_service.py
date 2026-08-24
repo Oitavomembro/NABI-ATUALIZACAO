@@ -24,7 +24,12 @@ def dfe_service():
         connection.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         connection.commit(); connection.close()
         fiscal = FiscalService(lambda: sqlite3.connect(database), storage_dir=root / "fiscal")
-        yield FiscalDFeService(fiscal, storage_dir=root / "dfe"), fiscal, root
+        yield FiscalDFeService(
+            fiscal,
+            storage_dir=root / "dfe",
+            actor_provider=lambda: "admin",
+            authorization_provider=lambda action: action == "transmit",
+        ), fiscal, root
 
 
 def test_monta_consulta_incremental_oficial_101(dfe_service):
@@ -139,7 +144,48 @@ def test_manifestacao_exige_documento_distribuido(dfe_service):
     service, _fiscal, _root = dfe_service
     with pytest.raises(ValueError, match="não foi localizada"):
         service.send_manifestation(
-            access_key="1" * 44, kind="CIENCIA", password="senha", actor="admin"
+            access_key="1" * 44, kind="CIENCIA", password="senha"
+        )
+
+
+@pytest.mark.parametrize(
+    ("actor_provider", "authorization_provider"),
+    [
+        (None, lambda _action: True),
+        (lambda: "", lambda _action: True),
+        (lambda: "admin", None),
+        (lambda: "admin", lambda _action: False),
+    ],
+)
+def test_manifestacao_falha_fechado_antes_de_ler_ou_transmitir(
+    dfe_service, actor_provider, authorization_provider
+):
+    _service, fiscal, root = dfe_service
+    service = FiscalDFeService(
+        fiscal,
+        storage_dir=root / "dfe-fail-closed",
+        actor_provider=actor_provider,
+        authorization_provider=authorization_provider,
+    )
+    with patch.object(service, "list_documents") as listed, patch.object(
+        fiscal, "transmit"
+    ) as transmitted:
+        with pytest.raises(PermissionError):
+            service.send_manifestation(
+                access_key="1" * 44, kind="CIENCIA", password="senha"
+            )
+    listed.assert_not_called()
+    transmitted.assert_not_called()
+
+
+def test_manifestacao_nao_aceita_actor_livre(dfe_service):
+    service, _fiscal, _root = dfe_service
+    with pytest.raises(TypeError, match="actor"):
+        service.send_manifestation(
+            access_key="1" * 44,
+            kind="CIENCIA",
+            password="senha",
+            actor="forjado",
         )
 
 
@@ -168,7 +214,7 @@ def test_manifestacao_assina_transmite_e_registra_sem_duplicar_conclusiva(dfe_se
         fiscal, "register_event", return_value={"success": True}
     ) as register:
         sent, record = service.send_manifestation(
-            access_key=key, kind="CONFIRMACAO", password="senha", actor="admin"
+            access_key=key, kind="CONFIRMACAO", password="senha"
         )
     assert sent.success and record["success"]
     assert register.call_args.kwargs["event_type"] == "MANIFESTACAO_CONFIRMACAO"
@@ -178,5 +224,5 @@ def test_manifestacao_assina_transmite_e_registra_sem_duplicar_conclusiva(dfe_se
     }]
     with pytest.raises(ValueError, match="manifestação conclusiva"):
         service.send_manifestation(
-            access_key=key, kind="DESCONHECIMENTO", password="senha", actor="admin"
+            access_key=key, kind="DESCONHECIMENTO", password="senha"
         )

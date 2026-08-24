@@ -748,6 +748,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return
         registrar_auditoria("Sistema", "INICIALIZAR", APP_VERSION, APP_VERSION_LABEL, "SUCESSO")
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
+        NFE_IMPORT_SERVICE.bind_security(
+            actor_provider=self._ator_fiscal_autenticado,
+            authorization_provider=lambda module, action: self.security.require(module, action),
+        )
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(
             conectar_banco,
@@ -763,7 +767,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             Path(APP_DIR) / "fiscal" / "email"
         )
         self.fiscal_dfe_service = FiscalDFeService(
-            self.fiscal_service, storage_dir=Path(APP_DIR) / "fiscal" / "dfe"
+            self.fiscal_service,
+            storage_dir=Path(APP_DIR) / "fiscal" / "dfe",
+            actor_provider=self._ator_fiscal_autenticado,
+            authorization_provider=lambda action: self.security.require("fiscal", action),
         )
         self.fiscal_ncm_catalog_service = FiscalNCMCatalogService(
             bundled_path=Path(RUNTIME_RESOURCE_DIR) / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
@@ -794,7 +801,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
             )
             self.fiscal_sale_service.finalize_local_cancellation(
-                sale_id=int(sale_id), actor=str(actor or "Sistema")
+                sale_id=int(sale_id)
             )
         self.fiscal_cancellation_service = FiscalCancellationService(
             self.fiscal_service,
@@ -4230,10 +4237,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 overrides[int(produto["item_origem_id"])] = {
                     "cfop": cfop, "cfop_analysis": analysis,
                 }
-            actor = self._usuario_financeiro()
             series = int(issuer_cfg.get("return_series") or 1)
             reservation = self.fiscal_service.reserve_number(
-                model="55", series=series, actor=actor, environment=config.get("environment")
+                model="55", series=series, environment=config.get("environment")
             )
             issuer = {
                 "cnpj": config.get("cnpj"), "name": issuer_cfg.get("name"),
@@ -4256,7 +4262,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "presence": 9,
                 "payment_code": "90",
             }
-            return issuer, document, overrides, reservation, actor
+            return issuer, document, overrides, reservation
 
         def emitir_oficial():
             item = selecionado()
@@ -4271,7 +4277,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             reservation = None
             try:
-                issuer, document, overrides, reservation, actor = _dados_emissao_oficial(item)
+                issuer, document, overrides, reservation = _dados_emissao_oficial(item)
                 rascunho = NFE_DEVOLUCAO_SERVICE.repository.buscar_rascunho(int(item["id"])) or {}
                 analyses = [dict(value.get("cfop_analysis") or {}) for value in overrides.values()]
                 cfops = sorted({str(value.get("cfop") or "") for value in overrides.values()})
@@ -4286,12 +4292,12 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     + (f"\nAtenção: {medium} item(ns) exigem conferência contábil posterior." if medium else ""),
                     parent=janela,
                 ):
-                    self.fiscal_service.release_number(reservation["reservation_id"], actor=actor, reason="Emissão cancelada antes da transmissão")
+                    self.fiscal_service.release_number(reservation["reservation_id"], reason="Emissão cancelada antes da transmissão")
                     return
                 estado = NFE_DEVOLUCAO_SERVICE.emitir_devolucao_oficial(
                     int(item["id"]), fiscal_service=self.fiscal_service, issuer=issuer,
                     document=document, item_overrides=overrides, password=senha,
-                    actor=actor, reservation_id=reservation["reservation_id"],
+                    reservation_id=reservation["reservation_id"],
                 )
                 registrar_auditoria("Fiscal", "Emitir NF-e de devolução", str(item["id"]),
                                    f"Status {estado.get('status')} | Chave {estado.get('access_key') or '-'}")
@@ -4307,7 +4313,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if reservation:
                     try:
                         self.fiscal_service.release_number(
-                            reservation["reservation_id"], actor=self._usuario_financeiro(),
+                            reservation["reservation_id"],
                             reason=f"Falha antes da autorização: {exc}",
                         )
                     except Exception:
@@ -4335,7 +4341,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 novo_estado = NFE_DEVOLUCAO_SERVICE.cancelar_devolucao_oficial(
                     int(item["id"]), fiscal_service=self.fiscal_service, password=senha,
-                    actor=self._usuario_financeiro(), justification=justificativa,
+                    justification=justificativa,
                 )
                 registrar_auditoria("Fiscal", "Cancelar NF-e de devolução", str(item["id"]),
                                    f"Status {novo_estado.get('status')}")
@@ -4365,7 +4371,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             try:
                 estado = NFE_DEVOLUCAO_SERVICE.recuperar_efeito_estoque_pendente(
-                    int(item["id"]), actor=self._usuario_financeiro()
+                    int(item["id"]), fiscal_service=self.fiscal_service
                 )
                 registrar_auditoria(
                     "Fiscal", "Recuperar estoque de devolução", str(item["id"]),
@@ -4388,7 +4394,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ):
                 return
             resultado = NFE_DEVOLUCAO_SERVICE.recuperar_pendencias_estoque(
-                actor=self._usuario_financeiro()
+                fiscal_service=self.fiscal_service
             )
             carregar()
             if resultado["falhas"]:
@@ -4618,20 +4624,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 parent=win,
             ):
                 return
+            actor_estorno = ""
             try:
+                actor_estorno = self._ator_fiscal_autenticado()
                 snapshot = criar_snapshot_sistema("antes_estornar_nfe_entrada")
                 resultados = []
                 for nota_id in ids:
-                    resultados.append(NFE_IMPORT_SERVICE.estornar_importacao(
-                        nota_id, usuario=self._usuario_financeiro()
-                    ))
+                    resultados.append(NFE_IMPORT_SERVICE.estornar_importacao(nota_id))
                 total_revertido = sum(item["movimentos_revertidos"] for item in resultados)
                 registrar_auditoria(
                     "XML",
                     "ESTORNAR_NFE_ENTRADA",
                     objeto=numeros,
                     detalhes=f"Notas={len(resultados)}; movimentos revertidos={total_revertido}; snapshot={snapshot.get('id')}",
-                    usuario="Administrador",
+                    usuario=actor_estorno,
                 )
                 self._registrar_acesso_admin(True, f"Estorno de {len(resultados)} NF-e(s) de entrada.")
                 messagebox.showinfo(
@@ -4645,7 +4651,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 except Exception:
                     logger.exception("Falha ao atualizar a grade de produtos após estornar NF-e")
             except Exception as exc:
-                registrar_auditoria("XML", "ESTORNAR_NFE_ENTRADA", objeto=numeros, detalhes=str(exc), resultado="ERRO", usuario="Administrador")
+                registrar_auditoria(
+                    "XML", "ESTORNAR_NFE_ENTRADA", objeto=numeros,
+                    detalhes=str(exc), resultado="ERRO",
+                    usuario=actor_estorno,
+                )
                 messagebox.showerror("Estornar lançamento", f"A operação foi revertida.\n\n{exc}", parent=win)
 
         def revisar_selecionada():
@@ -5338,17 +5348,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 cfg["indice"] = analise.index
                 itens_preparados.append(cfg)
             try:
-                usuario = getattr(getattr(self, "security_session", None), "username", "Sistema") or "Sistema"
                 if em_revisao:
                     resultado_revisao = NFE_IMPORT_SERVICE.revisar_produtos_importados(
-                        revisao_importacao_id, documento, itens=itens_preparados, usuario=usuario
+                        revisao_importacao_id, documento, itens=itens_preparados
                     )
                     vinculados = int(resultado_revisao["produtos_atualizados"])
                     resultados = []
                     criados = 0
                 else:
                     resultado_importacao = NFE_IMPORT_SERVICE.importar_atomicamente(
-                        documento, arquivo_origem=caminho, itens=itens_preparados, usuario=usuario,
+                        documento, arquivo_origem=caminho, itens=itens_preparados,
                     )
                     resultados = resultado_importacao["resultados"]
                     criados = int(resultado_importacao["itens_criados"])
@@ -7559,7 +7568,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
             )
             self.fiscal_sale_service.finalize_local_cancellation(
-                sale_id=int(venda["id"]), actor=actor
+                sale_id=int(venda["id"])
             )
         except (ValueError, RuntimeError) as exc:
             messagebox.showerror("Cancelar venda", str(exc), parent=parent); return
@@ -7786,7 +7795,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 rascunho_fiscal = self.fiscal_sale_service.prepare(
                     items=[dict(item) for item in itens_finalizados],
                     payments=pagamentos,
-                    actor=usuario_venda,
                     recipient=destinatario_fiscal,
                     destination=destino_fiscal,
                     contingency_reason=self._pdv_contingency_reason,
@@ -7810,7 +7818,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 user=usuario_venda,
                 after_sale_in_transaction=(
                     (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
-                        connection, sale_id, rascunho_fiscal, actor=usuario_venda
+                        connection, sale_id, rascunho_fiscal
                     )) if rascunho_fiscal is not None else None
                 ),
             )
@@ -7818,7 +7826,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if rascunho_fiscal is not None:
                 try:
                     self.fiscal_service.release_number(
-                        rascunho_fiscal.reservation_id, actor=usuario_venda,
+                        rascunho_fiscal.reservation_id,
                         reason="A transação comercial da venda foi revertida.",
                     )
                 except Exception:
@@ -11173,7 +11181,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     record = self.fiscal_service.initialize_numbering(
                         model=code, series=int(series_entry.get()),
                         next_number=int(next_entry.get()), environment=selected_environment(),
-                        actor=self._usuario_financeiro(),
                     )
                     registrar_auditoria(
                         self._usuario_financeiro(), "INICIAR_NUMERACAO_FISCAL", "Fiscal",
@@ -11995,9 +12002,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             queue_ids = None
             if contingency_batch:
-                batch = self.fiscal_service.retry_contingency_batch(
-                    actor=self._usuario_financeiro()
-                )
+                batch = self.fiscal_service.retry_contingency_batch()
                 if not batch["scheduled"]:
                     messagebox.showinfo(
                         "Contingência",
@@ -12012,9 +12017,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 queue = dict(row.get("_queue") or {})
                 try:
-                    self.fiscal_service.force_receipt_check(
-                        str(queue.get("id") or ""), actor=self._usuario_financeiro()
-                    )
+                    self.fiscal_service.force_receipt_check(str(queue.get("id") or ""))
                 except ValueError as exc:
                     messagebox.showwarning("Consultar recibo", str(exc), parent=janela)
                     return
@@ -12032,10 +12035,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if queue.get("id") and queue.get("status") == "RESPOSTA_DESCONHECIDA":
                     self.fiscal_service.reconcile_unknown(str(queue["id"]))
                 elif queue.get("id") and queue.get("status") in {"FALHA", "ERRO"}:
-                    self.fiscal_service.retry_transmission(str(queue["id"]), actor=self._usuario_financeiro())
+                    self.fiscal_service.retry_transmission(str(queue["id"]))
                 else:
                     self.fiscal_sale_service.enqueue_pending(
-                        sale_id=int(row["sale_id"]), actor=self._usuario_financeiro()
+                        sale_id=int(row["sale_id"])
                     )
             password = self._obter_senha_certificado(
                 parent=janela, title="Transmitir documentos fiscais"
@@ -12115,13 +12118,13 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
             def work(_context):
                 self.fiscal_sale_service.cancel_authorized(
-                    sale_id=sale_id, password=password, actor=actor, justification=justification
+                    sale_id=sale_id, password=password, justification=justification
                 )
                 self.pdv_transaction_service.cancel_sale(
                     sale_id, user=actor,
                     before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
                 )
-                self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id, actor=actor)
+                self.fiscal_sale_service.finalize_local_cancellation(sale_id=sale_id)
                 return sale_id
 
             task = TASK_MANAGER.submit("Cancelar venda fiscal autorizada", work)
@@ -12175,7 +12178,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 response, _event = self.fiscal_service.send_event(
                     event_type="CCE", access_key=key, sequence=sequence,
-                    password=password, actor=self._usuario_financeiro(),
+                    password=password,
                     correction=correction.strip(),
                 )
                 if not response.success:
@@ -12234,7 +12237,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                         start_number=int(entries["start"].get()),
                         end_number=int(entries["end"].get()),
                         justification=entries["justification"].get().strip(),
-                        password=password, actor=self._usuario_financeiro(),
+                        password=password,
                     )
                     if not response.success:
                         raise ValueError(
@@ -12536,7 +12539,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
             if password is None:
                 return
-            actor = self._usuario_financeiro()
             key = str(row["access_key"])
             transmission_status.configure(
                 text="Enviando manifestação em segundo plano...", text_color="#d29922"
@@ -12545,7 +12547,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "Manifestação do destinatário",
                 lambda _context: self.fiscal_dfe_service.send_manifestation(
                     access_key=key, kind=kind, password=password,
-                    actor=actor, justification=justification,
+                    justification=justification,
                 ),
             )
 

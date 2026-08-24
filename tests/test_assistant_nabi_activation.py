@@ -90,6 +90,33 @@ class AuthenticatedAssistantActivationTests(unittest.TestCase):
         self.assertIn(("logout", "IA_NABI_ENCERRADA"), security.calls)
         self.assertFalse(activation.active)
 
+    def test_stop_com_sessao_compartilhada_nao_desloga_o_sistema(self):
+        security = Security()
+        runtime = Runtime()
+        activation = AuthenticatedAssistantActivation(
+            security_service=security,
+            runtime_factory=lambda: runtime,
+            assistant_factory=lambda model, session_id: "assistente",
+            logout_on_stop=False,
+        )
+        activation.activate("operador", "segredo")
+        activation.stop()
+        self.assertEqual(runtime.stopped, 1)
+        self.assertFalse(any(call[0] == "logout" for call in security.calls))
+
+    def test_falha_com_sessao_compartilhada_nao_desloga_o_sistema(self):
+        security = Security()
+        runtime = Runtime(fail_start=True)
+        activation = AuthenticatedAssistantActivation(
+            security_service=security,
+            runtime_factory=lambda: runtime,
+            assistant_factory=lambda model, session_id: "assistente",
+            logout_on_stop=False,
+        )
+        with self.assertRaisesRegex(RuntimeError, "runtime inválido"):
+            activation.activate("operador", "segredo")
+        self.assertFalse(any(call[0] == "logout" for call in security.calls))
+
     def test_parar_durante_carregamento_impede_ativacao_tardia(self):
         entered = Event()
         release = Event()

@@ -7,12 +7,16 @@ from threading import Lock
 class AuthenticatedAssistantActivation:
     """Ativa o runtime local somente depois de autenticação real do operador."""
 
-    def __init__(self, *, security_service, runtime_factory, assistant_factory) -> None:
+    def __init__(
+        self, *, security_service, runtime_factory, assistant_factory,
+        logout_on_stop: bool = True,
+    ) -> None:
         if security_service is None or runtime_factory is None or assistant_factory is None:
             raise ValueError("Dependências de ativação da Nabi são obrigatórias.")
         self._security = security_service
         self._runtime_factory = runtime_factory
         self._assistant_factory = assistant_factory
+        self._logout_on_stop = bool(logout_on_stop)
         self._runtime = None
         self._service = None
         self._lock = Lock()
@@ -57,7 +61,8 @@ class AuthenticatedAssistantActivation:
         except Exception:
             if runtime is not None:
                 runtime.stop()
-            self._security.logout("IA_NABI_ATIVACAO_FALHOU")
+            if self._logout_on_stop:
+                self._security.logout("IA_NABI_ATIVACAO_FALHOU")
             with self._lock:
                 self._activating = False
             raise
@@ -73,4 +78,5 @@ class AuthenticatedAssistantActivation:
             return
         if runtime is not None:
             runtime.stop()
-        self._security.logout("IA_NABI_ENCERRADA")
+        if self._logout_on_stop:
+            self._security.logout("IA_NABI_ENCERRADA")

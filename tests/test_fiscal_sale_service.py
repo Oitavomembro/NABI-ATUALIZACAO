@@ -22,6 +22,7 @@ class FakeFiscalService:
         self.queued = []
         self.reservations = 0
         self.contingency_calls = []
+        self.authorized = True
 
     def connection_factory(self):
         return sqlite3.connect(self.db)
@@ -87,6 +88,11 @@ class FakeFiscalService:
     def validate_official_xml(self, _xml, **kwargs):
         self.contingency_calls.append(("validate", kwargs))
 
+    def require_authenticated_actor(self, action, *, operation):
+        if not self.authorized:
+            raise PermissionError("sessão fiscal obrigatória")
+        return "caixa"
+
 
 class FiscalSaleServiceTests(unittest.TestCase):
     def setUp(self):
@@ -124,7 +130,7 @@ class FiscalSaleServiceTests(unittest.TestCase):
 
     def test_prepara_nfce_com_numero_reservado_e_pagamento_pix(self):
         draft = self.service.prepare(
-            items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}], actor="caixa"
+            items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}]
         )
         self.assertEqual(draft.reservation_id, "RES-1")
         self.assertEqual(draft.model, "65")
@@ -143,7 +149,6 @@ class FiscalSaleServiceTests(unittest.TestCase):
             items=[{"produto_id": 1}],
             payments=[{"forma": "CREDITO", "valor": 10, "card_integration": 2,
                        "card_authorization": "NSU123"}],
-            actor="caixa",
         )
         self.assertEqual(self.fiscal.document["payment_code"], "03")
         self.assertEqual(
@@ -158,7 +163,6 @@ class FiscalSaleServiceTests(unittest.TestCase):
                 {"forma": "PIX", "valor": "4.00"},
                 {"forma": "CREDIARIO", "valor": "6.00"},
             ],
-            actor="caixa",
         )
         self.assertEqual(
             self.fiscal.document["payments"],
@@ -172,14 +176,14 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.fiscal.build_document_xml = lambda **_kwargs: (_ for _ in ()).throw(ValueError("xml inválido"))
         with self.assertRaisesRegex(ValueError, "xml inválido"):
             self.service.prepare(
-                items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}], actor="caixa"
+                items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}]
             )
         self.assertEqual(self.fiscal.released, ["RES-1"])
 
     def test_contingencia_nfce_nasce_com_nova_chave_qrcode_e_assinatura(self):
         draft = self.service.prepare(
             items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}],
-            actor="caixa", contingency_reason="Internet indisponível durante a venda.",
+            contingency_reason="Internet indisponível durante a venda.",
             certificate_password="senha",
         )
         self.assertTrue(draft.contingency)
@@ -190,7 +194,7 @@ class FiscalSaleServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "senha do certificado"):
             self.service.prepare(
                 items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}],
-                actor="caixa", contingency_reason="Internet indisponível durante a venda.",
+                contingency_reason="Internet indisponível durante a venda.",
             )
         self.assertEqual(self.fiscal.released, ["RES-1"])
 
@@ -199,8 +203,8 @@ class FiscalSaleServiceTests(unittest.TestCase):
         connection = sqlite3.connect(self.db)
         self.service.persist_draft(connection, 10, draft)
         connection.commit(); connection.close()
-        first = self.service.enqueue_pending(sale_id=10, actor="caixa")
-        second = self.service.enqueue_pending(sale_id=10, actor="caixa")
+        first = self.service.enqueue_pending(sale_id=10)
+        second = self.service.enqueue_pending(sale_id=10)
         self.assertEqual(first["id"], second["id"])
         connection = sqlite3.connect(self.db)
         self.assertEqual(connection.execute("SELECT COUNT(*) FROM fiscal_outbox").fetchone()[0], 1)
@@ -210,6 +214,53 @@ class FiscalSaleServiceTests(unittest.TestCase):
             self.service.summary(),
             {"total": 1, "authorized": 0, "pending": 1, "failed": 0, "cancelled": 0},
         )
+
+    def test_mutacoes_da_venda_fiscal_nao_aceitam_actor_livre(self):
+        draft = FiscalSaleDraft(
+            "RES-1", "29" + "0" * 42, "65", "HOMOLOGACAO", b"<NFe/>"
+        )
+        connection = sqlite3.connect(self.db)
+        try:
+            with self.assertRaisesRegex(TypeError, "actor"):
+                self.service.persist_draft(
+                    connection, 90, draft, actor="forjado"
+                )
+        finally:
+            connection.close()
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.enqueue_pending(sale_id=90, actor="forjado")
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.finalize_local_cancellation(
+                sale_id=90, actor="forjado"
+            )
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.cancel_authorized(
+                sale_id=90, password="senha", actor="forjado",
+                justification="Cancelamento solicitado pelo cliente",
+            )
+
+    def test_rascunho_falha_fechado_antes_de_gravar_documento_ou_outbox(self):
+        self.fiscal.authorized = False
+        draft = FiscalSaleDraft(
+            "RES-1", "29" + "0" * 42, "65", "HOMOLOGACAO", b"<NFe/>"
+        )
+        connection = sqlite3.connect(self.db)
+        try:
+            with self.assertRaisesRegex(PermissionError, "sessão fiscal"):
+                self.service.persist_draft(connection, 91, draft)
+            self.assertEqual(
+                connection.execute(
+                    "SELECT COUNT(*) FROM fiscal_sale_documents"
+                ).fetchone()[0],
+                0,
+            )
+        finally:
+            connection.close()
+
+    def test_enfileiramento_falha_fechado_antes_de_consultar_documento(self):
+        self.fiscal.authorized = False
+        with self.assertRaisesRegex(PermissionError, "sessão fiscal"):
+            self.service.enqueue_pending(sale_id=999)
 
     def test_destinatario_e_destino_sao_obtidos_do_cliente(self):
         recipient, destination = self.service.recipient_for_customer(1, model="55")
@@ -228,11 +279,11 @@ class FiscalSaleServiceTests(unittest.TestCase):
         connection = sqlite3.connect(self.db)
         self.service.persist_draft(connection, 20, draft)
         connection.commit(); connection.close()
-        self.service.enqueue_pending(sale_id=20, actor="caixa")
+        self.service.enqueue_pending(sale_id=20)
         connection = sqlite3.connect(self.db)
         self.service.prepare_local_cancellation(connection, 20)
         connection.commit(); connection.close()
-        self.service.finalize_local_cancellation(sale_id=20, actor="caixa")
+        self.service.finalize_local_cancellation(sale_id=20)
         connection = sqlite3.connect(self.db)
         status = connection.execute("SELECT status FROM fiscal_sale_documents WHERE sale_id=20").fetchone()[0]
         connection.close()
@@ -247,7 +298,7 @@ class FiscalSaleServiceTests(unittest.TestCase):
             {"total": 1, "authorized": 0, "pending": 0, "failed": 0, "cancelled": 1},
         )
         with self.assertRaisesRegex(ValueError, "cancelado"):
-            self.service.enqueue_pending(sale_id=20, actor="caixa")
+            self.service.enqueue_pending(sale_id=20)
 
     def test_cancelamento_local_bloqueia_documento_autorizado(self):
         draft = FiscalSaleDraft("RES-2", "29" + "1" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
@@ -290,7 +341,7 @@ class FiscalSaleServiceTests(unittest.TestCase):
         connection.execute("UPDATE fiscal_sale_documents SET status='AUTORIZADO',protocol='P2' WHERE sale_id=22")
         connection.commit(); connection.close()
         event = self.service.cancel_authorized(
-            sale_id=22, password="senha", actor="gerente",
+            sale_id=22, password="senha",
             justification="Cancelamento solicitado corretamente.",
         )
         self.assertEqual(event["event"], "CANCELAMENTO")

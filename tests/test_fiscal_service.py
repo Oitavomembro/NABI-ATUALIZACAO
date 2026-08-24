@@ -42,7 +42,7 @@ class FiscalServiceTests(unittest.TestCase):
             self.connect,
             storage_dir=Path(self.tmp.name) / "docs",
             actor_provider=lambda: "gerente",
-            authorization_provider=lambda action: action == "transmit",
+            authorization_provider=lambda action: action in {"configure", "transmit"},
         )
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
@@ -322,8 +322,8 @@ class FiscalServiceTests(unittest.TestCase):
     def test_numeração_inicial_define_proximo_numero_uma_unica_vez(self):
         initialized = self.service.initialize_numbering(
             model="55", series=4, next_number=321, environment="HOMOLOGACAO",
-            actor="admin",
         )
+        self.assertEqual(initialized["actor"], "gerente")
         self.assertEqual(initialized["next_number"], 321)
         scope = self.service.numbering_scope(
             model="55", series=4, environment="HOMOLOGACAO"
@@ -331,19 +331,19 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertTrue(scope["initialized"])
         self.assertEqual(scope["next_number"], 321)
         reserved = self.service.reserve_number(
-            model="55", series=4, environment="HOMOLOGACAO", actor="admin"
+            model="55", series=4, environment="HOMOLOGACAO"
         )
         self.assertEqual(reserved["number"], 321)
         with self.assertRaisesRegex(ValueError, "já foi iniciada"):
             self.service.initialize_numbering(
                 model="55", series=4, next_number=500,
-                environment="HOMOLOGACAO", actor="admin",
+                environment="HOMOLOGACAO",
             )
 
     def test_numeração_inicial_isola_ambiente_modelo_e_serie(self):
         self.service.initialize_numbering(
             model="65", series=2, next_number=90,
-            environment="HOMOLOGACAO", actor="admin",
+            environment="HOMOLOGACAO",
         )
         production = self.service.numbering_scope(
             model="65", series=2, environment="PRODUCAO"
@@ -353,6 +353,24 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertFalse(production["initialized"])
         self.assertFalse(other_model["initialized"])
+
+    def test_numeração_inicial_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.initialize_numbering(
+                model="55", series=1, next_number=1, actor="forjado"
+            )
+
+    def test_numeração_inicial_exige_permissao_configure_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-configuracao-numeracao",
+            actor_provider=lambda: "gerente",
+            authorization_provider=lambda action: action == "transmit",
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.initialize_numbering(model="55", series=1, next_number=1)
+        load.assert_not_called()
 
     def test_bahia_oferece_todos_os_regimes_e_os_dois_modelos(self):
         expected_regimes = {
@@ -442,10 +460,10 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "0" * 18 + "65" + "0" * 22
         xml = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}"/></NFe>'
         first = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+            operation="autorizacao", xml=xml, access_key=key, model="65"
         )
         second = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+            operation="autorizacao", xml=xml, access_key=key, model="65"
         )
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.service.list_transmission_queue()), 1)
@@ -1439,17 +1457,98 @@ class FiscalServiceTests(unittest.TestCase):
             return FiscalResponse(True, "135", "Evento registrado", "EV123", raw_xml="<ret><cStat>135</cStat><nProt>EV123</nProt></ret>")
         self.service.transmit = fake_transmit
         try:
-            response, record = self.service.authorize_document(xml=xml, access_key=key, password=self.password, actor="admin")
+            response, record = self.service.authorize_document(xml=xml, access_key=key, password=self.password)
             self.assertTrue(response.success)
             self.assertTrue(Path(record["processed_path"]).is_file())
             self.assertTrue(self.service.consult_document(access_key=key, password=self.password).success)
-            event_response, _ = self.service.send_event(event_type="CCE", access_key=key, sequence=1, password=self.password, actor="admin", correction="Corrigir descrição complementar do produto.")
+            event_response, _ = self.service.send_event(event_type="CCE", access_key=key, sequence=1, password=self.password, correction="Corrigir descrição complementar do produto.")
             self.assertTrue(event_response.success)
-            inut_response, _ = self.service.inutilize_numbers(year=2026, model="55", series=1, start_number=20, end_number=21, justification="Faixa não utilizada por falha operacional.", password=self.password, actor="admin")
+            inut_response, _ = self.service.inutilize_numbers(year=2026, model="55", series=1, start_number=20, end_number=21, justification="Faixa não utilizada por falha operacional.", password=self.password)
             self.assertTrue(inut_response.success)
         finally:
             self.service.transmit = original_transmit
         self.assertEqual(calls, ["autorizacao", "consulta", "evento", "inutilizacao"])
+
+    def test_evento_fiscal_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.send_event(
+                event_type="CCE", access_key="1" * 44, sequence=1,
+                password=self.password, actor="forjado",
+                correction="Correção complementar suficientemente detalhada.",
+            )
+
+    def test_autorizacao_fiscal_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.authorize_document(
+                xml=b"<NFe/>", access_key="1" * 44,
+                password=self.password, actor="forjado",
+            )
+
+    def test_autorizacao_fiscal_falha_fechado_antes_de_validar_assinar_ou_transmitir(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-documento",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_ready") as ready, patch.object(
+            service, "sign_xml"
+        ) as sign, patch.object(service, "transmit") as transmit:
+            with self.assertRaises(PermissionError):
+                service.authorize_document(
+                    xml=b"<NFe/>", access_key="1" * 44,
+                    password=self.password,
+                )
+        ready.assert_not_called()
+        sign.assert_not_called()
+        transmit.assert_not_called()
+
+    def test_evento_fiscal_falha_fechado_antes_de_validar_ou_transmitir(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-evento",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_ready") as ready, patch.object(
+            service, "transmit"
+        ) as transmit:
+            with self.assertRaises(PermissionError):
+                service.send_event(
+                    event_type="CCE", access_key="1" * 44, sequence=1,
+                    password=self.password,
+                    correction="Correção complementar suficientemente detalhada.",
+                )
+        ready.assert_not_called()
+        transmit.assert_not_called()
+
+    def test_inutilizacao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.inutilize_numbers(
+                year=2026, model="55", series=1, start_number=20,
+                end_number=21, justification="Faixa não utilizada pelo sistema.",
+                password=self.password, actor="forjado",
+            )
+
+    def test_inutilizacao_falha_fechado_antes_de_validar_ou_transmitir(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-inutilizacao",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_ready") as ready, patch.object(
+            service, "transmit"
+        ) as transmit:
+            with self.assertRaises(PermissionError):
+                service.inutilize_numbers(
+                    year=2026, model="55", series=1, start_number=20,
+                    end_number=21,
+                    justification="Faixa não utilizada pelo sistema.",
+                    password=self.password,
+                )
+        ready.assert_not_called()
+        transmit.assert_not_called()
 
     def test_contingencia_exige_justificativa_e_recalcula_chave(self):
         xml, original_key = self.service.build_document_xml(
@@ -1478,7 +1577,7 @@ class FiscalServiceTests(unittest.TestCase):
             f'<infNFe Id="NFe{key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>'
         )
         queued = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", model="65", access_key=key,
+            operation="autorizacao", xml=xml, model="65", access_key=key,
         )
         created = datetime.fromisoformat(queued["created_at"])
         deadline = datetime.fromisoformat(queued["contingency_deadline_at"])
@@ -1614,47 +1713,130 @@ class FiscalServiceTests(unittest.TestCase):
             self.service.merge_authorization_protocol(request_xml, response_xml)
 
     def test_reserva_confirma_e_bloqueia_reuso_de_numeracao(self):
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin", environment="HOMOLOGACAO")
+        reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(reservation["number"], 1)
+        self.assertEqual(reservation["actor"], "gerente")
         key = self.service.build_access_key(
             state_code="29", issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
             cnpj="12345678000195", model="55", series=1, number=1, numeric_code="12345678",
         )
-        confirmed = self.service.confirm_number(reservation["id"], access_key=key, actor="admin")
+        confirmed = self.service.confirm_number(reservation["id"], access_key=key)
         self.assertEqual(confirmed["status"], "CONFIRMADO")
         self.assertEqual(confirmed["access_key"], key)
+        self.assertEqual(confirmed["confirmed_by"], "gerente")
         with self.assertRaises(ValueError):
-            self.service.release_number(reservation["id"], actor="admin", reason="Tentativa inválida")
-        next_reservation = self.service.reserve_number(model="55", series=1, actor="admin", environment="HOMOLOGACAO")
+            self.service.release_number(reservation["id"], reason="Tentativa inválida")
+        next_reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(next_reservation["number"], 2)
 
+    def test_confirmacao_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.confirm_number(
+                "reserva", access_key="1" * 44, actor="forjado"
+            )
+
+    def test_confirmacao_bloqueia_reserva_legada_sem_identidade(self):
+        reservation = self.service.reserve_number(model="55", series=6)
+        connection = self.connect()
+        data = json.loads(connection.execute(
+            "SELECT valor FROM configuracoes WHERE chave=?",
+            (FiscalService.NUMBERING_KEY,),
+        ).fetchone()[0])
+        data["records"][reservation["id"]]["actor"] = ""
+        connection.execute(
+            "UPDATE configuracoes SET valor=? WHERE chave=?",
+            (json.dumps(data), FiscalService.NUMBERING_KEY),
+        )
+        connection.commit()
+        connection.close()
+        key = self.service.build_access_key(
+            state_code="29",
+            issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+            cnpj="12345678000195",
+            model="55",
+            series=6,
+            number=reservation["number"],
+            numeric_code="12345678",
+        )
+        with self.assertRaises(PermissionError):
+            self.service.confirm_number(reservation["id"], access_key=key)
+        current = {
+            row["id"]: row
+            for row in self.service.numbering_status(model="55", series=6)
+        }[reservation["id"]]
+        self.assertEqual(current["status"], "RESERVADO")
+
+    def test_reserva_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.reserve_number(model="55", series=1, actor="forjado")
+
+    def test_reserva_de_numeracao_falha_fechado_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-reserva",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.reserve_number(model="55", series=1)
+        load.assert_not_called()
+
+    def test_liberacao_de_numeracao_usa_operador_autenticado(self):
+        reservation = self.service.reserve_number(model="55", series=7)
+        released = self.service.release_number(
+            reservation["id"], reason="Documento descartado antes da transmissão"
+        )
+        self.assertEqual(released["status"], "LIBERADO")
+        self.assertEqual(released["released_by"], "gerente")
+
+    def test_liberacao_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.release_number(
+                "reserva", actor="forjado", reason="Documento descartado"
+            )
+
+    def test_liberacao_de_numeracao_falha_fechado_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-liberacao",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.release_number(
+                    "reserva", reason="Documento descartado antes da transmissão"
+                )
+        load.assert_not_called()
+
     def test_confirmacao_rejeita_chave_de_outra_numeracao(self):
-        reservation = self.service.reserve_number(model="65", series=3, actor="caixa", environment="HOMOLOGACAO")
+        reservation = self.service.reserve_number(model="65", series=3, environment="HOMOLOGACAO")
         wrong_key = self.service.build_access_key(
             state_code="29", issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
             cnpj="12345678000195", model="65", series=3, number=99, numeric_code="87654321",
         )
         with self.assertRaises(ValueError):
-            self.service.confirm_number(reservation["id"], access_key=wrong_key, actor="caixa")
+            self.service.confirm_number(reservation["id"], access_key=wrong_key)
         current = self.service.numbering_status(model="65", series=3)[0]
         self.assertEqual(current["status"], "RESERVADO")
 
     def test_reserva_expirada_e_recuperada_sem_reutilizar_numero(self):
-        reservation = self.service.reserve_number(model="55", series=9, actor="admin", ttl_minutes=1)
+        reservation = self.service.reserve_number(model="55", series=9, ttl_minutes=1)
         conn = self.connect()
         row = conn.execute("SELECT valor FROM configuracoes WHERE chave = ?", (FiscalService.NUMBERING_KEY,)).fetchone()
         data = __import__("json").loads(row[0])
         data["records"][reservation["id"]]["expires_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
         conn.execute("UPDATE configuracoes SET valor = ? WHERE chave = ?", (__import__("json").dumps(data), FiscalService.NUMBERING_KEY))
         conn.commit(); conn.close()
-        second = self.service.reserve_number(model="55", series=9, actor="admin")
+        second = self.service.reserve_number(model="55", series=9)
         self.assertEqual(second["number"], 2)
         records = {row["number"]: row for row in self.service.numbering_status(model="55", series=9)}
         self.assertEqual(records[1]["status"], "LIBERADO")
         self.assertEqual(records[2]["status"], "RESERVADO")
 
     def test_reserva_expirada_vinculada_a_documento_nao_e_liberada(self):
-        reservation = self.service.reserve_number(model="55", series=8, actor="admin", ttl_minutes=1)
+        reservation = self.service.reserve_number(model="55", series=8, ttl_minutes=1)
         conn = self.connect()
         conn.execute("CREATE TABLE movimentacoes (id INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO movimentacoes VALUES(1)")
@@ -1676,7 +1858,7 @@ class FiscalServiceTests(unittest.TestCase):
             json.dumps(data), FiscalService.NUMBERING_KEY,
         ))
         conn.commit(); conn.close()
-        self.service.reserve_number(model="55", series=8, actor="admin")
+        self.service.reserve_number(model="55", series=8)
         records = {row["number"]: row for row in self.service.numbering_status(model="55", series=8)}
         self.assertEqual(records[1]["status"], "RESERVADO")
         self.assertIn("Documento fiscal", records[1]["expiration_blocked_reason"])
@@ -1693,7 +1875,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "1" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin")
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml)
         response_xml = f'<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe><nProt>123</nProt></infProt></protNFe></retEnviNFe>'
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: FiscalResponse(True, "100", "Autorizado", protocol="123", access_key=key, raw_xml=response_xml)
@@ -1718,7 +1900,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "2" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", max_attempts=2, retry_minutes=1
+            operation="autorizacao", xml=xml, max_attempts=2, retry_minutes=1
         )
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(TimeoutError("timeout"))
@@ -1733,7 +1915,27 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_fila_autorizacao_rejeita_xml_sem_chave(self):
         with self.assertRaisesRegex(ValueError, "chave de acesso"):
-            self.service.enqueue_transmission(operation="autorizacao", xml="<enviNFe/>", actor="admin")
+            self.service.enqueue_transmission(operation="autorizacao", xml="<enviNFe/>")
+
+    def test_enfileiramento_fiscal_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.enqueue_transmission(
+                operation="consulta", xml="<consSitNFe/>", actor="forjado"
+            )
+
+    def test_enfileiramento_fiscal_falha_fechado_antes_de_ler_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-enfileirar",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.enqueue_transmission(
+                    operation="consulta", xml="<consSitNFe/>"
+                )
+        listed.assert_not_called()
 
     def test_fila_nao_contorna_bloqueio_de_producao(self):
         self.service.save_config({
@@ -1744,7 +1946,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "0" * 18 + "65" + "0" * 22
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
         self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", model="65", max_attempts=1
+            operation="autorizacao", xml=xml, model="65", max_attempts=1
         )
         called = []
         original = self.service.transmit
@@ -1768,7 +1970,7 @@ class FiscalServiceTests(unittest.TestCase):
         connection.execute("INSERT INTO fiscal_sale_documents VALUES(?, 'CANCELADO_LOCAL')", (key,))
         connection.commit(); connection.close()
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
-        self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", model="65")
+        self.service.enqueue_transmission(operation="autorizacao", xml=xml, model="65")
         called = []
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: called.append(kwargs)
@@ -1783,12 +1985,33 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "1" * 42
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", model="65"
+            operation="autorizacao", xml=xml, model="65"
         )
-        self.service.cancel_transmission(item["id"], actor="admin", reason="Venda cancelada")
+        cancelled = self.service.cancel_transmission(item["id"], reason="Venda cancelada")
+        self.assertEqual(cancelled["cancelled_by"], "gerente")
 
         with self.assertRaisesRegex(ValueError, "cancelada"):
-            self.service.retry_transmission(item["id"], actor="admin")
+            self.service.retry_transmission(item["id"])
+
+    def test_cancelamento_local_da_fila_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.cancel_transmission(
+                "fila", actor="forjado", reason="Cancelamento local solicitado"
+            )
+
+    def test_cancelamento_local_da_fila_falha_fechado_antes_de_ler(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-cancelamento-fila",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.cancel_transmission(
+                    "fila", reason="Cancelamento local solicitado"
+                )
+        listed.assert_not_called()
 
     def test_fila_autorizacao_bloqueia_resposta_de_outra_chave(self):
         self.service.save_config({
@@ -1803,7 +2026,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "3" * 44
         other_key = "4" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", max_attempts=1)
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, max_attempts=1)
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: FiscalResponse(True, "100", "Autorizado", protocol="999", access_key=other_key, raw_xml="<ret/>")
         try:
@@ -1833,7 +2056,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "5" * 44
         original_xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=original_xml, actor="admin", retry_minutes=1
+            operation="autorizacao", xml=original_xml, retry_minutes=1
         )
         calls = []
         response_xml = (
@@ -1874,7 +2097,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "6" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", retry_minutes=1)
+        self.service.enqueue_transmission(operation="autorizacao", xml=xml, retry_minutes=1)
         responses = iter([
             FiscalResponse(False, "103", "Lote recebido", receipt="123", raw_xml="<ret/>"),
             FiscalResponse(False, "105", "Lote em processamento", receipt="123", raw_xml="<ret/>")
@@ -1891,7 +2114,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(second["operation"], "recibo")
         self.assertEqual(second["last_status_code"], "105")
         self.assertEqual(second["attempts"], 2)
-        forced = self.service.force_receipt_check(second["id"], actor="gerente")
+        forced = self.service.force_receipt_check(second["id"])
         self.assertEqual(forced["operation"], "recibo")
         self.assertEqual(forced["receipt_check_requested_by"], "gerente")
         self.assertLessEqual(datetime.fromisoformat(forced["next_attempt_at"]), datetime.now(timezone.utc))
@@ -1904,7 +2127,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "3" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin")
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml)
         original = self.service.transmit
         self.service.transmit = lambda **_: (_ for _ in ()).throw(
             FiscalTransmissionUnknownError("timeout após envio")
@@ -1915,7 +2138,7 @@ class FiscalServiceTests(unittest.TestCase):
             self.service.transmit = original
         self.assertEqual(unknown["status"], "RESPOSTA_DESCONHECIDA")
         with self.assertRaisesRegex(ValueError, "consultado"):
-            self.service.retry_transmission(item["id"], actor="gerente")
+            self.service.retry_transmission(item["id"])
         reconciled = self.service.reconcile_unknown(item["id"])
         self.assertEqual(reconciled["operation"], "consulta")
         self.assertEqual(reconciled["reconciliation_for"], "autorizacao")
@@ -1926,7 +2149,6 @@ class FiscalServiceTests(unittest.TestCase):
         item = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
-            actor="historico",
         )
         rows = self.service.list_transmission_queue()
         rows[0]["status"] = "RESPOSTA_DESCONHECIDA"
@@ -1953,7 +2175,6 @@ class FiscalServiceTests(unittest.TestCase):
         item = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
-            actor="admin",
         )
         rows = self.service.list_transmission_queue()
         rows[0]["transmission_started_at"] = datetime.now(timezone.utc).isoformat()
@@ -1970,10 +2191,26 @@ class FiscalServiceTests(unittest.TestCase):
     def test_consulta_forcada_nao_reenvia_autorizacao_sem_recibo(self):
         item = self.service.enqueue_transmission(
             operation="autorizacao", xml=f'<NFe><infNFe Id="NFe{"7" * 44}"/></NFe>',
-            access_key="7" * 44, actor="admin",
+            access_key="7" * 44,
         )
         with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
-            self.service.force_receipt_check(item["id"], actor="admin")
+            self.service.force_receipt_check(item["id"])
+
+    def test_consulta_forcada_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.force_receipt_check("fila", actor="forjado")
+
+    def test_consulta_forcada_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-recibo",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.force_receipt_check("fila")
+        listed.assert_not_called()
 
     def test_retransmissao_em_lote_seleciona_apenas_nfce_em_contingencia(self):
         contingency_key = "2" * 34 + "9" + "2" * 9
@@ -1981,26 +2218,42 @@ class FiscalServiceTests(unittest.TestCase):
         contingency = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<NFe><infNFe Id="NFe{contingency_key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>',
-            access_key=contingency_key, model="65", actor="caixa",
+            access_key=contingency_key, model="65",
         )
         self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<NFe><infNFe Id="NFe{normal_key}"><ide><mod>65</mod><tpEmis>1</tpEmis></ide></infNFe></NFe>',
-            access_key=normal_key, model="65", actor="caixa",
+            access_key=normal_key, model="65",
         )
-        result = self.service.retry_contingency_batch(actor="gerente")
+        result = self.service.retry_contingency_batch()
         self.assertEqual(result["scheduled"], 1)
         self.assertEqual(result["queue_ids"], [contingency["id"]])
         queued = {row["id"]: row for row in self.service.list_transmission_queue()}
         self.assertTrue(queued[contingency["id"]]["contingency"])
         self.assertEqual(queued[contingency["id"]]["contingency_batch_requested_by"], "gerente")
 
+    def test_retransmissao_em_lote_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.retry_contingency_batch(actor="forjado")
+
+    def test_retransmissao_em_lote_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-contingencia",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.retry_contingency_batch()
+        listed.assert_not_called()
+
     def test_processamento_por_ids_nao_transmite_outros_pendentes(self):
         first = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe/>", actor="admin"
+            operation="consulta", xml="<consSitNFe/>"
         )
         second = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe><xServ>CONSULTAR</xServ></consSitNFe>", actor="admin"
+            operation="consulta", xml="<consSitNFe><xServ>CONSULTAR</xServ></consSitNFe>"
         )
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(True, "100", "Consulta concluída", raw_xml="<ret/>")
@@ -2016,7 +2269,7 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_reenvio_manual_reabre_item_falhado(self):
         item = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe/>", actor="admin", max_attempts=1
+            operation="consulta", xml="<consSitNFe/>", max_attempts=1
         )
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(RuntimeError("indisponível"))
@@ -2025,9 +2278,25 @@ class FiscalServiceTests(unittest.TestCase):
         finally:
             self.service.transmit = original
         self.assertEqual(failed["status"], "FALHA")
-        reopened = self.service.retry_transmission(item["id"], actor="gerente")
+        reopened = self.service.retry_transmission(item["id"])
         self.assertEqual(reopened["status"], "PENDENTE")
         self.assertEqual(reopened["retried_by"], "gerente")
+
+    def test_reenvio_manual_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.retry_transmission("fila", actor="forjado")
+
+    def test_reenvio_manual_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-reenvio",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.retry_transmission("fila")
+        listed.assert_not_called()
 
 
 
@@ -2050,10 +2319,29 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertTrue(validation["valid"])
         self.assertEqual(validation["access_key"], key)
         self.assertTrue(validation["signature"]["valid"])
-        record = self.service.import_authorized_xml(processed, actor="admin")
+        record = self.service.import_authorized_xml(processed)
         self.assertEqual(record["source"], "IMPORTADO")
+        self.assertEqual(record["actor"], "gerente")
         self.assertTrue(Path(record["processed_path"]).is_file())
         self.assertEqual(len(record["processed_sha256"]), 64)
+
+    def test_importacao_de_xml_autorizado_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.import_authorized_xml(b"<xml/>", actor="forjado")
+
+    def test_importacao_de_xml_autorizado_falha_fechado_antes_de_validar(self):
+        storage = Path(self.tmp.name) / "sem-autorizacao-importacao-fiscal"
+        service = FiscalService(
+            self.connect,
+            storage_dir=storage,
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_authorized_xml") as validate:
+            with self.assertRaises(PermissionError):
+                service.import_authorized_xml(b"<xml/>")
+        validate.assert_not_called()
+        self.assertFalse((storage / "homologacao").exists())
 
     def test_email_do_destinatario_so_e_lido_de_xml_autorizado_valido(self):
         _key, processed = self._authorized_signed_xml()
@@ -2090,7 +2378,7 @@ class FiscalServiceTests(unittest.TestCase):
             '</infProt></protNFe></retEnviNFe>'
         )
         processed = self.service.merge_authorization_protocol(signed, response)
-        self.service.import_authorized_xml(processed, actor="admin")
+        self.service.import_authorized_xml(processed)
         pdv = PDVService(self.connect)
         draft = self.service.duplicate_authorized_to_pdv_draft(
             access_key=key, pdv_service=pdv
@@ -2179,7 +2467,10 @@ class FiscalDocumentIntegrityTests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         conn.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         conn.commit(); conn.close()
-        self.service = FiscalService(lambda: sqlite3.connect(self.db_path), storage_dir=Path(self.tmp.name) / "docs")
+        self.service = FiscalService(
+            lambda: sqlite3.connect(self.db_path),
+            storage_dir=Path(self.tmp.name) / "docs",
+        )
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -2370,7 +2661,12 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
         conn.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         conn.commit()
         conn.close()
-        self.service = FiscalService(lambda: sqlite3.connect(self.db_path), storage_dir=Path(self.tmp.name) / "docs")
+        self.service = FiscalService(
+            lambda: sqlite3.connect(self.db_path),
+            storage_dir=Path(self.tmp.name) / "docs",
+            actor_provider=lambda: "gerente",
+            authorization_provider=lambda action: action == "transmit",
+        )
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         FiscalServiceTests._create_pfx(self.pfx_path, self.password)
@@ -2399,7 +2695,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
 
     def test_autorizacao_confirma_reserva_somente_com_sucesso(self):
         self._configure()
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin")
+        reservation = self.service.reserve_number(model="55", series=1)
         xml, key = self._document(reservation["number"])
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(
@@ -2415,7 +2711,6 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
                 xml=xml,
                 access_key=key,
                 password=self.password,
-                actor="admin",
                 reservation_id=reservation["id"],
             )
         finally:
@@ -2426,7 +2721,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
 
     def test_rejeicao_nao_confirma_reserva(self):
         self._configure()
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin")
+        reservation = self.service.reserve_number(model="55", series=1)
         xml, key = self._document(reservation["number"])
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(
@@ -2442,7 +2737,6 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
                 xml=xml,
                 access_key=key,
                 password=self.password,
-                actor="admin",
                 reservation_id=reservation["id"],
             )
         finally:

@@ -5,7 +5,7 @@ import json
 import re
 from pathlib import Path
 from datetime import datetime
-from typing import Any
+from typing import Any, Callable, Iterable
 
 from repositories import NFeImportRepository
 from validators import NFeImportValidator
@@ -20,9 +20,63 @@ from .nfe_xml_service import NFeDocument
 class NFeImportService:
     """Analisa duplicidades, vínculos e histórico antes da gravação da NF-e."""
 
-    def __init__(self, repository: NFeImportRepository) -> None:
+    def __init__(
+        self,
+        repository: NFeImportRepository,
+        *,
+        actor_provider: Callable[[], str | None] | None = None,
+        authorization_provider: Callable[[str, str], bool] | None = None,
+    ) -> None:
         self.repository = repository
         self.matching_service = NFeMatchingService(repository)
+        self._actor_provider = actor_provider
+        self._authorization_provider = authorization_provider
+
+    def bind_security(
+        self,
+        *,
+        actor_provider: Callable[[], str | None],
+        authorization_provider: Callable[[str, str], bool],
+    ) -> None:
+        """Liga a porta à sessão oficial depois que a composição Legacy existe."""
+        self._actor_provider = actor_provider
+        self._authorization_provider = authorization_provider
+
+    def _authenticated_actor(
+        self, *, operation: str, permissions: Iterable[tuple[str, str]]
+    ) -> str:
+        if self._authorization_provider is None:
+            raise PermissionError(
+                f"Uma sessão autenticada com permissão é obrigatória para {operation}."
+            )
+        for module, action in permissions:
+            if not self._authorization_provider(module, action):
+                raise PermissionError(
+                    f"Permissão {module}/{action} é obrigatória para {operation}."
+                )
+        if self._actor_provider is None:
+            raise PermissionError(f"Uma sessão autenticada é obrigatória para {operation}.")
+        try:
+            actor = str(self._actor_provider() or "").strip()
+        except PermissionError:
+            raise
+        except Exception as exc:
+            raise PermissionError(
+                f"Não foi possível confirmar a sessão para {operation}."
+            ) from exc
+        if not actor:
+            raise PermissionError("A sessão autenticada não possui identidade válida.")
+        return actor
+
+    @staticmethod
+    def _product_permissions(items: Iterable[dict[str, Any]]) -> set[tuple[str, str]]:
+        permissions: set[tuple[str, str]] = {("produtos", "view")}
+        actions = {str(item.get("acao") or "").strip().upper() for item in items}
+        if "CRIAR" in actions:
+            permissions.add(("produtos", "create"))
+        if "ATUALIZAR" in actions:
+            permissions.add(("produtos", "edit"))
+        return permissions
 
     def validar_nao_importada(self, documento: NFeDocument) -> None:
         if documento.chave and self.repository.buscar_importacao_por_chave(documento.chave):
@@ -40,7 +94,7 @@ class NFeImportService:
         *,
         arquivo_origem: str | Path,
         itens: list[dict[str, Any]],
-        usuario: str = "Sistema",
+        expected_actor: str = "",
         idempotency_key: str | None = None,
         operation_fingerprint: str | None = None,
     ) -> dict[str, Any]:
@@ -50,6 +104,15 @@ class NFeImportService:
         Qualquer falha em produto, vínculo, estoque, financeiro ou histórico causa
         rollback integral, mantendo a NF-e disponível para nova tentativa.
         """
+        permissions = [
+            ("compras", "receive"), ("financeiro", "create"),
+            *sorted(self._product_permissions(itens)),
+        ]
+        usuario = self._authenticated_actor(
+            operation="importar uma NF-e de entrada", permissions=permissions
+        )
+        if expected_actor and str(expected_actor).strip() != usuario:
+            raise PermissionError("A confirmação pertence a outra sessão autenticada.")
         NFeImportValidator.complete_items(len(itens), len(documento.itens))
         key = str(idempotency_key or "").strip()
         fingerprint = str(operation_fingerprint or "").strip()
@@ -175,9 +238,17 @@ class NFeImportService:
         return self.repository.analisar_exclusao(importacao_id)
 
     def excluir_importacao(self, importacao_id: int) -> dict[str, Any]:
+        self._authenticated_actor(
+            operation="excluir tecnicamente uma importação de NF-e",
+            permissions=(("technical", "delete"),),
+        )
         return self.repository.excluir_importacao(importacao_id)
 
-    def estornar_importacao(self, importacao_id: int, *, usuario: str = "Sistema") -> dict[str, Any]:
+    def estornar_importacao(self, importacao_id: int) -> dict[str, Any]:
+        usuario = self._authenticated_actor(
+            operation="estornar uma importação de NF-e",
+            permissions=(("compras", "receive"), ("financeiro", "reconcile")),
+        )
         return self.repository.estornar_importacao(importacao_id, usuario=usuario)
 
     def produtos_vinculados_importacao(self, importacao_id: int) -> dict[int, int]:
@@ -189,9 +260,12 @@ class NFeImportService:
         documento: NFeDocument,
         *,
         itens: list[dict[str, Any]],
-        usuario: str = "Sistema",
     ) -> dict[str, Any]:
         """Atualiza cadastros ligados à nota sem repetir estoque ou financeiro."""
+        usuario = self._authenticated_actor(
+            operation="revisar produtos importados de uma NF-e",
+            permissions=(("compras", "receive"), ("produtos", "edit")),
+        )
         NFeImportValidator.complete_items(len(itens), len(documento.itens))
         vinculados = self.produtos_vinculados_importacao(importacao_id)
         if len(vinculados) != len(documento.itens):
@@ -250,6 +324,10 @@ class NFeImportService:
         itens_criados: int,
         itens_vinculados: int,
     ) -> int:
+        self._authenticated_actor(
+            operation="registrar o resultado de uma importação de NF-e",
+            permissions=(("compras", "receive"),),
+        )
         importacao_id = self.repository.registrar_importacao(
             chave=documento.chave,
             numero=documento.numero,

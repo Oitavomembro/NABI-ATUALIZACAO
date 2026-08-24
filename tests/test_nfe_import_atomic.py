@@ -29,7 +29,11 @@ class NFeImportAtomicTests(unittest.TestCase):
         conn.executescript(SCHEMA)
         conn.commit(); conn.close()
         self.repo = NFeImportRepository(DatabaseManager(self.path))
-        self.service = NFeImportService(self.repo)
+        self.service = NFeImportService(
+            self.repo,
+            actor_provider=lambda: "Operador",
+            authorization_provider=lambda _module, _action: True,
+        )
         self.doc = NFeDocument(
             chave="CHAVE-ATOMIC", numero="77", fornecedor="Fornecedor", cnpj="123",
             data_emissao="2026-08-02", valor_total=25,
@@ -141,7 +145,7 @@ class NFeImportAtomicTests(unittest.TestCase):
         }]
 
         resultado = self.service.revisar_produtos_importados(
-            importacao["importacao_id"], self.doc, itens=preparados, usuario="Teste"
+            importacao["importacao_id"], self.doc, itens=preparados
         )
 
         self.assertEqual(resultado["produtos_atualizados"], 1)
@@ -174,12 +178,12 @@ class NFeImportAtomicTests(unittest.TestCase):
         fingerprint = "a" * 64
         first = self.service.importar_atomicamente(
             self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
-            usuario="Operador", idempotency_key="nabi:nfe:teste",
+            expected_actor="Operador", idempotency_key="nabi:nfe:teste",
             operation_fingerprint=fingerprint,
         )
         second = self.service.importar_atomicamente(
             self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
-            usuario="Operador", idempotency_key="nabi:nfe:teste",
+            expected_actor="Operador", idempotency_key="nabi:nfe:teste",
             operation_fingerprint=fingerprint,
         )
         self.assertEqual(second, first)
@@ -218,6 +222,99 @@ class NFeImportAtomicTests(unittest.TestCase):
             "titulos_financeiros", "nfe_importacoes",
         ):
             self.assertEqual(db.fetch_one(f"SELECT COUNT(*) n FROM {table}")["n"], 0)
+
+    def test_importacao_sem_sessao_falha_antes_de_gravar(self):
+        service = NFeImportService(self.repo)
+        with self.assertRaisesRegex(PermissionError, "sessão autenticada"):
+            service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+            )
+        self.assertEqual(
+            self.repo.database.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"],
+            0,
+        )
+
+    def test_importacao_exige_permissoes_reais_antes_de_gravar(self):
+        checked = []
+        service = NFeImportService(
+            self.repo,
+            actor_provider=lambda: "Operador",
+            authorization_provider=lambda module, action: (
+                checked.append((module, action)) or (module, action) != ("produtos", "create")
+            ),
+        )
+        with self.assertRaisesRegex(PermissionError, "produtos/create"):
+            service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+            )
+        self.assertIn(("compras", "receive"), checked)
+        self.assertIn(("financeiro", "create"), checked)
+        self.assertIn(("produtos", "create"), checked)
+        self.assertEqual(
+            self.repo.database.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"],
+            0,
+        )
+
+    def test_confirmacao_nabi_de_outra_sessao_falha_antes_de_gravar(self):
+        with self.assertRaisesRegex(PermissionError, "outra sessão"):
+            self.service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados,
+                expected_actor="OutroOperador",
+            )
+        self.assertEqual(
+            self.repo.database.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"],
+            0,
+        )
+
+    def test_estorno_e_revisao_nao_aceitam_usuario_livre(self):
+        with self.assertRaisesRegex(TypeError, "usuario"):
+            self.service.estornar_importacao(1, usuario="forjado")
+        with self.assertRaisesRegex(TypeError, "usuario"):
+            self.service.revisar_produtos_importados(
+                1, self.doc, itens=self.preparados, usuario="forjado"
+            )
+
+    def test_estorno_sem_sessao_preserva_importacao_e_estoque(self):
+        imported = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+        )
+        before = self.repo.database.fetch_one(
+            "SELECT estoque_atual FROM produtos"
+        )["estoque_atual"]
+        untrusted = NFeImportService(self.repo)
+        with self.assertRaisesRegex(PermissionError, "sessão autenticada"):
+            untrusted.estornar_importacao(imported["importacao_id"])
+        self.assertEqual(
+            self.repo.database.fetch_one(
+                "SELECT status FROM nfe_importacoes WHERE id=?",
+                (imported["importacao_id"],),
+            )["status"],
+            "CONCLUIDA",
+        )
+        self.assertEqual(
+            self.repo.database.fetch_one("SELECT estoque_atual FROM produtos")["estoque_atual"],
+            before,
+        )
+
+    def test_exclusao_tecnica_exige_permissao_exclusiva(self):
+        imported = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+        )
+        service = NFeImportService(
+            self.repo,
+            actor_provider=lambda: "Gerente",
+            authorization_provider=lambda module, action: (
+                module, action
+            ) != ("technical", "delete"),
+        )
+        with self.assertRaisesRegex(PermissionError, "technical/delete"):
+            service.excluir_importacao(imported["importacao_id"])
+        self.assertIsNotNone(
+            self.repo.database.fetch_one(
+                "SELECT id FROM nfe_importacoes WHERE id=?",
+                (imported["importacao_id"],),
+            )
+        )
 
 
 if __name__ == "__main__":

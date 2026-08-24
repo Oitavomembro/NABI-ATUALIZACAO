@@ -82,6 +82,35 @@ class MainQtAssistantActivationTests(unittest.TestCase):
             "banco", "perfil", "container", "rascunho", "importador"
         )
 
+    def test_composicao_fiscal_e_nabi_compartilham_a_sessao_do_shell(self):
+        gate = self.gate(
+            Capability.QT, Capability.ASSISTANT, Capability.FISCAL_WRITE
+        )
+        user = SimpleNamespace(username="operador", active=True)
+        security = Mock()
+        security.session = SimpleNamespace(user=user)
+        security.is_expired.return_value = False
+        security.require.return_value = True
+        with (
+            patch.object(main_qt, "NFeImportRepository", return_value="repo"),
+            patch.object(main_qt, "NFeImportService", return_value="importador") as importer,
+            patch.object(main_qt, "NFeEntryDraftService", return_value="rascunho"),
+            patch.object(
+                main_qt, "_create_assistant_activation", return_value="ativação"
+            ) as activation,
+        ):
+            main_qt._create_licensed_assistant(
+                "banco", "perfil", "container", gate, security=security
+            )
+        kwargs = importer.call_args.kwargs
+        self.assertEqual(kwargs["actor_provider"](), "operador")
+        self.assertTrue(kwargs["authorization_provider"]("compras", "receive"))
+        security.require.assert_called_once_with("compras", "receive")
+        activation.assert_called_once_with(
+            "banco", "perfil", "container", "rascunho", "importador",
+            security=security,
+        )
+
     def test_composicao_nao_inicia_modelo_antes_da_autenticacao(self):
         database = SimpleNamespace(connect=Mock())
         profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
