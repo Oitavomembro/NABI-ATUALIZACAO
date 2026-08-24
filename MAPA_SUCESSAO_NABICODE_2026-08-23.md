@@ -2262,3 +2262,27 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - pendência de integração: composição no shell/painel deve ocorrer somente em
   checkpoint coordenado, preservando o estado seguro quando o executor não for
   fornecido.
+
+### Segurança — remoção da credencial mestra universal
+
+- branch: `codex/seguranca-primeiro-acesso`; implementação no commit `7738c80`;
+- o hash de uma senha universal foi removido de `SecurityService`, do Legacy e
+  do instalador; não existe mais login mestre nem confirmação mestre capaz de
+  assumir uma identidade administrativa;
+- login aceita somente a senha individual do usuário ativo e mantém a limitação
+  persistente de tentativas; confirmações sensíveis exigem a senha real de um
+  usuário ativo com perfil `ADMIN` ou `GERENTE`;
+- a antiga autorização local por senha foi retirada do startup e do painel do
+  Legacy. A licença V2 `.nabilic`, assinada e vinculada à máquina, permanece a
+  única barreira comercial antes do banco e da interface;
+- o instalador não contém segredo compartilhado e não oferece exclusão de dados
+  operacionais. Atualização e desinstalação preservam banco, configurações e
+  backups; exclusão deliberada continua restrita ao fluxo autenticado dentro do
+  aplicativo;
+- validação focada final: `59 passed`; regressão completa: `2104 passed`, `1
+  skipped`, `444 subtests passed` e uma única falha de expectativa antiga do
+  próprio teste do desinstalador, atualizada e reaprovada em seguida; somando a
+  repetição dirigida, todas as verificações afetadas ficaram verdes;
+- `compileall` e `git diff --check` aprovados; Fiscal/SEFAZ não teve regra,
+  comunicação, prazo ou persistência alterada; Fichário não foi alterado;
+- nenhum push foi realizado neste checkpoint.
