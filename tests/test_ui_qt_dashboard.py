@@ -48,6 +48,9 @@ def test_worker_preenche_cartoes_e_historico_legacy():
     assert "R$ 25,00" in dialog.cards["sales"][1].text()
     assert "R$ 10,00" in dialog.cards["receipts"][1].text()
     assert "2 • R$ 80,00" in dialog.cards["overdue"][1].text()
+    assert dialog.cards["products"][1].minimumHeight() >= 82
+    assert "qlineargradient" in dialog.cards["products"][1].styleSheet()
+    assert "border-bottom:5px" in dialog.cards["products"][1].styleSheet()
     assert dialog.table.item(0, 0).text() == "7"
     assert dialog.table.item(0, 4).text() == "MESA"
     dialog.close()

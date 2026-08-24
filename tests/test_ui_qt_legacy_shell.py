@@ -76,6 +76,27 @@ def test_shell_starts_on_dashboard_without_creating_pdv(qt_application):
         shell.close()
 
 
+def test_navigation_cards_are_large_descriptive_and_arranged_in_three_columns(qt_application):
+    shell = NabiCodeShellWindow(Security(), (dashboard_module(),), Mock())
+    try:
+        vendas = shell.navigation_buttons["vendas"]
+        fiscal = shell.navigation_buttons["fiscal"]
+        assert vendas.sizeHint().height() >= 70
+        assert "qlineargradient" in vendas.styleSheet()
+        assert "border-bottom:6px" in vendas.styleSheet()
+        assert "PDV, pagamentos e comprovantes" in vendas.text()
+        assert "Documentos e comunicação fiscal" in fiscal.text()
+        positions = {
+            shell.navigation_buttons[item.module_id]: (index // 3, index % 3)
+            for index, item in enumerate(LEGACY_NAVIGATION)
+        }
+        assert positions[shell.navigation_buttons["dashboard"]] == (0, 0)
+        assert positions[shell.navigation_buttons["financeiro"]] == (1, 1)
+        assert positions[shell.navigation_buttons["configs"]] == (2, 2)
+    finally:
+        shell.close()
+
+
 def test_f2_opens_one_independent_pdv_and_close_returns_to_start(qt_application):
     pdv = QMainWindow()
     factory = Mock(return_value=pdv)

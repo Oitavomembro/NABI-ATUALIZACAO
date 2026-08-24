@@ -56,16 +56,23 @@ class DashboardDialog(QDialog):
         title.setStyleSheet("font-size:26px;font-weight:900;color:#00d084")
         self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#8b949e")
         heading.addWidget(title); heading.addStretch(); heading.addWidget(self.loading); root.addLayout(heading)
-        cards = QGridLayout(); self.cards = {}
-        for column, (key, label, color) in enumerate((
+        cards = QGridLayout(); cards.setSpacing(12); self.cards = {}
+        for index, (key, label, color) in enumerate((
             ("sales", "VENDAS REALIZADAS HOJE", "#00ff88"),
             ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff"),
             ("overdue", "COBRANÇAS VENCIDAS", "#f2cc60"),
             ("products", "PRODUTOS ATIVOS", "#a371f7"),
         )):
             card = QLabel(f"{label}\n—"); card.setAccessibleName(label)
-            card.setStyleSheet(f"background:#0d1117;border-radius:9px;padding:14px;color:{color};font-size:16px;font-weight:900")
-            cards.addWidget(card, 0, column); self.cards[key] = (label, card)
+            card.setMinimumHeight(82)
+            card.setStyleSheet(
+                "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                "stop:0 #21262d,stop:1 #0d1117);"
+                f"border:1px solid #30363d;border-bottom:5px solid {color};"
+                f"border-radius:12px;padding:16px;color:{color};"
+                "font-size:17px;font-weight:900"
+            )
+            cards.addWidget(card, index // 2, index % 2); self.cards[key] = (label, card)
         root.addLayout(cards)
         subtitle = QLabel("HISTÓRICO DE MOVIMENTAÇÕES DO DIA")
         subtitle.setStyleSheet("font-size:17px;font-weight:900"); root.addWidget(subtitle)
