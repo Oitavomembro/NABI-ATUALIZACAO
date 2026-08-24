@@ -1,0 +1,29 @@
+NABICODE — EMISSOR ADMINISTRATIVO DE LICENÇAS V2
+
+USO SEGURO
+1. Execute NabiCode_Emissor_Licencas_V2.exe somente em computador administrativo confiável.
+2. Selecione externamente a chave privada PEM criptografada e o catálogo público correspondente.
+3. A senha da chave privada não deve ficar neste pendrive, em arquivo de texto ou no computador do cliente.
+4. Carregue a solicitação da máquina ou informe o fingerprint completo, o titular, a edição FICHÁRIO e o prazo contratado.
+5. Clique em Revisar e confira todos os dados antes de assinar.
+6. Clique em Assinar e gerar; informe a senha somente na janela protegida.
+7. Verifique a licença gerada com o catálogo público.
+8. Entregue ao cliente somente o arquivo .nabilic.
+
+TRANSPORTE RECOMENDADO
+- Prefira um pendrive administrativo criptografado para o emissor e a chave.
+- Use outro pendrive, sem a chave privada, para levar a solicitação da máquina e devolver a licença.
+- Nunca conecte o pendrive administrativo em computador não confiável.
+- Feche o emissor e ejete os pendrives com segurança ao terminar.
+
+ARQUIVOS EXTERNOS NECESSÁRIOS
+- chave privada Ed25519 em PEM PKCS#8 criptografado;
+- trusted_public_keys.json correspondente;
+- senha guardada separadamente;
+- solicitação/fingerprint completo da máquina licenciada.
+
+IMPORTANTE
+- Este pacote NÃO contém chave privada, catálogo, senha ou licença.
+- O emissor de licenças NÃO substitui a chave permanente usada para assinar atualizações.
+- A chave de atualização exige cerimônia própria, senha definida pelo proprietário e armazenamento separado.
+- Não existe senha mestre, licença ilimitada implícita ou renovação sem nova assinatura.
