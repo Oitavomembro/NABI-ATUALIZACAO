@@ -1854,3 +1854,16 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   Relatórios e o Caixa atual, sem recorrer a conteúdo livre ou campos ocultos;
 - validação focada integrada: `54 passed`; regressão ampliada e homologação
   manual permanecem obrigatórias antes de distribuição.
+
+### Correção arquitetural — diário idempotente fora do FinanceiroService
+
+- a suíte completa encontrou uma regressão de modularização: o recebimento
+  assistido mantinha SQL do `assistant_operation_journal` dentro do serviço;
+- a persistência foi extraída para `AssistantOperationJournalRepository`, que
+  recebe a mesma conexão da transação e preserva início, replay, confirmação e
+  rollback atômicos sem alterar cálculos ou regras financeiras;
+- o teste arquitetural voltou a impedir SQL direto no `FinanceiroService`;
+  repetição de commit no diário continua recusada;
+- validação focada: `15 passed`; a suíte completa anterior registrou `2031
+  passed`, `1 skipped`, `444 subtests passed` e somente essa falha, agora
+  corrigida; repetição integral permanece como prova final do checkpoint.
