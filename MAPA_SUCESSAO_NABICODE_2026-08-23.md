@@ -1366,3 +1366,21 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - próxima pendência auditável: autoria/versionamento imutável das aprovações
   contábeis e enforcement documentado da contingência. Não implementar regra
   jurídica sem fonte oficial e decisão explícita de escopo.
+
+#### Bloqueio adversarial adicional — prazo de contingência NFC-e
+
+- o MOC 7.0, Anexo IV, publicado no Portal Nacional da NF-e, informa que a
+  transmissão da NFC-e emitida em contingência offline deve ocorrer depois de
+  superado o problema e, no texto vigente consultado em 23/08/2026, até o final
+  do primeiro dia útil subsequente à emissão;
+- o código atual registra `emissão + 24 horas` e apenas marca atraso. Esse cálculo
+  não demonstra o calendário oficial nem garante transmissão imediata após a
+  recuperação; portanto não serve como evidência suficiente de conformidade;
+- fonte primária:
+  `https://www.nfe.fazenda.gov.br/PORTal/exibirArquivo.aspx?conteudo=fMhAfsQfE+M%3D`;
+- decisão de segurança: não alterar prazo por aproximação e não liberar
+  contingência em produção. Antes, criar política versionada por modelo/UF,
+  calendário aplicável, escalonamento auditável e testes com fonte normativa;
+- o MOC 7.0, Anexo III, também exige transmissão das NF-e em contingência
+  imediatamente após cessar a falha, observando a legislação. Modelo 55 não deve
+  reutilizar automaticamente a regra do modelo 65.
