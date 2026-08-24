@@ -25,6 +25,10 @@ class System:
     def set_configs(self, values): self.values.update({key: str(value) for key, value in values.items()})
 
 
+class Printing:
+    def list_printers(self): return ["Padrão do Sistema", "Térmica TESTE"]
+
+
 class Backup:
     def __init__(self, directory): self.directory = str(directory); self.calls = 0
     def configured_directories(self): return [self.directory]
@@ -48,6 +52,7 @@ def service(tmp_path, permissions=("view", "edit", "backup", "diagnose")):
         config_path=tmp_path / "config" / "sistema.json",
         backup_service=backup,
         diagnostics=diagnostics,
+        printing_service=Printing(),
     ), security, system, backup, diagnostics
 
 
@@ -96,3 +101,13 @@ def test_sessao_ausente_falha_fechado(tmp_path):
     application, security, *_ = service(tmp_path)
     security.session = None
     with pytest.raises(PermissionError): application.load()
+
+
+def test_impressao_normaliza_formato_e_salva_sem_disparar_spooler(tmp_path):
+    application, _security, system, *_ = service(tmp_path)
+    values = dict(application.load_printing().values)
+    values.update({"impressora_recibo":"Térmica TESTE","formato_impressao_recibo":"Cupom 58 mm","modelo_cupom_visual":"Moderno","impressao_fonte":"Courier","impressao_fonte_tamanho":"12","impressao_corte_automatico":"1","impressao_tipo_corte":"PARCIAL","impressao_linhas_antes_corte":"3"})
+    saved = application.save_printing(values)
+    assert saved.values["formato_impressao_recibo"] == "Cupom 80 mm"
+    assert system.values["impressora_recibo"] == "Térmica TESTE"
+    assert "COMPROVANTE DE TESTE" in application.preview_receipt("Moderno")

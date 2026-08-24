@@ -13,6 +13,7 @@ from services.backup_service import BackupService
 from services.cash_service import CashService
 from services.report_service import ReportService
 from services.system_diagnostics import SystemDiagnostics
+from services.printing_service import PrintingService
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
 from ui_qt.commercial.financial_dialog import FinancialDialog
@@ -68,6 +69,7 @@ def build_administrative_modules(
         config_path=profile.paths.config / "sistema.json",
         backup_service=backups,
         diagnostics=diagnostics,
+        printing_service=PrintingService(system.get_config),
     )
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",

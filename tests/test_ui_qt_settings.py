@@ -4,6 +4,7 @@ import ast
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
@@ -35,12 +36,22 @@ class Application:
         self.backups += 1; return SimpleNamespace(created=("C:\\Teste\\backup.db",))
     def run_diagnostics(self):
         self.diagnostics += 1; return {"aprovado": True}, "SISTEMA APROVADO"
+    def load_printing(self):
+        values={"modelo_cupom_visual":"Clássico","impressao_fonte":"Helvetica","impressao_fonte_tamanho":"10","impressao_corte_automatico":"1","impressao_tipo_corte":"PARCIAL","impressao_linhas_antes_corte":"4"}
+        for category, default in {"recibo":"Cupom 80 mm","entrega":"Cupom 80 mm","ficha":"A4","historico":"A4","fechamento":"A4"}.items():
+            values[f"formato_impressao_{category}"]=default
+        for key in ("impressora_recibo","impressora_entrega","impressora_ficha","impressora_historico"):
+            values[key]="Padrão do Sistema"
+        return SimpleNamespace(printers=("Padrão do Sistema",), values=values)
+    def preview_receipt(self, model): return f"PRÉVIA {model}"
+    def save_printing(self, values): self.saved.append(dict(values)); return self.load_printing()
 
 
-def _enter(*, repeat=False):
+def _enter(*, repeat=False, shift=False):
     return QKeyEvent(
         QEvent.Type.KeyPress, Qt.Key.Key_Return,
-        Qt.KeyboardModifier.NoModifier, "\r", repeat, 1,
+        Qt.KeyboardModifier.ShiftModifier if shift else Qt.KeyboardModifier.NoModifier,
+        "\r", repeat, 1,
     )
 
 
@@ -64,6 +75,24 @@ def test_diagnostico_exibe_resultado_sem_persistencia_na_gui():
     dialog._run_diagnostics()
     assert application.diagnostics == 1
     assert "SISTEMA APROVADO" in dialog.diagnostic_text.toPlainText()
+    dialog.close()
+
+
+def test_previa_e_salvamento_de_impressao_usam_porta_sem_imprimir():
+    application = Application(); dialog = SettingsDialog(application)
+    assert "PRÉVIA Clássico" in dialog.receipt_preview.toPlainText()
+    with patch("ui_qt.administration.settings_dialog.QMessageBox.information"):
+        dialog._save_printing()
+    assert application.saved[-1]["impressora_recibo"] == "Padrão do Sistema"
+    assert application.saved[-1]["formato_impressao_fechamento"] == "A4"
+    dialog.close()
+
+
+def test_shift_enter_e_auto_repeat_nao_salvam_impressao():
+    application = Application(); dialog = SettingsDialog(application)
+    assert dialog.eventFilter(dialog.save_printing, _enter(shift=True)) is True
+    assert dialog.eventFilter(dialog.save_printing, _enter(repeat=True)) is True
+    assert application.saved == []
     dialog.close()
 
 

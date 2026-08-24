@@ -8,6 +8,8 @@ from typing import Any, Mapping
 
 from core.config_manager import ConfigManager
 from services.ui_preferences import UIPreferencesService
+from services.printing_service import PrintingService
+from services.receipt_template_service import ReceiptTemplateService
 
 
 @dataclass(frozen=True, slots=True)
@@ -16,6 +18,12 @@ class SettingsSnapshot:
     preferences: Mapping[str, Any]
     backup_directories: tuple[str, ...]
     daily_backup_enabled: bool
+
+
+@dataclass(frozen=True, slots=True)
+class PrintingSettingsSnapshot:
+    printers: tuple[str, ...]
+    values: Mapping[str, str]
 
 
 class SettingsApplicationService:
@@ -29,6 +37,7 @@ class SettingsApplicationService:
         config_path: str | Path,
         backup_service,
         diagnostics,
+        printing_service=None,
     ) -> None:
         self.security = security
         self.system_repository = system_repository
@@ -41,6 +50,9 @@ class SettingsApplicationService:
         )
         self.backup_service = backup_service
         self.diagnostics = diagnostics
+        self.printing_service = printing_service or PrintingService(
+            self.system_repository.get_config
+        )
 
     def _require(self, action: str) -> str:
         session = getattr(self.security, "session", None)
@@ -117,6 +129,54 @@ class SettingsApplicationService:
         self._require("diagnose")
         result = self.diagnostics.run(save_report=True)
         return result, self.diagnostics.format_report(result)
+
+    def load_printing(self) -> PrintingSettingsSnapshot:
+        self._require("view")
+        values = {}
+        for category, default_format in PrintingService.DEFAULT_FORMATS.items():
+            printer_key = "impressora_historico" if category == "fechamento" else f"impressora_{category}"
+            values[printer_key] = self.system_repository.get_config(printer_key, "Padrão do Sistema") or "Padrão do Sistema"
+            values[f"formato_impressao_{category}"] = PrintingService.normalize_output_format(
+                self.system_repository.get_config(f"formato_impressao_{category}", default_format),
+                default_format,
+            )
+        defaults = {
+            "modelo_cupom_visual": ReceiptTemplateService.DEFAULT,
+            "impressao_fonte": "Helvetica", "impressao_fonte_tamanho": "10",
+            "impressao_corte_automatico": "1", "impressao_tipo_corte": "PARCIAL",
+            "impressao_linhas_antes_corte": "4",
+        }
+        for key, default in defaults.items():
+            values[key] = self.system_repository.get_config(key, default) or default
+        return PrintingSettingsSnapshot(tuple(self.printing_service.list_printers()), values)
+
+    def save_printing(self, values: Mapping[str, object]) -> PrintingSettingsSnapshot:
+        self._require("edit")
+        allowed = {"modelo_cupom_visual", "impressao_fonte", "impressao_fonte_tamanho", "impressao_corte_automatico", "impressao_tipo_corte", "impressao_linhas_antes_corte"}
+        for category in PrintingService.DEFAULT_FORMATS:
+            allowed.add("impressora_historico" if category == "fechamento" else f"impressora_{category}")
+            allowed.add(f"formato_impressao_{category}")
+        unknown = set(values) - allowed
+        if unknown: raise ValueError("Configuração de impressão desconhecida.")
+        normalized = {key: str(value).strip() for key, value in values.items()}
+        if normalized.get("modelo_cupom_visual") not in ReceiptTemplateService.names(): raise ValueError("Modelo visual inválido.")
+        if normalized.get("impressao_fonte") not in {"Helvetica", "Times-Roman", "Courier"}: raise ValueError("Fonte inválida.")
+        size = int(normalized.get("impressao_fonte_tamanho", "10")); normalized["impressao_fonte_tamanho"] = str(max(6, min(24, size)))
+        lines = int(normalized.get("impressao_linhas_antes_corte", "4")); normalized["impressao_linhas_antes_corte"] = str(max(0, min(12, lines)))
+        if normalized.get("impressao_tipo_corte") not in {"PARCIAL", "TOTAL"}: raise ValueError("Tipo de corte inválido.")
+        for category, default_format in PrintingService.DEFAULT_FORMATS.items():
+            key = f"formato_impressao_{category}"
+            if key in normalized:
+                normalized[key] = PrintingService.normalize_output_format(
+                    normalized[key], default_format
+                )
+        self.system_repository.set_configs(normalized)
+        return self.load_printing()
+
+    def preview_receipt(self, model: str) -> str:
+        self._require("view")
+        sample = "NabiCode\nCOMPROVANTE DE TESTE\n" + "=" * 42 + "\n1x Produto de demonstração\nTOTAL: R$ 100,00"
+        return ReceiptTemplateService.render(sample, model)
 
     @staticmethod
     def _validated_directory(value: str, *, required: bool) -> str:

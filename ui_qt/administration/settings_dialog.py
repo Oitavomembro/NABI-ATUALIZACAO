@@ -60,6 +60,7 @@ class SettingsDialog(QDialog):
         root.addWidget(self.tabs, 1)
         self._build_interface_tab()
         self._build_backup_tab()
+        self._build_printing_tab()
         self._build_diagnostics_tab()
 
         close = QPushButton("Fechar [Esc]")
@@ -133,6 +134,41 @@ class SettingsDialog(QDialog):
         layout.addWidget(self.run_diagnostic)
         self.tabs.addTab(page, "Diagnóstico")
 
+    def _build_printing_tab(self) -> None:
+        page = QWidget(); form = QFormLayout(page)
+        self.document_outputs = {}
+        for label, category, printer_key in (
+            ("Recibo / venda", "recibo", "impressora_recibo"),
+            ("Entrega", "entrega", "impressora_entrega"),
+            ("Ficha do cliente", "ficha", "impressora_ficha"),
+            ("Histórico", "historico", "impressora_historico"),
+            ("Fechamento de caixa", "fechamento", "impressora_historico"),
+        ):
+            printer = QComboBox()
+            output_format = QComboBox()
+            output_format.addItems(("Cupom 80 mm", "A4", "PDF virtual"))
+            row = QHBoxLayout(); row.addWidget(printer, 2); row.addWidget(output_format, 1)
+            form.addRow(label, row)
+            self.document_outputs[category] = (printer_key, printer, output_format)
+        self.printer = self.document_outputs["recibo"][1]
+        self.output_format = self.document_outputs["recibo"][2]
+        self.receipt_model = QComboBox()
+        from services.receipt_template_service import ReceiptTemplateService
+        self.receipt_model.addItems(ReceiptTemplateService.names())
+        self.print_font = QComboBox(); self.print_font.addItems(("Helvetica", "Times-Roman", "Courier"))
+        self.font_size = QComboBox(); self.font_size.addItems(tuple(str(value) for value in range(6, 25)))
+        self.auto_cut = QCheckBox("Corte automático em impressora térmica")
+        self.cut_type = QComboBox(); self.cut_type.addItems(("PARCIAL", "TOTAL"))
+        self.cut_lines = QComboBox(); self.cut_lines.addItems(tuple(str(value) for value in range(13)))
+        form.addRow("Modelo visual", self.receipt_model); form.addRow("Fonte", self.print_font)
+        form.addRow("Tamanho", self.font_size); form.addRow("", self.auto_cut)
+        form.addRow("Tipo do corte", self.cut_type); form.addRow("Linhas antes do corte", self.cut_lines)
+        self.receipt_preview = QTextEdit(); self.receipt_preview.setReadOnly(True); form.addRow("Prévia", self.receipt_preview)
+        row = QHBoxLayout(); self.refresh_preview = QPushButton("Atualizar prévia"); self.save_printing = QPushButton("Salvar impressão")
+        self.save_printing.setObjectName("primary"); self.refresh_preview.clicked.connect(self._preview_receipt); self.save_printing.clicked.connect(self._save_printing)
+        row.addWidget(self.refresh_preview); row.addWidget(self.save_printing); form.addRow("", row)
+        self.tabs.addTab(page, "Impressão")
+
     def _load(self) -> None:
         try:
             snapshot = self.service.load()
@@ -151,16 +187,45 @@ class SettingsDialog(QDialog):
         self.local_backup.setText(directories[0] if directories else "")
         self.cloud_backup.setText(directories[1] if len(directories) > 1 else "")
         self.daily.setChecked(snapshot.daily_backup_enabled)
+        try:
+            printing = self.service.load_printing(); values = printing.values
+            for category, (printer_key, printer, output_format) in self.document_outputs.items():
+                printer.addItems(printing.printers)
+                printer.setCurrentText(values[printer_key])
+                output_format.setCurrentText(values[f"formato_impressao_{category}"])
+            self.receipt_model.setCurrentText(values["modelo_cupom_visual"]); self.print_font.setCurrentText(values["impressao_fonte"])
+            self.font_size.setCurrentText(values["impressao_fonte_tamanho"]); self.auto_cut.setChecked(values["impressao_corte_automatico"] == "1")
+            self.cut_type.setCurrentText(values["impressao_tipo_corte"]); self.cut_lines.setCurrentText(values["impressao_linhas_antes_corte"])
+            self._preview_receipt()
+        except Exception as error:
+            self.receipt_preview.setPlainText(str(error))
         editable = self.service.can("edit")
         for widget in (
             self.mode, self.workspace, self.density, self.theme, self.adaptive,
             self.background, self.local_backup, self.cloud_backup, self.daily,
             self.save_interface, self.save_backup,
+            *(widget for _key, printer, output_format in self.document_outputs.values() for widget in (printer, output_format)),
+            self.receipt_model, self.print_font,
+            self.font_size, self.auto_cut, self.cut_type, self.cut_lines, self.save_printing,
         ):
             widget.setEnabled(editable)
         self.backup_now.setEnabled(self.service.can("backup"))
         self.run_diagnostic.setEnabled(self.service.can("diagnose"))
         self.mode.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _preview_receipt(self) -> None:
+        try: self.receipt_preview.setPlainText(self.service.preview_receipt(self.receipt_model.currentText()))
+        except Exception as error: self.receipt_preview.setPlainText(str(error))
+
+    def _save_printing(self) -> None:
+        try:
+            current = dict(self.service.load_printing().values)
+            for category, (printer_key, printer, output_format) in self.document_outputs.items():
+                current[printer_key] = printer.currentText()
+                current[f"formato_impressao_{category}"] = output_format.currentText()
+            current.update({"modelo_cupom_visual": self.receipt_model.currentText(), "impressao_fonte": self.print_font.currentText(), "impressao_fonte_tamanho": self.font_size.currentText(), "impressao_corte_automatico": "1" if self.auto_cut.isChecked() else "0", "impressao_tipo_corte": self.cut_type.currentText(), "impressao_linhas_antes_corte": self.cut_lines.currentText()})
+            self.service.save_printing(current); QMessageBox.information(self, "Impressão", "Configuração de impressão salva.")
+        except Exception as error: QMessageBox.warning(self, "Impressão", str(error))
 
     def _save_preferences(self) -> None:
         try:
@@ -218,7 +283,12 @@ class SettingsDialog(QDialog):
         if (
             event.type() == QEvent.Type.KeyPress
             and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
-            and event.isAutoRepeat()
         ):
-            event.accept(); return True
+            if event.isAutoRepeat():
+                event.accept(); return True
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                previous = watched.previousInFocusChain()
+                if previous is not None:
+                    previous.setFocus(Qt.FocusReason.BacktabFocusReason)
+                event.accept(); return True
         return super().eventFilter(watched, event)
