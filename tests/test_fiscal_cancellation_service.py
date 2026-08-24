@@ -98,6 +98,7 @@ class FiscalCancellationServiceTests(unittest.TestCase):
         self.service = FiscalCancellationService(
             self.fiscal,
             cancel_commercial_sale=lambda sale_id, actor: self.reversals.append((sale_id, actor)),
+            actor_provider=lambda: "gerente",
         )
 
     def tearDown(self):
@@ -117,7 +118,7 @@ class FiscalCancellationServiceTests(unittest.TestCase):
 
     def request(self, **overrides):
         data = dict(
-            sale_id=1, password="senha", actor="gerente",
+            sale_id=1, password="senha",
             justification="Venda desfeita antes da saída.",
             no_circulation_confirmed=True, user_has_permission=True, now=self.now(),
         )
@@ -277,7 +278,7 @@ class FiscalCancellationServiceTests(unittest.TestCase):
     def test_venda_comercial_nao_gera_evento_nem_rede(self):
         with self.assertRaisesRegex(ValueError, "COMERCIAL"):
             self.service.request(
-                sale_id=999, password="", actor="operador",
+                sale_id=999, password="",
                 justification="Cancelamento comercial sem fiscal.",
                 no_circulation_confirmed=True, user_has_permission=True, now=self.now(),
             )
@@ -333,6 +334,55 @@ class FiscalCancellationServiceTests(unittest.TestCase):
         self.assertEqual(queued["requested_by"], "gerente")
         self.assertEqual(queued["justification"], "Venda desfeita antes da saída.")
         self.assertTrue(queued["original_document_sha256"])
+
+    def test_solicitacao_sem_provedor_de_sessao_falha_fechada(self):
+        unauthenticated = FiscalCancellationService(self.fiscal)
+
+        with self.assertRaisesRegex(PermissionError, "sessão autenticada"):
+            unauthenticated.request(
+                sale_id=1, password="senha",
+                justification="Venda desfeita antes da saída.",
+                no_circulation_confirmed=True, user_has_permission=True,
+                now=self.now(),
+            )
+
+        connection = sqlite3.connect(self.database)
+        status = connection.execute(
+            "SELECT status FROM fiscal_sale_documents WHERE id=1"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "AUTORIZADO")
+
+    def test_solicitacao_sem_identidade_na_sessao_falha_fechada(self):
+        unauthenticated = FiscalCancellationService(
+            self.fiscal, actor_provider=lambda: None
+        )
+
+        with self.assertRaisesRegex(PermissionError, "sessão autenticada"):
+            unauthenticated.request(
+                sale_id=1, password="senha",
+                justification="Venda desfeita antes da saída.",
+                no_circulation_confirmed=True, user_has_permission=True,
+                now=self.now(),
+            )
+
+    def test_api_de_solicitacao_recusa_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "unexpected keyword argument 'actor'"):
+            self.service.request(
+                sale_id=1, password="senha", actor="forjado",
+                justification="Venda desfeita antes da saída.",
+                no_circulation_confirmed=True, user_has_permission=True,
+                now=self.now(),
+            )
+
+        connection = sqlite3.connect(self.database)
+        try:
+            status = connection.execute(
+                "SELECT status FROM fiscal_sale_documents WHERE id=1"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+        self.assertEqual(status, "AUTORIZADO")
 
 
 if __name__ == "__main__":
