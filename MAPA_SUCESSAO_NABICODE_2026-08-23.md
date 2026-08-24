@@ -1259,3 +1259,40 @@ importação no banco de produção antes da aprovação visual e de um backup m
   testes físicos de reinstalação e atualização no Windows;
 - este requisito está planejado, mas ainda não foi declarado concluído nem deve
   ser confundido com a geração atual do EXE de homologação.
+
+## Checkpoint isolado — Administração de Usuários Qt
+
+Estado em `2026-08-23`, branch `codex/usuarios-permissoes-qt`, criada da
+integração commitada `4fbeeff45e93aa7108ede614d8ff707635504d20`:
+
+- implementação: `042c399763b849608debcabd25c1e5d860bd7c62` —
+  `feat: adiciona administracao de usuarios no Qt`;
+- `UserAdministrationService` é a única porta da GUI e reutiliza integralmente
+  `SecurityService`; identidade e autoridade vêm da sessão interna real, nunca
+  de username ou permissão fornecidos pela tela;
+- sessão ausente/expirada e operador sem `technical/users` falham fechados;
+  ADMIN continua coberto pelo wildcard oficial;
+- criação, edição, troca opcional de senha e ativação/desativação preservam
+  PBKDF2, perfis existentes, username imutável e a proteção que impede remover
+  ou desativar o último administrador;
+- `UsersDialog` e `UserEditorDialog` listam username, nome, perfil e estado,
+  oferecem F3/F4/F5/Esc e controlam Enter, Shift+Enter e auto-repeat sem SQL;
+- a GUI não importa banco, repositório, Legacy, Fiscal ou SEFAZ;
+- edição livre de perfis/permissões não foi transportada neste checkpoint para
+  evitar escalada acidental e mudança incidental de capacidades fiscais;
+- testes focados: `19 passed`; regressão Qt/administração/segurança relacionada:
+  `182 passed`, `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- nenhum `main_qt.py`, composição global, FICHÁRIO, atualizador, instalador,
+  licenciamento, IA Nabi, Fiscal/SEFAZ ou banco real foi alterado; nenhum push.
+
+Pendências:
+
+- composição/menu somente após liberação das trilhas paralelas;
+- decisão explícita antes de oferecer edição visual de perfis e permissões;
+- homologação manual de criação, edição, senha vazia/definida, último ADMIN,
+  sessão expirada, Enter/Shift+Enter/Esc e DPI no Windows.
+
+Próximo passo seguro: integrar primeiro os checkpoints já prontos de Caixa e
+Financeiro quando a composição estiver livre. Novas telas de Configurações ou
+edição de permissões exigem decisão material sobre capacidades visíveis por
+edição e não devem ser iniciadas durante a entrega FICHÁRIO.
