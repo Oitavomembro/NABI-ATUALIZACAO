@@ -18,6 +18,8 @@ from assistant_nabi import (
     ToolRequest,
     ToolSchema,
     UnavailableLanguageModelAdapter,
+    create_local_read_only_assistant_service,
+    create_unavailable_read_only_assistant_service,
     register_commercial_read_tools,
 )
 from commercial.application.dto import CustomerRecord, ProductRecord
@@ -575,6 +577,83 @@ class NabiDiagnosticToolTests(unittest.TestCase):
             with self.subTest(parameters=parameters):
                 with self.assertRaises(ValueError):
                     RUN_TEST_SUITE.schema.validate(parameters)
+
+
+class NabiCompositionTests(unittest.TestCase):
+    def setUp(self):
+        self.security = Security()
+        self.audit = ExistingAuditService()
+        self.queries = CommercialQueries()
+
+    def test_composicao_local_expoe_exclusivamente_as_tres_consultas_read(self):
+        transport = Transport({"choices": [{"message": {"content": "ok"}}]})
+        service = create_local_read_only_assistant_service(
+            security_service=self.security,
+            audit_service=self.audit,
+            commercial_query_service=self.queries,
+            session_id="sessao-real",
+            endpoint="http://127.0.0.1:8080/v1/chat/completions",
+            model_name="modelo-local",
+            transport=transport,
+        )
+        turn = service.ask("ajude")
+        self.assertFalse(turn.safe_failure)
+        tools = transport.calls[0][1]["tools"]
+        names = {item["function"]["name"] for item in tools}
+        self.assertEqual(names, {
+            "produtos.pesquisar",
+            "produtos.consultar_estoque",
+            "clientes.pesquisar",
+        })
+        self.assertTrue(all(
+            item["function"]["description"].startswith("Consulta") for item in tools
+        ))
+
+    def test_composicao_recusa_endpoint_nao_loopback(self):
+        with self.assertRaisesRegex(ValueError, "loopback"):
+            create_local_read_only_assistant_service(
+                security_service=self.security,
+                audit_service=self.audit,
+                commercial_query_service=self.queries,
+                session_id="sessao-real",
+                endpoint="http://example.com/v1/chat/completions",
+                model_name="modelo-local",
+            )
+
+    def test_dependencias_reais_ausentes_falham_sem_fabricar_substitutas(self):
+        values = {
+            "security_service": self.security,
+            "audit_service": self.audit,
+            "commercial_query_service": self.queries,
+        }
+        for missing in tuple(values):
+            with self.subTest(missing=missing):
+                dependencies = dict(values)
+                dependencies[missing] = None
+                with self.assertRaisesRegex(ValueError, missing):
+                    create_unavailable_read_only_assistant_service(
+                        **dependencies, session_id="sessao-real"
+                    )
+
+    def test_modo_indisponivel_nao_chama_rede_consulta_ou_auditoria(self):
+        service = create_unavailable_read_only_assistant_service(
+            security_service=self.security,
+            audit_service=self.audit,
+            commercial_query_service=self.queries,
+            session_id="sessao-real",
+        )
+        turn = service.ask("procure café")
+        self.assertTrue(turn.safe_failure)
+        self.assertEqual(self.queries.calls, [])
+        self.assertEqual(self.audit.events, [])
+
+    def test_composition_root_nao_importa_banco_fiscal_ou_sefaz(self):
+        import assistant_nabi.composition as composition
+        import inspect
+
+        source = inspect.getsource(composition).casefold()
+        for forbidden in ("database", "fiscal", "sefaz", "sqlite", "repository"):
+            self.assertNotIn(forbidden, source)
 
 
 if __name__ == "__main__":

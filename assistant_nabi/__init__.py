@@ -22,6 +22,10 @@ from .unavailable_provider import (
     UnavailableLanguageModelAdapter,
 )
 from .local_provider import LocalOpenAICompatibleModelAdapter
+from .composition import (
+    create_local_read_only_assistant_service,
+    create_unavailable_read_only_assistant_service,
+)
 
 __all__ = [
     "AssistantActor",
@@ -43,4 +47,6 @@ __all__ = [
     "ToolSchema",
     "register_commercial_read_tools",
     "UnavailableLanguageModelAdapter",
+    "create_local_read_only_assistant_service",
+    "create_unavailable_read_only_assistant_service",
 ]
