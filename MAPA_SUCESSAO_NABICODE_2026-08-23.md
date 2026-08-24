@@ -2345,3 +2345,32 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   primitivas internas porque recebem a identidade já capturada por operação ou
   worker. Torná-las portas públicas de sessão quebraria a autoria assíncrona;
   usos externos futuros devem passar por fachadas autenticadas.
+
+### Encerramento da trilha isolada de autoria fiscal
+
+- auditoria final por assinatura e chamadas confirmou que reserva, inicialização,
+  confirmação/liberação de número, autorização, eventos, inutilização, DFe,
+  importação de XML autorizado externo, outbox, venda fiscal e ciclo oficial de
+  devolução não aceitam mais autoria livre em suas fronteiras mutáveis;
+- `FiscalOutboxService.enqueue_in_transaction`, `store_document`,
+  `register_event`, `register_rejection` e o histórico de regras tributárias são
+  primitivas internas que preservam a identidade confiável capturada antes da
+  transação ou pelo worker. Não devem consultar sessão viva no processamento
+  assíncrono;
+- bloqueio coordenado restante: `NFeImportService.importar_atomicamente`,
+  `estornar_importacao`, `excluir_importacao` e
+  `revisar_produtos_importados` ainda precisam de uma porta única de sessão e
+  permissões. O serviço é composto separadamente no Legacy e em `main_qt.py`, e
+  o gateway `assistant_nabi/nfe_entry_gateway.py` atualmente fornece
+  `grant.username`. A correção exige checkpoint conjunto na branch consolidada,
+  sem aceitar o nome do grant como autoridade final e sem criar provedor
+  paralelo nesta branch;
+- suíte integral dos arquivos fiscais/NF-e: `444 passed`, `10 subtests passed`;
+  `compileall` completo e `git diff --check` aprovados;
+- não houve chamada real à SEFAZ, uso de banco real, alteração de regra legal,
+  XML, endpoint, prazo ou liberação de produção. Homologação fiscal física e
+  produção continuam expressamente bloqueadas;
+- próximo passo seguro: integrar esta branch por merge normal na consolidada,
+  repetir a suíte completa e somente então executar o checkpoint coordenado da
+  entrada de NF-e com SecurityService e broker Nabi compartilhando a mesma
+  autoridade de sessão.
