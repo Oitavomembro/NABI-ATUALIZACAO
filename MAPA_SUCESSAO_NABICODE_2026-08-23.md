@@ -2082,3 +2082,25 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   fiscal permanece bloqueada;
 - autoria da importação manual de XML permanece como próximo checkpoint
   independente de alto risco.
+
+### Auditoria fiscal de autoria — arquivo de XML autorizado externo
+
+- implementação: `704b542` — `fix: autentica importacao de xml fiscal`;
+- escopo deliberadamente separado: esta fronteira é
+  `FiscalService.import_authorized_xml`, que valida e arquiva no índice fiscal um
+  XML externo já autorizado. Não é a entrada comercial de compra por XML;
+- a API deixou de aceitar ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de validar o XML, criar diretórios ou gravar índice;
+  autoria persistida vem exclusivamente da sessão;
+- assinatura, chave, protocolo, ambiente, modelo, hash e validações de
+  integridade existentes foram preservados;
+- testes focados: `7 passed`, `128 deselected`; regressão de documento fiscal,
+  outbox, venda, Central e segurança: `46 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real, XML de cliente ou regra tributária foi usada ou
+  alterada. Produção fiscal permanece bloqueada;
+- bloqueio de composição ainda aberto: `NFeImportService.importar_atomicamente`
+  atende tanto o Legacy quanto o gateway confirmado da Nabi. Autenticá-lo exige
+  coordenação com `main_qt.py`/gateway para existir uma única porta de sessão;
+  esta branch não pode alterar esses arquivos e não deve introduzir autoridade
+  paralela ou fallback `Sistema`.
