@@ -66,6 +66,18 @@ class AdminAuditService:
         except Exception:
             self._logger.exception("Não foi possível persistir a auditoria no banco.")
 
+    def record_event_strict(
+        self, module: str, action: str, *, object_id: object = "",
+        details: object = "", result: str = "SUCESSO", user: str = "Sistema",
+    ) -> None:
+        """Persiste evento sensível ou propaga a falha para bloquear a operação."""
+
+        self._repository.record_event(
+            occurred_at=datetime.now().isoformat(timespec="seconds"),
+            user=str(user), module=str(module), action=str(action),
+            object_id=str(object_id), details=str(details), result=str(result),
+        )
+
     def record_admin_access(self, success: bool, details: str, *, occurred_at: str | None = None) -> None:
         text = str(details or "").strip()
         if not text:

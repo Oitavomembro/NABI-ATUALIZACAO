@@ -106,7 +106,11 @@ class PurchaseToolTests(unittest.TestCase):
             authorization.capability,
             CapabilityLevel.REINFORCED_CONFIRMATION,
         )
-        self.assertEqual(len(audit.events), 1)
+        self.assertEqual(len(audit.events), 3)
+        self.assertEqual(
+            [event[0][1] for event in audit.events[1:]],
+            ["RASCUNHO_REVISADO", "CONFIRMACAO_HUMANA"],
+        )
         second_challenge = assistant.review_draft(
             result.payload["draft_id"], result.payload["fingerprint"]
         )
@@ -115,6 +119,10 @@ class PurchaseToolTests(unittest.TestCase):
         )
         self.assertEqual(executed.recebimento_id, 91)
         self.assertEqual(len(official.calls), 1)
+        self.assertEqual(
+            [event[0][1] for event in audit.events[-3:]],
+            ["RASCUNHO_REVISADO", "CONFIRMACAO_HUMANA", "AUTORIZACAO_CONSUMIDA"],
+        )
 
 
 if __name__ == "__main__": unittest.main()

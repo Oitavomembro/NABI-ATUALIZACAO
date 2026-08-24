@@ -65,3 +65,23 @@ class AdminAssistantAuditAdapter:
             user=actor.username,
             event_bus=self._event_bus,
         )
+
+
+class AdminAssistantConfirmationAuditAdapter:
+    """Auditoria estrita de revisão, confirmação e consumo de autorização."""
+
+    def __init__(self, audit_service) -> None:
+        self._audit = audit_service
+
+    def record(self, event: str, *, actor: AssistantActor, draft, result: str) -> None:
+        recorder = getattr(self._audit, "record_event_strict", None)
+        if not callable(recorder):
+            recorder = self._audit.record_event
+        recorder(
+            "IA_NABI", str(event), object_id=draft.draft_id,
+            details=(
+                f"operation={draft.operation_kind}; fingerprint={draft.fingerprint}; "
+                f"session_id={actor.session_id}"
+            ),
+            result=str(result), user=actor.username,
+        )

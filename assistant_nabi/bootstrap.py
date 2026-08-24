@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
+from .adapters import (
+    AdminAssistantAuditAdapter, AdminAssistantConfirmationAuditAdapter,
+    CurrentSessionPermissionAdapter,
+)
 from .application import AssistantApplicationService
 from .read_tools import register_commercial_read_tools, register_financial_read_tools
 from .registry import ReadOnlyToolRegistry
@@ -109,7 +112,9 @@ def create_draft_assistant(
         product_stock_draft_service,
         financial_draft_service,
     )
-    confirmations = DraftConfirmationService()
+    confirmations = DraftConfirmationService(
+        audit=AdminAssistantConfirmationAuditAdapter(audit_service)
+    )
     register_sale_draft_tools(registry, drafts)
     if purchase_draft_service is not None:
         register_purchase_draft_tools(registry, purchase_draft_service)

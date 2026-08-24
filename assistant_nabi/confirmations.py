@@ -66,13 +66,18 @@ class ConfirmedDraftAuthorization:
 class DraftConfirmationService:
     """Confirmação humana curta, de uso único e vinculada ao conteúdo exato."""
 
-    def __init__(self, *, ttl_seconds: int = 120, clock=None) -> None:
+    def __init__(self, *, ttl_seconds: int = 120, clock=None, audit=None) -> None:
         self._ttl = max(15, min(int(ttl_seconds), 300))
         self._clock = clock or (lambda: datetime.now(timezone.utc))
         self._pending: dict[str, ConfirmationChallenge] = {}
         self._session_token: dict[str, str] = {}
         self._grants: dict[str, _GrantRecord] = {}
         self._lock = Lock()
+        self._audit = audit
+
+    def _record(self, event: str, *, actor: AssistantActor, draft) -> None:
+        if self._audit is not None:
+            self._audit.record(event, actor=actor, draft=draft, result="SUCESSO")
 
     def issue(self, draft, *, actor: AssistantActor) -> ConfirmationChallenge:
         if not self._is_confirmable(draft) or not isinstance(actor, AssistantActor):
@@ -95,6 +100,7 @@ class DraftConfirmationService:
                 else CapabilityLevel.SIMPLE_CONFIRMATION
             ),
         )
+        self._record("RASCUNHO_REVISADO", actor=actor, draft=draft)
         with self._lock:
             previous = self._session_token.get(actor.session_id)
             if previous:
@@ -132,6 +138,7 @@ class DraftConfirmationService:
             expires_at=now + timedelta(seconds=self._ttl),
             capability=challenge.required_capability,
         )
+        self._record("CONFIRMACAO_HUMANA", actor=actor, draft=draft)
         nonce = secrets.token_urlsafe(32)
         with self._lock:
             self._grants[nonce] = record
@@ -176,6 +183,10 @@ class DraftConfirmationService:
         )
         if record.capability is not required:
             raise PermissionError("A autorização não possui a capacidade exigida.")
+        effective_actor = actor or AssistantActor(
+            record.username, "AUDIT", record.session_id
+        )
+        self._record("AUTORIZACAO_CONSUMIDA", actor=effective_actor, draft=draft)
         with self._lock:
             if self._grants.pop(nonce, None) is not record:
                 raise PermissionError("A autorização não existe ou já foi utilizada.")

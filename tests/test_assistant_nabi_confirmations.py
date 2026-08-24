@@ -102,5 +102,13 @@ class DraftConfirmationTests(unittest.TestCase):
         with self.assertRaisesRegex(PermissionError, "não existe"):
             invalidated.consume(current, operation="SALE", actor=self.actor)
 
+    def test_falha_da_auditoria_estrita_impede_emitir_confirmacao(self):
+        class BrokenAudit:
+            def record(self, *args, **kwargs):
+                raise RuntimeError("auditoria indisponível")
+        service = DraftConfirmationService(audit=BrokenAudit())
+        with self.assertRaisesRegex(RuntimeError, "auditoria indisponível"):
+            service.issue(draft(), actor=self.actor)
+
 
 if __name__ == "__main__": unittest.main()
