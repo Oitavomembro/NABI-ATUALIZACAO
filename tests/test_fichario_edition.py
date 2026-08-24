@@ -134,10 +134,13 @@ def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
     runtime = (root / "fichario/update_runtime.py").read_text(encoding="utf-8")
     assert "NabiCode_Fichario_Updater" in build
     assert "BUILD_INFO.txt" in build and "BUILD_INFO.txt" in spec
+    assert "tempfile.mkdtemp" in build
     assert "trusted_public_keys.json" in spec
     assert "antes_atualizacao" in runtime
     assert "validate_installed_files" in runtime
     assert "ROLLBACK_PENDENTE" in runtime
+    shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
+    assert 'BUILD: {self._build_info()}' in shell
 
 
 def test_recebimento_separa_revisao_confirmacao_e_oferece_comprovante_oficial():

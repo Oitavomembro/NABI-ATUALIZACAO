@@ -4,6 +4,7 @@ import argparse
 import shutil
 import subprocess
 import sys
+import tempfile
 from datetime import datetime
 from pathlib import Path
 
@@ -65,7 +66,19 @@ def main(argv=None) -> int:
         )
         if not iscc.is_file():
             raise RuntimeError("Informe --iscc com o caminho absoluto do ISCC.exe.")
-        run([str(iscc), f"/DAppVersion={version}", str(INNO)])
+        distribution = dist / f"NabiCode_Fichario_v{version.replace('.', '_')}"
+        if not distribution.is_dir():
+            raise FileNotFoundError("Gere o aplicativo FICHÁRIO antes do instalador.")
+        short_root = Path(tempfile.mkdtemp(prefix="NBF_"))
+        short_dist = short_root / "app"
+        try:
+            shutil.copytree(distribution, short_dist)
+            run([
+                str(iscc), f"/DAppVersion={version}",
+                f"/DDistSource={short_dist}", str(INNO),
+            ])
+        finally:
+            shutil.rmtree(short_root, ignore_errors=True)
     return 0
 
 

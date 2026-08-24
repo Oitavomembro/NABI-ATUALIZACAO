@@ -119,7 +119,12 @@ class FicharioWindow(QMainWindow):
             button.clicked.connect(callback)
             actions.addWidget(button, index // 2, index % 2)
         layout.addLayout(actions, 1)
-        footer = QLabel(f"{profile.label} - EDICAO FICHARIO - usuario {session.user.display_name}")
+        footer = QLabel(
+            f"{profile.label} - EDICAO FICHARIO - usuario {session.user.display_name}"
+            f"   •   BUILD: {self._build_info()}"
+        )
+        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        footer.setStyleSheet("font-size:13px;font-weight:700;color:#8b949e")
         layout.addWidget(footer)
         self.refresh_summary()
         QTimer.singleShot(0, self._run_daily_backup)
@@ -352,6 +357,15 @@ class FicharioWindow(QMainWindow):
         )
 
     def show_settings(self) -> None:
+        build_info = self._build_info()
+        QMessageBox.information(
+            self, "Instalacao Fichario",
+            f"Perfil: {self.profile.label}\nDados: {self.profile.app_dir}\n"
+            f"Banco: {self.database.database_path}\nBuild: {build_info}",
+        )
+
+    @staticmethod
+    def _build_info() -> str:
         install = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
         build_info = "desenvolvimento local"
         for candidate in (
@@ -362,8 +376,4 @@ class FicharioWindow(QMainWindow):
                 build_info = candidate.read_text(encoding="utf-8-sig").strip(); break
             except OSError:
                 continue
-        QMessageBox.information(
-            self, "Instalacao Fichario",
-            f"Perfil: {self.profile.label}\nDados: {self.profile.app_dir}\n"
-            f"Banco: {self.database.database_path}\nBuild: {build_info}",
-        )
+        return build_info

@@ -5,6 +5,9 @@
 #define AppName "NabiCode Fichario"
 #define DistName "NabiCode_Fichario_v" + StringChange(AppVersion, ".", "_")
 #define AppExe DistName + ".exe"
+#ifndef DistSource
+  #define DistSource "..\..\build_output\fichario\dist\" + DistName
+#endif
 
 [Setup]
 AppId={{8A761427-FF35-4EC7-BAB4-7A09B9D72208}
@@ -34,7 +37,7 @@ Name: "brazilianportuguese"; MessagesFile: "compiler:Languages\BrazilianPortugue
 Name: "desktopicon"; Description: "Criar atalho na Area de Trabalho"; Flags: unchecked
 
 [Files]
-Source: "..\..\build_output\fichario\dist\{#DistName}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#DistSource}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\NabiCode Fichario"; Filename: "{app}\{#AppExe}"; WorkingDir: "{app}"
