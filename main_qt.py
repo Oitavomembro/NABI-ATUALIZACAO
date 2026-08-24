@@ -34,7 +34,7 @@ from ui_qt.app import run
 from licensing.gate import Capability
 from licensing.runtime import evaluate_runtime_gate, startup_block_message
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 
 def _create_assistant_activation(

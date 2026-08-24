@@ -6,7 +6,7 @@ from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database
 
 
-SCHEMA_VERSION = 20
+SCHEMA_VERSION = 21
 
 
 def schema_version(database) -> int:

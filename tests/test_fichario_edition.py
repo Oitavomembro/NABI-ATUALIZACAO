@@ -155,6 +155,15 @@ def test_backup_e_atualizacao_fichario_exigem_schema_21():
     assert "expected_schema_version=20" not in shell + runtime
 
 
+def test_entradas_qt_e_fichario_inicializam_schema_21():
+    root = Path(__file__).resolve().parents[1]
+    qt = (root / "main_qt.py").read_text(encoding="utf-8")
+    fichario = (root / "fichario/runtime.py").read_text(encoding="utf-8")
+    assert "SCHEMA_VERSION = 21" in qt
+    assert "SCHEMA_VERSION = 21" in fichario
+    assert "SCHEMA_VERSION = 20" not in qt + fichario
+
+
 def test_recebimento_separa_revisao_confirmacao_e_oferece_comprovante_oficial():
     root = Path(__file__).parents[1]
     dialog = (root / "fichario/receipt_dialog.py").read_text(encoding="utf-8")
