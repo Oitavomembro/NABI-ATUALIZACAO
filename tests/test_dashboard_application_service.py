@@ -23,6 +23,15 @@ def test_snapshot_exige_permissao_e_limita_paginacao():
     security.touch.assert_called_once_with()
 
 
+def test_resumo_lateral_usa_fachada_autorizada():
+    service, repository, security = _service()
+    repository.client_summary.return_value = "resumo"
+    assert service.load_client_summary() == "resumo"
+    repository.client_summary.assert_called_once_with()
+    security.require.assert_called_once_with("dashboard", "view")
+    security.touch.assert_called_once_with()
+
+
 @pytest.mark.parametrize("allowed,expired,missing", ((False,False,False),(True,True,False),(True,False,True)))
 def test_sessao_invalida_falha_antes_de_consultar(allowed, expired, missing):
     service, repository, security = _service(allowed=allowed, expired=expired)

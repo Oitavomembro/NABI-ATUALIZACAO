@@ -395,6 +395,10 @@ def main(argv=None) -> int:
             assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,
+            reauthenticate=lambda parent: (
+                ApplicationLoginDialog(module_security, parent).exec()
+                == QDialog.DialogCode.Accepted
+            ),
         )
     except Exception as error:
         splash.close()

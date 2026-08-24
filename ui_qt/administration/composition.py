@@ -38,7 +38,7 @@ def build_administrative_modules(
     app_version="2.5.1", schema_version=21,
 ):
     modules=[];dashboard=DashboardApplicationService(DashboardRepository(database),security)
-    modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True)))
+    modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
     if getattr(container,"customer_application",None):modules.append(AdministrativeModule("Clientes","Cadastro, busca, edição e fichas","F3","clientes","view",lambda p:CustomerManagementDialog(container.customer_application,parent=p),"clientes"))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
         service=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p:ProductManagementDialog(service,p),"produtos"))

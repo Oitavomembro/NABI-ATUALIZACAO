@@ -33,6 +33,7 @@ class AdministrativeModule:
     factory: Callable[[QWidget], QDialog]
     module_id: str = ""
     embedded_factory: Callable[[QWidget], QWidget] | None = None
+    summary_loader: Callable[[], object] | None = None
 
 
 class AdministrativeModuleHub(QDialog):

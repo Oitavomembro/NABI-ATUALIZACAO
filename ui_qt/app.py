@@ -136,6 +136,7 @@ def create_shell_application(
     assistant_activation=None,
     nfe_entry_service=None,
     assistant_panel_factory=None,
+    reauthenticate=None,
 ):
     """Cria o shell Legacy; o PDV só nasce quando Vendas/F2 for acionado."""
 
@@ -158,6 +159,7 @@ def create_shell_application(
         pdv_factory,
         store_name=store_name,
         profile_label=profile_label,
+        reauthenticate=reauthenticate,
     )
     if assistant_service is not None and assistant_panel_factory is not None:
         window.close()

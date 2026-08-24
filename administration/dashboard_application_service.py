@@ -32,3 +32,9 @@ class DashboardApplicationService:
             indicators=self.repository.indicators(),
             history=self.repository.day_history_page(limit=safe_limit, offset=safe_offset),
         )
+
+    def load_client_summary(self):
+        """Resumo lateral autorizado; a GUI nunca consulta o banco diretamente."""
+
+        self._require()
+        return self.repository.client_summary()

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
@@ -45,22 +45,44 @@ QPushButton:disabled { color:#8b949e; background:#21262d; }
 """
 
 
+class _SummarySignals(QObject):
+    completed = Signal(int, object, object)
+
+
+class _SummaryWorker(QRunnable):
+    def __init__(self, generation, loader):
+        super().__init__(); self.generation = generation; self.loader = loader
+        self.signals = _SummarySignals()
+
+    @Slot()
+    def run(self):
+        try: result, error = self.loader(), None
+        except Exception as caught: result, error = None, caught
+        self.signals.completed.emit(self.generation, result, error)
+
+
 class NabiCodeShellWindow(QMainWindow):
     """Janela principal com a mesma hierarquia operacional do NabiCode Legacy."""
 
     def __init__(
         self, security, modules, pdv_factory, *, store_name="NabiCode",
-        profile_label="COMERCIAL / NÃO FISCAL", parent=None,
+        profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None, parent=None,
     ) -> None:
         super().__init__(parent)
         self.security = security
         self.modules = tuple(modules)
         self.pdv_factory = pdv_factory
+        self.reauthenticate = reauthenticate
+        self._reauthenticating = False
         self._modules = {m.module_id: m for m in self.modules if m.module_id}
         self._open_dialogs = {}
         self._module_pages = {}
         self._pdv_window = None
         self._shortcuts = []
+        self._summary_generation = 0
+        self._summary_workers = []
+        self.worker_pool = QThreadPool(self)
+        self.worker_pool.setMaxThreadCount(2)
         self._active_module = "dashboard"
         self.setWindowTitle(f"NabiCode — {store_name}")
         self.resize(1360, 820)
@@ -114,7 +136,7 @@ class NabiCodeShellWindow(QMainWindow):
         root.addStretch()
         self.help_button = QPushButton("Central de Ajuda"); self.help_button.setStyleSheet("background:#1f6feb")
         self.help_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.help_button)
-        self.support_button = QPushButton("Suporte"); self.support_button.setStyleSheet("background:#2ea043")
+        self.support_button = QPushButton("Ajuda / suporte"); self.support_button.setStyleSheet("background:#2ea043")
         self.support_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.support_button)
         self.panic_button = QPushButton("Pânico  [Ctrl+Shift+P]"); self.panic_button.setStyleSheet("background:#b62324")
         self.panic_button.clicked.connect(self.close); root.addWidget(self.panic_button)
@@ -149,7 +171,11 @@ class NabiCodeShellWindow(QMainWindow):
         for module_id, button in self.navigation_buttons.items():
             button.setEnabled(module_id in available)
             if module_id not in available:
-                button.setToolTip("Módulo indisponível nesta edição")
+                tooltip = (
+                    "Disponível somente no NabiCode oficial Legacy; migração Qt pendente"
+                    if module_id == "fiscal" else "Módulo indisponível nesta edição"
+                )
+                button.setToolTip(tooltip)
         return grid
 
     def _install_shortcuts(self):
@@ -165,7 +191,17 @@ class NabiCodeShellWindow(QMainWindow):
 
     def _authorized(self, module):
         session = getattr(self.security, "session", None)
-        if session is None or self.security.is_expired(): raise PermissionError("Sessão expirada. Entre novamente.")
+        if session is None or self.security.is_expired():
+            if self.reauthenticate is None or self._reauthenticating:
+                raise PermissionError("Sessão expirada. Entre novamente.")
+            self._reauthenticating = True
+            try:
+                authenticated = bool(self.reauthenticate(self))
+            finally:
+                self._reauthenticating = False
+            session = getattr(self.security, "session", None)
+            if not authenticated or session is None or self.security.is_expired():
+                raise PermissionError("Autenticação cancelada. A ação permanece bloqueada.")
         if not self.security.require(module.permission_module, module.permission_action):
             raise PermissionError(f"Seu perfil não possui permissão para abrir {module.label}.")
         self.security.touch()
@@ -197,7 +233,8 @@ class NabiCodeShellWindow(QMainWindow):
             try:
                 self._authorized(module)
                 if self.pages.count() == 0: self.pages.addWidget(module.embedded_factory(self.pages))
-                self.pages.setCurrentIndex(0); self._mark_active("dashboard"); return True
+                self.pages.setCurrentIndex(0); self._mark_active("dashboard")
+                self.refresh_summary(); return True
             except Exception as error:
                 QMessageBox.warning(self, "Início", str(error)); return False
         if module_id in {
@@ -270,6 +307,40 @@ class NabiCodeShellWindow(QMainWindow):
     def ensure_pdv(self):
         self.open_pdv(); return self._pdv_window
 
+    def refresh_summary(self):
+        module = self._modules.get("dashboard")
+        loader = getattr(module, "summary_loader", None) if module is not None else None
+        if loader is None:
+            self._summary_unavailable("Indisponível")
+            return
+        self._summary_generation += 1
+        generation = self._summary_generation
+        for label in self.summary_labels.values(): label.setText("Carregando...")
+        worker = _SummaryWorker(generation, loader)
+        worker.signals.completed.connect(self._summary_loaded)
+        self._summary_workers.append(worker); self.worker_pool.start(worker)
+
+    def _summary_loaded(self, generation, summary, error):
+        self._summary_workers = [w for w in self._summary_workers if w.generation != generation]
+        if generation != self._summary_generation: return
+        if error is not None or summary is None:
+            self._summary_unavailable("Indisponível")
+            return
+        self.summary_labels["total"].setText(f"Total de Fichas: {summary.total_records}")
+        self.summary_labels["current"].setText(f"Em Dia: {summary.current_count}")
+        self.summary_labels["owing"].setText(
+            f"Devendo ({summary.owing_count}): R$ {summary.owing_value:.2f}"
+        )
+        self.summary_labels["alert"].setText(
+            f"Alerta >60d ({summary.alert_count}): R$ {summary.alert_value:.2f}"
+        )
+
+    def _summary_unavailable(self, value):
+        self.summary_labels["total"].setText(f"Fichas: {value}")
+        self.summary_labels["current"].setText(f"Em Dia: {value}")
+        self.summary_labels["owing"].setText(f"Devendo: {value}")
+        self.summary_labels["alert"].setText(f"Alerta (>60d): {value}")
+
     def eventFilter(self, watched, event):
         if watched in self.navigation_buttons.values() and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
             event.accept()
@@ -280,5 +351,10 @@ class NabiCodeShellWindow(QMainWindow):
         return super().eventFilter(watched, event)
 
     def closeEvent(self, event):
+        self._summary_generation += 1
         if self._pdv_window is not None: self._pdv_window.close()
+        for dialog in tuple(self._open_dialogs.values()): dialog.close()
+        for page in tuple(self._module_pages.values()): page.close()
+        self.worker_pool.clear()
+        self.worker_pool.waitForDone(3000)
         super().closeEvent(event)
