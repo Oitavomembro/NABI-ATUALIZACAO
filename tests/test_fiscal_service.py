@@ -331,7 +331,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertTrue(scope["initialized"])
         self.assertEqual(scope["next_number"], 321)
         reserved = self.service.reserve_number(
-            model="55", series=4, environment="HOMOLOGACAO", actor="admin"
+            model="55", series=4, environment="HOMOLOGACAO"
         )
         self.assertEqual(reserved["number"], 321)
         with self.assertRaisesRegex(ValueError, "já foi iniciada"):
@@ -1614,8 +1614,9 @@ class FiscalServiceTests(unittest.TestCase):
             self.service.merge_authorization_protocol(request_xml, response_xml)
 
     def test_reserva_confirma_e_bloqueia_reuso_de_numeracao(self):
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin", environment="HOMOLOGACAO")
+        reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(reservation["number"], 1)
+        self.assertEqual(reservation["actor"], "gerente")
         key = self.service.build_access_key(
             state_code="29", issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
             cnpj="12345678000195", model="55", series=1, number=1, numeric_code="12345678",
@@ -1625,11 +1626,27 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(confirmed["access_key"], key)
         with self.assertRaises(ValueError):
             self.service.release_number(reservation["id"], actor="admin", reason="Tentativa inválida")
-        next_reservation = self.service.reserve_number(model="55", series=1, actor="admin", environment="HOMOLOGACAO")
+        next_reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(next_reservation["number"], 2)
 
+    def test_reserva_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.reserve_number(model="55", series=1, actor="forjado")
+
+    def test_reserva_de_numeracao_falha_fechado_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-reserva",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.reserve_number(model="55", series=1)
+        load.assert_not_called()
+
     def test_confirmacao_rejeita_chave_de_outra_numeracao(self):
-        reservation = self.service.reserve_number(model="65", series=3, actor="caixa", environment="HOMOLOGACAO")
+        reservation = self.service.reserve_number(model="65", series=3, environment="HOMOLOGACAO")
         wrong_key = self.service.build_access_key(
             state_code="29", issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
             cnpj="12345678000195", model="65", series=3, number=99, numeric_code="87654321",
@@ -1640,21 +1657,21 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(current["status"], "RESERVADO")
 
     def test_reserva_expirada_e_recuperada_sem_reutilizar_numero(self):
-        reservation = self.service.reserve_number(model="55", series=9, actor="admin", ttl_minutes=1)
+        reservation = self.service.reserve_number(model="55", series=9, ttl_minutes=1)
         conn = self.connect()
         row = conn.execute("SELECT valor FROM configuracoes WHERE chave = ?", (FiscalService.NUMBERING_KEY,)).fetchone()
         data = __import__("json").loads(row[0])
         data["records"][reservation["id"]]["expires_at"] = (datetime.now(timezone.utc) - timedelta(minutes=1)).isoformat()
         conn.execute("UPDATE configuracoes SET valor = ? WHERE chave = ?", (__import__("json").dumps(data), FiscalService.NUMBERING_KEY))
         conn.commit(); conn.close()
-        second = self.service.reserve_number(model="55", series=9, actor="admin")
+        second = self.service.reserve_number(model="55", series=9)
         self.assertEqual(second["number"], 2)
         records = {row["number"]: row for row in self.service.numbering_status(model="55", series=9)}
         self.assertEqual(records[1]["status"], "LIBERADO")
         self.assertEqual(records[2]["status"], "RESERVADO")
 
     def test_reserva_expirada_vinculada_a_documento_nao_e_liberada(self):
-        reservation = self.service.reserve_number(model="55", series=8, actor="admin", ttl_minutes=1)
+        reservation = self.service.reserve_number(model="55", series=8, ttl_minutes=1)
         conn = self.connect()
         conn.execute("CREATE TABLE movimentacoes (id INTEGER PRIMARY KEY)")
         conn.execute("INSERT INTO movimentacoes VALUES(1)")
@@ -1676,7 +1693,7 @@ class FiscalServiceTests(unittest.TestCase):
             json.dumps(data), FiscalService.NUMBERING_KEY,
         ))
         conn.commit(); conn.close()
-        self.service.reserve_number(model="55", series=8, actor="admin")
+        self.service.reserve_number(model="55", series=8)
         records = {row["number"]: row for row in self.service.numbering_status(model="55", series=8)}
         self.assertEqual(records[1]["status"], "RESERVADO")
         self.assertIn("Documento fiscal", records[1]["expiration_blocked_reason"])
@@ -2267,7 +2284,10 @@ class FiscalDocumentIntegrityTests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         conn.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         conn.commit(); conn.close()
-        self.service = FiscalService(lambda: sqlite3.connect(self.db_path), storage_dir=Path(self.tmp.name) / "docs")
+        self.service = FiscalService(
+            lambda: sqlite3.connect(self.db_path),
+            storage_dir=Path(self.tmp.name) / "docs",
+        )
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -2458,7 +2478,12 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
         conn.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
         conn.commit()
         conn.close()
-        self.service = FiscalService(lambda: sqlite3.connect(self.db_path), storage_dir=Path(self.tmp.name) / "docs")
+        self.service = FiscalService(
+            lambda: sqlite3.connect(self.db_path),
+            storage_dir=Path(self.tmp.name) / "docs",
+            actor_provider=lambda: "gerente",
+            authorization_provider=lambda action: action == "transmit",
+        )
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         FiscalServiceTests._create_pfx(self.pfx_path, self.password)
@@ -2487,7 +2512,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
 
     def test_autorizacao_confirma_reserva_somente_com_sucesso(self):
         self._configure()
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin")
+        reservation = self.service.reserve_number(model="55", series=1)
         xml, key = self._document(reservation["number"])
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(
@@ -2514,7 +2539,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
 
     def test_rejeicao_nao_confirma_reserva(self):
         self._configure()
-        reservation = self.service.reserve_number(model="55", series=1, actor="admin")
+        reservation = self.service.reserve_number(model="55", series=1)
         xml, key = self._document(reservation["number"])
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(

@@ -497,10 +497,10 @@ class FiscalService:
         *,
         model: str,
         series: int,
-        actor: str,
         environment: str | None = None,
         ttl_minutes: int = 30,
     ) -> dict[str, Any]:
+        actor = self._authenticated_outbox_actor("transmit")
         model = str(model).strip()
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")

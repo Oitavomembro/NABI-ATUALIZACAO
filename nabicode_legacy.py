@@ -4233,7 +4233,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             actor = self._usuario_financeiro()
             series = int(issuer_cfg.get("return_series") or 1)
             reservation = self.fiscal_service.reserve_number(
-                model="55", series=series, actor=actor, environment=config.get("environment")
+                model="55", series=series, environment=config.get("environment")
             )
             issuer = {
                 "cnpj": config.get("cnpj"), "name": issuer_cfg.get("name"),

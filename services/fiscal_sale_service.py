@@ -66,7 +66,7 @@ class FiscalSaleService:
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
         reservation = self.fiscal_service.reserve_number(
-            model=model, series=series, actor=actor, environment=environment
+            model=model, series=series, environment=environment
         )
         try:
             issuer = dict(config.get("issuer") or {})
