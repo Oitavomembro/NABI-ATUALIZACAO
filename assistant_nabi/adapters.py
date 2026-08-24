@@ -16,9 +16,17 @@ class CurrentSessionPermissionAdapter:
         session = getattr(self._security, "session", None)
         if session is None or self._security.is_expired():
             raise PermissionError("Não existe sessão autenticada ativa para a Nabi.")
-        user = session.user
-        if not bool(getattr(user, "active", False)):
+        lookup = getattr(self._security, "get_user", None)
+        try:
+            user = lookup(session.user.username) if callable(lookup) else session.user
+        except (ValueError, KeyError):
+            user = None
+        if user is None or not bool(getattr(user, "active", False)):
+            logout = getattr(self._security, "logout", None)
+            if callable(logout):
+                logout("IA_NABI_USUARIO_REVOGADO")
             raise PermissionError("O usuário atual está inativo.")
+        session.user = user
         return AssistantActor(user.username, user.profile, self._session_id)
 
     def allows(self, actor: AssistantActor, module: str, action: str) -> bool:
@@ -56,4 +64,24 @@ class AdminAssistantAuditAdapter:
             result="SUCESSO" if result.success else "NEGADO_OU_FALHA",
             user=actor.username,
             event_bus=self._event_bus,
+        )
+
+
+class AdminAssistantConfirmationAuditAdapter:
+    """Auditoria estrita de revisão, confirmação e consumo de autorização."""
+
+    def __init__(self, audit_service) -> None:
+        self._audit = audit_service
+
+    def record(self, event: str, *, actor: AssistantActor, draft, result: str) -> None:
+        recorder = getattr(self._audit, "record_event_strict", None)
+        if not callable(recorder):
+            recorder = self._audit.record_event
+        recorder(
+            "IA_NABI", str(event), object_id=draft.draft_id,
+            details=(
+                f"operation={draft.operation_kind}; fingerprint={draft.fingerprint}; "
+                f"session_id={actor.session_id}"
+            ),
+            result=str(result), user=actor.username,
         )

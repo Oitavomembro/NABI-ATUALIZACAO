@@ -9,6 +9,8 @@ from PySide6.QtGui import QKeyEvent
 from ui_qt import app as qt_app
 from ui_qt.administration.composition import build_administrative_modules
 from ui_qt.administration.login_dialog import ApplicationLoginDialog
+from ui_qt.administration.initial_setup_dialog import InitialSetupDialog
+from ui_qt.administration.legacy_security_migration_dialog import LegacySecurityMigrationDialog
 import main_qt
 
 class Window(QMainWindow):
@@ -29,6 +31,34 @@ def test_login_valido_cria_sessao_por_autenticacao_real():
 def test_login_auto_repeat_e_consumido_sem_autenticar():
     security=Mock();dialog=ApplicationLoginDialog(security);event=QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier,"",True,1)
     assert dialog.eventFilter(dialog.enter,event) is True;security.authenticate.assert_not_called();dialog.close()
+
+def test_configuracao_inicial_exige_senhas_iguais_e_nao_abre_sessao():
+    security=Mock();dialog=InitialSetupDialog(security);dialog.store_name.setText("Loja");dialog.username.setText("dono");dialog.password.setText("segura123");dialog.password_confirmation.setText("diferente")
+    with patch("ui_qt.administration.initial_setup_dialog.QMessageBox.warning"):
+        dialog.complete()
+    security.complete_initial_setup.assert_not_called();assert dialog.result()==0
+    dialog.password.setText("segura123");dialog.password_confirmation.setText("segura123")
+    with patch("ui_qt.administration.initial_setup_dialog.QMessageBox.information"):
+        dialog.complete()
+    security.complete_initial_setup.assert_called_once();assert dialog.result()==QDialog.DialogCode.Accepted;dialog.close()
+
+def test_configuracao_inicial_consumo_de_auto_repeat_nao_grava():
+    security=Mock();dialog=InitialSetupDialog(security);event=QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier,"",True,1)
+    assert dialog.eventFilter(dialog.finish,event) is True;security.complete_initial_setup.assert_not_called();dialog.close()
+
+def test_migracao_legada_exige_confirmacao_e_consumo_unico():
+    security=Mock();dialog=LegacySecurityMigrationDialog(security);dialog.current_password.setText("antiga");dialog.new_password.setText("nova-segura");dialog.confirmation.setText("diferente")
+    with patch("ui_qt.administration.legacy_security_migration_dialog.QMessageBox.warning"):dialog.complete()
+    security.complete_existing_installation_migration.assert_not_called()
+    dialog.new_password.setText("nova-segura");dialog.confirmation.setText("nova-segura")
+    with patch("ui_qt.administration.legacy_security_migration_dialog.QMessageBox.information"):dialog.complete()
+    security.complete_existing_installation_migration.assert_called_once_with(username="admin",current_password="antiga",new_password="nova-segura")
+    assert dialog.result()==QDialog.DialogCode.Accepted;dialog.close()
+
+def test_migracao_legada_bloqueia_auto_repeat():
+    security=Mock();dialog=LegacySecurityMigrationDialog(security);event=QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier,"",True,1)
+    assert dialog.eventFilter(dialog.finish,event) is True
+    security.complete_existing_installation_migration.assert_not_called();dialog.close()
 
 def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios_usuarios():
     container=SimpleNamespace(customer_application=None,product_application=None,stock_actions=None,purchase_service=None,financial_query=None,financial_actions=None)
@@ -53,6 +83,8 @@ def test_main_nao_usa_sessao_sem_senha():
     source=Path("main_qt.py").read_text(encoding="utf-8")
     assert "start_session_without_password" not in source
     assert "ApplicationLoginDialog(module_security).exec()" in source
+    assert "InitialSetupDialog(module_security).exec()" in source
+    assert "LegacySecurityMigrationDialog(module_security).exec()" in source
 
 def test_factory_reautentica_sessao_expirada_e_cancela_fechado():
     security=Mock();security.session=None;security.is_expired.return_value=True

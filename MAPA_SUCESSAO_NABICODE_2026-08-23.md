@@ -1050,6 +1050,71 @@ Não confundir automação inteligente com autoridade. A Nabi poderá planejar, 
   passed`, zero falhas e um aviso externo conhecido do BrazilFiscalReport;
   `compileall` e `git diff --check` aprovados.
 
+### Segurança — primeiro acesso oficial e revogação imediata
+
+- branch isolada: `codex/seguranca-primeiro-acesso`, derivada da consolidação
+  enviada `112dacd`;
+- implementação: `4fc2a95` — `feat: protege primeiro acesso e revogacao de sessao`;
+- instalação nova do Qt oficial abre somente o assistente restrito para nome da
+  empresa, CNPJ/e-mail opcionais e criação do primeiro administrador;
+- o assistente não abre sessão implícita nem libera módulos; após concluir, o
+  login real com a senha recém-definida é obrigatório;
+- a conclusão é atômica, auditada e consumível uma única vez; atualização de
+  instalação existente não reabre o primeiro acesso;
+- o FICHÁRIO e sua decisão exclusiva de abertura direta não foram alterados;
+- sessões agora recarregam usuário ativo e perfil persistidos antes de autorizar;
+  desativação ou troca de perfil em outra instância alcançam o Qt e a Nabi na
+  próxima autorização, sem aguardar expiração;
+- validação focada: `172 passed`, `38 subtests passed`;
+- regressão integral: `2102 passed`, `1 skipped`, `444 subtests passed`, zero
+  falhas e um aviso externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados;
+- pendências separadas: substituir no Legacy oficial a sessão administrativa
+  automática por primeiro acesso/login real; remover a senha mestre universal;
+  adicionar limitação persistente de tentativas; completar auditoria das
+  confirmações da Nabi.
+
+#### Extensão ao Legacy oficial
+
+- implementação: `e95e201` — `feat: exige primeiro acesso seguro no Legacy`;
+- ajuste de regressão textual, sem mudança funcional: `ab7e2cc`;
+- instalação nova não cria mais o administrador padrão: abre configuração
+  restrita, grava empresa/CNPJ/e-mail e primeiro administrador atomicamente e
+  exige autenticação real antes de construir/liberar os módulos e iniciar o
+  worker fiscal;
+- inatividade encerra a sessão configurada e exige nova autenticação; autorização
+  sem sessão abre o login e falha fechada quando o operador cancela;
+- compatibilidade automática permanece temporariamente somente para bases
+  anteriores ao marcador `configuracao_inicial_concluida_v1`, evitando bloquear
+  instalações existentes durante uma atualização; sua migração será uma etapa
+  assistida separada;
+- FICHÁRIO não foi alterado e mantém sua regra exclusiva;
+- testes focados finais: `37 passed`; regressão integral repetida:
+  `2102 passed`, `1 skipped`, `444 subtests passed`, zero falhas e um aviso
+  externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados.
+
+#### Endurecimento de autenticação e confirmação da Nabi
+
+- `711d8a6` — `fix: limita tentativas de autenticacao`;
+- cinco falhas consecutivas por usuário criam bloqueio persistente de 60
+  segundos, compartilhado por reinícios e instâncias; tentativa durante o
+  bloqueio é recusada e auditada, e autenticação válida anterior ao limite
+  limpa o contador;
+- `26b1704` — `fix: audita confirmacoes assistidas da Nabi`;
+- revisão do rascunho, confirmação humana e consumo da autorização agora são
+  eventos distintos, correlacionados por operação, draft, fingerprint, usuário
+  e sessão, sem transportar senha ou conteúdo comercial livre;
+- a composição real usa auditoria estrita: falha de persistência impede emitir
+  ou consumir autorização e, portanto, bloqueia a mutação assistida;
+- validações focadas: `72 passed`, `14 subtests passed` para autenticação e
+  `182 passed`, `38 subtests passed` para Nabi/auditoria;
+- regressão integral final: `2105 passed`, `1 skipped`, `444 subtests passed`,
+  zero falhas e um aviso externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados;
+- próximo checkpoint crítico: substituir a senha mestre universal sem quebrar
+  autorização de instalação, atualização administrativa ou barreiras fiscais.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
@@ -2197,3 +2262,68 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - pendência de integração: composição no shell/painel deve ocorrer somente em
   checkpoint coordenado, preservando o estado seguro quando o executor não for
   fornecido.
+
+### Segurança — remoção da credencial mestra universal
+
+- branch: `codex/seguranca-primeiro-acesso`; implementação no commit `7738c80`;
+- o hash de uma senha universal foi removido de `SecurityService`, do Legacy e
+  do instalador; não existe mais login mestre nem confirmação mestre capaz de
+  assumir uma identidade administrativa;
+- login aceita somente a senha individual do usuário ativo e mantém a limitação
+  persistente de tentativas; confirmações sensíveis exigem a senha real de um
+  usuário ativo com perfil `ADMIN` ou `GERENTE`;
+- a antiga autorização local por senha foi retirada do startup e do painel do
+  Legacy. A licença V2 `.nabilic`, assinada e vinculada à máquina, permanece a
+  única barreira comercial antes do banco e da interface;
+- o instalador não contém segredo compartilhado e não oferece exclusão de dados
+  operacionais. Atualização e desinstalação preservam banco, configurações e
+  backups; exclusão deliberada continua restrita ao fluxo autenticado dentro do
+  aplicativo;
+- validação focada final: `59 passed`; regressão completa repetida após atualizar
+  a expectativa antiga do desinstalador: `2105 passed`, `1 skipped`, `444
+  subtests passed`, zero falhas e apenas a depreciação externa já conhecida do
+  `BrazilFiscalReport`;
+- `compileall` e `git diff --check` aprovados; Fiscal/SEFAZ não teve regra,
+  comunicação, prazo ou persistência alterada; Fichário não foi alterado;
+- nenhum push foi realizado neste checkpoint.
+
+### Segurança — migração assistida de instalações antigas
+
+- implementação no commit `e25f527`, branch `codex/seguranca-primeiro-acesso`;
+- bases oficiais antigas que possuem usuários, mas não possuem o marcador
+  `configuracao_inicial_concluida_v1`, não recebem mais sessão administrativa
+  automática;
+- antes de qualquer módulo, Qt e Legacy exigem um administrador ativo, validam
+  sua credencial persistida e obrigam a substituição por senha de no mínimo oito
+  caracteres; cancelar encerra a abertura em modo fail-closed;
+- a migração usa transação `BEGIN IMMEDIATE`, grava o novo hash PBKDF2 e o
+  marcador juntos, não abre sessão implícita, registra
+  `MIGRACAO_CREDENCIAL_LEGADA` e só pode ser consumida uma vez;
+- depois da migração, o login normal é obrigatório. Instalações oficiais já
+  configuradas também autenticam antes da construção/liberação dos módulos;
+- o Fichário permanece explicitamente separado e conserva sua decisão de abrir
+  sem login, coberta pelos testes próprios da edição;
+- validação focada inicial: `55 passed`; regressão completa: `2108 passed`, `1
+  skipped`, `444 subtests passed`, com uma única colisão textual de callback em
+  teste antigo; callback renomeado e repetição final das áreas afetadas: `60
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhum push foi realizado.
+
+### Segurança — política de senha para usuários
+
+- implementação no commit `7eaa112`, branch `codex/seguranca-primeiro-acesso`;
+- criação de usuário e troca explícita de senha exigem no mínimo oito
+  caracteres; não é mais possível criar conta oficial com senha vazia;
+- a verificação preserva compatibilidade somente para hashes já existentes,
+  evitando bloquear credenciais antigas durante a migração assistida;
+- ao migrar uma base antiga, contas secundárias com algoritmo legado `none` são
+  desativadas na mesma transação; o administrador deverá definir senha segura e
+  reativá-las conscientemente;
+- a interface Legacy informa a exigência de oito caracteres para novos
+  usuários; deixar o campo vazio ao editar continua significando manter a senha
+  existente, nunca apagá-la;
+- validação focada final: `56 passed`; regressão completa: `2110 passed`, `1
+  skipped`, `444 subtests passed`, zero falhas e apenas a depreciação externa
+  conhecida do `BrazilFiscalReport`; `compileall` e `git diff --check`
+  aprovados; Fichário, Fiscal/SEFAZ e banco real não foram alterados;
+- nenhum push foi realizado.

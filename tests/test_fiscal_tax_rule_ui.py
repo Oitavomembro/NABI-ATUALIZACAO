@@ -20,7 +20,7 @@ def test_matriz_nao_inventa_aliquota_e_exige_senha_para_alterar():
     assert "self.fiscal_tax_rule_service.list_rules()" in block
     assert "self.fiscal_tax_rule_service.save(values)" in block
     assert "self.fiscal_tax_rule_service.deactivate(rule_id)" in block
-    assert block.count("self._confirmar_senha_mestra(") == 2
+    assert block.count("self._confirmar_senha_gerencial(") == 2
     assert "Responsável contábil que aprovou" in block
     assert "Código de benefício fiscal aprovado (8 ou 10 caracteres" in block
     assert 'f"cBenef {rule.benefit_code or \'-\'}' in block

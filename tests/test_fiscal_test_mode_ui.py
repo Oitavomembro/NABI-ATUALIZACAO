@@ -15,7 +15,7 @@ def test_configuracao_expoe_teste_fiscal_sem_valor_e_producao_bloqueada():
 def test_troca_de_ambiente_fiscal_exige_senha_mestra():
     block = SOURCE.split("def abrir_configuracao_fiscal", 1)[1].split("def abrir_central_fiscal", 1)[0]
 
-    guard = block.index("if environment_changed and not self._confirmar_senha_mestra(")
+    guard = block.index("if environment_changed and not self._confirmar_senha_gerencial(")
     save = block.index('"enabled": enabled.get(), "environment": chosen_environment')
     assert guard < save
     assert "O ambiente fiscal não foi alterado." in block

@@ -14,14 +14,14 @@ class ItemAvulsoIntegrationTests(unittest.TestCase):
         self.assertIn("FISCAL — com recursos fiscais", self.source)
         self.assertIn('salvar_config("modo_operacao"', self.source)
 
-    def test_troca_de_modo_exige_senha_mestra_antes_de_salvar(self):
+    def test_troca_de_modo_exige_senha_gerencial_antes_de_salvar(self):
         inicio = self.source.index("def salvar_configuracoes_gerais(self):")
         fim = self.source.index("def abrir_restauracao_fabrica(self):", inicio)
         fluxo = self.source[inicio:fim]
-        self.assertIn("self._confirmar_senha_mestra(", fluxo)
-        self.assertIn("self.security.verify_master_password(senha)", self.source)
+        self.assertIn("self._confirmar_senha_gerencial(", fluxo)
+        self.assertIn("self.security.confirm_manager_password(senha)", self.source)
         self.assertLess(
-            fluxo.index("self._confirmar_senha_mestra("),
+            fluxo.index("self._confirmar_senha_gerencial("),
             fluxo.index('salvar_config("modo_operacao"'),
         )
 

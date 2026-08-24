@@ -52,7 +52,9 @@ from repositories import NFeImportRepository
 from services import NFeImportService
 from ui_qt.app import run
 from ui_qt.administration import (
-    AdministrativeModuleHub, ApplicationLoginDialog, build_administrative_modules,
+    AdministrativeModuleHub, ApplicationLoginDialog, InitialSetupDialog,
+    LegacySecurityMigrationDialog,
+    build_administrative_modules,
 )
 from licensing.gate import Capability
 from licensing.runtime import evaluate_runtime_gate, startup_block_message
@@ -235,7 +237,7 @@ def _schema_version(database: DatabaseManager) -> int:
         return 0
 
 
-def _initialize(database: DatabaseManager, profile, network_mode: bool, network_role: str) -> None:
+def _initialize(database: DatabaseManager, profile, network_mode: bool, network_role: str) -> bool:
     last_update = {"executada": False, "de": 0, "para": SCHEMA_VERSION, "backup": ""}
 
     def backup_before_update(previous: int, target: int) -> str:
@@ -246,7 +248,7 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
         backup_database(database.database_path, destination, network_mode=network_mode)
         return str(destination)
 
-    initialize_database(
+    return bool(initialize_database(
         db_name=str(database.database_path),
         backup_dir=str(profile.paths.backups),
         pdf_dir=str(profile.paths.pdfs),
@@ -257,7 +259,7 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
         connect=database.connect,
         read_existing_version=lambda: _schema_version(database),
         backup_before_update=backup_before_update,
-    )
+    ))
 
 
 def main(argv=None) -> int:
@@ -285,11 +287,20 @@ def main(argv=None) -> int:
     try:
         lock.acquire()
         database = DatabaseManager(database_path, network_mode=network_mode, logger=logging.getLogger("NabiCode.Qt"))
-        _initialize(database, profile, network_mode, network_role)
+        first_install = _initialize(database, profile, network_mode, network_role)
         container = create_commercial_container(database, pdf_dir=profile.paths.pdfs)
         system = SystemRepository(database.connect)
         module_security = SecurityService(database.connect)
-        module_security.bootstrap_admin(system.get_config("admin_senha_hash"))
+        if first_install:
+            if module_security.has_users():
+                raise RuntimeError("O banco novo já possui usuário; configuração inicial recusada.")
+            if InitialSetupDialog(module_security).exec() != QDialog.DialogCode.Accepted:
+                return 5
+        else:
+            module_security.bootstrap_admin(system.get_config("admin_senha_hash"))
+            if module_security.needs_existing_installation_migration():
+                if LegacySecurityMigrationDialog(module_security).exec() != QDialog.DialogCode.Accepted:
+                    return 5
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
         module_actions = build_administrative_modules(

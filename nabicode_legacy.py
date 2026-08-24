@@ -37,7 +37,6 @@ from services.fiscal_preflight_service import FiscalPreflightService
 from services.fiscal_onboarding_service import FiscalOnboardingService
 from services.fiscal_outbox_worker import FiscalOutboxWorker
 from services.fiscal_cancellation_service import FiscalCancellationService
-from services.installation_authorization_service import InstallationAuthorizationService
 from licensing.legacy_adapter import LegacyLicenseV2Adapter
 from services.legacy_runtime_facade import LegacyAuditFacade, LegacyInfrastructureFacade, LegacySystemFacade
 from services.windows_pdf_printer import WindowsPDFPrinter, WindowsPDFPrintError
@@ -724,25 +723,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self._license_dialog_active = False
         self._license_dialog_window = None
         self._license_exit_requested = False
-        self._installation_authorization_dialog_active = False
-        self._installation_authorization_dialog_window = None
-        self._installation_authorization_exit_requested = False
         mark_startup("main_window_created")
         # Constrói toda a interface com a janela oculta. Isso evita a janela
         # branca e o redesenho completo visível durante a inicialização.
         self.withdraw()
-
-        self.installation_authorization_service = InstallationAuthorizationService.for_windows(
-            profile=os.environ.get("NABICODE_PROFILE", ""),
-            app_dir=APP_DIR,
-        )
-        # Esta barreira ocorre antes do banco e dos demais serviços da aplicação.
-        with startup_modal_scope():
-            while self.verificar_autorizacao_instalacao():
-                pass
-        if self._installation_authorization_exit_requested:
-            self.destroy()
-            raise SystemExit(0)
 
         mark_startup("database_migrations_started")
         primeira_vez = inicializar_banco()
@@ -822,7 +806,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         self.fiscal_cancellation_service.recover_pending_reversals()
         self.modo_pdv = self.pdv_service.normalizar_modo(obter_config("pdv_modo") or "BALCAO")
-        self.security.bootstrap_admin(obter_config("admin_senha_hash"))
+        if not primeira_vez:
+            self.security.bootstrap_admin(obter_config("admin_senha_hash"))
         # Migração corretiva 2.4.42: o login de abertura fica DESATIVADO em toda
         # instalação existente até que o proprietário marque e salve novamente a
         # opção na tela Segurança desta versão. Chaves antigas não autorizam mais
@@ -867,6 +852,26 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             while self.verificar_bloqueio_expiracao():
                 pass
         if self._license_exit_requested:
+            self.destroy()
+            raise SystemExit(0)
+
+        if primeira_vez:
+            with startup_modal_scope():
+                if not self._executar_configuracao_inicial():
+                    self.destroy()
+                    raise SystemExit(0)
+                if not self.abrir_login_usuario(inicial=True):
+                    self.destroy()
+                    raise SystemExit(0)
+        elif self.security.needs_existing_installation_migration():
+            with startup_modal_scope():
+                if not self._executar_migracao_seguranca_legada():
+                    self.destroy()
+                    raise SystemExit(0)
+                if not self.abrir_login_usuario(inicial=True):
+                    self.destroy()
+                    raise SystemExit(0)
+        elif not self.abrir_login_usuario(inicial=True):
             self.destroy()
             raise SystemExit(0)
 
@@ -963,7 +968,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.bind_all("<Any-KeyPress>", lambda _event: self.security.touch(), add="+")
         self.bind_all("<Any-Button>", lambda _event: self.security.touch(), add="+")
         self.after(250, self._monitorar_inatividade)
-        self.security.start_session_without_password("admin")
         self._janela_abertura_caixa = None
         self._janela_formulario_abertura_caixa = None
         self.after_idle(self._iniciar_worker_fiscal)
@@ -1007,8 +1011,133 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             logger.exception("Não foi possível exibir a janela principal.")
 
     def _login_usuarios_habilitado(self):
-        # Login automático desativado: o NabiCode sempre inicia em sessão local.
-        return False
+        return str(obter_config("configuracao_inicial_concluida_v1") or "0") == "1"
+
+    def _executar_configuracao_inicial(self):
+        """Configura uma instalação nova sem liberar módulos operacionais."""
+        if self.security.has_users():
+            return False
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Configuração inicial do NabiCode")
+        janela.geometry("590x650")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(
+            janela, text="PRIMEIRO ACESSO", text_color="#00FF88",
+            font=ctk.CTkFont(size=23, weight="bold"),
+        ).pack(anchor="w", padx=32, pady=(26, 4))
+        aviso = ctk.CTkLabel(
+            janela,
+            text=("Configure a empresa e crie o primeiro administrador.\n"
+                  "Vendas, Financeiro e Fiscal permanecem bloqueados até concluir."),
+            justify="left", wraplength=520,
+        )
+        aviso.pack(anchor="w", padx=32, pady=(0, 12))
+        campos = {}
+        for rotulo, chave, valor, oculto in (
+            ("Empresa/loja*", "loja", "", False),
+            ("CNPJ", "cnpj", "", False),
+            ("E-mail", "email", "", False),
+            ("Usuário administrador*", "usuario", "admin", False),
+            ("Nome do administrador*", "nome", "Administrador", False),
+            ("Senha (mínimo 8 caracteres)*", "senha", "", True),
+            ("Repita a senha*", "confirmacao", "", True),
+        ):
+            ctk.CTkLabel(janela, text=rotulo).pack(anchor="w", padx=32, pady=(7, 2))
+            campo = ctk.CTkEntry(janela, height=36, show="●" if oculto else "")
+            campo.pack(fill="x", padx=32)
+            if valor:
+                campo.insert(0, valor)
+            campos[chave] = campo
+
+        def concluir_configuracao(event=None):
+            if campos["senha"].get() != campos["confirmacao"].get():
+                messagebox.showwarning("Configuração inicial", "As senhas não coincidem.", parent=janela)
+                campos["senha"].delete(0, "end"); campos["confirmacao"].delete(0, "end")
+                campos["senha"].focus_set(); return "break"
+            try:
+                self.security.complete_initial_setup(
+                    username=campos["usuario"].get(), display_name=campos["nome"].get(),
+                    password=campos["senha"].get(), store_name=campos["loja"].get(),
+                    document=campos["cnpj"].get(), email=campos["email"].get(),
+                )
+            except Exception as exc:
+                messagebox.showerror("Configuração inicial", str(exc), parent=janela)
+                return "break"
+            resultado["ok"] = True
+            janela.destroy()
+            return "break"
+
+        botao = ctk.CTkButton(
+            janela, text="Concluir configuração [Enter]", command=concluir_configuracao,
+            fg_color="#2ea043", height=42,
+        )
+        botao.pack(fill="x", padx=32, pady=22)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        campos["loja"].focus_set()
+        janela.bind("<Return>", concluir_configuracao)
+        self.wait_window(janela)
+        return resultado["ok"]
+
+    def _executar_migracao_seguranca_legada(self):
+        """Protege uma base antiga antes de liberar qualquer módulo operacional."""
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Atualização de segurança do NabiCode")
+        janela.geometry("560x500")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(
+            janela, text="PROTEJA O ACESSO EXISTENTE", text_color="#d29922",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        ).pack(anchor="w", padx=32, pady=(26, 6))
+        ctk.CTkLabel(
+            janela,
+            text=("Esta base foi criada antes do novo controle de acesso.\n"
+                  "Valide um administrador existente e defina uma nova senha."),
+            justify="left", wraplength=500,
+        ).pack(anchor="w", padx=32, pady=(0, 14))
+        campos = {}
+        for rotulo, chave, valor in (
+            ("Administrador existente*", "usuario", "admin"),
+            ("Senha atual*", "atual", ""),
+            ("Nova senha (mínimo 8 caracteres)*", "nova", ""),
+            ("Repita a nova senha*", "confirmacao", ""),
+        ):
+            ctk.CTkLabel(janela, text=rotulo).pack(anchor="w", padx=32, pady=(7, 2))
+            campo = ctk.CTkEntry(janela, height=36, show="" if chave == "usuario" else "●")
+            campo.pack(fill="x", padx=32)
+            if valor:
+                campo.insert(0, valor)
+            campos[chave] = campo
+
+        def concluir_migracao(event=None):
+            if campos["nova"].get() != campos["confirmacao"].get():
+                messagebox.showwarning("Atualização de segurança", "As novas senhas não coincidem.", parent=janela)
+                campos["nova"].delete(0, "end"); campos["confirmacao"].delete(0, "end")
+                campos["nova"].focus_set(); return "break"
+            try:
+                self.security.complete_existing_installation_migration(
+                    username=campos["usuario"].get(), current_password=campos["atual"].get(),
+                    new_password=campos["nova"].get(),
+                )
+            except Exception as exc:
+                campos["atual"].delete(0, "end")
+                messagebox.showerror("Atualização de segurança", str(exc), parent=janela)
+                campos["atual"].focus_set(); return "break"
+            resultado["ok"] = True
+            janela.destroy(); return "break"
+
+        ctk.CTkButton(
+            janela, text="Atualizar segurança [Enter]", command=concluir_migracao,
+            fg_color="#2ea043", height=42,
+        ).pack(fill="x", padx=32, pady=22)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        campos["usuario"].focus_set()
+        janela.bind("<Return>", concluir_migracao)
+        self.wait_window(janela)
+        return resultado["ok"]
 
     def _senha_administrativa_valida(self, senha):
         return self.security.confirm_manager_password(str(senha or ""))
@@ -1032,7 +1161,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _autorizar(self, modulo, acao="view", *, silencioso=False):
         if not self.security.session:
-            self.security.start_session_without_password("admin")
+            if not self.abrir_login_usuario():
+                return False
         if self.security.require(modulo, acao):
             self.security.touch()
             return True
@@ -1040,13 +1170,43 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             messagebox.showerror("Acesso negado", f"Seu perfil não possui permissão para {modulo}:{acao}.", parent=self)
         return False
 
-    def abrir_login_usuario(self):
-        return None
+    def abrir_login_usuario(self, inicial=False):
+        if self.security.session and not self.security.is_expired():
+            return True
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Entrar no NabiCode")
+        janela.geometry("430x330")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(janela, text="ENTRAR NO NABICODE", text_color="#00FF88", font=ctk.CTkFont(size=21, weight="bold")).pack(anchor="w", padx=30, pady=(28, 16))
+        ctk.CTkLabel(janela, text="Usuário").pack(anchor="w", padx=30)
+        usuario = ctk.CTkEntry(janela, height=38); usuario.pack(fill="x", padx=30, pady=(3, 12))
+        ctk.CTkLabel(janela, text="Senha").pack(anchor="w", padx=30)
+        senha = ctk.CTkEntry(janela, height=38, show="●"); senha.pack(fill="x", padx=30, pady=(3, 18))
+
+        def autenticar(event=None):
+            session = self.security.authenticate(usuario.get(), senha.get())
+            senha.delete(0, "end")
+            if session is None:
+                messagebox.showwarning("Acesso negado", "Usuário ou senha inválidos.", parent=janela)
+                senha.focus_set(); return "break"
+            resultado["ok"] = True
+            janela.destroy(); return "break"
+
+        ctk.CTkButton(janela, text="Entrar [Enter]", command=autenticar, fg_color="#1f6feb", height=40).pack(fill="x", padx=30)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        janela.bind("<Return>", autenticar)
+        (usuario if inicial else usuario).focus_set()
+        self.wait_window(janela)
+        return resultado["ok"]
 
     def _monitorar_inatividade(self):
         try:
+            if self.security.session and self.security.is_expired():
+                self.security.logout("INATIVIDADE")
             if not self.security.session:
-                self.security.start_session_without_password("admin")
+                self.abrir_login_usuario()
         finally:
             self.after(30000, self._monitorar_inatividade)
 
@@ -1341,163 +1501,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _servico_licenca(self):
         return cached_instance(self, "_license_service", LegacyLicenseV2Adapter)
-
-    def verificar_autorizacao_instalacao(self):
-        status = self.installation_authorization_service.evaluate()
-        if status.authorized:
-            return False
-        return self.forcar_tela_autorizacao_instalacao(status)
-
-    def forcar_tela_autorizacao_instalacao(self, status=None):
-        """Mantém a aplicação indisponível até esta máquina ser autorizada."""
-        if self._installation_authorization_dialog_active:
-            try:
-                if self._installation_authorization_dialog_window.winfo_exists():
-                    self._installation_authorization_dialog_window.lift()
-                    self._installation_authorization_dialog_window.focus_force()
-            except (AttributeError, tk.TclError):
-                pass
-            return True
-
-        status = status or self.installation_authorization_service.evaluate()
-        self._installation_authorization_dialog_active = True
-        parent_was_withdrawn = self.state() == "withdrawn"
-        if parent_was_withdrawn:
-            try:
-                self.attributes("-alpha", 0.0)
-                self.deiconify()
-                self.update_idletasks()
-            except tk.TclError:
-                pass
-
-        activation_window = ctk.CTkToplevel(self)
-        self._installation_authorization_dialog_window = activation_window
-        prepare_hidden_toplevel(activation_window)
-        activation_window.title("NabiCode — Ativação desta instalação")
-        activation_window.geometry("500x390")
-        activation_window.resizable(False, False)
-        activation_window.configure(fg_color="#0d1117")
-        activation_window.transient(self)
-
-        activation_window.update_idletasks()
-        width, height = 500, 390
-        x = (activation_window.winfo_screenwidth() // 2) - (width // 2)
-        y = (activation_window.winfo_screenheight() // 2) - (height // 2)
-        activation_window.geometry(f"{width}x{height}+{x}+{y}")
-
-        ctk.CTkLabel(
-            activation_window,
-            text="🔐 NabiCode — Ativação desta instalação",
-            font=ctk.CTkFont(size=19, weight="bold"),
-            text_color="#00FF88",
-        ).pack(pady=(24, 10))
-        ctk.CTkLabel(
-            activation_window,
-            text="Este computador ainda não está autorizado.",
-            font=ctk.CTkFont(size=14),
-            text_color="#c9d1d9",
-        ).pack(pady=(0, 12))
-        ctk.CTkLabel(
-            activation_window,
-            text="Código da máquina:",
-            text_color="#8b949e",
-        ).pack()
-        ctk.CTkLabel(
-            activation_window,
-            text=status.machine_code,
-            font=ctk.CTkFont(size=18, weight="bold"),
-            text_color="#ffd700",
-        ).pack(pady=(2, 14))
-
-        password_entry = ctk.CTkEntry(
-            activation_window,
-            placeholder_text="Senha de autorização",
-            show="●",
-            height=40,
-        )
-        password_entry.pack(fill="x", padx=42, pady=(0, 12))
-        result = {"authorized": False, "close": False}
-
-        def close_modal():
-            try:
-                activation_window.grab_release()
-            except tk.TclError:
-                pass
-            try:
-                activation_window.destroy()
-            except tk.TclError:
-                pass
-
-        def activate(_event=None):
-            if self.installation_authorization_service.authorize(
-                password_entry.get(), SecurityService.verify_master_password
-            ):
-                result["authorized"] = True
-                messagebox.showinfo(
-                    "Instalação autorizada",
-                    "Este computador foi autorizado com sucesso.",
-                    parent=activation_window,
-                )
-                close_modal()
-                return
-            password_entry.delete(0, "end")
-            messagebox.showerror(
-                "Autorização não realizada",
-                "Não foi possível autorizar este computador. Verifique a senha e tente novamente.",
-                parent=activation_window,
-            )
-            password_entry.focus_set()
-
-        ctk.CTkButton(
-            activation_window,
-            text="Ativar este computador",
-            command=activate,
-            height=42,
-            fg_color="#2ea043",
-            hover_color="#238636",
-            font=ctk.CTkFont(weight="bold"),
-        ).pack(fill="x", padx=42, pady=4)
-
-        def close_application():
-            result["close"] = True
-            close_modal()
-
-        password_entry.bind("<Return>", activate)
-        activation_window.protocol("WM_DELETE_WINDOW", close_application)
-        reveal_prepared_toplevel_smooth(
-            activation_window,
-            grab=True,
-            focus_widget=password_entry,
-            duration_ms=300,
-        )
-
-        try:
-            self.wait_window(activation_window)
-        finally:
-            close_modal()
-            self._installation_authorization_dialog_active = False
-            self._installation_authorization_dialog_window = None
-
-        if result["close"]:
-            self._installation_authorization_exit_requested = True
-            self.destroy()
-            return False
-        if result["authorized"]:
-            if self._startup_reveal_complete:
-                try:
-                    self.deiconify()
-                    self.attributes("-alpha", 1.0)
-                    self.lift()
-                    self.after(80, self.focus_force)
-                except tk.TclError:
-                    pass
-            elif parent_was_withdrawn:
-                try:
-                    self.withdraw()
-                except tk.TclError:
-                    pass
-            return False
-        return True
 
     def verificar_bloqueio_expiracao(self):
         status = self._servico_licenca().evaluate()
@@ -10924,9 +10927,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             )
 
         def remove_certificate():
-            if not self._confirmar_senha_mestra(
+            if not self._confirmar_senha_gerencial(
                 title="Remover certificado digital",
-                prompt="Digite a senha mestra para remover o A1 instalado no NabiCode.",
+                prompt="Digite a senha de um administrador ou gerente para remover o A1 instalado no NabiCode.",
                 parent=janela,
             ):
                 return
@@ -11156,9 +11159,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             refresh_numbering()
 
             def confirm_numbering():
-                if not self._confirmar_senha_mestra(
+                if not self._confirmar_senha_gerencial(
                     title="Configurar numeração fiscal",
-                    prompt="Digite a senha mestra para definir a sequência fiscal inicial.",
+                    prompt="Digite a senha de um administrador ou gerente para definir a sequência fiscal inicial.",
                     parent=modal,
                 ):
                     return
@@ -11268,10 +11271,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         def save():
             try:
                 enabled_changed = bool(config.get("enabled")) != bool(enabled.get())
-                if enabled_changed and not self._confirmar_senha_mestra(
+                if enabled_changed and not self._confirmar_senha_gerencial(
                     title="Alterar emissão fiscal oficial",
                     prompt=(
-                        "Digite a senha mestra para habilitar ou desabilitar a emissão "
+                        "Digite a senha de um administrador ou gerente para habilitar ou desabilitar a emissão "
                         "fiscal oficial."
                     ),
                     parent=janela,
@@ -11283,10 +11286,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 chosen_environment = selected_environment()
                 environment_changed = str(config.get("environment") or "HOMOLOGACAO").upper() != chosen_environment
-                if environment_changed and not self._confirmar_senha_mestra(
+                if environment_changed and not self._confirmar_senha_gerencial(
                     title="Alterar ambiente fiscal",
                     prompt=(
-                        "Digite a senha mestra para trocar entre o modo de teste fiscal "
+                        "Digite a senha de um administrador ou gerente para trocar entre o modo de teste fiscal "
                         "e o ambiente de produção."
                     ),
                     parent=janela,
@@ -11453,8 +11456,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         status.pack(anchor="w", padx=16, pady=8)
 
         def save_rule():
-            if not self._confirmar_senha_mestra(
-                title="Salvar regra tributária", prompt="Digite a senha mestra para alterar a matriz fiscal.", parent=janela
+            if not self._confirmar_senha_gerencial(
+                title="Salvar regra tributária", prompt="Digite a senha de um administrador ou gerente para alterar a matriz fiscal.", parent=janela
             ): return
             try:
                 values = {name: entry.get() for name, entry in fields.items()}
@@ -11468,8 +11471,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         deactivate_id = ctk.CTkEntry(content, placeholder_text="Número da regra a desativar (ex.: 3)")
         deactivate_id.pack(fill="x", padx=16, pady=(8, 4))
         def deactivate_rule():
-            if not self._confirmar_senha_mestra(
-                title="Desativar regra tributária", prompt="Digite a senha mestra para preservar e desativar esta regra.", parent=janela
+            if not self._confirmar_senha_gerencial(
+                title="Desativar regra tributária", prompt="Digite a senha de um administrador ou gerente para preservar e desativar esta regra.", parent=janela
             ): return
             try:
                 rule_id = int(deactivate_id.get())
@@ -12303,9 +12306,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ).pack(anchor="w", padx=20, pady=(0, 4))
 
             def save_email_config():
-                if not self._confirmar_senha_mestra(
+                if not self._confirmar_senha_gerencial(
                     title="Configurar e-mail fiscal",
-                    prompt="Digite a senha mestra para proteger a credencial de e-mail.",
+                    prompt="Digite a senha de um administrador ou gerente para proteger a credencial de e-mail.",
                     parent=modal,
                 ):
                     return
@@ -12340,9 +12343,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 buttons, text="Remover configuração", fg_color="#da3633",
                 command=lambda: (
                     self.fiscal_email_service.remove_config(), modal.destroy()
-                ) if self._confirmar_senha_mestra(
+                ) if self._confirmar_senha_gerencial(
                     title="Remover e-mail fiscal",
-                    prompt="Digite a senha mestra para remover a credencial de e-mail.",
+                    prompt="Digite a senha de um administrador ou gerente para remover a credencial de e-mail.",
                     parent=modal,
                 ) else None,
             ).pack(side="left", fill="x", expand=True, padx=(4, 0))
@@ -12762,7 +12765,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         salvar_config("pasta_backup_nuvem", self.entry_backup_nuvem.get().strip())
         salvar_config("backup_diario_ativo", "1" if self.var_backup_diario.get() else "0")
 
-    def _confirmar_senha_mestra(self, *, title, prompt, parent=None):
+    def _confirmar_senha_gerencial(self, *, title, prompt, parent=None):
         senha = simpledialog.askstring(
             title,
             prompt,
@@ -12771,10 +12774,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         if senha is None:
             return False
-        if not self.security.verify_master_password(senha):
+        if not self.security.confirm_manager_password(senha):
             messagebox.showerror(
                 title,
-                "Senha mestra inválida. Nenhuma alteração protegida foi aplicada.",
+                "Senha de administrador ou gerente inválida. Nenhuma alteração protegida foi aplicada.",
                 parent=parent or self,
             )
             return False
@@ -12789,11 +12792,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if hasattr(self, "combo_modo_pdv_config") else getattr(self, "modo_pdv", "BALCAO")
         )
         modo_alterado = modo_anterior != modo_novo
-        if modo_alterado and not self._confirmar_senha_mestra(
+        if modo_alterado and not self._confirmar_senha_gerencial(
             title="Alterar modo Comercial/Fiscal",
             prompt=(
                 f"A mudança de {modo_anterior} para {modo_novo} altera regras do PDV e "
-                "o acesso às ferramentas fiscais.\n\nDigite a senha mestra para confirmar."
+                "o acesso às ferramentas fiscais.\n\nDigite a senha de um administrador ou gerente para confirmar."
             ),
             parent=self,
         ):
@@ -13002,7 +13005,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 justify="center",
             ).pack(padx=24, pady=(0, 14))
 
-            ctk.CTkLabel(auth, text="Senha administrativa ou senha mestra").pack(anchor="w", padx=34, pady=(0, 4))
+            ctk.CTkLabel(auth, text="Senha de administrador ou gerente").pack(anchor="w", padx=34, pady=(0, 4))
             senha = ctk.CTkEntry(auth, show="●", height=40)
             senha.pack(fill="x", padx=34)
 
@@ -13288,80 +13291,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         # LICENÇA
         aba = abas.tab("Licença")
-        authorization_frame = ctk.CTkFrame(aba, fg_color="#0d1117", corner_radius=10)
-        authorization_frame.pack(fill="x", padx=18, pady=(18, 6))
-        ctk.CTkLabel(
-            authorization_frame,
-            text="AUTORIZAÇÃO DA INSTALAÇÃO",
-            font=ctk.CTkFont(size=15, weight="bold"),
-            text_color="#00FF88",
-        ).pack(pady=(12, 4))
-        lbl_installation_authorization = ctk.CTkLabel(
-            authorization_frame,
-            text="",
-            justify="left",
-            anchor="w",
-            text_color="#c9d1d9",
-        )
-        lbl_installation_authorization.pack(fill="x", padx=16, pady=(2, 8))
-
-        def update_installation_authorization():
-            authorization = self.installation_authorization_service.evaluate()
-            if not authorization.required:
-                label = "DISPENSADA (PERFIL TESTE)"
-            else:
-                label = "AUTORIZADA" if authorization.authorized else "NÃO AUTORIZADA"
-            activated_at = "—"
-            if authorization.activated_at:
-                try:
-                    activated_at = datetime.fromisoformat(authorization.activated_at).strftime(
-                        "%d/%m/%Y %H:%M:%S"
-                    )
-                except ValueError:
-                    activated_at = authorization.activated_at
-            lbl_installation_authorization.configure(
-                text=(
-                    f"Status: {label}\n"
-                    f"Código da máquina: {authorization.machine_code}\n"
-                    f"Ativada em: {activated_at}"
-                )
-            )
-
-        def remove_installation_authorization():
-            password = simpledialog.askstring(
-                "Remover autorização",
-                "Digite a senha administrativa para remover a autorização deste computador:",
-                show="●",
-                parent=janela,
-            )
-            if password is None:
-                return
-            if not self.installation_authorization_service.remove_authorization(
-                password, self.security.verify_master_password
-            ):
-                messagebox.showerror(
-                    "Remover autorização",
-                    "Não foi possível remover a autorização.",
-                    parent=janela,
-                )
-                return
-            update_installation_authorization()
-            messagebox.showinfo(
-                "Remover autorização",
-                "Autorização removida. Na próxima abertura, este computador precisará ser autorizado novamente.",
-                parent=janela,
-            )
-
-        ctk.CTkButton(
-            authorization_frame,
-            text="Remover autorização deste computador",
-            command=remove_installation_authorization,
-            height=36,
-            fg_color="#da3633",
-            hover_color="#b62324",
-        ).pack(fill="x", padx=16, pady=(0, 12))
-        update_installation_authorization()
-
         lbl_validade = ctk.CTkLabel(aba, text="", font=ctk.CTkFont(size=16, weight="bold"), text_color="#ffd700")
         lbl_validade.pack(pady=(10, 10))
         def atualizar_licenca():
@@ -13557,7 +13486,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             senha = simpledialog.askstring(
                 "Autorizar atualização",
-                "Senha administrativa ou senha mestra:",
+                "Senha de administrador ou gerente:",
                 show="●",
                 parent=janela,
             )
@@ -14268,7 +14197,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ctk.CTkOptionMenu(editor, variable=perfil_var, values=perfis or ["OPERADOR"]).pack(fill="x", padx=28)
             ativo_var = ctk.BooleanVar(value=atual_user.active if atual_user else True)
             ctk.CTkCheckBox(editor, text="Usuário ativo", variable=ativo_var).pack(anchor="w", padx=28, pady=12)
-            ctk.CTkLabel(editor, text="Senha (opcional)" if not atual_user else "Nova senha (vazia mantém a atual)").pack(anchor="w", padx=28, pady=(2, 3))
+            ctk.CTkLabel(editor, text="Senha (mínimo 8 caracteres)" if not atual_user else "Nova senha (vazia mantém a atual)").pack(anchor="w", padx=28, pady=(2, 3))
             senha_ent = ctk.CTkEntry(editor, show="●", height=38); senha_ent.pack(fill="x", padx=28)
             def salvar_usuario_editor():
                 try:

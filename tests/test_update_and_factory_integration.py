@@ -42,22 +42,24 @@ class UpdateAndFactoryIntegrationTests(unittest.TestCase):
     def test_factory_reset_requests_password_in_dedicated_modal(self):
         self.assertIn('text="Continuar e informar senha"', SOURCE)
         self.assertIn('auth.title("Autorizar restauração")', SOURCE)
-        self.assertIn('text="Senha administrativa ou senha mestra"', SOURCE)
+        self.assertIn('text="Senha de administrador ou gerente"', SOURCE)
         self.assertIn("command=solicitar_autorizacao_e_executar", SOURCE)
         self.assertNotIn(
             'text="Senha administrativa", font=ctk.CTkFont(size=12, weight="bold")).grid(row=8',
             SOURCE,
         )
 
-    def test_existing_installations_start_without_login_window(self):
+    def test_existing_installations_migrate_and_require_login_before_ui(self):
         create_ui = SOURCE.index("self.criar_menu_lateral()")
-        automatic_session = SOURCE.index(
-            'self.security.start_session_without_password("admin")'
-        )
-        self.assertGreater(automatic_session, create_ui)
+        migration = SOURCE.index("self.security.needs_existing_installation_migration()")
+        login = SOURCE.index("elif not self.abrir_login_usuario(inicial=True)")
+        self.assertLess(migration, create_ui)
+        self.assertLess(login, create_ui)
+        self.assertNotIn('self.security.start_session_without_password("admin")', SOURCE)
         self.assertIn("def _login_usuarios_habilitado(self):", SOURCE)
-        self.assertIn("Login automático desativado", SOURCE)
-        self.assertIn("def abrir_login_usuario(self):", SOURCE)
+        self.assertIn('configuracao_inicial_concluida_v1', SOURCE)
+        self.assertIn("def _executar_migracao_seguranca_legada(self):", SOURCE)
+        self.assertIn("def abrir_login_usuario(self, inicial=False):", SOURCE)
         self.assertNotIn("self.after(250, self.abrir_login_usuario)", SOURCE)
 
 

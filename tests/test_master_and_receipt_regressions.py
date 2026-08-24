@@ -1,16 +1,11 @@
 from pathlib import Path
-import hashlib
 import unittest
-from unittest.mock import patch
 from services.security_service import SecurityService
 
 class MasterPasswordTests(unittest.TestCase):
-    def test_master_password_is_valid(self):
-        synthetic_password = "credencial sintetica de teste"
-        synthetic_hash = hashlib.sha256(synthetic_password.encode("utf-8")).hexdigest()
-        with patch.object(SecurityService, "MASTER_PASSWORD_SHA256", synthetic_hash):
-            self.assertTrue(SecurityService.verify_master_password(synthetic_password))
-            self.assertFalse(SecurityService.verify_master_password("credencial incorreta"))
+    def test_master_password_was_removed(self):
+        self.assertFalse(hasattr(SecurityService, "MASTER_PASSWORD_SHA256"))
+        self.assertFalse(hasattr(SecurityService, "verify_master_password"))
 
 class SourceRegressionTests(unittest.TestCase):
     def test_login_is_only_required_after_explicit_configuration(self):

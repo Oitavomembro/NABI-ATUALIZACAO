@@ -4,8 +4,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
-import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
@@ -44,7 +42,10 @@ class SecurityService:
     """Autenticação e autorização persistidas em `configuracoes`, sem alterar o schema."""
 
     CONFIG_KEY = "security_state_v1"
-    MASTER_PASSWORD_SHA256 = "f89df8c2689cb179a06efafecef653e12f99b525d12dbeb1ed3ff0484faebc57"
+    LOGIN_THROTTLE_KEY = "security_login_throttle_v1"
+    INITIAL_SETUP_KEY = "configuracao_inicial_concluida_v1"
+    MAX_LOGIN_FAILURES = 5
+    LOGIN_COOLDOWN_SECONDS = 60
 
     def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int = 15) -> None:
         self.connection_factory = connection_factory
@@ -88,9 +89,175 @@ class SecurityService:
         }
         self._save(state)
 
+    def has_users(self) -> bool:
+        """Informa se a instalação já possui uma identidade administrativa."""
+
+        return bool(self._load()["users"])
+
+    def needs_existing_installation_migration(self) -> bool:
+        """Detecta base antiga com usuários, mas sem o marco do primeiro acesso."""
+
+        if not self.has_users():
+            return False
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.INITIAL_SETUP_KEY,)
+            ).fetchone()
+            value = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            return str(value or "").strip() != "1"
+        finally:
+            connection.close()
+
+    def complete_existing_installation_migration(
+        self, *, username: str, current_password: str, new_password: str
+    ) -> SecurityUser:
+        """Converte uma base antiga mediante prova da credencial administrativa atual."""
+
+        username = self._normalize_username(username)
+        if len(str(new_password or "")) < 8:
+            raise ValueError("A nova senha deve ter ao menos 8 caracteres.")
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            marker = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.INITIAL_SETUP_KEY,)
+            ).fetchone()
+            marker_value = (
+                marker[0] if marker and not hasattr(marker, "keys")
+                else (marker["valor"] if marker else "")
+            )
+            if str(marker_value or "").strip() == "1":
+                raise PermissionError("A migração de segurança já foi concluída.")
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.CONFIG_KEY,)
+            ).fetchone()
+            raw = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            state = json.loads(raw or "{}")
+            users = dict(state.get("users") or {})
+            data = users.get(username)
+            if not data or not data.get("active") or str(data.get("profile") or "").upper() != "ADMIN":
+                raise PermissionError("Informe um administrador ativo da instalação existente.")
+            if not self.verify_password(current_password, data.get("password") or {}):
+                raise PermissionError("A senha administrativa atual não confere.")
+            data["password"] = self.hash_password(new_password)
+            for other_username, other_data in users.items():
+                if other_username == username:
+                    continue
+                if (other_data.get("password") or {}).get("algorithm") == "none":
+                    other_data["active"] = False
+            state["users"] = users
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.CONFIG_KEY, json.dumps(state, ensure_ascii=False, sort_keys=True)),
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.INITIAL_SETUP_KEY, "1"),
+            )
+            connection.execute(
+                "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    datetime.now().strftime("%d/%m/%Y %H:%M:%S"), username,
+                    "SEGURANCA", "MIGRACAO_CREDENCIAL_LEGADA", username,
+                    "Credencial administrativa substituída; contas antigas sem senha foram desativadas.", "SUCESSO",
+                ),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        self.session = None
+        return self.get_user(username)
+
+    def complete_initial_setup(
+        self,
+        *,
+        username: str,
+        display_name: str,
+        password: str,
+        store_name: str,
+        document: str = "",
+        email: str = "",
+    ) -> SecurityUser:
+        """Consome o primeiro acesso e cria o administrador sem sessão implícita.
+
+        A verificação e a gravação usam a mesma transação para que duas
+        instâncias concorrentes não consigam concluir o primeiro acesso.
+        """
+
+        username = self._normalize_username(username)
+        display_name = str(display_name or "").strip() or username
+        store_name = str(store_name or "").strip()
+        document = "".join(character for character in str(document or "") if character.isdigit())
+        email = str(email or "").strip()
+        if not store_name:
+            raise ValueError("Informe o nome da empresa ou loja.")
+        if len(str(password or "")) < 8:
+            raise ValueError("A senha inicial deve ter ao menos 8 caracteres.")
+        if document and len(document) != 14:
+            raise ValueError("O CNPJ deve possuir 14 dígitos ou ficar vazio.")
+        if email and ("@" not in email or email.startswith("@") or email.endswith("@")):
+            raise ValueError("Informe um e-mail válido ou deixe o campo vazio.")
+
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.CONFIG_KEY,)
+            ).fetchone()
+            raw = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            loaded = json.loads(raw or "{}")
+            state = {
+                "users": dict(loaded.get("users") or {}),
+                "profiles": dict(loaded.get("profiles") or {}),
+            }
+            if state["users"]:
+                raise PermissionError("A configuração inicial já foi concluída.")
+            for name, permissions in DEFAULT_PERMISSIONS.items():
+                state["profiles"].setdefault(name, permissions)
+            state["users"][username] = {
+                "display_name": display_name,
+                "profile": "ADMIN",
+                "active": True,
+                "password": self.hash_password(password),
+            }
+            values = {
+                self.CONFIG_KEY: json.dumps(state, ensure_ascii=False, sort_keys=True),
+                "nome_loja": store_name,
+                "cnpj": document,
+                "email": email,
+                "configuracao_inicial_concluida_v1": "1",
+            }
+            connection.executemany(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                tuple(values.items()),
+            )
+            connection.execute(
+                "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    datetime.now().strftime("%d/%m/%Y %H:%M:%S"), username,
+                    "SEGURANCA", "CONFIGURACAO_INICIAL", username,
+                    "Primeiro administrador e identificação básica configurados.", "SUCESSO",
+                ),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        self.session = None
+        return self.get_user(username)
+
     def create_user(self, username: str, display_name: str, password: str, profile: str, *, active: bool = True) -> SecurityUser:
         username = self._normalize_username(username)
         profile = str(profile).strip().upper()
+        if len(str(password or "")) < 8:
+            raise ValueError("A senha do usuário deve ter ao menos 8 caracteres.")
         state = self._load()
         if username in state["users"]:
             raise ValueError("Usuário já cadastrado.")
@@ -104,6 +271,8 @@ class SecurityService:
         return self.get_user(username)
 
     def set_password(self, username: str, password: str) -> None:
+        if len(str(password or "")) < 8:
+            raise ValueError("A nova senha deve ter ao menos 8 caracteres.")
         state = self._load(); username = self._normalize_username(username)
         if username not in state["users"]:
             raise ValueError("Usuário inexistente.")
@@ -113,38 +282,75 @@ class SecurityService:
     def set_user_active(self, username: str, active: bool) -> None:
         self.update_user(username, active=active)
 
-    @staticmethod
-    def _normalize_master_password(password: str) -> str:
-        # Aceita diferenças acidentais de maiúsculas, espaços duplicados e
-        # caracteres Unicode equivalentes, sem guardar a senha em texto puro.
-        value = unicodedata.normalize("NFKC", str(password or ""))
-        value = re.sub(r"\s+", " ", value).strip().casefold()
-        return value
-
-    @classmethod
-    def verify_master_password(cls, password: str) -> bool:
-        normalized = cls._normalize_master_password(password)
-        actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        return hmac.compare_digest(actual, cls.MASTER_PASSWORD_SHA256)
-
     def authenticate(self, username: str, password: str) -> SecuritySession | None:
         username = self._normalize_username(username)
+        if self._login_is_blocked(username):
+            self._log_login(username, False, "LOGIN_BLOQUEADO")
+            return None
         state = self._load()
-        if self.verify_master_password(password):
-            data = state["users"].get("admin") or next((item for item in state["users"].values() if item.get("active") and item.get("profile") == "ADMIN"), None)
-            if data:
-                user = SecurityUser("admin", data.get("display_name") or "Administrador", "ADMIN", True)
-                now = datetime.now(); self.session = SecuritySession(user, now, now)
-                self._log_login("admin", True, "LOGIN_MESTRE")
-                return self.session
         data = state["users"].get(username)
         success = bool(data and data.get("active") and self.verify_password(password, data.get("password", {})))
         self._log_login(username, success, "LOGIN")
         if not success:
+            self._record_login_attempt(username, False)
             return None
+        self._record_login_attempt(username, True)
         user = SecurityUser(username, data.get("display_name") or username, data.get("profile") or "OPERADOR", True)
         now = datetime.now(); self.session = SecuritySession(user, now, now)
         return self.session
+
+    def _login_is_blocked(self, username: str, *, now: datetime | None = None) -> bool:
+        now = now or datetime.now()
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.LOGIN_THROTTLE_KEY,)
+            ).fetchone()
+            data = json.loads((row[0] if row else "") or "{}")
+            blocked_until = str((data.get(username) or {}).get("blocked_until") or "")
+            if not blocked_until:
+                return False
+            return now < datetime.fromisoformat(blocked_until)
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return True
+        finally:
+            connection.close()
+
+    def _record_login_attempt(
+        self, username: str, success: bool, *, now: datetime | None = None
+    ) -> None:
+        now = now or datetime.now()
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.LOGIN_THROTTLE_KEY,)
+            ).fetchone()
+            data = json.loads((row[0] if row else "") or "{}")
+            if success:
+                data.pop(username, None)
+            else:
+                previous = data.get(username) or {}
+                failures = int(previous.get("failures") or 0) + 1
+                blocked_until = ""
+                if failures >= self.MAX_LOGIN_FAILURES:
+                    blocked_until = (
+                        now + timedelta(seconds=self.LOGIN_COOLDOWN_SECONDS)
+                    ).isoformat(timespec="seconds")
+                    failures = 0
+                data[username] = {
+                    "failures": failures, "blocked_until": blocked_until,
+                }
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.LOGIN_THROTTLE_KEY, json.dumps(data, sort_keys=True)),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
 
     def start_session_without_password(self, username: str = "admin") -> SecuritySession:
@@ -174,16 +380,26 @@ class SecurityService:
     def require(self, module: str, action: str = "view") -> bool:
         if not self.session or self.is_expired():
             return False
-        state = self._load(); profile = state["profiles"].get(self.session.user.profile, {})
+        state = self._load()
+        persisted = state["users"].get(self.session.user.username)
+        if not persisted or not bool(persisted.get("active")):
+            self.logout("SESSAO_REVOGADA")
+            return False
+        current_user = SecurityUser(
+            self.session.user.username,
+            persisted.get("display_name") or self.session.user.username,
+            persisted.get("profile") or "OPERADOR",
+            True,
+        )
+        if current_user != self.session.user:
+            self.session.user = current_user
+        profile = state["profiles"].get(current_user.profile, {})
         if "*" in profile and "*" in profile["*"]:
             return True
         actions = profile.get(str(module), [])
         return "*" in actions or str(action) in actions
 
     def confirm_manager_password(self, password: str) -> bool:
-        if self.verify_master_password(password):
-            self._log_login("admin", True, "CONFIRMACAO_MESTRE")
-            return True
         state = self._load()
         for username, data in state["users"].items():
             if data.get("active") and data.get("profile") in {"ADMIN", "GERENTE"} and self.verify_password(password, data.get("password", {})):

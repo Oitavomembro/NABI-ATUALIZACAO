@@ -12,6 +12,6 @@ class T(unittest.TestCase):
   self.assertIn('entrada somada ao valor financiado',PDV); self.assertIn('financed_value',TX)
  def test_cupom(self):
   self.assertIn('Compra a prazo',REC); self.assertIn('PAGA NESTE RECEBIMENTO',REC)
- def test_login_disabled(self):
-  i=UI.index('    def abrir_login_usuario'); self.assertIn('return None',UI[i:i+120])
+ def test_login_real_nas_instalacoes_configuradas(self):
+  i=UI.index('    def abrir_login_usuario'); self.assertIn('self.security.authenticate',UI[i:i+1800])
 if __name__=='__main__': unittest.main()

@@ -55,108 +55,13 @@ Filename: "{app}\{#AppExe}"; Description: "Executar NabiCode"; WorkingDir: "{app
 const
   LegacyR6UninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{D8DD09BC-A699-4E77-A011-786A02A19596}_is1';
   OfficialUninstallKey = 'Software\Microsoft\Windows\CurrentVersion\Uninstall\{F186E71A-73A5-4E5E-B8B1-9C6488CF9267}_is1';
-  MasterPasswordSHA256 = 'f89df8c2689cb179a06efafecef653e12f99b525d12dbeb1ed3ff0484faebc57';
 
 var
-  DeleteAllUserData: Boolean;
   MaintenancePage: TInputOptionWizardPage;
   MaintenanceFinished: Boolean;
   OfficialInstallLocation: String;
   LegacyInstallLocation: String;
   OldInstallLocations: TStringList;
-
-function NormalizeMasterPassword(const Value: String): String;
-var
-  Normalized: String;
-begin
-  Normalized := Lowercase(Trim(Value));
-  while Pos('  ', Normalized) > 0 do
-    StringChangeEx(Normalized, '  ', ' ', True);
-  Result := Normalized;
-end;
-
-function VerifyMasterPassword(const Value: String): Boolean;
-begin
-  Result := CompareText(GetSHA256OfString(NormalizeMasterPassword(Value)),
-    MasterPasswordSHA256) = 0;
-end;
-
-function RequestMasterPassword(): Boolean;
-var
-  Form: TSetupForm;
-  Prompt: TNewStaticText;
-  PasswordEdit: TPasswordEdit;
-  OKButton: TNewButton;
-  CancelButton: TNewButton;
-  Password: String;
-begin
-  Form := CreateCustomForm(ScaleX(440), ScaleY(150), False, True);
-  try
-    Form.Caption := 'Autorização de segurança';
-    Prompt := TNewStaticText.Create(Form);
-    Prompt.Parent := Form;
-    Prompt.Left := ScaleX(16);
-    Prompt.Top := ScaleY(16);
-    Prompt.Width := Form.ClientWidth - ScaleX(32);
-    Prompt.Caption := 'Digite a senha mestra do NabiCode para confirmar a exclusão total:';
-
-    PasswordEdit := TPasswordEdit.Create(Form);
-    PasswordEdit.Parent := Form;
-    PasswordEdit.Left := ScaleX(16);
-    PasswordEdit.Top := Prompt.Top + Prompt.Height + ScaleY(12);
-    PasswordEdit.Width := Form.ClientWidth - ScaleX(32);
-
-    OKButton := TNewButton.Create(Form);
-    OKButton.Parent := Form;
-    OKButton.Caption := 'Confirmar';
-    OKButton.Width := ScaleX(100);
-    OKButton.Height := ScaleY(28);
-    OKButton.Left := Form.ClientWidth - ScaleX(216);
-    OKButton.Top := Form.ClientHeight - ScaleY(42);
-    OKButton.ModalResult := mrOk;
-    OKButton.Default := True;
-
-    CancelButton := TNewButton.Create(Form);
-    CancelButton.Parent := Form;
-    CancelButton.Caption := 'Cancelar';
-    CancelButton.Width := ScaleX(100);
-    CancelButton.Height := ScaleY(28);
-    CancelButton.Left := Form.ClientWidth - ScaleX(108);
-    CancelButton.Top := OKButton.Top;
-    CancelButton.ModalResult := mrCancel;
-    CancelButton.Cancel := True;
-    Form.ActiveControl := PasswordEdit;
-
-    Result := Form.ShowModal() = mrOk;
-    Password := PasswordEdit.Text;
-    PasswordEdit.Text := '';
-  finally
-    Form.Free();
-  end;
-  if Result and not VerifyMasterPassword(Password) then
-  begin
-    MsgBox('Senha mestra incorreta. Nenhum dado foi apagado.', mbError, MB_OK);
-    Result := False;
-  end;
-  Password := '';
-end;
-
-procedure DeleteAllNabiCodeData();
-var
-  Index: Integer;
-begin
-  { Somente raízes exatas pertencentes ao NabiCode; nunca apaga AppData/ProgramData genéricos. }
-  DelTree(ExpandConstant('{userappdata}\NabiCode'), True, True, True);
-  DelTree(ExpandConstant('{localappdata}\NabiCode'), True, True, True);
-  DelTree(ExpandConstant('{commonappdata}\NabiCode'), True, True, True);
-  if OfficialInstallLocation <> '' then
-    DelTree(RemoveBackslashUnlessRoot(OfficialInstallLocation), True, True, True);
-  if LegacyInstallLocation <> '' then
-    DelTree(RemoveBackslashUnlessRoot(LegacyInstallLocation), True, True, True);
-  if OldInstallLocations <> nil then
-    for Index := 0 to OldInstallLocations.Count - 1 do
-      DelTree(RemoveBackslashUnlessRoot(OldInstallLocations[Index]), True, True, True);
-end;
 
 function RunRegisteredUninstaller(const RootKey: Integer; const RegistryKey: String): Boolean;
 var
@@ -288,35 +193,16 @@ begin
       'Escolha o que deseja fazer e clique em Avançar:', True, False);
     MaintenancePage.Add('Atualizar ou reparar o NabiCode (mantém todos os dados)');
     MaintenancePage.Add('Desinstalar o programa e manter banco, backups e configurações');
-    MaintenancePage.Add('Desinstalar e apagar completamente os dados deste usuário');
     MaintenancePage.SelectedValueIndex := 0;
   end;
 end;
 
 function NextButtonClick(CurPageID: Integer): Boolean;
-var
-  DeleteData: Boolean;
 begin
   Result := True;
   if (MaintenancePage = nil) or (CurPageID <> MaintenancePage.ID) or
     (MaintenancePage.SelectedValueIndex = 0) then
     Exit;
-
-  DeleteData := MaintenancePage.SelectedValueIndex = 2;
-  if DeleteData and
-    (SuppressibleMsgBox(
-      'ATENÇÃO: banco de dados, backups, relatórios e configurações serão apagados definitivamente.' + #13#10 +
-      'Confirma que deseja APAGAR TUDO?', mbCriticalError,
-      MB_YESNO or MB_DEFBUTTON2, IDNO) <> IDYES) then
-  begin
-    Result := False;
-    Exit;
-  end;
-  if DeleteData and not RequestMasterPassword() then
-  begin
-    Result := False;
-    Exit;
-  end;
 
   if not RunRegisteredUninstaller(HKLM64, OfficialUninstallKey) then
   begin
@@ -327,8 +213,6 @@ begin
   RemoveLegacyR6();
   RemoveOtherRegisteredNabiCodeInstalls();
   RemoveLegacyShortcuts();
-  if DeleteData then
-    DeleteAllNabiCodeData();
   MaintenanceFinished := True;
   MsgBox('Manutenção concluída com sucesso.', mbInformation, MB_OK);
   WizardForm.Close;
@@ -356,7 +240,6 @@ function InitializeUninstall(): Boolean;
 var
   Choice: Integer;
 begin
-  DeleteAllUserData := False;
   if UninstallSilent then
   begin
     { Atualizações e remoções silenciosas nunca apagam dados operacionais. }
@@ -366,32 +249,14 @@ begin
 
   Choice := SuppressibleMsgBox(
     'Como deseja desinstalar o NabiCode?' + #13#10 + #13#10 +
-    'SIM — Apagar o programa e todos os dados deste usuário.' + #13#10 +
-    'NÃO — Apagar somente o programa e manter banco, backups e configurações.' + #13#10 +
+    'SIM — Desinstalar o programa e manter banco, backups e configurações.' + #13#10 +
+    'NÃO — Não desinstalar.' + #13#10 +
     'CANCELAR — Não desinstalar.',
     mbConfirmation, MB_YESNOCANCEL or MB_DEFBUTTON2, IDNO);
-  if Choice = IDCANCEL then
+  if (Choice = IDCANCEL) or (Choice = IDNO) then
   begin
     Result := False;
     Exit;
-  end;
-  if Choice = IDYES then
-  begin
-    DeleteAllUserData :=
-      SuppressibleMsgBox(
-        'ATENÇÃO: banco de dados, backups, relatórios e configurações serão apagados definitivamente.' + #13#10 +
-        'Confirma que deseja APAGAR TUDO?',
-        mbCriticalError, MB_YESNO or MB_DEFBUTTON2, IDNO) = IDYES;
-    if not DeleteAllUserData then
-    begin
-      Result := False;
-      Exit;
-    end;
-    if not RequestMasterPassword() then
-    begin
-      Result := False;
-      Exit;
-    end;
   end;
   Result := True;
 end;
@@ -399,14 +264,5 @@ end;
 procedure CurUninstallStepChanged(CurUninstallStep: TUninstallStep);
 begin
   if CurUninstallStep = usPostUninstall then
-  begin
-    if DeleteAllUserData then
-    begin
-      OfficialInstallLocation := ExpandConstant('{app}');
-      DeleteAllNabiCodeData();
-      Log('Dados operacionais do usuário removidos por escolha explícita.');
-    end
-    else
-      Log('Dados operacionais do NabiCode preservados em AppData.');
-  end;
+    Log('Dados operacionais do NabiCode preservados em AppData.');
 end;
