@@ -1436,3 +1436,37 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `compileall` e `git diff --check` aprovados;
 - nenhuma venda é finalizada pela Nabi: venda confirmada apenas carrega o
   rascunho no PDV e continua exigindo Pagamentos e confirmação no fluxo oficial.
+
+### Checkpoint fiscal offline — ator técnico autenticado
+
+- implementação integrada: `18dd14f` (origem `58ca6ad`) — `fix: vincula
+  historico fiscal a sessao autenticada`;
+- a identidade vem de `SecurityService.session.user.username`, preenchida pelo
+  login real e invalidada por logout ou expiração por inatividade;
+- `FiscalTaxRuleService` recebe uma porta confiável `actor_provider`; criação,
+  alteração e desativação exigem identidade não vazia antes da transação;
+- a API de mutação não aceita `actor` livre, e `approved_by` continua separado
+  como responsável contábil declarado;
+- consultas e resolução permanecem independentes de sessão; backfill histórico
+  continua honesto como `LEGACY_SEM_TRILHA`/`NAO_INFORMADO`;
+- validação na trilha de origem: `36 passed`; regressão fiscal relacionada:
+  `404 passed`, `10 subtests passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma regra tributária, XML, outbox, transmissão ou ambiente SEFAZ mudou.
+
+### Documento operacional — dossiê de homologação fiscal Bahia
+
+- documento integrado: `97853f5` (origem `2bde4ce`) —
+  `docs/MODELO_DOSSIE_HOMOLOGACAO_FISCAL_BAHIA.md`;
+- o modelo separa NF-e/NFC-e, evidências automatizadas e homologação física e
+  mantém todos os campos reais como pendentes até coleta acompanhada;
+- o documento não afirma aprovação, não fabrica protocolo e não desbloqueia
+  produção; deve ser preenchido apenas com evidência verificável da SEFAZ/BA.
+
+### Validação consolidada após os checkpoints de segurança
+
+- suíte completa da branch integrada: `1.909 passed`, `1 skipped`, `2 warnings`,
+  `412 subtests passed`, zero falhas;
+- os avisos são um `PytestCollectionWarning` de classe auxiliar e uma
+  depreciação externa do `BrazilFiscalReport`; nenhum representa falha funcional;
+- `compileall` dos módulos existentes e `git diff --check` aprovados;
+- produção fiscal continua bloqueada e nenhum push foi realizado.
