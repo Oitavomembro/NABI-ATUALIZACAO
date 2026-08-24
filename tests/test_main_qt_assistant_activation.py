@@ -187,6 +187,31 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         self.assertEqual(factory.call_args.kwargs["product_stock_draft_service"], "rascunhos-estoque")
         self.assertEqual(factory.call_args.kwargs["product_stock_executor"], "executor-estoque")
 
+    def test_composicao_injeta_financeiro_assistido_somente_com_backend_completo(self):
+        database = SimpleNamespace(connect=Mock())
+        profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))
+        container = SimpleNamespace(
+            query=object(), financial_actions=object(), finance_service=object(),
+        )
+        security = Mock(); security.authenticate.return_value = object()
+        system = Mock(); system.get_config.return_value = "hash"
+        runtime = Mock(); runtime.create_model_adapter.return_value = "modelo"
+        with (
+            patch.object(main_qt, "SystemRepository", return_value=system),
+            patch.object(main_qt, "SecurityService", return_value=security),
+            patch.object(main_qt, "AdminAuditService", return_value="auditoria"),
+            patch.object(main_qt, "LocalLlamaServer", return_value=runtime),
+            patch.object(
+                main_qt, "create_financial_assistant_components",
+                return_value=("rascunhos-financeiro", "executor-financeiro"),
+            ),
+            patch.object(main_qt, "create_draft_assistant", return_value="assistente") as factory,
+        ):
+            activation = main_qt._create_assistant_activation(database, profile, container)
+            activation.activate("op", "senha")
+        self.assertEqual(factory.call_args.kwargs["financial_draft_service"], "rascunhos-financeiro")
+        self.assertEqual(factory.call_args.kwargs["financial_executor"], "executor-financeiro")
+
     def test_composicao_injeta_entrada_nfe_sem_iniciar_runtime_ou_sefaz(self):
         database = SimpleNamespace(connect=Mock())
         profile = SimpleNamespace(app_dir=Path("C:/NabiCode/Teste"))

@@ -27,6 +27,7 @@ from assistant_nabi import (
     ProductStockDraftService,
     PurchaseOrderDraftService,
     SupplierRegistrationDraftService,
+    create_financial_assistant_components,
 )
 from administration.product_management_service import ProductManagementService
 from commercial.infrastructure.runtime import create_commercial_container
@@ -122,6 +123,14 @@ def _create_assistant_activation(
         customer_receipt_executor = NabiCodeCustomerReceiptAssistantGateway(
             container.actions, customer_application
         )
+    financial_drafts = financial_executor = None
+    if (
+        getattr(container, "financial_actions", None) is not None
+        and getattr(container, "finance_service", None) is not None
+    ):
+        financial_drafts, financial_executor = create_financial_assistant_components(
+            container, container.finance_service
+        )
     profile_paths = getattr(profile, "paths", None)
     report_output = getattr(profile_paths, "pdfs", profile.app_dir / "pdfs")
     report_service = ReportApplicationService(NabiCodeReportGateway(ReportService(
@@ -163,6 +172,8 @@ def _create_assistant_activation(
             procurement_executor=procurement_executor,
             product_stock_draft_service=product_stock_drafts,
             product_stock_executor=product_stock_executor,
+            financial_draft_service=financial_drafts,
+            financial_executor=financial_executor,
             nfe_entry_draft_service=nfe_entry_service,
             nfe_entry_executor=nfe_entry_executor,
             customer_draft_service=customer_drafts,

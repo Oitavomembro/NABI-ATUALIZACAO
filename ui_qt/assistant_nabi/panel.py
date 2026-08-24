@@ -383,6 +383,8 @@ class NabiAssistantPanel(QWidget):
                 "compras.preparar_pedido",
                 "produtos.preparar_cadastro",
                 "estoque.preparar_movimento",
+                "financeiro.preparar_titulo",
+                "financeiro.preparar_baixa",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -449,6 +451,10 @@ class NabiAssistantPanel(QWidget):
             "STOCK_REMOVE": "Confira produto, saldo anterior, quantidade de saída, novo saldo e motivo.",
             "STOCK_ADJUST": "Confira produto, saldo anterior, novo saldo absoluto e motivo.",
         }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
+        if operation_kind.startswith("FINANCIAL_CREATE_"):
+            guidance = "Confira tipo, parte, valor, emissão, vencimento e documento do título."
+        elif operation_kind.startswith("FINANCIAL_SETTLE_"):
+            guidance = "Confira título, saldo anterior, valor da baixa, saldo restante, forma e data."
         self.history.append(
             f"<b>Nabi:</b> {guidance} "
             "A confirmação é temporária e vale somente para este conteúdo."
@@ -487,6 +493,10 @@ class NabiAssistantPanel(QWidget):
                 "PRODUCT_CREATE", "STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST",
             }:
                 result, _authorization = self._service.confirm_and_execute_product_stock(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind.startswith("FINANCIAL_"):
+                result, _authorization = self._service.confirm_and_execute_financial(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -549,6 +559,16 @@ class NabiAssistantPanel(QWidget):
             self.history.append(
                 "<b>Nabi:</b> Movimento de estoque confirmado pelo serviço oficial. "
                 f"Movimento #{int(result['movement_id'])}; saldo {result['resulting_balance']}."
+            )
+        elif operation_kind.startswith("FINANCIAL_"):
+            self._set_state("completed", "Financeiro registrado")
+            payment = (
+                f"; pagamento #{int(result.payment_id)}"
+                if result.payment_id is not None else ""
+            )
+            self.history.append(
+                "<b>Nabi:</b> Operação financeira confirmada pelo serviço oficial. "
+                f"Título #{int(result.title_id)}{payment}; saldo R$ {result.open_amount}."
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")
@@ -821,6 +841,21 @@ class NabiAssistantPanel(QWidget):
                 f"Saldo anterior: {payload['previous_balance']} — novo saldo: {payload['new_balance']}",
                 f"Motivo: {payload['reason']}",
                 "RASCUNHO — nenhum estoque foi movimentado.",
+            ))
+        if result.tool_name == "financeiro.preparar_titulo":
+            return "\n".join((
+                f"Título a {payload['title_type'].lower()}: R$ {payload['amount']}",
+                f"Parte: #{payload.get('party_id') or '-'} — {payload.get('party_name') or '-'}",
+                f"Vencimento: {payload['due_date']} — documento {payload.get('document') or '-'}",
+                "RASCUNHO — nenhum título foi criado.",
+            ))
+        if result.tool_name == "financeiro.preparar_baixa":
+            return "\n".join((
+                f"Título #{payload['title_id']} a {payload['title_type'].lower()}",
+                f"Saldo anterior: R$ {payload['previous_open_amount']}",
+                f"Baixa: R$ {payload['amount']} — saldo esperado R$ {payload['expected_open_amount']}",
+                f"Forma: {payload['payment_method']} — data {payload['payment_date']}",
+                "RASCUNHO — nenhuma baixa foi registrada.",
             ))
         if result.tool_name == "relatorios.consultar_indicadores":
             return "\n".join((

@@ -270,6 +270,21 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("estoque inicial: 0.0000", self.panel._result_text(product).casefold())
         self.assertIn("novo saldo: 7.0000", self.panel._result_text(stock))
 
+    def test_renderiza_rascunhos_financeiros_sem_declarar_persistencia(self):
+        title = ToolResult("t", "financeiro.preparar_titulo", True, {
+            "title_type": "PAGAR", "amount": "150.00", "party_id": 3,
+            "party_name": "FORNECEDOR", "due_date": "2026-09-10", "document": "NF1",
+        })
+        settlement = ToolResult("b", "financeiro.preparar_baixa", True, {
+            "title_type": "RECEBER", "title_id": 9, "previous_open_amount": "100.00",
+            "amount": "40.00", "expected_open_amount": "60.00",
+            "payment_method": "PIX", "payment_date": "2026-08-24",
+        })
+        self.assertIn("nenhum título foi criado", self.panel._result_text(title))
+        preview = self.panel._result_text(settlement)
+        self.assertIn("saldo esperado R$ 60.00", preview)
+        self.assertIn("nenhuma baixa foi registrada", preview)
+
     def test_intencao_abre_pesquisa_por_porta_explicita_uma_vez(self):
         opened = []
         panel = NabiAssistantPanel(
