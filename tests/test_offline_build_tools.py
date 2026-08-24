@@ -44,40 +44,34 @@ def test_installer_removes_only_the_known_legacy_r6_identity():
     assert "RegDeleteKeyIncludingSubkeys(HKLM64, LegacyR6UninstallKey)" in script
 
 
-def test_uninstaller_preserves_data_by_default_and_requires_double_confirmation_to_delete():
+def test_uninstaller_always_preserves_operational_data():
     script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
     assert "function InitializeUninstall" in script
     assert "MB_YESNOCANCEL or MB_DEFBUTTON2" in script
-    assert "MB_YESNO or MB_DEFBUTTON2" in script
     assert "if UninstallSilent then" in script
-    assert "DeleteAllUserData := False" in script
-    assert "DelTree(ExpandConstant('{userappdata}\\NabiCode'), True, True, True)" in script
+    assert "DeleteAllNabiCodeData" not in script
+    assert "Dados operacionais do NabiCode preservados em AppData" in script
 
 
-def test_single_setup_offers_update_repair_and_both_uninstall_modes():
+def test_single_setup_offers_repair_and_safe_uninstall():
     script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
     assert "OfficialUninstallKey" in script
     assert "CreateInputOptionPage" in script
     assert "Atualizar ou reparar o NabiCode" in script
     assert "Desinstalar o programa e manter banco" in script
-    assert "Desinstalar e apagar completamente" in script
+    assert "Desinstalar e apagar completamente" not in script
     assert "function NextButtonClick" in script
     assert "RunRegisteredUninstaller(HKLM64, OfficialUninstallKey)" in script
 
 
-def test_total_removal_requires_the_same_master_password_hash_and_exact_app_roots():
-    import re
-
+def test_installer_never_embeds_master_password_or_deletes_operational_data():
     script = (ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss").read_text(encoding="utf-8")
     security = (ROOT / "services" / "security_service.py").read_text(encoding="utf-8")
-    installer_hash = re.search(r"MasterPasswordSHA256 = '([0-9a-f]{64})'", script).group(1)
-    service_hash = re.search(r'MASTER_PASSWORD_SHA256 = "([0-9a-f]{64})"', security).group(1)
-    assert installer_hash == service_hash
-    assert "RequestMasterPassword()" in script
-    assert "GetSHA256OfString(NormalizeMasterPassword(Value))" in script
-    assert "{userappdata}\\NabiCode" in script
-    assert "{localappdata}\\NabiCode" in script
-    assert "{commonappdata}\\NabiCode" in script
+    assert "MasterPasswordSHA256" not in script
+    assert "RequestMasterPassword" not in script
+    assert "MASTER_PASSWORD_SHA256" not in security
+    assert "Desinstalar e apagar completamente" not in script
+    assert "DeleteAllNabiCodeData" not in script
     assert "OfficialInstallLocation" in script
     assert "LegacyInstallLocation" in script
 

@@ -113,8 +113,9 @@ def test_installer_mutex_contract_is_stable_and_released_last():
 def test_uninstaller_preserves_appdata_and_keeps_append_only_install_log():
     assert "UninstallLogMode=append" in INNO
     assert "uninsdelete" not in INNO.casefold()
-    assert "if DeleteAllUserData then" in INNO
-    assert "DeleteAllNabiCodeData();" in INNO
+    assert "DeleteAllUserData" not in INNO
+    assert "DeleteAllNabiCodeData" not in INNO
+    assert "Dados operacionais do NabiCode preservados em AppData" in INNO
 
 
 def test_official_icon_is_valid_and_wired_to_executable_and_installer():

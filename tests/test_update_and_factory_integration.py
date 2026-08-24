@@ -42,7 +42,7 @@ class UpdateAndFactoryIntegrationTests(unittest.TestCase):
     def test_factory_reset_requests_password_in_dedicated_modal(self):
         self.assertIn('text="Continuar e informar senha"', SOURCE)
         self.assertIn('auth.title("Autorizar restauração")', SOURCE)
-        self.assertIn('text="Senha administrativa ou senha mestra"', SOURCE)
+        self.assertIn('text="Senha de administrador ou gerente"', SOURCE)
         self.assertIn("command=solicitar_autorizacao_e_executar", SOURCE)
         self.assertNotIn(
             'text="Senha administrativa", font=ctk.CTkFont(size=12, weight="bold")).grid(row=8',

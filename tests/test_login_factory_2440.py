@@ -1,7 +1,5 @@
 from pathlib import Path
-import hashlib
 import unittest
-from unittest.mock import patch
 
 from services.security_service import SecurityService
 
@@ -11,13 +9,9 @@ SOURCE = (ROOT / "nabicode_legacy.py").read_text(encoding="utf-8")
 
 
 class LoginFactory2440Tests(unittest.TestCase):
-    def test_master_password_normalizes_case_and_spaces(self):
-        normalized = "credencial sintetica de teste"
-        synthetic_hash = hashlib.sha256(normalized.encode("utf-8")).hexdigest()
-        with patch.object(SecurityService, "MASTER_PASSWORD_SHA256", synthetic_hash):
-            self.assertTrue(SecurityService.verify_master_password(normalized))
-            self.assertTrue(SecurityService.verify_master_password("  CREDENCIAL   SINTETICA   DE   TESTE  "))
-            self.assertFalse(SecurityService.verify_master_password("credencial incorreta"))
+    def test_nao_existe_credencial_mestra_universal(self):
+        self.assertFalse(hasattr(SecurityService, "MASTER_PASSWORD_SHA256"))
+        self.assertFalse(hasattr(SecurityService, "verify_master_password"))
 
     def test_startup_novo_exige_configuracao_e_login_real(self):
         self.assertIn("def _login_usuarios_habilitado(self):", SOURCE)
