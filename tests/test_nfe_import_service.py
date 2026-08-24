@@ -92,7 +92,11 @@ class NFeImportServiceTests(unittest.TestCase):
         db = DatabaseManager(self.db_path)
         ProductDecimalMigration(db).run()
         self.repo = NFeImportRepository(db)
-        self.service = NFeImportService(self.repo)
+        self.service = NFeImportService(
+            self.repo,
+            actor_provider=lambda: "Operador",
+            authorization_provider=lambda _module, _action: True,
+        )
         self.doc = NFeDocument(
             chave="35123456789012345678901234567890123456789012",
             numero="123",

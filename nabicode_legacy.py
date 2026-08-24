@@ -764,6 +764,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             return
         registrar_auditoria("Sistema", "INICIALIZAR", APP_VERSION, APP_VERSION_LABEL, "SUCESSO")
         self.security = SecurityService(conectar_banco, inactivity_minutes=int(obter_config("bloqueio_inatividade_minutos") or 15))
+        NFE_IMPORT_SERVICE.bind_security(
+            actor_provider=self._ator_fiscal_autenticado,
+            authorization_provider=lambda module, action: self.security.require(module, action),
+        )
         REPORT_SERVICE.authorize = lambda _actor, report_id: self.security.require(self._modulo_do_relatorio(report_id), "view")
         self.fiscal_service = FiscalService(
             conectar_banco,
@@ -4617,20 +4621,20 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 parent=win,
             ):
                 return
+            actor_estorno = ""
             try:
+                actor_estorno = self._ator_fiscal_autenticado()
                 snapshot = criar_snapshot_sistema("antes_estornar_nfe_entrada")
                 resultados = []
                 for nota_id in ids:
-                    resultados.append(NFE_IMPORT_SERVICE.estornar_importacao(
-                        nota_id, usuario=self._usuario_financeiro()
-                    ))
+                    resultados.append(NFE_IMPORT_SERVICE.estornar_importacao(nota_id))
                 total_revertido = sum(item["movimentos_revertidos"] for item in resultados)
                 registrar_auditoria(
                     "XML",
                     "ESTORNAR_NFE_ENTRADA",
                     objeto=numeros,
                     detalhes=f"Notas={len(resultados)}; movimentos revertidos={total_revertido}; snapshot={snapshot.get('id')}",
-                    usuario="Administrador",
+                    usuario=actor_estorno,
                 )
                 self._registrar_acesso_admin(True, f"Estorno de {len(resultados)} NF-e(s) de entrada.")
                 messagebox.showinfo(
@@ -4644,7 +4648,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 except Exception:
                     logger.exception("Falha ao atualizar a grade de produtos após estornar NF-e")
             except Exception as exc:
-                registrar_auditoria("XML", "ESTORNAR_NFE_ENTRADA", objeto=numeros, detalhes=str(exc), resultado="ERRO", usuario="Administrador")
+                registrar_auditoria(
+                    "XML", "ESTORNAR_NFE_ENTRADA", objeto=numeros,
+                    detalhes=str(exc), resultado="ERRO",
+                    usuario=actor_estorno,
+                )
                 messagebox.showerror("Estornar lançamento", f"A operação foi revertida.\n\n{exc}", parent=win)
 
         def revisar_selecionada():
@@ -5337,17 +5345,16 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 cfg["indice"] = analise.index
                 itens_preparados.append(cfg)
             try:
-                usuario = getattr(getattr(self, "security_session", None), "username", "Sistema") or "Sistema"
                 if em_revisao:
                     resultado_revisao = NFE_IMPORT_SERVICE.revisar_produtos_importados(
-                        revisao_importacao_id, documento, itens=itens_preparados, usuario=usuario
+                        revisao_importacao_id, documento, itens=itens_preparados
                     )
                     vinculados = int(resultado_revisao["produtos_atualizados"])
                     resultados = []
                     criados = 0
                 else:
                     resultado_importacao = NFE_IMPORT_SERVICE.importar_atomicamente(
-                        documento, arquivo_origem=caminho, itens=itens_preparados, usuario=usuario,
+                        documento, arquivo_origem=caminho, itens=itens_preparados,
                     )
                     resultados = resultado_importacao["resultados"]
                     criados = int(resultado_importacao["itens_criados"])

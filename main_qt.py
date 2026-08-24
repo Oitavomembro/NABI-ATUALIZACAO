@@ -70,13 +70,16 @@ def _administrative_hub_factory(security, modules):
 
 
 def _create_assistant_activation(
-    database, profile, container, nfe_entry_service=None, nfe_import_service=None
+    database, profile, container, nfe_entry_service=None, nfe_import_service=None,
+    security=None,
 ):
     """Compõe ativação autenticada; nenhum runtime inicia durante o startup."""
 
     system = SystemRepository(database.connect)
-    security = SecurityService(database.connect)
-    security.bootstrap_admin(system.get_config("admin_senha_hash"))
+    owns_security = security is None
+    if owns_security:
+        security = SecurityService(database.connect)
+        security.bootstrap_admin(system.get_config("admin_senha_hash"))
     audit = AdminAuditService(database.connect, logging.getLogger("NabiCode.NabiAudit"))
     ia_root = profile.app_dir / "ia"
     purchase_drafts = purchase_executor = None
@@ -186,20 +189,42 @@ def _create_assistant_activation(
         security_service=security,
         runtime_factory=runtime_factory,
         assistant_factory=assistant_factory,
+        logout_on_stop=owns_security,
     )
 
 
-def _create_licensed_assistant(database, profile, container, license_gate):
+def _create_licensed_assistant(
+    database, profile, container, license_gate, security=None
+):
     """Compõe a Nabi e o apoio de NF-e somente quando assinados na licença."""
 
     if not license_gate.allows(Capability.ASSISTANT):
         return None, None, None
     nfe_import_service = nfe_entry_service = None
     if license_gate.allows(Capability.FISCAL_WRITE):
-        nfe_import_service = NFeImportService(NFeImportRepository(database))
+        import_security = ({
+            "actor_provider": (
+                lambda: (
+                    security.session.user.username
+                    if security is not None
+                    and security.session is not None
+                    and not security.is_expired()
+                    and security.session.user.active
+                    else None
+                )
+            ),
+            "authorization_provider": (
+                lambda module, action: security.require(module, action)
+            ),
+        } if security is not None else {})
+        nfe_import_service = NFeImportService(
+            NFeImportRepository(database), **import_security
+        )
         nfe_entry_service = NFeEntryDraftService(nfe_import_service)
+    activation_args = ({"security": security} if security is not None else {})
     activation = _create_assistant_activation(
-        database, profile, container, nfe_entry_service, nfe_import_service
+        database, profile, container, nfe_entry_service, nfe_import_service,
+        **activation_args,
     )
     unavailable = UnavailableAssistantService(
         "Clique em Ativar Nabi e autentique um usuário autorizado. "
@@ -302,7 +327,10 @@ def main(argv=None) -> int:
             module_security, module_actions
         )
         assistant_service, assistant_activation, nfe_entry_service = (
-            _create_licensed_assistant(database, profile, container, license_gate)
+            _create_licensed_assistant(
+                database, profile, container, license_gate,
+                security=module_security,
+            )
         )
         if assistant_activation is not None:
             qt.aboutToQuit.connect(assistant_activation.stop)

@@ -59,7 +59,7 @@ class NFeEntryGatewayTests(unittest.TestCase):
         self.assertEqual(document, "documento")
         self.assertEqual(call["itens"][0]["produto_id"], 9)
         self.assertEqual(call["itens"][0]["fator"], "3.0000")
-        self.assertEqual(call["usuario"], "Operador")
+        self.assertEqual(call["expected_actor"], "Operador")
         self.assertEqual(call["idempotency_key"], "nabi:nfe:d1")
         self.assertEqual(call["operation_fingerprint"], "a" * 64)
 

@@ -38,7 +38,7 @@ class NabiCodeNFeEntryAssistantGateway:
             document,
             arquivo_origem=source,
             itens=items,
-            usuario=grant.username,
+            expected_actor=grant.username,
             idempotency_key=f"nabi:nfe:{draft.draft_id}",
             operation_fingerprint=draft.fingerprint,
         )
