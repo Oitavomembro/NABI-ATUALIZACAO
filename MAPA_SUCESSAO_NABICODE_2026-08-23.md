@@ -2201,3 +2201,23 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   foi usada ou alterada. Produção fiscal permanece bloqueada;
 - eventos fiscais gerais (`send_event`) ainda recebem ator externo e devem ser
   migrados com cuidado porque são consumidos por cancelamento, CC-e e devolução.
+
+### Auditoria fiscal de autoria — eventos fiscais comuns
+
+- implementação: `8bf9495` — `fix: autentica eventos fiscais`;
+- `FiscalService.send_event` deixou de aceitar ator externo e exige sessão ativa
+  com permissão `fiscal/transmit` antes de validar, assinar ou transmitir;
+- CC-e, cancelamento de venda e cancelamento de devolução fornecem somente os
+  dados próprios do evento. O histórico técnico é sempre atribuído ao operador
+  confirmado pelo serviço;
+- elegibilidade, protocolo, sequência, justificativa/correção, assinatura,
+  endpoint, XML e resposta SEFAZ foram preservados. As identidades declaradas do
+  documento e responsáveis contábeis não foram confundidas com operador técnico;
+- testes focados: `3 passed`, `145 deselected`; regressão de venda,
+  cancelamento, devolução e outbox/worker: `115 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma transmissão real, dado real ou regra tributária foi usada ou alterada.
+  Produção fiscal permanece bloqueada;
+- serviços superiores que ainda usam `actor` para efeitos comerciais próprios
+  (por exemplo reversão de estoque da devolução) continuam pendentes de auditoria
+  separada; não são mais capazes de forjar a autoria do evento fiscal.
