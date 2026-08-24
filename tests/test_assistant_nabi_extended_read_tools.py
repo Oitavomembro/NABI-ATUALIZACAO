@@ -10,7 +10,9 @@ from assistant_nabi.read_tools import (
     register_financial_read_tools,
 )
 from assistant_nabi.ui_tools import register_ui_intent_tools
-from commercial.application.financial_dto import CashFlowEntry, FinancialSummary
+from commercial.application.financial_dto import (
+    CashFlowEntry, FinancialSummary, PayableSummary, ReceivableSummary,
+)
 from commercial.application.product_dto import LowStockProductSummary
 from commercial.application.query_dto import (
     CustomerCreditSummary,
@@ -65,6 +67,28 @@ class FinancialQueries:
         return (CashFlowEntry(
             1, 2, datetime(2026, 8, 23, 12), "ENTRADA", Decimal("50"),
             "VENDA", "dado que não deve sair", "documento secreto",
+        ),)
+
+    def receivables(self, **filters):
+        return (ReceivableSummary(
+            41, 9, "MARIA", "VENDA", "secreto", "DOC-SECRETO",
+            "descrição privada", Decimal("100"), Decimal("20"), Decimal("80"),
+            date(2026, 8, 1), date(2026, 8, 30), "PARCIAL", False,
+        ),)
+
+    def overdue_receivables(self):
+        return (ReceivableSummary(
+            42, 10, "JOÃO", "VENDA", "secreto", "DOC-ATRASADO",
+            "não expor", Decimal("40"), Decimal("0"), Decimal("40"),
+            date(2026, 7, 1), date(2026, 8, 1), "ABERTO", True,
+        ),)
+
+    def payables(self, **filters):
+        return (PayableSummary(
+            51, 6, "FORNECEDOR", "COMPRA", "origem", "NF-SECRETA",
+            "não expor", Decimal("70"), Decimal("0"), Decimal("70"),
+            date(2026, 8, 1), date(2026, 9, 1), "ABERTO",
+            bool(filters.get("overdue")), "CENTRO-SECRETO",
         ),)
 
 
@@ -146,6 +170,37 @@ def test_servico_financeiro_ausente_nao_registra_ferramentas():
     }), actor=actor)
     assert not result.success
     assert result.message == "Ferramenta não registrada."
+
+
+def test_listas_financeiras_sao_limitadas_e_minimizadas():
+    harness = _harness()
+    receivables = harness.registry.execute(ToolRequest("financeiro.listar_receber", {
+        "situation": "ABERTOS",
+    }), actor=harness.actor)
+    overdue = harness.registry.execute(ToolRequest("financeiro.listar_receber", {
+        "situation": "VENCIDOS",
+    }), actor=harness.actor)
+    payables = harness.registry.execute(ToolRequest("financeiro.listar_pagar", {
+        "situation": "ABERTOS",
+    }), actor=harness.actor)
+    assert receivables.payload["items"][0] == {
+        "title_id": 41, "customer_id": 9, "customer_name": "MARIA",
+        "open_amount": "80.00", "due_date": "2026-08-30",
+        "status": "PARCIAL", "overdue": False,
+    }
+    assert overdue.payload["items"][0]["title_id"] == 42
+    assert payables.payload["items"][0]["beneficiary_id"] == 6
+    serialized = str((receivables.payload, payables.payload))
+    for forbidden in ("DOC-SECRETO", "NF-SECRETA", "descrição privada", "CENTRO-SECRETO"):
+        assert forbidden not in serialized
+
+
+def test_lista_financeira_recusa_situacao_livre():
+    harness = _harness()
+    result = harness.registry.execute(ToolRequest("financeiro.listar_pagar", {
+        "situation": "TODOS",
+    }), actor=harness.actor)
+    assert not result.success
 
 
 def test_intencao_de_pesquisa_nao_seleciona_produto_nem_recebe_id():

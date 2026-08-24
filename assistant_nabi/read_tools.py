@@ -106,6 +106,27 @@ CASH_FLOW = ToolDefinition(
     FINANCIAL_SUMMARY.schema,
 )
 
+FINANCIAL_RECEIVABLES = ToolDefinition(
+    "financeiro.listar_receber",
+    ToolKind.READ,
+    CapabilityLevel.READ,
+    "financeiro",
+    "view",
+    ToolSchema((ParameterDefinition(
+        "situation", ParameterType.TEXT, required=True,
+        allowed_values=("ABERTOS", "VENCIDOS"),
+    ),)),
+)
+
+FINANCIAL_PAYABLES = ToolDefinition(
+    "financeiro.listar_pagar",
+    ToolKind.READ,
+    CapabilityLevel.READ,
+    "financeiro",
+    "view",
+    FINANCIAL_RECEIVABLES.schema,
+)
+
 
 def _iso_day(value: str, field: str) -> date:
     try:
@@ -315,6 +336,49 @@ class CashFlowTool:
         }
 
 
+def _minimal_titles(records, *, party_id: str, party_name: str) -> dict:
+    ordered = sorted(records, key=lambda item: (item.due_date, item.title_id))[:50]
+    return {"items": [{
+        "title_id": record.title_id,
+        party_id: getattr(record, party_id),
+        party_name: getattr(record, party_name),
+        "open_amount": format(record.open_amount, ".2f"),
+        "due_date": record.due_date.isoformat(),
+        "status": record.status,
+        "overdue": record.overdue,
+    } for record in ordered]}
+
+
+class FinancialReceivablesTool:
+    def __init__(self, query_service) -> None:
+        self._queries = query_service
+
+    def execute(self, request: ToolRequest, *, actor) -> dict:
+        situation = request.parameters["situation"]
+        records = (
+            self._queries.overdue_receivables()
+            if situation == "VENCIDOS"
+            else self._queries.receivables(open_only=True)
+        )
+        return _minimal_titles(
+            records, party_id="customer_id", party_name="customer_name"
+        )
+
+
+class FinancialPayablesTool:
+    def __init__(self, query_service) -> None:
+        self._queries = query_service
+
+    def execute(self, request: ToolRequest, *, actor) -> dict:
+        situation = request.parameters["situation"]
+        records = self._queries.payables(
+            open_only=True, overdue=situation == "VENCIDOS"
+        )
+        return _minimal_titles(
+            records, party_id="beneficiary_id", party_name="beneficiary_name"
+        )
+
+
 def register_commercial_read_tools(registry, query_service) -> None:
     """Expõe somente DTOs mínimos da fachada comercial de consultas."""
 
@@ -335,3 +399,5 @@ def register_financial_read_tools(registry, query_service) -> None:
         return
     registry.register(FINANCIAL_SUMMARY, FinancialSummaryTool(query_service))
     registry.register(CASH_FLOW, CashFlowTool(query_service))
+    registry.register(FINANCIAL_RECEIVABLES, FinancialReceivablesTool(query_service))
+    registry.register(FINANCIAL_PAYABLES, FinancialPayablesTool(query_service))

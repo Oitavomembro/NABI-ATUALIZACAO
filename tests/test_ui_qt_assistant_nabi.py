@@ -181,6 +181,39 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("Pago: R$ 30.00", text)
         self.assertNotIn("documento", text.casefold())
 
+    def test_renderiza_listas_financeiras_sem_campos_ocultos(self):
+        result = ToolResult("r-titles", "financeiro.listar_receber", True, {
+            "items": [{
+                "title_id": 41, "customer_id": 9, "customer_name": "MARIA",
+                "open_amount": "80.00", "due_date": "2026-08-30",
+                "status": "PARCIAL", "overdue": False,
+            }]
+        })
+        text = self.panel._result_text(result)
+        self.assertIn("Título #41 — Cliente #9 MARIA", text)
+        self.assertIn("R$ 80.00", text)
+        for hidden in ("documento", "origem", "observação", "centro de custo"):
+            self.assertNotIn(hidden, text.casefold())
+
+    def test_renderiza_indicadores_e_caixa_deterministicamente(self):
+        indicators = ToolResult("r-ind", "relatorios.consultar_indicadores", True, {
+            "start_date": "2026-08-01", "end_date": "2026-08-24",
+            "sales_total": "120.50", "receivable_open": "80.00",
+            "payable_open": "30.25", "low_stock": 4, "active_customers": 17,
+        })
+        cash = ToolResult("r-cash", "caixa.consultar_atual", True, {
+            "is_open": True, "session_id": 7, "opened_at": "2026-08-24 08:00:00",
+            "opening_balance": "100.00", "expected_cash": "180.00",
+            "cash_sales": "50.00", "pix_sales": "20.00", "card_sales": "10.00",
+            "other_sales": "0.00", "cash_receipts": "15.00",
+            "supplies": "5.00", "withdrawals": "20.00",
+        })
+        indicator_text = self.panel._result_text(indicators)
+        cash_text = self.panel._result_text(cash)
+        self.assertIn("Clientes ativos: 17", indicator_text)
+        self.assertIn("Dinheiro esperado: R$ 180.00", cash_text)
+        self.assertNotIn("observação", cash_text.casefold())
+
     def test_renderiza_estoque_baixo_deterministicamente(self):
         result = ToolResult("r-stock", "estoque.listar_baixo", True, {
             "items": [{

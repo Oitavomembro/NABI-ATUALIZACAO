@@ -691,6 +691,41 @@ class NabiAssistantPanel(QWidget):
                 f"{item['origin']} — R$ {item['amount']}"
                 for item in items
             )
+        if result.tool_name in {"financeiro.listar_receber", "financeiro.listar_pagar"}:
+            items = payload.get("items", ())
+            if not items:
+                return "Nenhum título encontrado para a situação solicitada."
+            receiving = result.tool_name.endswith("receber")
+            id_field = "customer_id" if receiving else "beneficiary_id"
+            name_field = "customer_name" if receiving else "beneficiary_name"
+            label = "Cliente" if receiving else "Beneficiário"
+            return "\n".join(
+                f"Título #{item['title_id']} — {label} #{item[id_field] or '-'} "
+                f"{item[name_field] or '-'} — vence {item['due_date']} — "
+                f"R$ {item['open_amount']} — {item['status']}"
+                for item in items
+            )
+        if result.tool_name == "relatorios.consultar_indicadores":
+            return "\n".join((
+                f"Período: {payload['start_date']} a {payload['end_date']}",
+                f"Vendas: R$ {payload['sales_total']}",
+                f"A receber: R$ {payload['receivable_open']}",
+                f"A pagar: R$ {payload['payable_open']}",
+                f"Produtos com estoque baixo: {payload['low_stock']}",
+                f"Clientes ativos: {payload['active_customers']}",
+            ))
+        if result.tool_name == "caixa.consultar_atual":
+            if not payload["is_open"]:
+                return "O caixa deste terminal está fechado."
+            return "\n".join((
+                f"Caixa aberto — sessão #{payload['session_id']} — {payload['opened_at']}",
+                f"Saldo inicial: R$ {payload['opening_balance']}",
+                f"Dinheiro esperado: R$ {payload['expected_cash']}",
+                f"Vendas: dinheiro R$ {payload['cash_sales']} — PIX R$ {payload['pix_sales']} "
+                f"— cartões R$ {payload['card_sales']} — outros R$ {payload['other_sales']}",
+                f"Recebimentos em dinheiro: R$ {payload['cash_receipts']}",
+                f"Suprimentos: R$ {payload['supplies']} — sangrias R$ {payload['withdrawals']}",
+            ))
         if result.tool_name == "interface.abrir_pesquisa_produtos":
             term = payload.get("term", "")
             return (
