@@ -2852,3 +2852,41 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   chaves permanentes, revisão jurídica e dossiê/homologação oficial SEFAZ Bahia.
   Não há outro checkpoint automatizável de alto valor identificado sem invadir
   as trilhas reservadas de IA/Fichário ou inventar evidência fiscal.
+
+### Projeção tributária gerencial — fundação auditável
+
+- branch isolada: `codex/projecao-tributaria-v1`, derivada da integração final
+  `7147c32`; implementação: `9575ee5` — `feat: cria base auditavel de projecao tributaria`;
+- a funcionalidade é expressamente uma **projeção gerencial**, nunca apuração
+  oficial, declaração, geração de DAS ou substituição do contador/PGDAS-D;
+- `TaxProjectionService` inicia pelo Simples Nacional e exige regra externa
+  versionada, fonte, vigência, anexo, alíquota nominal, parcela a deduzir e
+  confirmação identificada da contabilidade. Não escolhe enquadramento, não
+  inventa alíquota e não transmite qualquer informação;
+- a memória preserva segregações, RBT12, regime de caixa/competência, alíquotas,
+  deduções, estimativa até a consulta, projeção do mês, margem de reserva e
+  alertas explícitos. Cálculos monetários usam `Decimal` e arredondamento
+  determinístico;
+- `TaxRevenueSnapshotService` fornece somente evidência de faturamento por
+  competência. Recebimentos não viram nova receita; vendas canceladas e espelhos
+  financeiros são excluídos; datas inválidas e dados não segregados geram alerta
+  em vez de serem mascarados;
+- tratamentos de ST, monofásico, alíquota zero, isenção, retenções, devoluções,
+  início de atividade, excesso de sublimite, Lucro Presumido/Real e transição
+  CBS/IBS permanecem bloqueados até regra documentada, teste e validação
+  contábil específicos;
+- referências abertas avaliadas: `tributos-br`, `FiscalBrasil` e
+  `@brasil-fiscal/nfe`, todos sob licença MIT nas versões pesquisadas. Foram
+  usados apenas como referência de arquitetura/limitações; nenhum código externo
+  foi incorporado. `FiscalBrasil` se declara alpha e `tributos-br` registra
+  cenários ainda não cobertos, portanto nenhum deles será autoridade legal;
+- testes do núcleo: `14 passed`; regressão relacionada de relatórios,
+  faturamento/recebimentos, financeiro e PDV: `69 passed`; `compileall` e
+  `git diff --check` aprovados;
+- próximo checkpoint: criar configuração tributária administrativa versionada,
+  segregação comprovável das vendas e interface Qt somente leitura com nível de
+  confiança. A Nabi poderá consultar/explicar a memória por porta explícita, mas
+  nunca alterar regras, confirmar enquadramento ou declarar tributos;
+- coordenação de homologação: a outra conversa conduz e registra os testes; esta
+  conversa atua como auditor adversarial independente. Nenhuma etapa fiscal é
+  aprovada apenas por quem a executou.
