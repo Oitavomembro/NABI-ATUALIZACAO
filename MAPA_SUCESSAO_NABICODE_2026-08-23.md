@@ -1812,3 +1812,18 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   gerador DANFE; `compileall` e `git diff --check` aprovados;
 - regras tributárias, XML, prazos, endpoints, ambiente, transmissão e resposta
   SEFAZ não foram alterados. Produção fiscal continua bloqueada.
+
+### Checkpoint IA Nabi — indicadores agregados de Relatórios
+
+- a ferramenta somente leitura `relatorios.consultar_indicadores` usa
+  exclusivamente `ReportApplicationService.indicators` e a sessão real com
+  permissão `relatorios/view`;
+- aceita somente datas ISO, início não posterior ao fim e período máximo de 366
+  dias; devolve apenas vendas, contas a receber, contas a pagar, estoque baixo e
+  clientes ativos;
+- não expõe linhas, documentos, caminhos, exportação, geração de arquivos,
+  relatório NF-e, Fiscal/SEFAZ, banco ou qualquer operação mutável;
+- ausência do serviço mantém a ferramenta não registrada sem impedir PDV ou
+  painel Nabi;
+- validação integrada: `59 passed`, `4 subtests passed`; `compileall` e
+  `git diff --check` aprovados; homologação manual do painel permanece pendente.
