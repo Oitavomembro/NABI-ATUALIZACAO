@@ -145,6 +145,37 @@ Legenda:
 - pendências físicas: cerimônia da chave real, cópias criptografadas e teste de restauração, hash do catálogo, build administrativo reproduzível/SBOM, validação em segunda máquina Windows, revisão de versão da `cryptography` e revisão jurídica;
 - nenhum push realizado.
 
+#### Checkpoint do Emissor administrativo para pendrive — branch `codex/emissor-facil-fichario`
+
+- implementação e automação portátil: `8353fc8` — `build: finaliza emissor administrativo portatil`;
+- o primeiro smoke do EXE revelou `No module named 'services'`: `licensing.machine`
+  dependia transitivamente do agregador excluído pelo spec; a coleta dos
+  identificadores Windows foi movida para a própria fronteira de licenciamento,
+  preservando o mesmo fingerprint e mantendo serviços comerciais/fiscais fora
+  do emissor;
+- o build oficial com Python `3.14.7` e PyInstaller `6.21.0` gerou e abriu no
+  Windows `NabiCode_Emissor_Licencas_V2.exe`; a janela mostrou solicitação da
+  máquina, titular, edição `FICHARIO`, prazos, revisão, assinatura e minimizar;
+- emissão, adulteração e verificação foram repetidas somente com chaves
+  temporárias de teste; não restou `.pem`, `.key` ou `.nabilic` temporário;
+- auditoria de 192 entradas internas do executável não encontrou chave, licença,
+  catálogo, `NabiCode-Segredos`, IA, Fiscal/SEFAZ ou entradas do cliente;
+- SHA-256 do EXE validado: `6084feddcda87596a730be9a78020d87635290155eae4746448d9b3ed39fa998`;
+- pasta gerada para cópia contém somente EXE, `LEIA-ME-EMISSOR.txt` e
+  `SHA256SUMS.txt`; SBOM separado registra Python, PyInstaller, PySide6,
+  shiboken6 e cryptography, sem caminhos ou segredos;
+- validação final: `62 passed`, três cenários explícitos de chaves temporárias
+  aprovados, `compileall` e `git diff --check` aprovados;
+- a chave privada real e o catálogo externo não foram lidos, copiados,
+  versionados nem incorporados; o proprietário deve transportá-los de forma
+  criptografada e manter a senha separada;
+- o emissor de licenças não substitui a chave permanente de assinatura de
+  atualizações; essa chave exige cerimônia, senha e guarda próprias e não foi
+  criada neste checkpoint;
+- pendências físicas: copiar a pasta gerada para pendrive criptografado,
+  conferir os hashes após a cópia e repetir abertura/emissão em segunda máquina
+  administrativa controlada; nenhum push realizado.
+
 ### IA Nabi
 
 - [x] visão do produto registrada;
