@@ -1050,6 +1050,30 @@ Não confundir automação inteligente com autoridade. A Nabi poderá planejar, 
   passed`, zero falhas e um aviso externo conhecido do BrazilFiscalReport;
   `compileall` e `git diff --check` aprovados.
 
+### Segurança — primeiro acesso oficial e revogação imediata
+
+- branch isolada: `codex/seguranca-primeiro-acesso`, derivada da consolidação
+  enviada `112dacd`;
+- implementação: `4fc2a95` — `feat: protege primeiro acesso e revogacao de sessao`;
+- instalação nova do Qt oficial abre somente o assistente restrito para nome da
+  empresa, CNPJ/e-mail opcionais e criação do primeiro administrador;
+- o assistente não abre sessão implícita nem libera módulos; após concluir, o
+  login real com a senha recém-definida é obrigatório;
+- a conclusão é atômica, auditada e consumível uma única vez; atualização de
+  instalação existente não reabre o primeiro acesso;
+- o FICHÁRIO e sua decisão exclusiva de abertura direta não foram alterados;
+- sessões agora recarregam usuário ativo e perfil persistidos antes de autorizar;
+  desativação ou troca de perfil em outra instância alcançam o Qt e a Nabi na
+  próxima autorização, sem aguardar expiração;
+- validação focada: `172 passed`, `38 subtests passed`;
+- regressão integral: `2102 passed`, `1 skipped`, `444 subtests passed`, zero
+  falhas e um aviso externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados;
+- pendências separadas: substituir no Legacy oficial a sessão administrativa
+  automática por primeiro acesso/login real; remover a senha mestre universal;
+  adicionar limitação persistente de tentativas; completar auditoria das
+  confirmações da Nabi.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
