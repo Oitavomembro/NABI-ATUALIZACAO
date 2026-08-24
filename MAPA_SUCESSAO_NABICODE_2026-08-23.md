@@ -2221,3 +2221,24 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - serviços superiores que ainda usam `actor` para efeitos comerciais próprios
   (por exemplo reversão de estoque da devolução) continuam pendentes de auditoria
   separada; não são mais capazes de forjar a autoria do evento fiscal.
+
+### Auditoria fiscal de autoria — autorização síncrona de documento
+
+- implementação: `17e2572` — `fix: autentica autoria da autorizacao fiscal`;
+- `FiscalService.authorize_document` deixou de aceitar ator externo e exige
+  sessão ativa com permissão `fiscal/transmit` antes de validar prontidão,
+  assinar XML, criar arquivos ou transmitir;
+- o registro do documento autorizado/rejeitado recebe exclusivamente a
+  identidade confirmada pelo serviço. A devolução oficial fornece somente XML,
+  chave, certificado, modelo e reserva, nunca a autoria técnica;
+- validações de chave, ambiente, modelo e reserva, QR Code NFC-e, assinatura,
+  schema, endpoint, protocolo, armazenamento íntegro e confirmação monotônica da
+  numeração foram preservadas;
+- testes focados: `12 passed`, `138 deselected`; devolução: `35 passed`;
+  regressão fiscal ampliada: `285 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, XML de cliente ou regra tributária foi
+  usada ou alterada. Produção fiscal permanece bloqueada;
+- a identidade comercial ainda recebida pelo serviço superior de devolução para
+  seus efeitos próprios permanece separada da autoria técnica fiscal e requer
+  auditoria própria antes de eventual remoção.
