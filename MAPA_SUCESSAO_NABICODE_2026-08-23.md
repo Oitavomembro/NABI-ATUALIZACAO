@@ -2025,3 +2025,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   alterada. Produção fiscal permanece bloqueada;
 - consulta manual de recibo, cancelamento local de transmissão e autoria da
   importação manual de XML continuam checkpoints independentes pendentes.
+
+### Auditoria fiscal de autoria — consulta manual de recibo
+
+- implementação: `83ccbf5` — `fix: autentica consulta manual de recibo`;
+- causa: `FiscalService.force_receipt_check` aceitava `actor` do chamador e
+  gravava esse texto ao reagendar uma consulta de recibo na outbox;
+- agora identidade e permissão `fiscal/transmit` são verificadas antes de ler a
+  fila; a API não aceita ator externo e a Central Fiscal não fornece mais texto
+  de usuário para a operação;
+- a operação continua sendo exclusivamente consulta de recibo existente: não
+  converte autorização sem recibo, não reenvia NFC-e/NF-e e não atua em item
+  concluído ou cancelado;
+- testes focados: `4 passed`, `125 deselected`; regressão de
+  outbox/worker/Central/cancelamento/venda/segurança: `103 passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma rede SEFAZ, XML, endpoint, prazo, regra tributária ou dado real foi
+  alterado. Produção fiscal permanece bloqueada;
+- cancelamento local da transmissão e autoria da importação manual de XML
+  continuam pendentes para checkpoints separados.
