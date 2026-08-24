@@ -1639,13 +1639,51 @@ class FiscalServiceTests(unittest.TestCase):
             state_code="29", issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
             cnpj="12345678000195", model="55", series=1, number=1, numeric_code="12345678",
         )
-        confirmed = self.service.confirm_number(reservation["id"], access_key=key, actor="admin")
+        confirmed = self.service.confirm_number(reservation["id"], access_key=key)
         self.assertEqual(confirmed["status"], "CONFIRMADO")
         self.assertEqual(confirmed["access_key"], key)
+        self.assertEqual(confirmed["confirmed_by"], "gerente")
         with self.assertRaises(ValueError):
             self.service.release_number(reservation["id"], actor="admin", reason="Tentativa inválida")
         next_reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(next_reservation["number"], 2)
+
+    def test_confirmacao_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.confirm_number(
+                "reserva", access_key="1" * 44, actor="forjado"
+            )
+
+    def test_confirmacao_bloqueia_reserva_legada_sem_identidade(self):
+        reservation = self.service.reserve_number(model="55", series=6)
+        connection = self.connect()
+        data = json.loads(connection.execute(
+            "SELECT valor FROM configuracoes WHERE chave=?",
+            (FiscalService.NUMBERING_KEY,),
+        ).fetchone()[0])
+        data["records"][reservation["id"]]["actor"] = ""
+        connection.execute(
+            "UPDATE configuracoes SET valor=? WHERE chave=?",
+            (json.dumps(data), FiscalService.NUMBERING_KEY),
+        )
+        connection.commit()
+        connection.close()
+        key = self.service.build_access_key(
+            state_code="29",
+            issued_at=datetime(2026, 8, 2, tzinfo=timezone.utc),
+            cnpj="12345678000195",
+            model="55",
+            series=6,
+            number=reservation["number"],
+            numeric_code="12345678",
+        )
+        with self.assertRaises(PermissionError):
+            self.service.confirm_number(reservation["id"], access_key=key)
+        current = {
+            row["id"]: row
+            for row in self.service.numbering_status(model="55", series=6)
+        }[reservation["id"]]
+        self.assertEqual(current["status"], "RESERVADO")
 
     def test_reserva_de_numeracao_nao_aceita_actor_livre(self):
         with self.assertRaisesRegex(TypeError, "actor"):
@@ -1670,7 +1708,7 @@ class FiscalServiceTests(unittest.TestCase):
             cnpj="12345678000195", model="65", series=3, number=99, numeric_code="87654321",
         )
         with self.assertRaises(ValueError):
-            self.service.confirm_number(reservation["id"], access_key=wrong_key, actor="caixa")
+            self.service.confirm_number(reservation["id"], access_key=wrong_key)
         current = self.service.numbering_status(model="65", series=3)[0]
         self.assertEqual(current["status"], "RESERVADO")
 

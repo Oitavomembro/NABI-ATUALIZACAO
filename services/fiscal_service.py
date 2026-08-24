@@ -558,7 +558,7 @@ class FiscalService:
         finally:
             conn.close()
 
-    def confirm_number(self, reservation_id: str, *, access_key: str, actor: str) -> dict[str, Any]:
+    def confirm_number(self, reservation_id: str, *, access_key: str) -> dict[str, Any]:
         key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para confirmar numeração.")
@@ -576,6 +576,11 @@ class FiscalService:
                 return dict(record)
             if record.get("status") != "RESERVADO":
                 raise ValueError("A numeração não está disponível para confirmação.")
+            reserved_by = str(record.get("actor") or "").strip()
+            if not reserved_by:
+                raise PermissionError(
+                    "A reserva fiscal não possui uma identidade autenticada de origem."
+                )
             expected_model = key[20:22]
             expected_series = int(key[22:25])
             expected_number = int(key[25:34])
@@ -585,7 +590,7 @@ class FiscalService:
                 "status": "CONFIRMADO",
                 "access_key": key,
                 "confirmed_at": datetime.now(timezone.utc).isoformat(),
-                "confirmed_by": str(actor or "").strip(),
+                "confirmed_by": reserved_by,
             })
             self._save_numbering_conn(conn, data)
             conn.commit()
@@ -3282,7 +3287,6 @@ class FiscalService:
                         if reservation_id:
                             self.confirm_number(
                                 reservation_id, access_key=queued_key,
-                                actor=str(record.get("actor", "")),
                             )
                     elif operation == "evento":
                         event_type = str(record.get("event_type") or "EVENTO").upper()
@@ -3670,7 +3674,7 @@ class FiscalService:
             actor=actor,
         )
         if reservation_id and response.success:
-            numbering = self.confirm_number(reservation_id, access_key=key, actor=actor)
+            numbering = self.confirm_number(reservation_id, access_key=key)
             record = dict(record)
             record["numbering"] = numbering
         return response, record
