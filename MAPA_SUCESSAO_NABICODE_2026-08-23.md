@@ -1754,3 +1754,27 @@ importação no banco de produção antes da aprovação visual e de um backup m
   backup em dois destinos e relatório de diagnóstico no perfil TESTE; impressão
   e restauração continuam checkpoints separados. Fiscal/SEFAZ, IA, Fichário,
   licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Impressão comercial Qt
+
+- branch/worktree: `codex/impressao-qt`, derivada do checkpoint de Configurações
+  `7ec1a14`, sem alterar a integração;
+- implementação `0aec7be` — `feat: adiciona configuracao de impressao ao Qt`;
+- a aba Impressão reutiliza `PrintingService` e `ReceiptTemplateService`, lista
+  as impressoras instaladas e cobre Recibo/Venda, Entrega, Ficha do cliente,
+  Histórico e Fechamento de caixa com os formatos oficiais `Cupom 80 mm`, `A4`
+  e `PDF virtual`;
+- os 20 modelos visuais do Legacy permanecem disponíveis, com fonte, tamanho,
+  corte parcial/total e linhas de avanço normalizados antes da gravação atômica;
+- prévia é determinística e não envia trabalho ao spooler; salvar configurações
+  também não imprime. A impressão física continua exclusiva dos fluxos
+  documentais oficiais já existentes;
+- Enter simples mantém uma ação, auto-repeat é consumido e Shift+Enter retorna
+  pelo foco sem acionar botões; Esc fecha somente Configurações e F9 continua
+  exclusivo para finalizar a venda no PDV;
+- testes focados finais: `32 passed`; regressão ampliada Qt, Commercial,
+  documental e startup Nabi: `361 passed`, `367 subtests passed`; `compileall`
+  e `git diff --check` aprovados;
+- pendências: homologação visual no Windows, enumeração com impressora física de
+  TESTE e teste manual de cupom/A4 sem venda fiscal. Fiscal/SEFAZ, IA, Fichário,
+  licenciamento, instalador e banco real não foram alterados.
