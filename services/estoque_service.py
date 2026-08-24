@@ -414,21 +414,32 @@ class EstoqueService:
             # A leitura e a atualização do saldo formam uma única operação
             # serializada, inclusive quando duas ações manuais concorrem.
             connection.execute("BEGIN IMMEDIATE")
-            produto = self.repository.buscar_produto(int(produto_id), connection)
-            self._validar_produto(produto)
-            saldo_anterior = Decimal(str(produto["estoque_atual"]))
-            saldo_atual = (saldo_anterior + qtd if entrada else saldo_anterior - qtd).quantize(self.CASAS)
-            if not entrada and not bool(produto["permite_estoque_negativo"]) and saldo_atual < 0:
-                raise ValueError("Estoque insuficiente para concluir a saída.")
-            self.repository.atualizar_saldo(int(produto_id), float(saldo_atual), connection)
-            tipo = "ENTRADA" if entrada else "SAIDA"
-            quantidade_mov = qtd if entrada else -qtd
-            mov_id = self.repository.registrar_movimentacao(
-                produto_id=int(produto_id), tipo=tipo, quantidade=float(quantidade_mov),
-                saldo_anterior=float(saldo_anterior), saldo_atual=float(saldo_atual),
-                origem=origem, origem_id=origem_id, motivo=motivo, usuario=usuario,
-                connection=connection,
+            return self.movimentar_na_transacao(
+                connection, produto_id, qtd, entrada=entrada, origem=origem,
+                origem_id=origem_id, motivo=motivo, usuario=usuario,
             )
+
+    def movimentar_na_transacao(
+        self, connection, produto_id: int, quantidade: float, *, entrada: bool,
+        origem: str, origem_id: str = "", motivo: str = "", usuario: str = "Sistema",
+    ) -> ResultadoMovimentacaoEstoque:
+        """Executa uma movimentação dentro da transação já controlada pelo chamador."""
+        qtd = self._quantidade(quantidade)
+        produto = self.repository.buscar_produto(int(produto_id), connection)
+        self._validar_produto(produto)
+        saldo_anterior = Decimal(str(produto["estoque_atual"]))
+        saldo_atual = (saldo_anterior + qtd if entrada else saldo_anterior - qtd).quantize(self.CASAS)
+        if not entrada and not bool(produto["permite_estoque_negativo"]) and saldo_atual < 0:
+            raise ValueError("Estoque insuficiente para concluir a saída.")
+        self.repository.atualizar_saldo(int(produto_id), float(saldo_atual), connection)
+        tipo = "ENTRADA" if entrada else "SAIDA"
+        quantidade_mov = qtd if entrada else -qtd
+        mov_id = self.repository.registrar_movimentacao(
+            produto_id=int(produto_id), tipo=tipo, quantidade=float(quantidade_mov),
+            saldo_anterior=float(saldo_anterior), saldo_atual=float(saldo_atual),
+            origem=origem, origem_id=origem_id, motivo=motivo, usuario=usuario,
+            connection=connection,
+        )
         return ResultadoMovimentacaoEstoque(
             int(produto_id), float(saldo_anterior), float(saldo_atual),
             float(quantidade_mov), tipo, mov_id,

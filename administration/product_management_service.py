@@ -6,12 +6,13 @@ from commercial.application.action_dto import ActionContext, ActionOrigin
 class ProductManagementService:
     """Porta administrativa: sessão, permissão e ator ficam fora da GUI."""
 
-    def __init__(self, products, stock_actions, security) -> None:
+    def __init__(self, products, stock_actions, security, assisted_actions=None) -> None:
         if products is None or stock_actions is None or security is None:
             raise ValueError("Produtos, estoque e segurança são obrigatórios.")
         self.products = products
         self.stock_actions = stock_actions
         self.security = security
+        self.assisted_actions = assisted_actions
 
     def _require(self, action: str) -> str:
         session = self.security.session
@@ -63,3 +64,24 @@ class ProductManagementService:
         username = self._require(permission)
         context = ActionContext(username, ActionOrigin.UI)
         return operation(command, context=context, confirmed=bool(confirmed))
+
+    def execute_assisted(
+        self, operation: str, command, *, username: str,
+        idempotency_key: str, operation_fingerprint: str,
+    ):
+        if self.assisted_actions is None:
+            raise RuntimeError("Operações assistidas idempotentes não estão disponíveis.")
+        operation = str(operation or "").upper()
+        permission = "create" if operation == "PRODUCT_CREATE" else "edit"
+        current = self._require(permission)
+        if current != str(username or "").strip():
+            raise PermissionError("A confirmação pertence a outro usuário.")
+        if operation == "PRODUCT_CREATE":
+            return self.assisted_actions.create_product(
+                command, username=current, idempotency_key=idempotency_key,
+                operation_fingerprint=operation_fingerprint,
+            )
+        return self.assisted_actions.move_stock(
+            operation, command, username=current, idempotency_key=idempotency_key,
+            operation_fingerprint=operation_fingerprint,
+        )

@@ -34,6 +34,7 @@ class AssistantApplicationService:
         nfe_entry_executor=None,
         customer_executor=None,
         customer_receipt_executor=None,
+        product_stock_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -46,6 +47,7 @@ class AssistantApplicationService:
         self._nfe_entry_executor = nfe_entry_executor
         self._customer_executor = customer_executor
         self._customer_receipt_executor = customer_receipt_executor
+        self._product_stock_executor = product_stock_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -91,6 +93,10 @@ class AssistantApplicationService:
             "NFE_ENTRY_IMPORT": ("compras", "create"),
             "CUSTOMER_CREATE": ("clientes", "create"),
             "CUSTOMER_RECEIPT": ("financeiro", "pay"),
+            "PRODUCT_CREATE": ("produtos", "create"),
+            "STOCK_RECEIVE": ("produtos", "edit"),
+            "STOCK_REMOVE": ("produtos", "edit"),
+            "STOCK_ADJUST": ("produtos", "edit"),
         }.get(str(getattr(draft, "operation_kind", "")))
         if permission is None or not self._permissions.allows(actor, *permission):
             raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
@@ -147,6 +153,20 @@ class AssistantApplicationService:
             raise TypeError("O rascunho confirmado não é um recebimento de cliente.")
         draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._customer_receipt_executor.execute(draft, authorization)
+        return result, authorization
+
+    def confirm_and_execute_product_stock(
+        self, token: str, draft_id: str, fingerprint: str
+    ):
+        if self._product_stock_executor is None:
+            raise RuntimeError("Produto/estoque assistido não está configurado.")
+        draft = self._drafts.get(draft_id)
+        if getattr(draft, "operation_kind", "") not in {
+            "PRODUCT_CREATE", "STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST",
+        }:
+            raise TypeError("O rascunho confirmado não é de produto/estoque.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        result = self._product_stock_executor.execute(draft, authorization)
         return result, authorization
 
     def invalidate_confirmations(self) -> None:
