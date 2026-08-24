@@ -7,6 +7,7 @@ import json
 import re
 
 from repositories import CompraRepository, EstoqueRepository
+from repositories.assistant_operation_journal_repository import AssistantOperationJournalRepository
 from services.financeiro_service import FinanceiroService
 
 
@@ -35,6 +36,7 @@ class CompraService:
         self.estoque_repository = estoque_repository
         self.financeiro_service = financeiro_service
         self.database = repository.database
+        self.operation_journal = AssistantOperationJournalRepository()
         if estoque_repository.database.database_path != repository.database.database_path:
             raise ValueError("Os repositórios devem utilizar o mesmo banco de dados.")
 
@@ -53,19 +55,49 @@ class CompraService:
         *,
         observacao: str = "",
         usuario: str = "Sistema",
+        idempotency_key: str | None = None,
+        operation_fingerprint: str | None = None,
     ) -> int:
         itens_normalizados = self._normalizar_itens_pedido(itens)
+        key, fingerprint = self._idempotency_fields(
+            idempotency_key, operation_fingerprint
+        )
         with self.database.session(write=True) as connection:
+            if key:
+                previous = self.operation_journal.get(connection, key)
+                if previous is not None:
+                    if previous["fingerprint"].lower() != fingerprint:
+                        raise PermissionError("A chave idempotente já pertence a outro conteúdo.")
+                    if previous["status"].upper() != "COMMITTED":
+                        raise RuntimeError("A operação assistida possui estado persistente desconhecido.")
+                    return int(json.loads(previous["result_json"])["order_id"])
+                self.operation_journal.begin(
+                    connection, idempotency_key=key,
+                    operation_kind="PURCHASE_ORDER_CREATE", fingerprint=fingerprint,
+                    username=str(usuario or "Sistema"),
+                )
             fornecedor = self.repository.buscar_fornecedor(int(fornecedor_id), connection)
             if not fornecedor or not bool(fornecedor["ativo"]):
                 raise ValueError("Fornecedor não encontrado ou inativo.")
             for item in itens_normalizados:
                 produto = self.repository.buscar_produto(item["produto_id"], connection)
                 self._validar_produto_compra(produto)
-            return self.repository.criar_pedido(
+            pedido_id = self.repository.criar_pedido(
                 fornecedor_id=int(fornecedor_id), observacao=observacao,
                 usuario=usuario, itens=itens_normalizados, connection=connection,
             )
+            if key:
+                connection.execute(
+                    """INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado)
+                       VALUES(datetime('now','localtime'),?,'Compras','CRIAR_PEDIDO',?,?, 'SUCESSO')""",
+                    (str(usuario or "Sistema"), str(pedido_id),
+                     f"Fornecedor {int(fornecedor_id)}; itens={len(itens_normalizados)}; idempotency={key}"),
+                )
+                self.operation_journal.commit(
+                    connection, idempotency_key=key,
+                    result_json=json.dumps({"order_id": pedido_id}, sort_keys=True, separators=(",", ":")),
+                )
+            return pedido_id
 
     def receber(
         self,

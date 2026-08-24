@@ -19,19 +19,21 @@ class FornecedorRepository:
         )
         return [dict(row) for row in rows]
 
-    def criar(self, nome: str, **extras: Any) -> int:
+    def criar(self, nome: str, *, connection=None, **extras: Any) -> int:
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-        return self.database.execute(
-            """INSERT INTO fornecedores
+        sql = """INSERT INTO fornecedores
                (razao_social,nome_fantasia,cnpj,telefone,email,ativo,criado_em,atualizado_em)
-               VALUES(?,?,?,?,?,1,?,?)""",
-            (
-                extras.get("razao_social") or nome,
-                nome,
-                extras.get("cnpj", ""),
-                extras.get("telefone", ""),
-                extras.get("email", ""),
-                agora,
-                agora,
-            ),
+               VALUES(?,?,?,?,?,1,?,?)"""
+        parameters = (
+            extras.get("razao_social") or nome,
+            nome,
+            extras.get("cnpj", ""),
+            extras.get("telefone", ""),
+            extras.get("email", ""),
+            agora,
+            agora,
         )
+        if connection is None:
+            return int(self.database.execute(sql, parameters))
+        cursor = connection.execute(sql, parameters)
+        return int(cursor.lastrowid)

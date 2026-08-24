@@ -162,6 +162,45 @@ class CompraServiceTest(unittest.TestCase):
         )
         self.assertIsNone(row)
 
+    def test_criacao_de_pedido_assistida_e_atomica_e_idempotente(self):
+        kwargs = {
+            "idempotency_key": "nabi:purchase-order:draft-1",
+            "operation_fingerprint": "d" * 64,
+            "usuario": "operador",
+        }
+        first = self.service.criar_pedido(
+            1, [{"produto_id": 1, "quantidade": "2", "custo_unitario": "8.50"}],
+            **kwargs,
+        )
+        repeated = self.service.criar_pedido(
+            1, [{"produto_id": 1, "quantidade": "2", "custo_unitario": "8.50"}],
+            **kwargs,
+        )
+        self.assertEqual(first, repeated)
+        self.assertEqual(len(self.repo.listar_pedidos()), 1)
+        journal = self.repo.database.fetch_one(
+            "SELECT operation_kind,status,username FROM assistant_operation_journal"
+        )
+        self.assertEqual(tuple(journal), ("PURCHASE_ORDER_CREATE", "COMMITTED", "operador"))
+        with self.assertRaisesRegex(PermissionError, "outro conteúdo"):
+            self.service.criar_pedido(
+                1, [{"produto_id": 1, "quantidade": "1", "custo_unitario": "8.50"}],
+                idempotency_key=kwargs["idempotency_key"],
+                operation_fingerprint="e" * 64,
+            )
+
+    def test_falha_do_pedido_assistido_remove_journal_na_mesma_transacao(self):
+        with self.assertRaisesRegex(ValueError, "não controla estoque"):
+            self.service.criar_pedido(
+                1, [{"produto_id": 3, "quantidade": "1", "custo_unitario": "10"}],
+                idempotency_key="nabi:purchase-order:failed",
+                operation_fingerprint="f" * 64,
+            )
+        self.assertIsNone(self.repo.database.fetch_one(
+            "SELECT 1 FROM assistant_operation_journal WHERE idempotency_key=?",
+            ("nabi:purchase-order:failed",),
+        ))
+
 
 if __name__ == '__main__':
     unittest.main()

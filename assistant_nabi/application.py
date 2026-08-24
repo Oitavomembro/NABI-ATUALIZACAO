@@ -34,6 +34,7 @@ class AssistantApplicationService:
         nfe_entry_executor=None,
         customer_executor=None,
         customer_receipt_executor=None,
+        procurement_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -46,6 +47,7 @@ class AssistantApplicationService:
         self._nfe_entry_executor = nfe_entry_executor
         self._customer_executor = customer_executor
         self._customer_receipt_executor = customer_receipt_executor
+        self._procurement_executor = procurement_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -88,6 +90,8 @@ class AssistantApplicationService:
         permission = {
             "SALE": ("vendas", "create"),
             "PURCHASE_RECEIPT": ("compras", "create"),
+            "PURCHASE_ORDER_CREATE": ("compras", "create"),
+            "SUPPLIER_CREATE": ("compras", "create"),
             "NFE_ENTRY_IMPORT": ("compras", "create"),
             "CUSTOMER_CREATE": ("clientes", "create"),
             "CUSTOMER_RECEIPT": ("financeiro", "pay"),
@@ -148,6 +152,24 @@ class AssistantApplicationService:
         draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._customer_receipt_executor.execute(draft, authorization)
         return result, authorization
+
+    def confirm_and_execute_supplier(self, token: str, draft_id: str, fingerprint: str):
+        if self._procurement_executor is None:
+            raise RuntimeError("Cadastro assistido de fornecedor não está configurado.")
+        draft = self._drafts.get(draft_id)
+        if getattr(draft, "operation_kind", "") != "SUPPLIER_CREATE":
+            raise TypeError("O rascunho confirmado não é um fornecedor.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        return self._procurement_executor.execute_supplier(draft, authorization), authorization
+
+    def confirm_and_execute_purchase_order(self, token: str, draft_id: str, fingerprint: str):
+        if self._procurement_executor is None:
+            raise RuntimeError("Criação assistida de pedido não está configurada.")
+        draft = self._drafts.get(draft_id)
+        if getattr(draft, "operation_kind", "") != "PURCHASE_ORDER_CREATE":
+            raise TypeError("O rascunho confirmado não é um pedido de compra.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        return self._procurement_executor.execute_order(draft, authorization), authorization
 
     def invalidate_confirmations(self) -> None:
         if self._confirmations is None:

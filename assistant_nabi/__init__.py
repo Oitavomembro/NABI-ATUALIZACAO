@@ -57,6 +57,13 @@ from .purchase_read_tools import (
     GET_PURCHASE_ORDER, LIST_PURCHASE_ORDERS, LIST_SUPPLIERS,
     register_purchase_read_tools,
 )
+from .procurement_drafts import (
+    PurchaseOrderDraft, PurchaseOrderDraftItem, PurchaseOrderDraftService,
+    PurchaseOrderItemRequest, SupplierRegistrationDraft,
+    SupplierRegistrationDraftService,
+)
+from .procurement_gateway import NabiCodeProcurementAssistantGateway
+from .procurement_tools import PREPARE_PURCHASE_ORDER, PREPARE_SUPPLIER
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -130,6 +137,15 @@ __all__ = [
     "LIST_PURCHASE_ORDERS",
     "GET_PURCHASE_ORDER",
     "register_purchase_read_tools",
+    "PurchaseOrderDraft",
+    "PurchaseOrderDraftItem",
+    "PurchaseOrderDraftService",
+    "PurchaseOrderItemRequest",
+    "SupplierRegistrationDraft",
+    "SupplierRegistrationDraftService",
+    "NabiCodeProcurementAssistantGateway",
+    "PREPARE_PURCHASE_ORDER",
+    "PREPARE_SUPPLIER",
     "OPEN_PRODUCT_SEARCH",
     "OPEN_MODULE_HUB",
     "register_ui_intent_tools",
