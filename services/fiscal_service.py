@@ -2999,13 +2999,15 @@ class FiscalService:
         *,
         operation: str,
         xml: bytes | str,
-        actor: str,
         access_key: str = "",
         model: str = "55",
         reservation_id: str = "",
         max_attempts: int = 5,
         retry_minutes: int = 5,
     ) -> dict[str, Any]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="enfileirar uma transmissão fiscal"
+        )
         operation = str(operation or "").strip().lower()
         if operation not in {"autorizacao", "consulta", "recibo", "evento", "inutilizacao"}:
             raise ValueError("Operação fiscal inválida para a fila de transmissão.")

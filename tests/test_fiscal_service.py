@@ -460,10 +460,10 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "0" * 18 + "65" + "0" * 22
         xml = f'<NFe xmlns="http://www.portalfiscal.inf.br/nfe"><infNFe Id="NFe{key}"/></NFe>'
         first = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+            operation="autorizacao", xml=xml, access_key=key, model="65"
         )
         second = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", access_key=key, model="65"
+            operation="autorizacao", xml=xml, access_key=key, model="65"
         )
         self.assertEqual(first["id"], second["id"])
         self.assertEqual(len(self.service.list_transmission_queue()), 1)
@@ -1577,7 +1577,7 @@ class FiscalServiceTests(unittest.TestCase):
             f'<infNFe Id="NFe{key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>'
         )
         queued = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="caixa", model="65", access_key=key,
+            operation="autorizacao", xml=xml, model="65", access_key=key,
         )
         created = datetime.fromisoformat(queued["created_at"])
         deadline = datetime.fromisoformat(queued["contingency_deadline_at"])
@@ -1875,7 +1875,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "1" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin")
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml)
         response_xml = f'<retEnviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><protNFe><infProt><cStat>100</cStat><xMotivo>Autorizado</xMotivo><chNFe>{key}</chNFe><nProt>123</nProt></infProt></protNFe></retEnviNFe>'
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: FiscalResponse(True, "100", "Autorizado", protocol="123", access_key=key, raw_xml=response_xml)
@@ -1900,7 +1900,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "2" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", max_attempts=2, retry_minutes=1
+            operation="autorizacao", xml=xml, max_attempts=2, retry_minutes=1
         )
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(TimeoutError("timeout"))
@@ -1915,7 +1915,27 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_fila_autorizacao_rejeita_xml_sem_chave(self):
         with self.assertRaisesRegex(ValueError, "chave de acesso"):
-            self.service.enqueue_transmission(operation="autorizacao", xml="<enviNFe/>", actor="admin")
+            self.service.enqueue_transmission(operation="autorizacao", xml="<enviNFe/>")
+
+    def test_enfileiramento_fiscal_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.enqueue_transmission(
+                operation="consulta", xml="<consSitNFe/>", actor="forjado"
+            )
+
+    def test_enfileiramento_fiscal_falha_fechado_antes_de_ler_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-enfileirar",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.enqueue_transmission(
+                    operation="consulta", xml="<consSitNFe/>"
+                )
+        listed.assert_not_called()
 
     def test_fila_nao_contorna_bloqueio_de_producao(self):
         self.service.save_config({
@@ -1926,7 +1946,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "0" * 18 + "65" + "0" * 22
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
         self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", model="65", max_attempts=1
+            operation="autorizacao", xml=xml, model="65", max_attempts=1
         )
         called = []
         original = self.service.transmit
@@ -1950,7 +1970,7 @@ class FiscalServiceTests(unittest.TestCase):
         connection.execute("INSERT INTO fiscal_sale_documents VALUES(?, 'CANCELADO_LOCAL')", (key,))
         connection.commit(); connection.close()
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
-        self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", model="65")
+        self.service.enqueue_transmission(operation="autorizacao", xml=xml, model="65")
         called = []
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: called.append(kwargs)
@@ -1965,7 +1985,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "29" + "1" * 42
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=xml, actor="admin", model="65"
+            operation="autorizacao", xml=xml, model="65"
         )
         cancelled = self.service.cancel_transmission(item["id"], reason="Venda cancelada")
         self.assertEqual(cancelled["cancelled_by"], "gerente")
@@ -2006,7 +2026,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "3" * 44
         other_key = "4" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", max_attempts=1)
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, max_attempts=1)
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: FiscalResponse(True, "100", "Autorizado", protocol="999", access_key=other_key, raw_xml="<ret/>")
         try:
@@ -2036,7 +2056,7 @@ class FiscalServiceTests(unittest.TestCase):
         key = "5" * 44
         original_xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
         item = self.service.enqueue_transmission(
-            operation="autorizacao", xml=original_xml, actor="admin", retry_minutes=1
+            operation="autorizacao", xml=original_xml, retry_minutes=1
         )
         calls = []
         response_xml = (
@@ -2077,7 +2097,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "6" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin", retry_minutes=1)
+        self.service.enqueue_transmission(operation="autorizacao", xml=xml, retry_minutes=1)
         responses = iter([
             FiscalResponse(False, "103", "Lote recebido", receipt="123", raw_xml="<ret/>"),
             FiscalResponse(False, "105", "Lote em processamento", receipt="123", raw_xml="<ret/>")
@@ -2107,7 +2127,7 @@ class FiscalServiceTests(unittest.TestCase):
         })
         key = "3" * 44
         xml = f'<enviNFe xmlns="http://www.portalfiscal.inf.br/nfe"><NFe><infNFe Id="NFe{key}" versao="4.00"/></NFe></enviNFe>'
-        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml, actor="admin")
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=xml)
         original = self.service.transmit
         self.service.transmit = lambda **_: (_ for _ in ()).throw(
             FiscalTransmissionUnknownError("timeout após envio")
@@ -2129,7 +2149,6 @@ class FiscalServiceTests(unittest.TestCase):
         item = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
-            actor="historico",
         )
         rows = self.service.list_transmission_queue()
         rows[0]["status"] = "RESPOSTA_DESCONHECIDA"
@@ -2156,7 +2175,6 @@ class FiscalServiceTests(unittest.TestCase):
         item = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<enviNFe><NFe><infNFe Id="NFe{key}"/></NFe></enviNFe>',
-            actor="admin",
         )
         rows = self.service.list_transmission_queue()
         rows[0]["transmission_started_at"] = datetime.now(timezone.utc).isoformat()
@@ -2173,7 +2191,7 @@ class FiscalServiceTests(unittest.TestCase):
     def test_consulta_forcada_nao_reenvia_autorizacao_sem_recibo(self):
         item = self.service.enqueue_transmission(
             operation="autorizacao", xml=f'<NFe><infNFe Id="NFe{"7" * 44}"/></NFe>',
-            access_key="7" * 44, actor="admin",
+            access_key="7" * 44,
         )
         with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
             self.service.force_receipt_check(item["id"])
@@ -2200,12 +2218,12 @@ class FiscalServiceTests(unittest.TestCase):
         contingency = self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<NFe><infNFe Id="NFe{contingency_key}"><ide><mod>65</mod><tpEmis>9</tpEmis></ide></infNFe></NFe>',
-            access_key=contingency_key, model="65", actor="caixa",
+            access_key=contingency_key, model="65",
         )
         self.service.enqueue_transmission(
             operation="autorizacao",
             xml=f'<NFe><infNFe Id="NFe{normal_key}"><ide><mod>65</mod><tpEmis>1</tpEmis></ide></infNFe></NFe>',
-            access_key=normal_key, model="65", actor="caixa",
+            access_key=normal_key, model="65",
         )
         result = self.service.retry_contingency_batch()
         self.assertEqual(result["scheduled"], 1)
@@ -2232,10 +2250,10 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_processamento_por_ids_nao_transmite_outros_pendentes(self):
         first = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe/>", actor="admin"
+            operation="consulta", xml="<consSitNFe/>"
         )
         second = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe><xServ>CONSULTAR</xServ></consSitNFe>", actor="admin"
+            operation="consulta", xml="<consSitNFe><xServ>CONSULTAR</xServ></consSitNFe>"
         )
         original = self.service.transmit
         self.service.transmit = lambda **_: FiscalResponse(True, "100", "Consulta concluída", raw_xml="<ret/>")
@@ -2251,7 +2269,7 @@ class FiscalServiceTests(unittest.TestCase):
 
     def test_reenvio_manual_reabre_item_falhado(self):
         item = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe/>", actor="admin", max_attempts=1
+            operation="consulta", xml="<consSitNFe/>", max_attempts=1
         )
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(RuntimeError("indisponível"))
