@@ -1820,3 +1820,21 @@ importação no banco de produção antes da aprovação visual e de um backup m
   negado para perfis sem `technical:audit`. Nenhum push foi feito porque a etapa
   ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
   instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Identificação Comercial da Loja Qt
+
+- branch/worktree: `codex/identidade-loja-qt`, derivada da Auditoria
+  `6de895c`, sem alterar a integração;
+- implementação `fa22971` — `feat: adiciona identidade comercial da loja ao Qt`;
+- a aba Loja expõe somente `nome_loja` e `rodape_cupom`, que são as duas chaves
+  comerciais realmente consumidas pelos comprovantes e PDFs existentes;
+- nome e rodapé são normalizados, possuem limites de 120/500 caracteres,
+  rejeitam controles inválidos e são gravados juntos por uma única transação;
+- CNPJ, emitente, certificado, ambiente, numeração e qualquer parâmetro fiscal
+  permanecem fora dessa interface e não são lidos nem alterados;
+- testes focados: `34 passed`; regressão Qt, Commercial, recibos, PDF e startup:
+  `357 passed`, `367 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual no perfil TESTE e geração de comprovante
+  não fiscal para confirmar nome/rodapé. Nenhum push foi feito porque a etapa
+  ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
+  instalador e banco real não foram alterados.
