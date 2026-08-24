@@ -1936,3 +1936,40 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   consulta posterior e reflexos comerciais. O vídeo atual não cobre essa prova;
 - nenhum dado visível do certificado, chave completa de acesso, CNPJ ou nome de
   pessoa foi transportado para o repositório. Produção fiscal continua bloqueada.
+
+### Evidência operacional externa — venda e emissão de NFC-e
+
+- vídeo recebido em `2026-08-24`, duração `00:00:56.02`, resolução `1600x900`,
+  `3.359` quadros e SHA-256
+  `C50D2A3334A2449EE4162C676144FF499C7DE73CCF330B5C2D2C3C99FA8B11CC`;
+- a gravação mostra outro emissor em sessão remota AnyDesk e serve apenas como
+  referência operacional/visual. Não comprova conformidade do NabiCode, não
+  substitui documentação oficial e não autoriza produção fiscal;
+- foram observadas duas vendas de um item: a primeira usa um fechamento rápido
+  com valor pago já preenchido; a segunda abre a tela completa de pagamento,
+  com lista de formas, valor, troco, desconto, acréscimo e restante;
+- o fluxo visível é: localizar produto, selecionar item, formar o cupom, revisar
+  quantidade/valor/total, escolher o fechamento, informar pagamento, aguardar a
+  emissão, abrir a pré-visualização do DANFE NFC-e e somente então retornar ao
+  estado `CAIXA LIVRE` para nova venda;
+- o DANFE mostrado contém QR Code, chave/consulta, protocolo e data/hora de
+  autorização, mas esses valores pertencem ao estabelecimento filmado e não
+  foram transcritos para o projeto;
+- experiência útil para o NabiCode: fechamento rápido e pagamento detalhado são
+  duas apresentações da mesma operação fiscal; nenhuma delas pode criar duas
+  vendas, transmitir duas vezes ou marcar sucesso antes de uma resposta fiscal
+  terminal comprovada. Impressão/visualização é pós-autorização e não deve ser
+  confundida com a autoridade da SEFAZ;
+- o vídeo não exibe XML assinado/enviado, ambiente de homologação, `cStat`/
+  `xMotivo`, tratamento de rejeição, timeout, resposta desconhecida, consulta de
+  recibo/chave, contingência, reinício, reimpressão ou reconciliação. Esses itens
+  permanecem PENDENTES e não podem ser inferidos da animação `Aguarde` nem do
+  DANFE visível;
+- também não há demonstração de múltiplos itens, consumidor identificado,
+  desconto/acréscimo efetivo, pagamento misto, cartão/PIX, cancelamento da tela
+  de pagamento, falha de impressão ou recuperação após queda. Vídeos adicionais
+  podem documentar esses fluxos, mas regras fiscais continuam dependentes de
+  fonte oficial e testes próprios;
+- nenhum dado pessoal, certificado, chave completa, CNPJ, chave de acesso ou
+  protocolo visível foi transportado. Nenhuma chamada à SEFAZ foi executada por
+  esta auditoria e produção fiscal continua bloqueada.
