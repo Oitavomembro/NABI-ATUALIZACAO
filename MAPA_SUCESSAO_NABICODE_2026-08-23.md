@@ -1683,3 +1683,25 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendências: conexão ao shell/hub permanece coordenada fora deste checkpoint e
   homologação visual/manual no Windows ainda é necessária. IA, Fiscal/SEFAZ,
   Fichário, licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Fornecedores e Compras Qt
+
+- branch/worktree: `codex/fornecedores-compras-qt`, derivada do consolidado
+  `306abfc`, sem alterar a integração;
+- fachada em `a164620` — `feat: protege fornecedores e compras no Qt`:
+  `PurchaseManagementService` exige sessão e `compras:view/create/receive`,
+  deriva o ator internamente e limita consultas a 200 pedidos;
+- interface em `e7aead7` — `feat: adiciona fornecedores e compras no Qt`:
+  lista por status, fornecedor, novo pedido com itens/IDs reais, detalhes e
+  preparação de recebimento parcial com conta a pagar opcional;
+- o recebimento chama exatamente uma vez `CompraService.receber`; estoque,
+  custo, financeiro, auditoria e idempotência permanecem exclusivamente na
+  transação oficial já existente, sem persistência ou journal na GUI;
+- visual, colunas, nomes e ações seguem a tela Legacy; Enter executa uma ação,
+  Shift+Enter retorna, Esc fecha a janela corrente e auto-repeat é consumido;
+- testes focados: `29 passed`; regressão ampliada de Compras, Estoque,
+  Financeiro, Produtos e decimais: `85 passed`; `compileall` e
+  `git diff --check` aprovados;
+- pendências: conexão ao shell/hub permanece fora deste checkpoint; homologação
+  manual com fornecedores/produtos de TESTE é necessária. IA, Fiscal/SEFAZ,
+  Fichário, licenciamento, instalador e banco real não foram alterados.
