@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import sys
-from pathlib import Path
 
 from PySide6.QtCore import QDate, QDateTime, QTimer, Qt
 from PySide6.QtWidgets import (
@@ -141,7 +139,6 @@ class FicharioWindow(QMainWindow):
         self.footer.setText(
             f"{self.profile.label} - EDICAO FICHARIO - usuario "
             f"{self.session.user.display_name}   •   DATA/HORA: {current}"
-            f"   •   BUILD: {self._build_info()}"
         )
 
     def open_system_center(self) -> None:
@@ -371,23 +368,8 @@ class FicharioWindow(QMainWindow):
         )
 
     def show_settings(self) -> None:
-        build_info = self._build_info()
         QMessageBox.information(
             self, "Instalacao Fichario",
             f"Perfil: {self.profile.label}\nDados: {self.profile.app_dir}\n"
-            f"Banco: {self.database.database_path}\nBuild: {build_info}",
+            f"Banco: {self.database.database_path}",
         )
-
-    @staticmethod
-    def _build_info() -> str:
-        install = Path(sys.executable).resolve().parent if getattr(sys, "frozen", False) else Path(__file__).resolve().parents[1]
-        build_info = "desenvolvimento local"
-        for candidate in (
-            install / "BUILD_INFO.txt", install / "_internal" / "BUILD_INFO.txt",
-            install / "build_output" / "fichario" / "BUILD_INFO.txt",
-        ):
-            try:
-                build_info = candidate.read_text(encoding="utf-8-sig").strip(); break
-            except OSError:
-                continue
-        return build_info

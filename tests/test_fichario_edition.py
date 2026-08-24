@@ -133,7 +133,7 @@ def test_menu_visivel_e_backup_diario_configuravel():
     assert "Aplicar atualização assinada" in shell
 
 
-def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
+def test_build_fichario_inclui_helper_externo_e_metadado_interno():
     root = Path(__file__).parents[1]
     build = (root / "build_tools/build_fichario.py").read_text(encoding="utf-8")
     spec = (root / "build_tools/pyinstaller/nabicode_fichario.spec").read_text(encoding="utf-8")
@@ -149,7 +149,8 @@ def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
     assert "validate_installed_files" in runtime
     assert "ROLLBACK_PENDENTE" in runtime
     shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
-    assert 'BUILD: {self._build_info()}' in shell
+    assert "BUILD:" not in shell
+    assert "Build:" not in shell
 
 
 def test_shell_exibe_relogio_do_windows_e_exclusao_cadastral_reforcada():
