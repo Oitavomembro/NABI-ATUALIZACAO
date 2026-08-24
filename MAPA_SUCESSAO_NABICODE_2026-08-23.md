@@ -1504,3 +1504,19 @@ importação no banco de produção antes da aprovação visual e de um backup m
   corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
   permanente de atualização por cerimônia segura para permitir R21→R22 sem
   reconstruir instalador. Nenhum bypass de assinatura foi introduzido.
+
+### Checkpoint isolado — Relatórios comerciais Qt
+
+- implementação de origem: `2c6b5b7` — `feat: adiciona relatorios comerciais no Qt`;
+- `ReportReadPort`, `ReportApplicationService` e DTOs imutáveis transportam
+  consultas, resumos, indicadores e exportações sem expor conexão ou SQL à GUI;
+- `NabiCodeReportGateway` reutiliza o `ReportService` oficial para filtros,
+  autorização, auditoria, totalização e exportação atômica CSV/XLSX/PDF;
+- relatório `nfe` não é exposto pela fachada comercial; Central Fiscal,
+  Fiscal/SEFAZ, XML e regras tributárias permanecem fora desse diálogo;
+- Enter executa uma etapa, Shift+Enter retorna, auto-repeat é consumido, F5
+  atualiza e Esc fecha somente o diálogo;
+- validação na origem: `39 passed`; regressão relacionada: `293 passed`,
+  `359 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: composição global por sessão/permissão e homologação visual e das
+  exportações no Windows, sem transportar o agendador Tk para a GUI Qt.
