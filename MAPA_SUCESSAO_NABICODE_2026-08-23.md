@@ -1094,6 +1094,27 @@ Não confundir automação inteligente com autoridade. A Nabi poderá planejar, 
   externo conhecido do BrazilFiscalReport;
 - `compileall` e `git diff --check`: aprovados.
 
+#### Endurecimento de autenticação e confirmação da Nabi
+
+- `711d8a6` — `fix: limita tentativas de autenticacao`;
+- cinco falhas consecutivas por usuário criam bloqueio persistente de 60
+  segundos, compartilhado por reinícios e instâncias; tentativa durante o
+  bloqueio é recusada e auditada, e autenticação válida anterior ao limite
+  limpa o contador;
+- `26b1704` — `fix: audita confirmacoes assistidas da Nabi`;
+- revisão do rascunho, confirmação humana e consumo da autorização agora são
+  eventos distintos, correlacionados por operação, draft, fingerprint, usuário
+  e sessão, sem transportar senha ou conteúdo comercial livre;
+- a composição real usa auditoria estrita: falha de persistência impede emitir
+  ou consumir autorização e, portanto, bloqueia a mutação assistida;
+- validações focadas: `72 passed`, `14 subtests passed` para autenticação e
+  `182 passed`, `38 subtests passed` para Nabi/auditoria;
+- regressão integral final: `2105 passed`, `1 skipped`, `444 subtests passed`,
+  zero falhas e um aviso externo conhecido do BrazilFiscalReport;
+- `compileall` e `git diff --check`: aprovados;
+- próximo checkpoint crítico: substituir a senha mestre universal sem quebrar
+  autorização de instalação, atualização administrativa ou barreiras fiscais.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
