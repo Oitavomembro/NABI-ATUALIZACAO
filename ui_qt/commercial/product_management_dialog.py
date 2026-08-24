@@ -18,11 +18,14 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog{background:#0d1117;color:#f0f6fc;font-size:14px} QLabel{color:#f0f6fc}
-QLineEdit,QComboBox,QTableWidget{background:#161b22;color:#f0f6fc;border:1px solid #30363d;border-radius:6px;selection-background-color:#1f6feb}
-QLineEdit,QComboBox{min-height:38px;padding:0 8px} QPushButton{background:#30363d;color:#f0f6fc;border:0;border-radius:6px;min-height:40px;padding:0 13px;font-weight:800}
-QPushButton#primary{background:#238636} QPushButton#warning{background:#9e6a03}
-QHeaderView::section{background:#21262d;color:#f0f6fc;padding:10px;border:0;border-right:1px solid #30363d;font-weight:800}
+QDialog{background:#090d13;color:#edf7ff;font-size:14px} QLabel{color:#edf7ff}
+QLineEdit,QComboBox,QTableWidget{background:#111923;color:#edf7ff;border:1px solid #263b50;border-radius:7px;selection-background-color:#1267a8}
+QLineEdit,QComboBox{min-height:40px;padding:0 9px} QPushButton{background:#202e3c;color:#edf7ff;border:1px solid #31506a;border-radius:7px;min-height:40px;padding:0 13px;font-weight:800}
+QPushButton:hover{background:#29445b;border-color:#37b9ef}
+QPushButton:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus{border:1px solid #38c8ff}
+QPushButton#primary{background:#1267a8;border-color:#38c8ff} QPushButton#warning{background:#73581a;border-color:#d9a928}
+QHeaderView::section{background:#182531;color:#dff7ff;padding:10px;border:0;border-right:1px solid #2b5069;border-bottom:1px solid #38c8ff;font-weight:800}
+QTableWidget{gridline-color:#263b50;alternate-background-color:#0d141c}
 """
 
 
@@ -65,9 +68,12 @@ class ProductEditorDialog(QDialog):
         if product:
             self.current_stock.setEnabled(False)
             self.current_stock.setToolTip("Use Movimentar estoque para alterar o saldo.")
+        self.description.setStyleSheet(
+            "font-size:18px;font-weight:900;color:#67dcff;border:2px solid #38c8ff"
+        )
         for label, widget in (
-            ("Código", self.code), ("Código de barras", self.barcode),
-            ("Nome / descrição*", self.description), ("Tipo", self.product_type),
+            ("Nome / descrição*", self.description), ("Código", self.code),
+            ("Código de barras", self.barcode), ("Tipo", self.product_type),
             ("Preço de venda", self.sale_price), ("Preço de custo", self.cost_price),
             ("Estoque inicial" if not product else "Estoque atual", self.current_stock),
             ("Estoque mínimo", self.minimum_stock), ("", self.allow_negative),
@@ -132,7 +138,7 @@ class StockMovementDialog(QDialog):
         self.setWindowTitle("Movimentar estoque"); self.setMinimumWidth(560); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel(product.description)
-        title.setStyleSheet("font-size:21px;font-weight:900;color:#00d084")
+        title.setStyleSheet("font-size:21px;font-weight:900;color:#67dcff")
         root.addWidget(title); root.addWidget(QLabel(f"Saldo atual: {_quantity_text(product.current_stock)}"))
         form = QFormLayout(); self.kind = QComboBox(); self.kind.addItems(("ENTRADA", "SAÍDA", "AJUSTE DE SALDO"))
         self.amount = QLineEdit(); self.amount.setPlaceholderText("0,0000")
@@ -215,23 +221,33 @@ class ProductManagementDialog(QDialog):
         self.setWindowTitle("Produtos e estoque"); self.resize(1220, 760); self.setMinimumSize(940, 620)
         self.setStyleSheet(STYLE); root = QVBoxLayout(self)
         title = QLabel("PRODUTOS E ESTOQUE")
-        title.setStyleSheet("font-size:25px;font-weight:900;color:#00d084"); root.addWidget(title)
+        title.setObjectName("sectionTitle")
+        title.setStyleSheet("font-size:25px;font-weight:900;color:#67dcff;border-bottom:2px solid #1687bd;padding:0 0 8px 2px"); root.addWidget(title)
         guidance = QLabel("Nome, preço e estoque em destaque. Cadastros e movimentos usam IDs reais e os serviços oficiais.")
         guidance.setStyleSheet("color:#8b949e"); root.addWidget(guidance)
-        search_row = QHBoxLayout(); self.search = QLineEdit(); self.search.setPlaceholderText("Buscar por nome, código ou código de barras")
+        search_row = QHBoxLayout(); self.search = QLineEdit(); self.search.setObjectName("productSearch"); self.search.setPlaceholderText("Buscar por nome, código ou código de barras")
         refresh = QPushButton("Pesquisar  [Enter]"); refresh.clicked.connect(self.reload)
         search_row.addWidget(self.search, 1); search_row.addWidget(refresh); root.addLayout(search_row)
-        self.table = QTableWidget(0, 7); self.table.setHorizontalHeaderLabels(
+        self.table = QTableWidget(0, 7); self.table.setObjectName("productTable"); self.table.setAlternatingRowColors(True); self.table.setHorizontalHeaderLabels(
             ("Código", "Nome / descrição", "Preço", "Estoque", "Mínimo", "Tipo", "Situação")
         )
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.verticalHeader().setDefaultSectionSize(42); self.table.verticalHeader().setVisible(False)
-        header = self.table.horizontalHeader(); header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for column in (2, 3): header.setSectionResizeMode(column, QHeaderView.ResizeMode.ResizeToContents)
+        header = self.table.horizontalHeader(); header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.installEventFilter(self); self.table.doubleClicked.connect(self.edit_product)
         root.addWidget(self.table, 1)
+        self.selected_details = QLabel("Selecione um produto para conferir nome, preço e estoque.")
+        self.selected_details.setObjectName("productSelectedDetails")
+        self.selected_details.setWordWrap(True)
+        self.selected_details.setStyleSheet(
+            "background:#101a24;border:1px solid #2f6f91;border-left:4px solid #38c8ff;"
+            "border-radius:7px;padding:13px;color:#edf7ff;font-size:17px;font-weight:800;"
+        )
+        root.addWidget(self.selected_details)
+        self.table.itemSelectionChanged.connect(self._show_selected_details)
         buttons = QHBoxLayout(); self.new = QPushButton("Novo  [F3]"); self.edit = QPushButton("Editar  [F4]")
         self.move = QPushButton("Movimentar estoque  [F6]"); self.history = QPushButton("Histórico  [F7]")
         close = QPushButton("Fechar  [Esc]"); self.new.setObjectName("primary"); self.move.setObjectName("warning")
@@ -284,6 +300,27 @@ class ProductManagementDialog(QDialog):
                 self.table.setItem(row, column, cell)
             if product.product_id == selected: selected_row = row
         if self.table.rowCount(): self.table.selectRow(selected_row if selected_row is not None else 0)
+        else: self._show_selected_details()
+
+    def _show_selected_details(self) -> None:
+        product_id = self.selected_id()
+        product = next(
+            (item for item in self._products if item.product_id == product_id), None
+        )
+        if product is None:
+            self.selected_details.setText(
+                "Selecione um produto para conferir nome, preço e estoque."
+            )
+            return
+        status = (
+            "INATIVO" if not product.active else
+            "ESTOQUE BAIXO" if product.current_stock <= product.minimum_stock else "ATIVO"
+        )
+        self.selected_details.setText(
+            f"{product.description}   •   Código: {product.code or '—'}   •   "
+            f"Preço: {_money(product.sale_price)}   •   "
+            f"Estoque: {_quantity_text(product.current_stock)}   •   {status}"
+        )
 
     def _selected(self):
         product_id = self.selected_id()

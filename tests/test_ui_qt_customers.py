@@ -8,7 +8,7 @@ import pytest
 pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QHeaderView
 
 from commercial.application.customer_dto import (
     CustomerDetails, CustomerPurchaseBehavior, CustomerStatement,
@@ -80,6 +80,24 @@ def test_lista_transporta_id_real_e_exibe_saldos(app):
     assert "CPF:" not in dialog.selected_details.text()
     assert "Telefone: 71999990000" in dialog.selected_details.text()
     assert dialog.width() >= 1180 and dialog.height() >= 720
+    assert dialog.search.objectName() == "customerSearch"
+    assert dialog.table.objectName() == "customerTable"
+    assert dialog.table.alternatingRowColors()
+    assert dialog.table.horizontalHeader().sectionResizeMode(1) == QHeaderView.ResizeMode.Stretch
+    assert dialog.selected_details.objectName() == "customerSelectedDetails"
+    assert dialog.delete_button.objectName() == "destructive"
+    dialog.close()
+
+
+def test_visual_clientes_prioriza_ficha_e_dados_reais_sem_regra_nova(app):
+    dialog = CustomerManagementDialog(Service())
+    assert dialog.table.horizontalHeaderItem(0).text() == "Ficha"
+    assert dialog.selected_customer_id() == 7
+    details = dialog.selected_details.text()
+    assert details.startswith("Ficha 5507 — MARIA")
+    assert "Endereço: RUA A" in details
+    assert "#38c8ff" in dialog.selected_details.styleSheet()
+    assert "#d84a52" in dialog.styleSheet()
     dialog.close()
 
 

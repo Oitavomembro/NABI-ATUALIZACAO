@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtWidgets import QApplication, QMessageBox, QHeaderView
 
 from commercial.application.product_dto import ProductDetails
 from ui_qt.commercial.product_management_dialog import (
@@ -70,6 +70,24 @@ def test_lista_prioriza_nome_preco_estoque_e_preserva_product_id():
     assert dialog.table.item(0, 2).text() == "R$ 125,50"
     assert dialog.table.item(0, 3).text() == "4"
     assert dialog.table.item(0, 1).font().bold()
+    assert dialog.search.objectName() == "productSearch"
+    assert dialog.table.objectName() == "productTable"
+    assert dialog.table.alternatingRowColors()
+    assert dialog.table.horizontalHeader().sectionResizeMode(1) == QHeaderView.ResizeMode.Stretch
+    assert dialog.selected_details.objectName() == "productSelectedDetails"
+    assert "MESA LEGACY" in dialog.selected_details.text()
+    assert "Preço: R$ 125,50" in dialog.selected_details.text()
+    assert "Estoque: 4" in dialog.selected_details.text()
+    dialog.close()
+
+
+def test_visual_produtos_mantem_id_real_e_destaca_dados_operacionais():
+    dialog = ProductManagementDialog(Application())
+    assert dialog.selected_id() == 17
+    assert "Código: M17" in dialog.selected_details.text()
+    assert "ATIVO" in dialog.selected_details.text()
+    assert "#38c8ff" in dialog.selected_details.styleSheet()
+    assert "#090d13" in dialog.styleSheet()
     dialog.close()
 
 

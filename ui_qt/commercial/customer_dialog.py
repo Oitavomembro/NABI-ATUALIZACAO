@@ -16,16 +16,22 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; }
+QDialog { background:#090d13; color:#edf7ff; }
 QLabel { color:#f0f6fc; }
-QLineEdit,QTextEdit,QTableWidget { background:#161b22; color:#f0f6fc;
- border:1px solid #30363d; border-radius:6px; selection-background-color:#1f6feb; }
+QLineEdit,QTextEdit,QComboBox,QTableWidget { background:#111923; color:#edf7ff;
+ border:1px solid #263b50; border-radius:7px; selection-background-color:#1267a8; }
 QLineEdit { min-height:38px; padding:0 9px; }
-QPushButton { background:#30363d; color:#f0f6fc; border:0; border-radius:6px;
+QPushButton { background:#202e3c; color:#edf7ff; border:1px solid #31506a; border-radius:7px;
  min-height:38px; padding:0 14px; font-weight:700; }
-QPushButton#primary { background:#1f6feb; }
-QHeaderView::section { background:#21262d; color:#f0f6fc; padding:9px;
- border:0; border-right:1px solid #30363d; font-weight:700; }
+QPushButton:hover { background:#29445b; border-color:#37b9ef; }
+QPushButton:focus,QLineEdit:focus,QComboBox:focus,QTableWidget:focus {
+ border:1px solid #38c8ff; }
+QPushButton#primary { background:#1267a8; border-color:#38c8ff; }
+QPushButton#destructive { background:#7a252b; border-color:#d84a52; }
+QHeaderView::section { background:#182531; color:#dff7ff; padding:9px;
+ border:0; border-right:1px solid #2b5069; border-bottom:1px solid #38c8ff;
+ font-weight:700; }
+QTableWidget { gridline-color:#263b50; alternate-background-color:#0d141c; }
 """
 
 
@@ -59,7 +65,7 @@ class CustomerEditorDialog(QDialog):
         )
         self.record.setStyleSheet(
             f"font-size:{max(20, _customer_font_size() + 4)}px;font-weight:900;"
-            "color:#00d084;border:2px solid #00d084"
+            "color:#67dcff;border:2px solid #38c8ff"
         )
         self.name = QLineEdit(customer.name if customer else "")
         self.code = QLineEdit(customer.code if customer else "")
@@ -145,7 +151,7 @@ class CustomerStatementDialog(QDialog):
         layout = QVBoxLayout(self)
         customer = statement.customer
         title = QLabel(f"FICHA {customer.record_number or '—'} — {customer.name}")
-        title.setStyleSheet("font-size:21px;font-weight:800;color:#00d084")
+        title.setStyleSheet("font-size:21px;font-weight:800;color:#67dcff")
         layout.addWidget(title)
         contact = QLabel(
             f"Endereço: {customer.address or '—'}   •   "
@@ -199,7 +205,11 @@ class CustomerManagementDialog(QDialog):
         self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
         title = QLabel("CLIENTES E FICHAS")
-        title.setStyleSheet("font-size:23px;font-weight:800;color:#00d084")
+        title.setObjectName("sectionTitle")
+        title.setStyleSheet(
+            "font-size:25px;font-weight:900;color:#67dcff;"
+            "border-bottom:2px solid #1687bd;padding:0 0 8px 2px"
+        )
         layout.addWidget(title)
         if filter_title:
             active_filter = QLabel(f"Filtro ativo: {filter_title}")
@@ -207,6 +217,7 @@ class CustomerManagementDialog(QDialog):
             layout.addWidget(active_filter)
         search_row = QHBoxLayout()
         self.search = QLineEdit()
+        self.search.setObjectName("customerSearch")
         self.search.setPlaceholderText(
             "Buscar por ficha, código, nome, CPF, RG, telefone ou endereço"
         )
@@ -222,6 +233,8 @@ class CustomerManagementDialog(QDialog):
         search_row.addWidget(self.refresh_button)
         layout.addLayout(search_row)
         self.table = QTableWidget(0, 6)
+        self.table.setObjectName("customerTable")
+        self.table.setAlternatingRowColors(True)
         self.table.setHorizontalHeaderLabels(
             [
                 "Ficha", "Nome", "Saldo\ndevedor", "Compras\nsem atraso",
@@ -245,10 +258,9 @@ class CustomerManagementDialog(QDialog):
         header = self.table.horizontalHeader()
         header.setMinimumHeight(58)
         header.setDefaultAlignment(Qt.AlignmentFlag.AlignCenter)
-        header.setSectionResizeMode(QHeaderView.ResizeMode.Fixed)
+        header.setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         header.setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
-        for column, width in ((0, 90), (2, 145), (3, 145), (4, 145), (5, 145)):
-            self.table.setColumnWidth(column, width)
+        self.table.setColumnWidth(0, 96)
         self.table.doubleClicked.connect(self.open_statement)
         self.table.installEventFilter(self)
         self.search.installEventFilter(self)
@@ -260,10 +272,11 @@ class CustomerManagementDialog(QDialog):
         self._apply_customer_font(_customer_font_size())
         layout.addWidget(self.table, 1)
         self.selected_details = QLabel("Selecione um cliente para ver o endereço.")
+        self.selected_details.setObjectName("customerSelectedDetails")
         self.selected_details.setWordWrap(True)
         self.selected_details.setStyleSheet(
-            "background:#161b22;border:1px solid #30363d;border-radius:7px;"
-            "padding:12px;color:#f0f6fc;font-size:18px;font-weight:800;"
+            "background:#101a24;border:1px solid #2f6f91;border-left:4px solid #38c8ff;"
+            "border-radius:7px;padding:13px;color:#edf7ff;font-size:18px;font-weight:800;"
         )
         layout.addWidget(self.selected_details)
         self.table.itemSelectionChanged.connect(self._show_selected_details)
@@ -272,6 +285,7 @@ class CustomerManagementDialog(QDialog):
         self.edit_button = QPushButton("Editar selecionado  [F4]")
         self.statement_button = QPushButton("Abrir ficha  [Enter]")
         self.delete_button = QPushButton("Excluir cadastro vazio  [Del]")
+        self.delete_button.setObjectName("destructive")
         close = QPushButton("Fechar  [Esc]")
         self.new_button.setObjectName("primary")
         self.new_button.clicked.connect(self.new_customer)
