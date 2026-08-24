@@ -1419,3 +1419,20 @@ importação no banco de produção antes da aprovação visual e de um backup m
   Qt ou FICHÁRIO retornem silenciosamente à versão anterior;
 - validação focada: `25 passed`; `compileall` e `git diff --check` aprovados;
 - nenhuma regra fiscal, dado real ou comunicação SEFAZ foi alterada.
+
+### Checkpoint IA Nabi — confirmação mutável opaca e de uso único
+
+- implementação: `7b798bb` — `fix: torna confirmacoes da Nabi de uso unico`;
+- a auditoria adversarial comprovou que o PDV ignorava o objeto de autorização e
+  que Compras/entrada de NF-e aceitavam objetos fabricáveis fora do serviço de
+  confirmação;
+- o broker agora emite um grant opaco, temporário e de uso único, vinculado ao
+  rascunho, fingerprint, operação, usuário, sessão e capacidade exigida;
+- PDV, recebimento de compra e entrada local por NF-e recusam ausência, objeto
+  manual, objeto falso com método `consume`, operação/sessão divergente e replay;
+- todas as dependências e conteúdos verificáveis são revalidados antes de o grant
+  ser consumido; as chaves idempotentes oficiais foram preservadas;
+- validação consolidada do checkpoint: `132 passed`, `38 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma venda é finalizada pela Nabi: venda confirmada apenas carrega o
+  rascunho no PDV e continua exigindo Pagamentos e confirmação no fluxo oficial.
