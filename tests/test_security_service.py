@@ -48,6 +48,29 @@ class SecurityServiceTests(unittest.TestCase):
         self.service.set_user_active("caixa", False)
         self.assertIsNone(self.service.authenticate("caixa", "senha123"))
 
+    def test_cinco_falhas_bloqueiam_persistentemente_outra_instancia(self):
+        self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
+        for _ in range(5):
+            self.assertIsNone(self.service.authenticate("caixa", "errada"))
+        other = SecurityService(self.factory)
+        self.assertIsNone(other.authenticate("caixa", "senha123"))
+        connection = self.factory()
+        details = [row[0] for row in connection.execute(
+            "SELECT detalhes FROM log_acesso_admin ORDER BY id DESC LIMIT 2"
+        )]
+        connection.close()
+        self.assertTrue(any("LOGIN_BLOQUEADO" in item for item in details))
+
+    def test_login_valido_limpa_falhas_anteriores(self):
+        self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
+        for _ in range(4):
+            self.assertIsNone(self.service.authenticate("caixa", "errada"))
+        self.assertIsNotNone(self.service.authenticate("caixa", "senha123"))
+        self.service.logout()
+        for _ in range(4):
+            self.assertIsNone(self.service.authenticate("caixa", "errada"))
+        self.assertIsNotNone(self.service.authenticate("caixa", "senha123"))
+
     def test_outra_instancia_revoga_sessao_imediatamente(self):
         self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
         self.assertIsNotNone(self.service.authenticate("caixa", "senha123"))

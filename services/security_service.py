@@ -44,6 +44,9 @@ class SecurityService:
     """Autenticação e autorização persistidas em `configuracoes`, sem alterar o schema."""
 
     CONFIG_KEY = "security_state_v1"
+    LOGIN_THROTTLE_KEY = "security_login_throttle_v1"
+    MAX_LOGIN_FAILURES = 5
+    LOGIN_COOLDOWN_SECONDS = 60
     MASTER_PASSWORD_SHA256 = "f89df8c2689cb179a06efafecef653e12f99b525d12dbeb1ed3ff0484faebc57"
 
     def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int = 15) -> None:
@@ -214,6 +217,9 @@ class SecurityService:
 
     def authenticate(self, username: str, password: str) -> SecuritySession | None:
         username = self._normalize_username(username)
+        if self._login_is_blocked(username):
+            self._log_login(username, False, "LOGIN_BLOQUEADO")
+            return None
         state = self._load()
         if self.verify_master_password(password):
             data = state["users"].get("admin") or next((item for item in state["users"].values() if item.get("active") and item.get("profile") == "ADMIN"), None)
@@ -221,15 +227,71 @@ class SecurityService:
                 user = SecurityUser("admin", data.get("display_name") or "Administrador", "ADMIN", True)
                 now = datetime.now(); self.session = SecuritySession(user, now, now)
                 self._log_login("admin", True, "LOGIN_MESTRE")
+                self._record_login_attempt(username, True)
                 return self.session
         data = state["users"].get(username)
         success = bool(data and data.get("active") and self.verify_password(password, data.get("password", {})))
         self._log_login(username, success, "LOGIN")
         if not success:
+            self._record_login_attempt(username, False)
             return None
+        self._record_login_attempt(username, True)
         user = SecurityUser(username, data.get("display_name") or username, data.get("profile") or "OPERADOR", True)
         now = datetime.now(); self.session = SecuritySession(user, now, now)
         return self.session
+
+    def _login_is_blocked(self, username: str, *, now: datetime | None = None) -> bool:
+        now = now or datetime.now()
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.LOGIN_THROTTLE_KEY,)
+            ).fetchone()
+            data = json.loads((row[0] if row else "") or "{}")
+            blocked_until = str((data.get(username) or {}).get("blocked_until") or "")
+            if not blocked_until:
+                return False
+            return now < datetime.fromisoformat(blocked_until)
+        except (ValueError, TypeError, json.JSONDecodeError):
+            return True
+        finally:
+            connection.close()
+
+    def _record_login_attempt(
+        self, username: str, success: bool, *, now: datetime | None = None
+    ) -> None:
+        now = now or datetime.now()
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.LOGIN_THROTTLE_KEY,)
+            ).fetchone()
+            data = json.loads((row[0] if row else "") or "{}")
+            if success:
+                data.pop(username, None)
+            else:
+                previous = data.get(username) or {}
+                failures = int(previous.get("failures") or 0) + 1
+                blocked_until = ""
+                if failures >= self.MAX_LOGIN_FAILURES:
+                    blocked_until = (
+                        now + timedelta(seconds=self.LOGIN_COOLDOWN_SECONDS)
+                    ).isoformat(timespec="seconds")
+                    failures = 0
+                data[username] = {
+                    "failures": failures, "blocked_until": blocked_until,
+                }
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.LOGIN_THROTTLE_KEY, json.dumps(data, sort_keys=True)),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
 
     def start_session_without_password(self, username: str = "admin") -> SecuritySession:
