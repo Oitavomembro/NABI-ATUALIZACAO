@@ -1870,3 +1870,86 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - repetição integral final: `2034 passed`, `1 skipped`, `2 warnings`, `444
   subtests passed`, zero falhas; os avisos são a classe auxiliar já conhecida e
   uma depreciação externa do `BrazilFiscalReport` no DANFE.
+### Checkpoint isolado — Configurações comerciais Qt
+
+- branch/worktree: `codex/configuracoes-qt`, derivada do consolidado
+  `3751c3a`, sem alterar a integração;
+- implementação `0110ebb` — `feat: adiciona configuracoes comerciais ao Qt`;
+- nova `SettingsApplicationService` exige sessão válida e permissões reais de
+  `configs`; leitura continua disponível a `configs:view`, enquanto alteração,
+  backup e diagnóstico falham fechados sem `edit`, `backup` ou `diagnose`;
+- preferências visuais são normalizadas pelo mesmo `UIPreferencesService` do
+  Legacy e isoladas pelo nome autenticado do usuário; senha ou identidade livre
+  não entram na janela;
+- destinos e política diária de backup são gravados atomicamente pelo
+  `SystemRepository.set_configs`; o backup Qt reutiliza `BackupService`, não
+  inclui diretório fiscal e nunca executa restauração pela interface;
+- diagnóstico reutiliza `SystemDiagnostics`, salva relatório na área mutável do
+  perfil e não muda dados de negócio;
+- a janela Qt preserva a organização escura do Legacy em abas Interface,
+  Backup e Diagnóstico; `Ctrl+G` abre o cartão no hub, mantendo F9 exclusivo do
+  PDV, Esc fecha a janela e auto-repeat de Enter é consumido;
+- validação focada e de infraestrutura: `72 passed`; regressão conjunta Qt,
+  Commercial, startup da Nabi e licença: `340 passed`, `367 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- pendências: homologação visual/manual do cartão Configurações, preferências,
+  backup em dois destinos e relatório de diagnóstico no perfil TESTE; impressão
+  e restauração continuam checkpoints separados. Fiscal/SEFAZ, IA, Fichário,
+  licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Impressão comercial Qt
+
+- branch/worktree: `codex/impressao-qt`, derivada do checkpoint de Configurações
+  `7ec1a14`, sem alterar a integração;
+- implementação `0aec7be` — `feat: adiciona configuracao de impressao ao Qt`;
+- a aba Impressão reutiliza `PrintingService` e `ReceiptTemplateService`, lista
+  as impressoras instaladas e cobre Recibo/Venda, Entrega, Ficha do cliente,
+  Histórico e Fechamento de caixa com os formatos oficiais `Cupom 80 mm`, `A4`
+  e `PDF virtual`;
+- os 20 modelos visuais do Legacy permanecem disponíveis, com fonte, tamanho,
+  corte parcial/total e linhas de avanço normalizados antes da gravação atômica;
+- prévia é determinística e não envia trabalho ao spooler; salvar configurações
+  também não imprime. A impressão física continua exclusiva dos fluxos
+  documentais oficiais já existentes;
+- Enter simples mantém uma ação, auto-repeat é consumido e Shift+Enter retorna
+  pelo foco sem acionar botões; Esc fecha somente Configurações e F9 continua
+  exclusivo para finalizar a venda no PDV;
+- testes focados finais: `32 passed`; regressão ampliada Qt, Commercial,
+  documental e startup Nabi: `361 passed`, `367 subtests passed`; `compileall`
+  e `git diff --check` aprovados;
+- pendências: homologação visual no Windows, enumeração com impressora física de
+  TESTE e teste manual de cupom/A4 sem venda fiscal. Fiscal/SEFAZ, IA, Fichário,
+  licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Central de Ajuda Qt
+
+- branch/worktree: `codex/ajuda-suporte-qt`, derivada do checkpoint de Impressão
+  `0f348a9`, sem alterar a integração;
+- implementação `6b90bcd` — `feat: adiciona central de ajuda ao Qt`;
+- a apresentação Qt reutiliza `ContextHelpRegistry`, é somente leitura e oferece
+  assuntos e pesquisa por tecla/ação com a estética escura do Legacy;
+- o catálogo passou a cobrir Caixa, Financeiro, Relatórios, Compras, Usuários e
+  Impressão além dos tópicos anteriores; orientações não concedem permissões nem
+  executam ações de negócio;
+- `Ctrl+H` abre a Ajuda no hub sem conflitar com F1 do hub/Início ou F9 do PDV;
+  Esc fecha somente a janela e Enter/auto-repeat na tabela são consumidos;
+- nenhum navegador, mensageiro, processo externo, banco ou serviço fiscal é
+  acessado pela janela; suporte externo permanece indisponível até existir uma
+  configuração real e autorizada;
+- testes focados: `25 passed`; regressão Qt e startup relacionado: `239 passed`,
+  `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual da pesquisa, tópicos e teclado no Windows.
+  Fiscal/SEFAZ, IA, Fichário, licenciamento, instalador e banco real não foram
+  alterados.
+
+### Integração — Configurações, Impressão, Ajuda e backup completo
+
+- a sequência `codex/configuracoes-qt` → `codex/impressao-qt` →
+  `codex/ajuda-suporte-qt` foi reunida ao consolidado por merge normal;
+- o backup manual Qt foi corrigido na composição para incluir também a pasta
+  fiscal persistente; XMLs e DANFEs entram em arquivo separado com manifesto e
+  hash, enquanto certificados, senhas e e-mails continuam excluídos;
+- restauração não foi exposta como ação simples: permanece no fluxo técnico
+  reforçado existente, com validação e cópia de segurança anterior;
+- validação integrada de Configurações, Impressão, Ajuda, backup/restauração e
+  composição: `56 passed`; `compileall` e `git diff --check` aprovados.

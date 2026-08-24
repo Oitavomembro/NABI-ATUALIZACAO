@@ -36,6 +36,13 @@ class ContextHelpRegistryTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.registry.register(HelpTopic("", "Inválido", "", ()))
 
+    def test_modulos_qt_possuem_orientacao_sem_acao_fiscal(self):
+        for context in ("caixa", "financeiro", "relatorios", "compras", "usuarios", "impressao"):
+            topic = self.registry.get(context)
+            self.assertEqual(topic.context, context)
+            text = " ".join(item.action for item in topic.shortcuts).casefold()
+            self.assertNotIn("sefaz", text)
+
 
 if __name__ == "__main__":
     unittest.main()

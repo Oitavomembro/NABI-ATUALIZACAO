@@ -32,10 +32,11 @@ def test_login_auto_repeat_e_consumido_sem_autenticar():
 
 def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios_usuarios():
     container=SimpleNamespace(customer_application=None,product_application=None,stock_actions=None,purchase_service=None,financial_query=None,financial_actions=None)
-    database=SimpleNamespace(connect=Mock());profile=SimpleNamespace(paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF")));security=Mock()
-    with patch("ui_qt.administration.composition.CashService"),patch("ui_qt.administration.composition.ReportService"):
+    database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"));profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal")));security=Mock()
+    with patch("ui_qt.administration.composition.CashService"),patch("ui_qt.administration.composition.ReportService"),patch("ui_qt.administration.composition.SettingsApplicationService"),patch("ui_qt.administration.composition.BackupService") as backup:
         modules=build_administrative_modules(container,database,profile,security)
-    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários")
+    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários","Configurações","Ajuda")
+    assert backup.call_args.kwargs["fiscal_directory"] == Path("C:/Teste/fiscal")
 
 def test_shell_sem_factory_preserva_funcionamento_anterior():
     with patch.object(qt_app,"PDVWindow",Window),patch.object(qt_app,"PDVViewModel",lambda app:app):

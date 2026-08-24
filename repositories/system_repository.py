@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
-from typing import Callable, Optional
+from typing import Callable, Mapping, Optional
 import sqlite3
 
 
@@ -45,6 +45,30 @@ class SystemRepository:
             conn.execute(
                 "INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)",
                 (normalized, "" if value is None else str(value)),
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
+        finally:
+            conn.close()
+
+    def set_configs(self, values: Mapping[str, object]) -> None:
+        """Grava um conjunto coerente de configurações em uma transação."""
+
+        normalized: list[tuple[str, str]] = []
+        for key, value in values.items():
+            name = str(key or "").strip()
+            if not name:
+                raise ValueError("A chave da configuração é obrigatória.")
+            normalized.append((name, "" if value is None else str(value)))
+        if not normalized:
+            raise ValueError("Informe ao menos uma configuração.")
+        conn = self._connection_factory()
+        try:
+            conn.executemany(
+                "INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)",
+                normalized,
             )
             conn.commit()
         except Exception:
