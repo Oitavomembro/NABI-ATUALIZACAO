@@ -1,29 +1,24 @@
 from __future__ import annotations
 
-import ctypes
 import hashlib
 import hmac
 import json
 import os
 import time
 import uuid
-from ctypes import wintypes
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Mapping, Protocol
 
 from services.windows_data_protector import WindowsDataProtectionError, WindowsDataProtector
+from licensing.machine import MachineIdentificationError, windows_machine_components
 
 
 class DataProtector(Protocol):
     def protect(self, data: bytes) -> bytes: ...
 
     def unprotect(self, data: bytes) -> bytes: ...
-
-
-class MachineIdentificationError(RuntimeError):
-    pass
 
 
 @dataclass(frozen=True)
@@ -34,63 +29,6 @@ class InstallationAuthorizationStatus:
     machine_code: str
     installation_id: str = ""
     activated_at: str = ""
-
-
-def windows_machine_components() -> dict[str, str]:
-    """Obtém identificadores Windows estáveis; os valores brutos nunca são persistidos."""
-    if os.name != "nt":
-        raise MachineIdentificationError("A identificação da instalação exige Windows.")
-
-    try:
-        import winreg
-
-        access = winreg.KEY_READ | getattr(winreg, "KEY_WOW64_64KEY", 0)
-        with winreg.OpenKey(
-            winreg.HKEY_LOCAL_MACHINE,
-            r"SOFTWARE\Microsoft\Cryptography",
-            0,
-            access,
-        ) as key:
-            machine_guid = str(winreg.QueryValueEx(key, "MachineGuid")[0]).strip()
-    except (OSError, ValueError, TypeError) as exc:
-        raise MachineIdentificationError("MachineGuid do Windows indisponível.") from exc
-
-    system_drive = str(os.environ.get("SystemDrive") or "C:").rstrip("\\/") + "\\"
-    serial_number = wintypes.DWORD()
-    try:
-        get_volume_information = ctypes.windll.kernel32.GetVolumeInformationW
-        get_volume_information.argtypes = (
-            wintypes.LPCWSTR,
-            wintypes.LPWSTR,
-            wintypes.DWORD,
-            ctypes.POINTER(wintypes.DWORD),
-            ctypes.POINTER(wintypes.DWORD),
-            ctypes.POINTER(wintypes.DWORD),
-            wintypes.LPWSTR,
-            wintypes.DWORD,
-        )
-        get_volume_information.restype = wintypes.BOOL
-        ok = get_volume_information(
-            system_drive,
-            None,
-            0,
-            ctypes.byref(serial_number),
-            None,
-            None,
-            None,
-            0,
-        )
-    except (AttributeError, OSError) as exc:
-        raise MachineIdentificationError("Volume do sistema Windows indisponível.") from exc
-    if not ok:
-        raise MachineIdentificationError("Serial do volume do sistema indisponível.")
-
-    if not machine_guid:
-        raise MachineIdentificationError("Identificadores obrigatórios da máquina indisponíveis.")
-    return {
-        "machine_guid": machine_guid,
-        "system_volume_serial": f"{serial_number.value:08X}",
-    }
 
 
 class InstallationAuthorizationService:

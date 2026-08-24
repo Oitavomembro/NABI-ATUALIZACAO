@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import re
+import unicodedata
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 
@@ -8,27 +10,42 @@ from PySide6.QtCore import QDate, Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout,
     QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton,
-    QPlainTextEdit, QInputDialog, QVBoxLayout,
+    QPlainTextEdit, QInputDialog, QVBoxLayout, QWidget,
 )
 
 from licensing.models import LicenseEdition
-from licensing.machine import machine_code
+from licensing.machine import machine_code, machine_fingerprint as current_machine_fingerprint
 
 from .workflow import (
     IssuanceRequest, IssuanceReview, parse_machine_request, request_from_existing,
-    review_request, sign_review, verify_license_file,
+    load_public_catalog, review_request, sign_review, verify_license_file,
 )
 
 
 class LicenseIssuerWindow(QDialog):
     """Ferramenta administrativa externa; nunca é importada pelo NabiCode."""
 
-    def __init__(self, parent=None) -> None:
+    EDITION_FEATURES = {
+        LicenseEdition.COMMERCIAL: "commercial,legacy,qt",
+        LicenseEdition.FICHARIO: "commercial,fichario,financial,qt",
+        LicenseEdition.EVALUATION: "commercial,qt",
+    }
+
+    def __init__(self, parent=None, *, key_directory: Path | None = None,
+                 output_directory: Path | None = None) -> None:
         super().__init__(parent)
         self._review: IssuanceReview | None = None
         self._source_license: Path | None = None
         self._source_catalog: Path | None = None
+        self._key_directory = Path(key_directory) if key_directory else (
+            Path.home() / "Documents" / "NabiCode-Segredos" / "licenciamento"
+        )
+        self._output_directory = Path(output_directory) if output_directory else (
+            Path.home() / "Documents" / "NabiCode-Licencas"
+        )
+        self._suggested_output = ""
         self.setWindowTitle("NabiCode — Emissor externo de Licenças V2")
+        self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self.setMinimumSize(860, 680)
         self.resize(980, 760)
 
@@ -53,43 +70,62 @@ class LicenseIssuerWindow(QDialog):
         self.customer = QLineEdit()
         self.edition = QComboBox()
         self.edition.addItems([item.value for item in LicenseEdition])
-        self.valid_until = QDateEdit(QDate.currentDate().addYears(1))
-        self.valid_until.setCalendarPopup(True)
+        self.edition.setCurrentText(LicenseEdition.FICHARIO.value)
+        self.duration = QComboBox()
+        for months in (1, 3, 6, 9, 12):
+            self.duration.addItem(f"{months} {'mês' if months == 1 else 'meses'}", months)
+        self.duration.setCurrentIndex(self.duration.findData(12))
+        self.valid_until = QDateEdit(QDate.currentDate().addMonths(12))
+        self.valid_until.setReadOnly(True)
+        self.valid_until.setButtonSymbols(QDateEdit.ButtonSymbols.NoButtons)
         self.valid_until.setDisplayFormat("dd/MM/yyyy")
-        self.features = QLineEdit("commercial,legacy,qt")
-        self.features.setPlaceholderText("commercial, legacy, qt")
+        self.features = QLineEdit()
+        self.features.setReadOnly(True)
         self.license_id = QLineEdit()
         self.license_id.setPlaceholderText("Gerado automaticamente em nova licença")
         self.revoked = QCheckBox("Emitir revogação assinada")
         self.output = QLineEdit()
         self.output.setPlaceholderText("Arquivo de saída .nabilic")
 
-        key_row = self._path_row(self.private_key, self._choose_private_key, "Escolher chave")
-        catalog_row = self._path_row(self.public_catalog, self._choose_public_catalog, "Escolher catálogo")
-        request_row = self._path_row(
-            self.machine_fingerprint, self._load_machine_request, "Carregar solicitação"
-        )
+        request_row = QHBoxLayout()
+        request_row.addWidget(self.machine_code, 1)
+        load_request = QPushButton("Carregar solicitação")
+        load_request.clicked.connect(self._load_machine_request)
+        self.local_machine_button = QPushButton("Usar esta máquina")
+        self.local_machine_button.clicked.connect(self._use_current_machine)
+        request_row.addWidget(load_request)
+        request_row.addWidget(self.local_machine_button)
         output_row = self._path_row(self.output, self._choose_output, "Escolher saída")
-        form.addRow("Chave privada:", key_row)
-        form.addRow("Catálogo público:", catalog_row)
-        form.addRow("Identificador da chave:", self.key_id)
-        form.addRow("Fingerprint da máquina:", request_row)
-        form.addRow("Código visual da máquina:", self.machine_code)
+        form.addRow("Máquina:", request_row)
         form.addRow("Cliente/titular:", self.customer)
         form.addRow("Edição:", self.edition)
-        form.addRow("Validade:", self.valid_until)
-        form.addRow("Recursos:", self.features)
-        form.addRow("ID da licença:", self.license_id)
-        form.addRow("Revogação:", self.revoked)
+        form.addRow("Período:", self.duration)
+        form.addRow("Validade calculada:", self.valid_until)
         form.addRow("Arquivo portátil:", output_row)
         layout.addLayout(form)
 
+        self.advanced_button = QPushButton("Mostrar opções avançadas")
+        self.advanced_button.setCheckable(True)
+        layout.addWidget(self.advanced_button)
+        self.advanced_panel = QWidget()
+        advanced = QFormLayout(self.advanced_panel)
+        key_row = self._path_row(self.private_key, self._choose_private_key, "Escolher chave")
+        catalog_row = self._path_row(self.public_catalog, self._choose_public_catalog, "Escolher catálogo")
+        advanced.addRow("Chave privada:", key_row)
+        advanced.addRow("Catálogo público:", catalog_row)
+        advanced.addRow("Identificador da chave:", self.key_id)
+        advanced.addRow("Fingerprint técnico:", self.machine_fingerprint)
+        advanced.addRow("Recursos automáticos:", self.features)
+        advanced.addRow("ID da licença:", self.license_id)
+        advanced.addRow("Revogação:", self.revoked)
         auxiliary = QHBoxLayout()
         self.load_existing_button = QPushButton("Carregar licença para renovar/revogar")
         self.verify_button = QPushButton("Verificar licença com chave pública")
         auxiliary.addWidget(self.load_existing_button)
         auxiliary.addWidget(self.verify_button)
-        layout.addLayout(auxiliary)
+        advanced.addRow(auxiliary)
+        self.advanced_panel.setVisible(False)
+        layout.addWidget(self.advanced_panel)
 
         self.review_text = QPlainTextEdit()
         self.review_text.setReadOnly(True)
@@ -100,18 +136,22 @@ class LicenseIssuerWindow(QDialog):
         self.review_button = QPushButton("1. Revisar")
         self.sign_button = QPushButton("2. Assinar e gerar .nabilic")
         self.sign_button.setEnabled(False)
+        self.minimize_button = QPushButton("Minimizar")
         self.close_button = QPushButton("Fechar")
         actions.addStretch()
         actions.addWidget(self.review_button)
         actions.addWidget(self.sign_button)
+        actions.addWidget(self.minimize_button)
         actions.addWidget(self.close_button)
         layout.addLayout(actions)
 
         self.review_button.clicked.connect(self._review_request)
         self.sign_button.clicked.connect(self._sign)
+        self.minimize_button.clicked.connect(self.showMinimized)
         self.close_button.clicked.connect(self.reject)
         self.load_existing_button.clicked.connect(self._load_existing)
         self.verify_button.clicked.connect(self._verify_existing)
+        self.advanced_button.toggled.connect(self._toggle_advanced)
         for widget in (
             self.private_key, self.public_catalog, self.key_id, self.machine_fingerprint, self.customer,
             self.edition, self.valid_until, self.features, self.license_id,
@@ -125,6 +165,81 @@ class LicenseIssuerWindow(QDialog):
             if signal is None:
                 signal = getattr(widget, "toggled", None)
             signal.connect(self._invalidate_review)
+        self.edition.currentTextChanged.connect(self._apply_edition_defaults)
+        self.duration.currentIndexChanged.connect(self._apply_duration)
+        self.customer.textChanged.connect(self._suggest_output)
+        self._discover_owner_keys()
+        self._apply_edition_defaults()
+        self._apply_duration()
+
+    def _toggle_advanced(self, visible: bool) -> None:
+        self.advanced_panel.setVisible(visible)
+        self.advanced_button.setText(
+            "Ocultar opções avançadas" if visible else "Mostrar opções avançadas"
+        )
+
+    def _discover_owner_keys(self) -> None:
+        """Descobre somente caminhos e chave pública; senha nunca é persistida."""
+        catalog = self._key_directory / "trusted_public_keys.json"
+        private_candidates = sorted(self._key_directory.glob("*-private.pem"))
+        if not catalog.is_file() or len(private_candidates) != 1:
+            return
+        try:
+            key_ids = tuple(load_public_catalog(catalog))
+        except ValueError:
+            return
+        if len(key_ids) != 1:
+            return
+        self.private_key.setText(str(private_candidates[0]))
+        self.public_catalog.setText(str(catalog))
+        self.key_id.setText(key_ids[0])
+
+    def _apply_edition_defaults(self, *_args) -> None:
+        edition = LicenseEdition(self.edition.currentText())
+        self.features.setText(self.EDITION_FEATURES[edition])
+        evaluation = edition is LicenseEdition.EVALUATION
+        self.duration.setEnabled(not evaluation)
+        if evaluation:
+            self.duration.setCurrentIndex(self.duration.findData(1))
+            self.valid_until.setDate(QDate.currentDate().addDays(29))
+        self._suggest_output()
+
+    def _apply_duration(self, *_args) -> None:
+        if LicenseEdition(self.edition.currentText()) is LicenseEdition.EVALUATION:
+            self.valid_until.setDate(QDate.currentDate().addDays(29))
+            self._suggest_output()
+            return
+        months = int(self.duration.currentData() or 12)
+        self.valid_until.setDate(QDate.currentDate().addMonths(months))
+        self._suggest_output()
+
+    def _use_current_machine(self) -> None:
+        try:
+            fingerprint = current_machine_fingerprint()
+        except Exception as error:
+            QMessageBox.critical(self, "Máquina indisponível", str(error))
+            return
+        self.machine_fingerprint.setText(fingerprint)
+        self.machine_code.setText(machine_code(fingerprint))
+
+    @staticmethod
+    def _safe_name(value: str) -> str:
+        normalized = unicodedata.normalize("NFKD", value).encode("ascii", "ignore").decode()
+        return re.sub(r"[^a-z0-9]+", "-", normalized.casefold()).strip("-") or "cliente"
+
+    def _suggest_output(self, *_args) -> None:
+        if self.output.text() and self.output.text() != self._suggested_output:
+            return
+        edition = self.edition.currentText().casefold() or "licenca"
+        customer = self._safe_name(self.customer.text())
+        date_text = self.valid_until.date().toString("yyyyMMdd")
+        candidate = self._output_directory / f"{edition}-{customer}-{date_text}.nabilic"
+        sequence = 1
+        while candidate.exists():
+            candidate = self._output_directory / f"{edition}-{customer}-{date_text}-{sequence}.nabilic"
+            sequence += 1
+        self._suggested_output = str(candidate)
+        self.output.setText(self._suggested_output)
 
     @staticmethod
     def _path_row(field: QLineEdit, callback, label: str):

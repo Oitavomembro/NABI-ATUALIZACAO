@@ -154,6 +154,37 @@ Legenda:
 - pendências físicas: cerimônia da chave real, cópias criptografadas e teste de restauração, hash do catálogo, build administrativo reproduzível/SBOM, validação em segunda máquina Windows, revisão de versão da `cryptography` e revisão jurídica;
 - nenhum push realizado.
 
+#### Checkpoint do Emissor administrativo para pendrive — branch `codex/emissor-facil-fichario`
+
+- implementação e automação portátil: `8353fc8` — `build: finaliza emissor administrativo portatil`;
+- o primeiro smoke do EXE revelou `No module named 'services'`: `licensing.machine`
+  dependia transitivamente do agregador excluído pelo spec; a coleta dos
+  identificadores Windows foi movida para a própria fronteira de licenciamento,
+  preservando o mesmo fingerprint e mantendo serviços comerciais/fiscais fora
+  do emissor;
+- o build oficial com Python `3.14.7` e PyInstaller `6.21.0` gerou e abriu no
+  Windows `NabiCode_Emissor_Licencas_V2.exe`; a janela mostrou solicitação da
+  máquina, titular, edição `FICHARIO`, prazos, revisão, assinatura e minimizar;
+- emissão, adulteração e verificação foram repetidas somente com chaves
+  temporárias de teste; não restou `.pem`, `.key` ou `.nabilic` temporário;
+- auditoria de 192 entradas internas do executável não encontrou chave, licença,
+  catálogo, `NabiCode-Segredos`, IA, Fiscal/SEFAZ ou entradas do cliente;
+- SHA-256 do EXE validado: `6084feddcda87596a730be9a78020d87635290155eae4746448d9b3ed39fa998`;
+- pasta gerada para cópia contém somente EXE, `LEIA-ME-EMISSOR.txt` e
+  `SHA256SUMS.txt`; SBOM separado registra Python, PyInstaller, PySide6,
+  shiboken6 e cryptography, sem caminhos ou segredos;
+- validação final: `62 passed`, três cenários explícitos de chaves temporárias
+  aprovados, `compileall` e `git diff --check` aprovados;
+- a chave privada real e o catálogo externo não foram lidos, copiados,
+  versionados nem incorporados; o proprietário deve transportá-los de forma
+  criptografada e manter a senha separada;
+- o emissor de licenças não substitui a chave permanente de assinatura de
+  atualizações; essa chave exige cerimônia, senha e guarda próprias e não foi
+  criada neste checkpoint;
+- pendências físicas: copiar a pasta gerada para pendrive criptografado,
+  conferir os hashes após a cópia e repetir abertura/emissão em segunda máquina
+  administrativa controlada; nenhum push realizado.
+
 ### IA Nabi
 
 - [x] visão do produto registrada;
@@ -1727,3 +1758,27 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendência: homologação manual do login, F1, oito cartões, expiração e retorno
   ao PDV no Windows. Fiscal/SEFAZ, Fichário, licenciamento, instalador e banco
   real não foram alterados.
+### Simplificação operacional do Emissor FICHÁRIO
+
+Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
+
+- implementação: `8bccecf` — `feat: simplifica emissao de licencas`;
+- o proprietário continua escolhendo a edição, pois ela define o sistema
+  licenciado; `FICHARIO` configura automaticamente
+  `commercial,fichario,financial,qt`;
+- o Emissor descobre no diretório administrativo externo a única chave privada,
+  o catálogo público correspondente e seu `key_id`; nenhuma senha é persistida;
+- o fluxo principal mostra somente máquina, titular, edição, período de
+  1/3/6/9/12 meses, validade calculada e arquivo de saída automático;
+- fingerprint bruto, caminhos, recursos, ID e revogação ficam em
+  `Opções avançadas`, fechadas por padrão;
+- `Usar esta máquina` obtém o fingerprint local; outra máquina continua usando
+  solicitação assinável, sem tentar reverter o código visual;
+- o nome do `.nabilic` é sugerido automaticamente e nunca sobrescreve arquivo
+  existente;
+- a edição AVALIAÇÃO fica limitada automaticamente a trinta dias;
+- botão `Minimizar` e controle nativo de minimizar foram adicionados;
+- regressão focada: `28 passed`; regressão integral de licenciamento/emissor:
+  `51 passed`, `8 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: integrar o commit na trilha conjunta, refazer o pacote externo do
+  Emissor e homologar visualmente no Windows; nenhum push realizado.
