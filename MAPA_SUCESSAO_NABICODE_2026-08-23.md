@@ -988,6 +988,29 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 
 Não confundir automação inteligente com autoridade. A Nabi poderá planejar, consultar e operar ferramentas autorizadas, mas o NabiCode continuará sendo a fonte de verdade. Backend, permissões, validações, confirmação humana, transações e auditoria decidem o que realmente pode acontecer.
 
+### Checkpoint IA Nabi — fornecedores e novos pedidos assistidos
+
+- branch isolada: `codex/nabi-fornecedores-pedidos`;
+- base confirmada: `0a4091075c9478bfa9c7855ffa4b43238fddc122`, contendo
+  `40d6f40` e `0a40910`;
+- implementação: `926351db1224c45eb3b0604f3e4ef64bfd1f3874`;
+- a Nabi prepara cadastros de fornecedor e pedidos de compra como rascunhos
+  imutáveis, com IDs reais, valores decimais textuais e prévia determinística;
+- cadastro e pedido exigem permissão `compras/create`, sessão real e confirmação
+  humana reforçada vinculada ao conteúdo exato;
+- a execução usa exclusivamente `PurchaseManagementService`,
+  `FornecedorRepository` e `CompraService`; o usuário é derivado da sessão e
+  comparado com o operador que confirmou;
+- journal idempotente, cadastro/pedido e auditoria são persistidos na mesma
+  transação; falha reverte todos os efeitos e repetição devolve o mesmo ID;
+- chaves reutilizadas com outro fingerprint e autorizações fabricadas ou já
+  consumidas falham fechadas;
+- o recebimento de compras já existente não foi alterado, assim como
+  `main_qt.py`, `ui_qt/app.py`, painel da Nabi e Fiscal/SEFAZ;
+- validação ampliada: 157 testes e 38 subtestes da Nabi/Compras aprovados,
+  além de `compileall` e `git diff --check`;
+- nenhuma ligação ao painel/shell e nenhum push foram realizados nesta etapa.
+
 ## Checkpoint FICHÁRIO — chave pública e ativação física
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
