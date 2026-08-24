@@ -2794,3 +2794,30 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo seguro: revisão independente do merge e integração normal desta
   branch na consolidada. Depois, continuar apenas pelas pendências fiscais
   documentais/homologação oficial, sem inventar evidência nem ampliar regras.
+
+### Candidata final — Segurança + autoria fiscal/NF-e
+
+- branch/worktree: `codex/integracao-final-candidata` em
+  `NabiCode-QT-Final-codex`, derivada exatamente da consolidada `112dacd`;
+- merge `e2e4903`: preserva integralmente os 16 commits do endurecimento de
+  primeiro acesso, migração de credenciais antigas, política de senhas,
+  limitação de tentativas e remoção da credencial mestra universal;
+- merge `31811cb`: preserva a trilha completa de autoria fiscal e integra a
+  entrada comercial por NF-e na mesma sessão oficial de Qt, Legacy e Nabi;
+- `main_qt.py` e `nabicode_legacy.py` foram combinados automaticamente. O único
+  conflito real foi este mapa, reconciliado mantendo todas as evidências de
+  Segurança e Fiscal sem apagar pendências;
+- a branch antiga `codex/principal-modulos-qt` foi auditada e deliberadamente
+  excluída: sua composição já foi substituída pelos módulos administrativos
+  mais completos existentes na consolidada;
+- validação cruzada de Segurança, startup, Nabi, importação NFe, DFe, outbox,
+  venda e devolução: `319 passed`, `10 subtests passed`;
+- regressão integral: `2160 passed`, `1 skipped`, `444 subtests passed`, zero
+  falhas; único aviso é a depreciação externa já conhecida do
+  `BrazilFiscalReport`; `compileall` completo e `git diff --check` aprovados;
+- nenhum banco, licença de cliente, chave privada, certificado, XML real ou
+  segredo foi incluído. Nenhuma chamada real à SEFAZ foi executada;
+- pendências restantes: homologações físicas/visuais já listadas, cerimônia das
+  chaves permanentes, revisão jurídica e dossiê/homologação oficial SEFAZ Bahia.
+  Não há outro checkpoint automatizável de alto valor identificado sem invadir
+  as trilhas reservadas de IA/Fichário ou inventar evidência fiscal.
