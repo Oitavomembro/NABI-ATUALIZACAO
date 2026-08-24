@@ -87,7 +87,7 @@ class DraftConfirmationService:
             expires_at=now + timedelta(seconds=self._ttl),
             required_capability=(
                 CapabilityLevel.REINFORCED_CONFIRMATION
-                if draft.operation_kind in {"PURCHASE_RECEIPT", "NFE_ENTRY_IMPORT"}
+                if draft.operation_kind in {"PURCHASE_RECEIPT", "NFE_ENTRY_IMPORT", "CUSTOMER_CREATE"}
                 else CapabilityLevel.SIMPLE_CONFIRMATION
             ),
         )
@@ -163,7 +163,7 @@ class DraftConfirmationService:
             raise PermissionError("A autorização pertence a outro usuário ou sessão.")
         required = (
             CapabilityLevel.REINFORCED_CONFIRMATION
-            if operation in {"PURCHASE_RECEIPT", "NFE_ENTRY_IMPORT"}
+            if operation in {"PURCHASE_RECEIPT", "NFE_ENTRY_IMPORT", "CUSTOMER_CREATE"}
             else CapabilityLevel.SIMPLE_CONFIRMATION
         )
         if record.capability is not required:

@@ -24,6 +24,23 @@ class CustomerApplicationService:
         )
         return self.get_customer(customer_id)
 
+    def create_customer_assisted(
+        self, command: CustomerCreateCommand, *, username: str,
+        idempotency_key: str, operation_fingerprint: str,
+    ) -> CustomerDetails:
+        create = getattr(self._registration, "criar_assistido", None)
+        if not callable(create):
+            raise RuntimeError("Cadastro assistido idempotente não está disponível.")
+        customer_id = create(
+            nome=command.name, codigo=command.code,
+            numero_ficha=command.record_number, cpf=command.cpf, rg=command.rg,
+            telefone=command.phone, endereco=command.address,
+            observacoes=command.notes, limite=command.credit_limit,
+            usuario=username, idempotency_key=idempotency_key,
+            operation_fingerprint=operation_fingerprint,
+        )
+        return self.get_customer(customer_id)
+
     def next_record_number(self) -> int:
         return self._registration.next_record_number()
 

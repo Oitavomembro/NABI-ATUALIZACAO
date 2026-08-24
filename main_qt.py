@@ -18,6 +18,8 @@ from assistant_nabi import (
     NabiCodeNFeEntryAssistantGateway,
     create_purchase_assistant_components,
     create_draft_assistant,
+    CustomerRegistrationDraftService,
+    NabiCodeCustomerRegistrationGateway,
 )
 from commercial.infrastructure.runtime import create_commercial_container
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
@@ -55,6 +57,11 @@ def _create_assistant_activation(
         nfe_entry_executor = NabiCodeNFeEntryAssistantGateway(
             nfe_entry_service, nfe_import_service
         )
+    customer_drafts = customer_executor = None
+    customer_application = getattr(container, "customer_application", None)
+    if customer_application is not None:
+        customer_drafts = CustomerRegistrationDraftService(customer_application)
+        customer_executor = NabiCodeCustomerRegistrationGateway(customer_application)
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -77,6 +84,8 @@ def _create_assistant_activation(
             purchase_executor=purchase_executor,
             nfe_entry_draft_service=nfe_entry_service,
             nfe_entry_executor=nfe_entry_executor,
+            customer_draft_service=customer_drafts,
+            customer_executor=customer_executor,
         )
 
     return AuthenticatedAssistantActivation(

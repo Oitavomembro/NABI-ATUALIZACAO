@@ -375,6 +375,7 @@ class NabiAssistantPanel(QWidget):
                 "vendas.sugerir_rascunho_por_estoque",
                 "compras.preparar_recebimento",
                 "compras.preparar_entrada_nfe_exata",
+                "clientes.preparar_cadastro",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -421,6 +422,9 @@ class NabiAssistantPanel(QWidget):
             "NFE_ENTRY_IMPORT": (
                 "Confira chave, fornecedor, produtos vinculados, quantidades e fatores de conversão."
             ),
+            "CUSTOMER_CREATE": (
+                "Confira ficha, nome, documentos, contato, endereço e limite de crédito."
+            ),
         }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
         self.history.append(
             f"<b>Nabi:</b> {guidance} "
@@ -438,6 +442,10 @@ class NabiAssistantPanel(QWidget):
                 )
             elif operation_kind == "NFE_ENTRY_IMPORT":
                 result, _authorization = self._service.confirm_and_execute_nfe_entry(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind == "CUSTOMER_CREATE":
+                result, _authorization = self._service.confirm_and_execute_customer(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -467,6 +475,12 @@ class NabiAssistantPanel(QWidget):
                 f"Importação #{int(result['importacao_id'])}; "
                 f"{int(result['itens_vinculados'])} item(ns) vinculado(s). "
                 "Nenhuma comunicação com a SEFAZ foi realizada."
+            )
+        elif operation_kind == "CUSTOMER_CREATE":
+            self._set_state("completed", "Cliente cadastrado")
+            self.history.append(
+                "<b>Nabi:</b> Cadastro confirmado pelo serviço oficial. "
+                f"Ficha {int(result.record_number)}; cliente #{int(result.customer_id)}."
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")

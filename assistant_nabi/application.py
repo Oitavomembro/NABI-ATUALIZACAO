@@ -32,6 +32,7 @@ class AssistantApplicationService:
         confirmation_service=None,
         purchase_executor=None,
         nfe_entry_executor=None,
+        customer_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -42,6 +43,7 @@ class AssistantApplicationService:
         self._confirmations = confirmation_service
         self._purchase_executor = purchase_executor
         self._nfe_entry_executor = nfe_entry_executor
+        self._customer_executor = customer_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -85,6 +87,7 @@ class AssistantApplicationService:
             "SALE": ("vendas", "create"),
             "PURCHASE_RECEIPT": ("compras", "create"),
             "NFE_ENTRY_IMPORT": ("compras", "create"),
+            "CUSTOMER_CREATE": ("clientes", "create"),
         }.get(str(getattr(draft, "operation_kind", "")))
         if permission is None or not self._permissions.allows(actor, *permission):
             raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
@@ -117,6 +120,18 @@ class AssistantApplicationService:
             raise TypeError("O rascunho confirmado não é uma entrada de NF-e.")
         draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._nfe_entry_executor.execute(draft, authorization)
+        return result, authorization
+
+    def confirm_and_execute_customer(
+        self, token: str, draft_id: str, fingerprint: str
+    ):
+        if self._customer_executor is None:
+            raise RuntimeError("Cadastro assistido de cliente não está configurado.")
+        draft = self._drafts.get(draft_id)
+        if getattr(draft, "operation_kind", "") != "CUSTOMER_CREATE":
+            raise TypeError("O rascunho confirmado não é um cadastro de cliente.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        result = self._customer_executor.execute(draft, authorization)
         return result, authorization
 
     def invalidate_confirmations(self) -> None:

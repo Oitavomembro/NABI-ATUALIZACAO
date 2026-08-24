@@ -65,6 +65,10 @@ class DraftService(Service):
         self.confirmations.append((token, draft_id, fingerprint))
         return {"importacao_id": 88, "itens_vinculados": 2}, object()
 
+    def confirm_and_execute_customer(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        return SimpleNamespace(customer_id=45, record_number=5501), object()
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
@@ -370,6 +374,27 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertIn("Importação #88", panel.history.toPlainText())
         self.assertIn("Nenhuma comunicação com a SEFAZ", panel.history.toPlainText())
         self.assertEqual(panel.status.text(), "Entrada de NF-e registrada")
+
+    def test_cadastro_cliente_exige_revisao_e_servico_confirmado(self):
+        service = DraftService()
+        panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 14
+        panel._complete(14, AssistantTurn("Cadastro preparado", (ToolResult(
+            "req-customer", "clientes.preparar_cadastro", True,
+            {
+                "draft_id": "customer-1", "fingerprint": "e" * 64,
+                "operation_kind": "CUSTOMER_CREATE", "record_number": 5501,
+                "name": "MARIA", "credit_limit": "500.00",
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        panel.review_draft()
+        self.assertIn("ficha, nome", panel.history.toPlainText())
+        panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][1], "customer-1")
+        self.assertIn("Ficha 5501", panel.history.toPlainText())
+        self.assertEqual(panel.status.text(), "Cliente cadastrado")
 
     def test_resposta_xml_atrasada_e_ignorada_apos_parar(self):
         panel = NabiAssistantPanel(Service(), nfe_entry_service=object())
