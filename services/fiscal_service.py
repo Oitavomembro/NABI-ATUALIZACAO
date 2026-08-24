@@ -3546,8 +3546,9 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def retry_contingency_batch(self, *, actor: str) -> dict[str, Any]:
+    def retry_contingency_batch(self) -> dict[str, Any]:
         """Reagenda em lote somente documentos NFC-e emitidos em contingência."""
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         now = datetime.now(timezone.utc).isoformat()
         selected: list[str] = []

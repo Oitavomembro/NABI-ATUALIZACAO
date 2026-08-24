@@ -11995,9 +11995,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             queue_ids = None
             if contingency_batch:
-                batch = self.fiscal_service.retry_contingency_batch(
-                    actor=self._usuario_financeiro()
-                )
+                batch = self.fiscal_service.retry_contingency_batch()
                 if not batch["scheduled"]:
                     messagebox.showinfo(
                         "Contingência",

@@ -2025,12 +2025,28 @@ class FiscalServiceTests(unittest.TestCase):
             xml=f'<NFe><infNFe Id="NFe{normal_key}"><ide><mod>65</mod><tpEmis>1</tpEmis></ide></infNFe></NFe>',
             access_key=normal_key, model="65", actor="caixa",
         )
-        result = self.service.retry_contingency_batch(actor="gerente")
+        result = self.service.retry_contingency_batch()
         self.assertEqual(result["scheduled"], 1)
         self.assertEqual(result["queue_ids"], [contingency["id"]])
         queued = {row["id"]: row for row in self.service.list_transmission_queue()}
         self.assertTrue(queued[contingency["id"]]["contingency"])
         self.assertEqual(queued[contingency["id"]]["contingency_batch_requested_by"], "gerente")
+
+    def test_retransmissao_em_lote_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.retry_contingency_batch(actor="forjado")
+
+    def test_retransmissao_em_lote_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-contingencia",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.retry_contingency_batch()
+        listed.assert_not_called()
 
     def test_processamento_por_ids_nao_transmite_outros_pendentes(self):
         first = self.service.enqueue_transmission(
