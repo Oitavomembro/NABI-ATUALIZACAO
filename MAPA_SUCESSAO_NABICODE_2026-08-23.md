@@ -1778,3 +1778,24 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendências: homologação visual no Windows, enumeração com impressora física de
   TESTE e teste manual de cupom/A4 sem venda fiscal. Fiscal/SEFAZ, IA, Fichário,
   licenciamento, instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Central de Ajuda Qt
+
+- branch/worktree: `codex/ajuda-suporte-qt`, derivada do checkpoint de Impressão
+  `0f348a9`, sem alterar a integração;
+- implementação `6b90bcd` — `feat: adiciona central de ajuda ao Qt`;
+- a apresentação Qt reutiliza `ContextHelpRegistry`, é somente leitura e oferece
+  assuntos e pesquisa por tecla/ação com a estética escura do Legacy;
+- o catálogo passou a cobrir Caixa, Financeiro, Relatórios, Compras, Usuários e
+  Impressão além dos tópicos anteriores; orientações não concedem permissões nem
+  executam ações de negócio;
+- `Ctrl+H` abre a Ajuda no hub sem conflitar com F1 do hub/Início ou F9 do PDV;
+  Esc fecha somente a janela e Enter/auto-repeat na tabela são consumidos;
+- nenhum navegador, mensageiro, processo externo, banco ou serviço fiscal é
+  acessado pela janela; suporte externo permanece indisponível até existir uma
+  configuração real e autorizada;
+- testes focados: `25 passed`; regressão Qt e startup relacionado: `239 passed`,
+  `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual da pesquisa, tópicos e teclado no Windows.
+  Fiscal/SEFAZ, IA, Fichário, licenciamento, instalador e banco real não foram
+  alterados.
