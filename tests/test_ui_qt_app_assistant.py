@@ -53,7 +53,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
         ):
             _, window = qt_app.create_application(object(), [])
         self.assertEqual(window.docks, [])
-        self.assertFalse(hasattr(window, "nabi_assistant_dock"))
+        self.assertFalse(hasattr(window, "nabi_assistant"))
 
     def test_servico_indisponivel_cria_painel_lateral_em_falha_fechada(self):
         service = UnavailableAssistantService("Modelo ausente.")
@@ -64,8 +64,8 @@ class QtApplicationAssistantTests(unittest.TestCase):
             _, window = qt_app.create_application(
                 object(), [], assistant_service=service
             )
-        self.assertEqual(len(window.docks), 1)
-        panel = window.nabi_assistant_dock.widget()
+        self.assertEqual(window.docks, [])
+        panel = window.nabi_assistant.widget()
         self.assertFalse(panel.send.isEnabled())
         self.assertIn("Modelo ausente", panel.history.toPlainText())
         window.close()
@@ -81,7 +81,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
                 object(), [], assistant_service=service,
                 assistant_activation=activation,
             )
-        panel = window.nabi_assistant_dock.widget()
+        panel = window.nabi_assistant.widget()
         self.assertIs(panel._activation_manager, activation)
         self.assertFalse(panel.send.isEnabled())
         window.close()
@@ -97,7 +97,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
                 object(), [], assistant_service=service,
                 nfe_entry_service=nfe_entry,
             )
-        panel = window.nabi_assistant_dock.widget()
+        panel = window.nabi_assistant.widget()
         self.assertIs(panel._nfe_entry_service, nfe_entry)
         self.assertFalse(panel.prepare_nfe_entry_button.isHidden())
         self.assertFalse(panel.prepare_nfe_entry_button.isEnabled())
@@ -114,7 +114,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
             _, window = qt_app.create_application(
                 object(), [], assistant_service=Service()
             )
-        panel = window.nabi_assistant_dock.widget()
+        panel = window.nabi_assistant.widget()
         panel._generation = 7
         panel._complete(7, AssistantTurn("Abrindo pesquisa.", (ToolResult(
             "request-1",
@@ -136,7 +136,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
             _, window = qt_app.create_application(
                 object(), [], assistant_service=Service(),
             )
-        panel = window.nabi_assistant_dock.widget()
+        panel = window.nabi_assistant.widget()
         panel._generation = 8
         panel._complete(8, AssistantTurn("Abrindo módulos.", (ToolResult(
             "request-2", "interface.abrir_modulos", True,

@@ -229,7 +229,8 @@ def test_attaching_nabi_panel_does_not_open_sales(qt_application):
             assistant_panel_factory=lambda _parent: panel,
         )
         try:
-            assert shell.nabi_assistant_dock.widget() is panel
+            assert shell.nabi_assistant.widget() is panel
+            assert shell.nabi_assistant.isExpanded() is False
             pdv.assert_not_called()
         finally:
             shell.close()

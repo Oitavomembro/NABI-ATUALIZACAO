@@ -4,13 +4,13 @@ import sys
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QKeySequence
-from PySide6.QtWidgets import QApplication, QDialog, QDockWidget, QMessageBox, QToolBar, QWidget
+from PySide6.QtWidgets import QApplication, QDialog, QMessageBox, QToolBar, QWidget
 
 from commercial.application.pdv_application_service import PDVApplicationService
 
 from .commercial.pdv_view_model import PDVViewModel
 from .commercial.pdv_window import PDVWindow
-from .assistant_nabi import NabiAssistantPanel
+from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant
 from .shell import NabiCodeShellWindow
 
 
@@ -80,19 +80,8 @@ def create_application(
                 ),
                 module_hub_opener=getattr(window, "open_administrative_hub", None),
             )
-        dock = QDockWidget("Nabi", window)
-        dock.setObjectName("nabiAssistantDock")
-        dock.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
-        )
-        dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-            | QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
-        dock.setWidget(panel)
-        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        window.nabi_assistant_dock = dock
+        floating = NabiFloatingAssistant(panel, window)
+        window.nabi_assistant = floating
     return qt_application, window
 
 
@@ -192,19 +181,8 @@ def create_shell_application(
                 product_search_opener=open_product_search,
                 module_hub_opener=lambda: window.show_module("dashboard"),
             )
-        dock = QDockWidget("Nabi", window)
-        dock.setObjectName("nabiAssistantDock")
-        dock.setAllowedAreas(
-            Qt.DockWidgetArea.LeftDockWidgetArea | Qt.DockWidgetArea.RightDockWidgetArea
-        )
-        dock.setFeatures(
-            QDockWidget.DockWidgetFeature.DockWidgetClosable
-            | QDockWidget.DockWidgetFeature.DockWidgetMovable
-            | QDockWidget.DockWidgetFeature.DockWidgetFloatable
-        )
-        dock.setWidget(panel)
-        window.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, dock)
-        window.nabi_assistant_dock = dock
+        floating = NabiFloatingAssistant(panel, window)
+        window.nabi_assistant = floating
     return qt_application, window
 
 

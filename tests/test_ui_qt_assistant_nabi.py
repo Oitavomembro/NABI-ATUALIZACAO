@@ -11,8 +11,8 @@ from assistant_nabi import AssistantTurn, ToolResult, UnavailableAssistantServic
 from commercial.application.pdv_session import PDVSession
 
 try:
-    from PySide6.QtWidgets import QApplication, QDockWidget
-    from ui_qt.assistant_nabi import NabiAssistantPanel
+    from PySide6.QtWidgets import QApplication
+    from ui_qt.assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant
     from ui_qt.app import create_application
 except (ImportError, OSError) as error:
     QT_AVAILABLE = False
@@ -540,13 +540,13 @@ class NabiAssistantShellIntegrationTests(unittest.TestCase):
 
         _qt, window = create_application(Application(), argv=[])
         try:
-            self.assertEqual(window.findChildren(QDockWidget, "nabiAssistantDock"), [])
-            self.assertFalse(hasattr(window, "nabi_assistant_dock"))
+            self.assertEqual(window.findChildren(NabiFloatingAssistant), [])
+            self.assertFalse(hasattr(window, "nabi_assistant"))
             self.assertEqual(called, [])
         finally:
             window.close()
 
-    def test_opt_in_cria_painel_lateral_removivel_com_servico_fornecido(self):
+    def test_opt_in_cria_mascote_flutuante_recolhida_com_servico_fornecido(self):
         class Application:
             new_session = staticmethod(PDVSession)
 
@@ -561,14 +561,16 @@ class NabiAssistantShellIntegrationTests(unittest.TestCase):
             Application(), argv=[], assistant_panel_factory=factory
         )
         try:
-            dock = window.nabi_assistant_dock
+            floating = window.nabi_assistant
             self.assertEqual(calls, [window])
-            self.assertIsInstance(dock.widget(), NabiAssistantPanel)
-            self.assertTrue(
-                dock.features() & QDockWidget.DockWidgetFeature.DockWidgetClosable
-            )
-            dock.close()
-            self.assertFalse(dock.isVisible())
+            self.assertIsInstance(floating, NabiFloatingAssistant)
+            self.assertIsInstance(floating.widget(), NabiAssistantPanel)
+            self.assertFalse(floating.isExpanded())
+            self.assertFalse(floating.isHidden())
+            floating.expand()
+            self.assertTrue(floating.isExpanded())
+            floating.collapse()
+            self.assertFalse(floating.isExpanded())
         finally:
             window.close()
 
@@ -581,7 +583,7 @@ class NabiAssistantShellIntegrationTests(unittest.TestCase):
                 Application(), argv=[], assistant_panel_factory=lambda _parent: object()
             )
 
-    def test_servico_e_factory_nao_podem_disputar_o_mesmo_dock(self):
+    def test_servico_e_factory_nao_podem_disputar_a_mesma_apresentacao(self):
         class Application:
             new_session = staticmethod(PDVSession)
 
