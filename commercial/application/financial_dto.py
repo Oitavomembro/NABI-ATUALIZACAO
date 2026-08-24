@@ -147,6 +147,7 @@ class PersistedFinancialAction:
     status: str
     open_amount: Decimal
     payment_id: int | None = None
+    idempotent_replay: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "open_amount", _money(self.open_amount, "saldo do título"))

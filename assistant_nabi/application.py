@@ -34,6 +34,7 @@ class AssistantApplicationService:
         nfe_entry_executor=None,
         customer_executor=None,
         customer_receipt_executor=None,
+        financial_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -46,6 +47,7 @@ class AssistantApplicationService:
         self._nfe_entry_executor = nfe_entry_executor
         self._customer_executor = customer_executor
         self._customer_receipt_executor = customer_receipt_executor
+        self._financial_executor = financial_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -92,6 +94,11 @@ class AssistantApplicationService:
             "CUSTOMER_CREATE": ("clientes", "create"),
             "CUSTOMER_RECEIPT": ("financeiro", "pay"),
         }.get(str(getattr(draft, "operation_kind", "")))
+        operation_kind = str(getattr(draft, "operation_kind", ""))
+        if operation_kind.startswith("FINANCIAL_CREATE_"):
+            permission = ("financeiro", "create")
+        elif operation_kind.startswith("FINANCIAL_SETTLE_"):
+            permission = ("financeiro", "pay")
         if permission is None or not self._permissions.allows(actor, *permission):
             raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
         if draft.fingerprint != str(fingerprint or ""):
@@ -100,6 +107,16 @@ class AssistantApplicationService:
             token=token, draft=draft, actor=actor
         )
         return draft, authorization
+
+    def confirm_and_execute_financial(self, token: str, draft_id: str, fingerprint: str):
+        if self._financial_executor is None:
+            raise RuntimeError("Execução financeira assistida não está configurada.")
+        draft = self._drafts.get(draft_id)
+        if not str(getattr(draft, "operation_kind", "")).startswith("FINANCIAL_"):
+            raise TypeError("O rascunho confirmado não é financeiro.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        result = self._financial_executor.execute(draft, authorization)
+        return result, authorization
 
     def confirm_and_execute_purchase(
         self, token: str, draft_id: str, fingerprint: str

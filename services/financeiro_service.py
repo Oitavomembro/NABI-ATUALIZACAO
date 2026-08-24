@@ -111,6 +111,59 @@ class FinanceiroService:
         with self.database.session(write=True) as conn:
             return executar(conn)
 
+    @staticmethod
+    def _validate_assisted_identity(idempotency_key: str, fingerprint: str) -> tuple[str, str]:
+        key = str(idempotency_key or "").strip()
+        content = str(fingerprint or "").strip().lower()
+        if not key or len(key) > 160:
+            raise ValueError("Chave idempotente financeira inválida.")
+        if len(content) != 64 or any(char not in "0123456789abcdef" for char in content):
+            raise ValueError("Identificação idempotente financeira inválida.")
+        return key, content
+
+    def _begin_assisted(self, connection, *, key: str, fingerprint: str, kind: str, user: str):
+        previous = self.operation_journal.get(connection, key)
+        if previous is not None:
+            if previous["fingerprint"] != fingerprint:
+                raise PermissionError("A chave idempotente já pertence a outro conteúdo financeiro.")
+            if previous["status"] != "COMMITTED":
+                raise RuntimeError("A operação financeira anterior não foi concluída.")
+            return json.loads(previous["result_json"])
+        self.operation_journal.begin(
+            connection, idempotency_key=key, operation_kind=kind,
+            fingerprint=fingerprint, username=str(user or "Sistema"),
+        )
+        return None
+
+    def criar_titulo_assistido(
+        self, *, idempotency_key: str, operation_fingerprint: str, **kwargs,
+    ) -> dict[str, Any]:
+        """Cria título e confirma o journal da Nabi na mesma transação."""
+        key, fingerprint = self._validate_assisted_identity(
+            idempotency_key, operation_fingerprint
+        )
+        user = str(kwargs.get("usuario") or "Sistema")
+        title_type = str(kwargs.get("tipo") or "").strip().upper()
+        with self.database.session(write=True) as connection:
+            previous = self._begin_assisted(
+                connection, key=key, fingerprint=fingerprint,
+                kind=f"FINANCIAL_CREATE_{title_type}", user=user,
+            )
+            if previous is not None:
+                return {**previous, "idempotent_replay": True}
+            title_id = self.criar_titulo(connection=connection, **kwargs)
+            title = self.repository.obter_titulo(title_id, connection)
+            result = {
+                "title_id": int(title_id), "payment_id": None,
+                "status": str(title["status"]),
+                "open_amount": format(self._dinheiro(title["saldo_aberto"]), "f"),
+            }
+            self.operation_journal.commit(
+                connection, idempotency_key=key,
+                result_json=json.dumps(result, sort_keys=True, separators=(",", ":")),
+            )
+        return {**result, "idempotent_replay": False}
+
     def _sincronizar_pagamento_venda_legada(
         self, connection, *, titulo: dict[str, Any], pagamento_id: int,
         valor: Decimal, data_pagamento: str,
@@ -247,12 +300,13 @@ class FinanceiroService:
         observacao: str = "",
         usuario: str = "Sistema",
         data_pagamento: str | date | datetime | None = None,
+        connection=None,
     ) -> ResultadoPagamento:
         valor_decimal = self._dinheiro(valor)
         if valor_decimal <= 0:
             raise ValueError("O pagamento deve ser maior que zero.")
         data_iso = self._data_iso(data_pagamento, padrao_hoje=True)
-        with self.database.session(write=True) as connection:
+        def executar(connection):
             titulo = self.repository.obter_titulo(int(titulo_id), connection)
             if not titulo:
                 raise ValueError("Título financeiro não encontrado.")
@@ -280,10 +334,41 @@ class FinanceiroService:
                 detalhes=f"pagamento={pagamento_id}; valor={valor_decimal:.2f}; status={status}",
                 connection=connection,
             )
-        return ResultadoPagamento(
-            titulo_id=int(titulo_id), pagamento_id=pagamento_id,
-            valor_pago=novo_pago, saldo_aberto=novo_saldo, status=status,
+            return ResultadoPagamento(
+                titulo_id=int(titulo_id), pagamento_id=pagamento_id,
+                valor_pago=novo_pago, saldo_aberto=novo_saldo, status=status,
+            )
+        if connection is not None:
+            return executar(connection)
+        with self.database.session(write=True) as conn:
+            return executar(conn)
+
+    def baixar_titulo_assistido(
+        self, titulo_id: int, valor: Any, *, idempotency_key: str,
+        operation_fingerprint: str, **kwargs,
+    ) -> dict[str, Any]:
+        """Baixa título e confirma o journal da Nabi na mesma transação."""
+        key, fingerprint = self._validate_assisted_identity(
+            idempotency_key, operation_fingerprint
         )
+        user = str(kwargs.get("usuario") or "Sistema")
+        with self.database.session(write=True) as connection:
+            previous = self._begin_assisted(
+                connection, key=key, fingerprint=fingerprint,
+                kind="FINANCIAL_SETTLEMENT", user=user,
+            )
+            if previous is not None:
+                return {**previous, "idempotent_replay": True}
+            paid = self.pagar(titulo_id, valor, connection=connection, **kwargs)
+            result = {
+                "title_id": paid.titulo_id, "payment_id": paid.pagamento_id,
+                "status": paid.status, "open_amount": format(paid.saldo_aberto, "f"),
+            }
+            self.operation_journal.commit(
+                connection, idempotency_key=key,
+                result_json=json.dumps(result, sort_keys=True, separators=(",", ":")),
+            )
+        return {**result, "idempotent_replay": False}
 
     def registrar_venda_crediario_transacao(
         self,
