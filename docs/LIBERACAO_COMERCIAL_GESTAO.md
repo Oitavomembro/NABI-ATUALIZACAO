@@ -7,10 +7,10 @@ aplica ao uso administrativo e ao PDV **sem emissão fiscal oficial**.
 
 - cadastros, estoque, vendas, crediário, recebimentos, Caixa e relatórios;
 - importação de XML como apoio ao cadastro e à entrada de mercadorias;
-- login de usuários opcional no modo não fiscal;
-- senha administrativa pertencente ao cliente;
-- senha mestra do fabricante restrita a suporte, recuperação e operações
-  técnicas sensíveis, sempre registradas na auditoria;
+- login obrigatório com usuário ativo antes de liberar os módulos;
+- credenciais individuais pertencentes ao cliente, com primeiro acesso e
+  migração assistida para instalações antigas;
+- nenhuma senha mestra, credencial universal ou fallback do fabricante;
 - backup diário e backup manual, restauração validada e atualização com
   snapshot/retorno à versão anterior;
 - emissão fiscal de produção permanece bloqueada.
@@ -36,18 +36,19 @@ assim ainda pode ser distribuída somente como TESTE.
 
 ## Decisões do produto
 
-### Login no modo não fiscal
+### Login e autoria no modo não fiscal
 
-O login não é obrigatório. Instalações de um único computador podem operar em
-sessão local. Se o proprietário ativar usuários, permissões e inatividade, essas
-configurações passam a ser respeitadas sem mudar as regras comerciais.
+O login é obrigatório antes de liberar os módulos da edição Gestão. Instalações
+novas concluem o primeiro acesso criando uma credencial administrativa do
+cliente; instalações antigas passam pela migração assistida e depois usam o
+login normal. Permissões, inatividade e autoria são sempre vinculadas à sessão.
 
-### Senha mestra de suporte
+### Suporte sem credencial universal
 
-A senha mestra é uma credencial universal do fabricante. Ela não substitui a
-senha cotidiana do cliente e não deve ser divulgada, impressa, registrada em
-logs ou enviada junto do instalador. Seu uso deve ficar limitado a rotinas que
-já exigem confirmação técnica e que produzam registro de auditoria.
+O NabiCode não possui senha mestra ou credencial universal do fabricante.
+Suporte e recuperação exigem autorização por uma conta ativa do cliente com a
+permissão necessária e registro de auditoria. Licença assinada não autentica
+operador e nenhuma senha pode fabricar, prolongar ou contornar uma licença.
 
 ### Fiscal
 

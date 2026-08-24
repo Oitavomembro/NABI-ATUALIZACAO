@@ -1,5 +1,9 @@
 # Auditoria 2.4.40
 
+> Registro histórico da versão 2.4.40. As referências abaixo a senha mestra não
+> descrevem o produto atual; a credencial universal foi removida. Consulte o
+> mapa de sucessão para o contrato vigente.
+
 - Login inicial: bloqueado por padrão em bancos novos e existentes.
 - Ativação de login: exige consentimento explícito salvo na tela Segurança.
 - Hotfix de banco: incluído para desligar login na instalação atual sem apagar dados.

@@ -1,5 +1,11 @@
 # NabiCode — Estado Atual
 
+> AVISO: este arquivo preserva registros históricos de checkpoints antigos e
+> não define mais o estado vigente de segurança ou liberação. Consulte
+> `MAPA_SUCESSAO_NABICODE_2026-08-23.md`. Em especial, referências abaixo a
+> senha mestra/universal e login opcional foram superadas: não existe credencial
+> universal do fabricante e a edição Gestão exige sessão autenticada.
+
 ## Missão Fiscal 03 — worker automático seguro
 
 - criado worker Python interno, iniciado somente após schema e serviços fiscais estarem prontos;

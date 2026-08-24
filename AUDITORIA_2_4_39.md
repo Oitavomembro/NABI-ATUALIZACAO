@@ -1,5 +1,9 @@
 # Auditoria 2.4.39
 
+> Registro histórico da versão 2.4.39. As referências abaixo a senha mestra não
+> descrevem o produto atual; a credencial universal foi removida. Consulte o
+> mapa de sucessão para o contrato vigente.
+
 ## Correções
 
 - Migração única `login_opcional_migrado_2439` desativa o login inicial em bancos existentes antes da criação da interface.

@@ -8,11 +8,13 @@ def _read(name: str) -> str:
     return (ROOT / "docs" / name).read_text(encoding="utf-8")
 
 
-def test_commercial_scope_keeps_non_fiscal_login_optional_and_fiscal_blocked():
+def test_commercial_scope_requires_customer_login_and_keeps_fiscal_blocked():
     document = _read("LIBERACAO_COMERCIAL_GESTAO.md")
-    assert "login não é obrigatório" in document
+    assert "login é obrigatório" in document
     assert "emissão fiscal de produção permanece bloqueada" in document
-    assert "senha mestra" in document
+    assert "não possui senha mestra" in document
+    assert "credencial universal do fabricante" in document
+    assert "senha cotidiana" not in document
 
 
 def test_release_gate_requires_backup_restore_and_clean_test_data():
