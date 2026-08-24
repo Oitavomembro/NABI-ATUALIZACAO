@@ -164,6 +164,28 @@ DEFAULT_TOPICS: Tuple[HelpTopic, ...] = (
         ),
         ("Restaurações e limpezas exigem backup e confirmação reforçada.",),
     ),
+    HelpTopic("caixa", "Caixa", "Abertura, movimentos e fechamento do caixa.", (
+        HelpShortcut("Enter", "Confirmar a ação ou campo atual"), HelpShortcut("Shift+Enter", "Voltar ao campo anterior"),
+        HelpShortcut("Esc", "Fechar somente a janela atual"),
+    ), ("Sangria, suprimento e fechamento exigem permissão e confirmação.",)),
+    HelpTopic("financeiro", "Financeiro", "Consulta e baixa de contas a receber e pagar.", (
+        HelpShortcut("Ctrl+F", "Pesquisar títulos"), HelpShortcut("Enter", "Abrir ou confirmar o título selecionado"),
+        HelpShortcut("Esc", "Fechar somente a janela atual"),
+    ), ("Baixas usam a identidade da sessão autenticada.",)),
+    HelpTopic("relatorios", "Relatórios", "Consultas e exportações comerciais.", (
+        HelpShortcut("Enter", "Gerar o relatório com os filtros atuais"), HelpShortcut("Esc", "Fechar a janela"),
+    )),
+    HelpTopic("compras", "Fornecedores / Compras", "Pedidos e recebimentos pelos serviços oficiais.", (
+        HelpShortcut("Enter", "Confirmar a etapa atual"), HelpShortcut("Shift+Enter", "Voltar à etapa anterior"),
+        HelpShortcut("Esc", "Fechar a janela atual"),
+    ), ("Recebimentos repetidos são recusados pelo núcleo.",)),
+    HelpTopic("usuarios", "Usuários", "Contas, perfis e permissões do NabiCode.", (
+        HelpShortcut("Enter", "Abrir ou salvar a ação atual"), HelpShortcut("Esc", "Cancelar ou fechar"),
+    ), ("Nenhuma tela concede permissão fora do perfil autenticado.",)),
+    HelpTopic("impressao", "Impressão", "Impressoras, formatos e modelos de comprovante.", (
+        HelpShortcut("Enter", "Confirmar o controle atual"), HelpShortcut("Shift+Enter", "Voltar ao controle anterior"),
+        HelpShortcut("Esc", "Fechar Configurações"),
+    ), ("Atualizar a prévia ou salvar não envia documento à impressora.",)),
 )
 
 
@@ -181,6 +203,8 @@ class ContextHelpRegistry:
         "xml": "xml_import",
         "devolucao": "nfe_devolucao",
         "configuracoes": "configs",
+        "fornecedores": "compras",
+        "printing": "impressao",
     }
 
     def __init__(self, topics: Iterable[HelpTopic] = DEFAULT_TOPICS) -> None:

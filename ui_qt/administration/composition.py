@@ -24,6 +24,7 @@ from .dashboard_dialog import DashboardDialog
 from .module_hub import AdministrativeModule
 from .users_dialog import UsersDialog
 from .settings_dialog import SettingsDialog
+from .help_dialog import HelpDialog
 
 def _username(security):
     if security.session is None or security.is_expired():raise PermissionError("Sessão expirada. Entre novamente.")
@@ -74,5 +75,9 @@ def build_administrative_modules(
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",
         "configs", "view", lambda p: SettingsDialog(settings, p),
+    ))
+    modules.append(AdministrativeModule(
+        "Ajuda", "Atalhos e orientação dos módulos", "Ctrl+H",
+        "dashboard", "view", lambda p: HelpDialog(parent=p),
     ))
     return tuple(modules)
