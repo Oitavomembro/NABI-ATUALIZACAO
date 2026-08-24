@@ -4286,7 +4286,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     + (f"\nAtenção: {medium} item(ns) exigem conferência contábil posterior." if medium else ""),
                     parent=janela,
                 ):
-                    self.fiscal_service.release_number(reservation["reservation_id"], actor=actor, reason="Emissão cancelada antes da transmissão")
+                    self.fiscal_service.release_number(reservation["reservation_id"], reason="Emissão cancelada antes da transmissão")
                     return
                 estado = NFE_DEVOLUCAO_SERVICE.emitir_devolucao_oficial(
                     int(item["id"]), fiscal_service=self.fiscal_service, issuer=issuer,
@@ -4307,7 +4307,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if reservation:
                     try:
                         self.fiscal_service.release_number(
-                            reservation["reservation_id"], actor=self._usuario_financeiro(),
+                            reservation["reservation_id"],
                             reason=f"Falha antes da autorização: {exc}",
                         )
                     except Exception:
@@ -7818,7 +7818,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             if rascunho_fiscal is not None:
                 try:
                     self.fiscal_service.release_number(
-                        rascunho_fiscal.reservation_id, actor=usuario_venda,
+                        rascunho_fiscal.reservation_id,
                         reason="A transação comercial da venda foi revertida.",
                     )
                 except Exception:

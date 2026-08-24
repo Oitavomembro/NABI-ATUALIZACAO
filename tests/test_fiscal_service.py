@@ -1644,7 +1644,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(confirmed["access_key"], key)
         self.assertEqual(confirmed["confirmed_by"], "gerente")
         with self.assertRaises(ValueError):
-            self.service.release_number(reservation["id"], actor="admin", reason="Tentativa inválida")
+            self.service.release_number(reservation["id"], reason="Tentativa inválida")
         next_reservation = self.service.reserve_number(model="55", series=1, environment="HOMOLOGACAO")
         self.assertEqual(next_reservation["number"], 2)
 
@@ -1699,6 +1699,34 @@ class FiscalServiceTests(unittest.TestCase):
         with patch.object(service, "_load_numbering_conn") as load:
             with self.assertRaises(PermissionError):
                 service.reserve_number(model="55", series=1)
+        load.assert_not_called()
+
+    def test_liberacao_de_numeracao_usa_operador_autenticado(self):
+        reservation = self.service.reserve_number(model="55", series=7)
+        released = self.service.release_number(
+            reservation["id"], reason="Documento descartado antes da transmissão"
+        )
+        self.assertEqual(released["status"], "LIBERADO")
+        self.assertEqual(released["released_by"], "gerente")
+
+    def test_liberacao_de_numeracao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.release_number(
+                "reserva", actor="forjado", reason="Documento descartado"
+            )
+
+    def test_liberacao_de_numeracao_falha_fechado_antes_da_transacao(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-liberacao",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "_load_numbering_conn") as load:
+            with self.assertRaises(PermissionError):
+                service.release_number(
+                    "reserva", reason="Documento descartado antes da transmissão"
+                )
         load.assert_not_called()
 
     def test_confirmacao_rejeita_chave_de_outra_numeracao(self):

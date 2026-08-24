@@ -601,9 +601,12 @@ class FiscalService:
         finally:
             conn.close()
 
-    def release_number(self, reservation_id: str, *, actor: str, reason: str) -> dict[str, Any]:
+    def release_number(self, reservation_id: str, *, reason: str) -> dict[str, Any]:
         if not str(reason).strip():
             raise ValueError("Motivo da liberação da numeração é obrigatório.")
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="liberar a numeração fiscal"
+        )
         conn = self.connection_factory()
         try:
             conn.execute("BEGIN IMMEDIATE")

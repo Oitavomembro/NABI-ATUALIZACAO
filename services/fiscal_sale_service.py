@@ -114,7 +114,7 @@ class FiscalSaleService:
             )
         except Exception:
             self.fiscal_service.release_number(
-                str(reservation["id"]), actor=actor,
+                str(reservation["id"]),
                 reason="Falha ao preparar documento antes da venda.",
             )
             raise
@@ -452,7 +452,7 @@ class FiscalSaleService:
         if str(row[0] or ""):
             try:
                 self.fiscal_service.release_number(
-                    str(row[0]), actor=actor, reason="Venda cancelada antes da autorização fiscal."
+                    str(row[0]), reason="Venda cancelada antes da autorização fiscal."
                 )
             except ValueError as exc:
                 if "confirmada" not in str(exc).lower():
