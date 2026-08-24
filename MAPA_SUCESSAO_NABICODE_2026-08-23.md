@@ -1840,3 +1840,17 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   qualquer mutação; ausência do serviço mantém a capacidade indisponível;
 - validação ampliada Nabi/Caixa: `162 passed`, `38 subtests passed`, zero falhas;
   `compileall` e `git diff --check` aprovados.
+
+### Checkpoint IA Nabi — listas financeiras minimizadas
+
+- `financeiro.listar_receber` e `financeiro.listar_pagar` aceitam somente as
+  situações fechadas `ABERTOS` ou `VENCIDOS`, exigem `financeiro/view` e usam
+  exclusivamente `FinancialQueryService`;
+- cada resposta é ordenada por vencimento e limitada a 50 títulos, contendo
+  apenas ID real, parte relacionada, saldo aberto, vencimento, estado e atraso;
+- documento, descrição, referência, origem, observações e centro de custo não
+  entram no contexto do modelo; nenhuma baixa, criação ou estorno foi exposto;
+- o painel renderiza deterministicamente essas listas, os indicadores de
+  Relatórios e o Caixa atual, sem recorrer a conteúdo livre ou campos ocultos;
+- validação focada integrada: `54 passed`; regressão ampliada e homologação
+  manual permanecem obrigatórias antes de distribuição.
