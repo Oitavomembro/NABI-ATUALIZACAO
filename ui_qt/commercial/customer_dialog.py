@@ -6,7 +6,7 @@ from PySide6.QtCore import QEvent, QSettings, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
+    QInputDialog, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
     QTextEdit, QVBoxLayout,
 )
 
@@ -185,10 +185,14 @@ class CustomerStatementDialog(QDialog):
 
 
 class CustomerManagementDialog(QDialog):
-    def __init__(self, service, parent=None, *, customer_provider=None, filter_title="") -> None:
+    def __init__(
+        self, service, parent=None, *, customer_provider=None, filter_title="",
+        deletion_authorizer=None,
+    ) -> None:
         super().__init__(parent)
         self.service = service
         self.customer_provider = customer_provider
+        self.deletion_authorizer = deletion_authorizer
         self.setWindowTitle("Clientes e fichas")
         self.resize(1180, 720)
         self.setMinimumSize(940, 600)
@@ -267,20 +271,24 @@ class CustomerManagementDialog(QDialog):
         self.new_button = QPushButton("Novo cliente  [F3]")
         self.edit_button = QPushButton("Editar selecionado  [F4]")
         self.statement_button = QPushButton("Abrir ficha  [Enter]")
+        self.delete_button = QPushButton("Excluir cadastro vazio  [Del]")
         close = QPushButton("Fechar  [Esc]")
         self.new_button.setObjectName("primary")
         self.new_button.clicked.connect(self.new_customer)
         self.edit_button.clicked.connect(self.edit_customer)
         self.statement_button.clicked.connect(self.open_statement)
+        self.delete_button.clicked.connect(self.delete_customer)
         close.clicked.connect(self.reject)
-        for button in (self.new_button, self.edit_button, self.statement_button):
+        for button in (
+            self.new_button, self.edit_button, self.statement_button, self.delete_button,
+        ):
             buttons.addWidget(button)
         buttons.addStretch(); buttons.addWidget(close)
         layout.addLayout(buttons)
         self._shortcuts = []
         for key, callback in (
             ("F3", self.new_customer), ("F4", self.edit_customer),
-            ("F5", self.reload), ("Esc", self.reject),
+            ("F5", self.reload), ("Del", self.delete_customer), ("Esc", self.reject),
         ):
             shortcut = QShortcut(QKeySequence(key), self)
             shortcut.setAutoRepeat(False); shortcut.activated.connect(callback)
@@ -411,6 +419,29 @@ class CustomerManagementDialog(QDialog):
         if customer is None: return
         if CustomerEditorDialog(self.service, customer, self).exec() == QDialog.DialogCode.Accepted:
             self.reload()
+
+    def delete_customer(self) -> None:
+        customer = self._selected()
+        if customer is None:
+            return
+        if self.deletion_authorizer is None or not self.deletion_authorizer():
+            return
+        reference = customer.record_number or "—"
+        typed, accepted = QInputDialog.getText(
+            self, "Excluir cadastro vazio",
+            f"Ficha {reference} — {customer.name}\n\n"
+            "Somente cadastros sem saldo e sem movimentos podem ser excluídos.\n"
+            "Digite EXCLUIR para confirmar:",
+        )
+        if not accepted or typed.strip().upper() != "EXCLUIR":
+            return
+        try:
+            self.service.delete_unused_customer(customer.customer_id)
+        except Exception as exc:
+            QMessageBox.warning(self, "Exclusão recusada", str(exc))
+            return
+        QMessageBox.information(self, "Cliente", "Cadastro vazio excluído com segurança.")
+        self.reload()
 
     def open_statement(self, *_args) -> None:
         customer_id = self.selected_customer_id()

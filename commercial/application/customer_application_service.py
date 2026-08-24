@@ -36,6 +36,12 @@ class CustomerApplicationService:
         )
         return self.get_customer(command.customer_id)
 
+    def delete_unused_customer(self, customer_id: int) -> None:
+        delete = getattr(self._registration, "excluir_cadastro_sem_movimento", None)
+        if not callable(delete):
+            raise RuntimeError("Exclusão segura de cadastro não está disponível.")
+        delete(int(customer_id))
+
     def get_customer(self, customer_id: int) -> CustomerDetails:
         details = self._accounts.details(customer_id)
         if details is None:

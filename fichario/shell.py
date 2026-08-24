@@ -3,7 +3,7 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QTimer, Qt
+from PySide6.QtCore import QDate, QDateTime, QTimer, Qt
 from PySide6.QtWidgets import (
     QApplication, QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout, QHBoxLayout,
     QInputDialog, QLabel, QLineEdit, QMainWindow, QMessageBox, QPushButton,
@@ -119,19 +119,29 @@ class FicharioWindow(QMainWindow):
             button.clicked.connect(callback)
             actions.addWidget(button, index // 2, index % 2)
         layout.addLayout(actions, 1)
-        footer = QLabel(
-            f"{profile.label} - EDICAO FICHARIO - usuario {session.user.display_name}"
-            f"   •   BUILD: {self._build_info()}"
-        )
-        footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        footer.setStyleSheet("font-size:13px;font-weight:700;color:#8b949e")
-        layout.addWidget(footer)
+        self.footer = QLabel()
+        self.footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.footer.setStyleSheet("font-size:13px;font-weight:700;color:#8b949e")
+        layout.addWidget(self.footer)
+        self._clock_timer = QTimer(self)
+        self._clock_timer.setInterval(1000)
+        self._clock_timer.timeout.connect(self._refresh_system_clock)
+        self._refresh_system_clock()
+        self._clock_timer.start()
         self.refresh_summary()
         QTimer.singleShot(0, self._run_daily_backup)
 
     def _apply_interface_font(self) -> None:
         self.setStyleSheet(
             STYLE + f"\nQMainWindow,QDialog,QMenu,QMenuBar{{font-size:{interface_font_size()}px;}}"
+        )
+
+    def _refresh_system_clock(self) -> None:
+        current = QDateTime.currentDateTime().toString("dd/MM/yyyy HH:mm:ss")
+        self.footer.setText(
+            f"{self.profile.label} - EDICAO FICHARIO - usuario "
+            f"{self.session.user.display_name}   •   DATA/HORA: {current}"
+            f"   •   BUILD: {self._build_info()}"
         )
 
     def open_system_center(self) -> None:
@@ -224,7 +234,10 @@ class FicharioWindow(QMainWindow):
 
     def open_customers(self) -> None:
         if not self._allowed("clientes", "view"): return
-        CustomerManagementDialog(self.container.customer_application, self).exec()
+        CustomerManagementDialog(
+            self.container.customer_application, self,
+            deletion_authorizer=lambda: self._allowed("clientes", "edit"),
+        ).exec()
         self.refresh_summary()
 
     def open_customer_segment(self, segment: str, title: str) -> None:
@@ -238,6 +251,7 @@ class FicharioWindow(QMainWindow):
         CustomerManagementDialog(
             self.container.customer_application, self,
             customer_provider=provider, filter_title=title,
+            deletion_authorizer=lambda: self._allowed("clientes", "edit"),
         ).exec()
         self.refresh_summary()
 

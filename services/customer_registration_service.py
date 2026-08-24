@@ -141,6 +141,13 @@ class CustomerRegistrationService:
         if self.history_callback:
             self.history_callback(normalized_id, "EDIÇÃO", "Dados cadastrais atualizados.")
 
+    def excluir_cadastro_sem_movimento(self, cliente_id: int) -> None:
+        """Exclui somente cadastro vazio; qualquer vínculo comercial bloqueia."""
+        normalized_id = int(cliente_id)
+        if normalized_id <= 0:
+            raise ValueError("Cliente inválido.")
+        self.repository.excluir_cadastro_sem_movimento(normalized_id)
+
     def atualizar_perfil_fiscal(self, customer_id: int, **values: Any) -> None:
         data = {
             "email": str(values.get("email") or "").strip(),

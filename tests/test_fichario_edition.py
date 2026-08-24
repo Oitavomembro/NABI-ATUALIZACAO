@@ -146,6 +146,17 @@ def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
     assert 'BUILD: {self._build_info()}' in shell
 
 
+def test_shell_exibe_relogio_do_windows_e_exclusao_cadastral_reforcada():
+    root = Path(__file__).parents[1]
+    shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
+    dialog = (root / "ui_qt/commercial/customer_dialog.py").read_text(encoding="utf-8")
+    assert "QDateTime.currentDateTime()" in shell
+    assert 'toString("dd/MM/yyyy HH:mm:ss")' in shell
+    assert "_clock_timer.setInterval(1000)" in shell
+    assert "Excluir cadastro vazio  [Del]" in dialog
+    assert 'typed.strip().upper() != "EXCLUIR"' in dialog
+
+
 def test_backup_e_atualizacao_fichario_exigem_schema_21():
     root = Path(__file__).resolve().parents[1]
     shell = (root / "fichario/shell.py").read_text(encoding="utf-8")

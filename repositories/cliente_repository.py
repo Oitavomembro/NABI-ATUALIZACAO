@@ -283,6 +283,58 @@ class ClienteRepository:
         if cursor.rowcount != 1:
             raise ValueError("Cliente não encontrado.")
 
+    def excluir_cadastro_sem_movimento(self, cliente_id: int) -> None:
+        """Remove erro cadastral vazio sem apagar qualquer histórico comercial."""
+        normalized_id = int(cliente_id)
+        with self.database.session(write=True) as connection:
+            customer = connection.execute(
+                "SELECT codigo, COALESCE(saldo_devedor, 0) FROM clientes WHERE id=?",
+                (normalized_id,),
+            ).fetchone()
+            if customer is None:
+                raise ValueError("Cliente não encontrado.")
+            if str(customer[0] or "").strip().upper() == "CONSUMIDOR_FINAL":
+                raise ValueError("Consumidor Final é um cadastro técnico e não pode ser excluído.")
+            if abs(float(customer[1] or 0)) > 0.005:
+                raise ValueError("Cliente com saldo devedor não pode ser excluído.")
+
+            references: list[tuple[str, str]] = []
+            tables = connection.execute(
+                "SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'"
+            ).fetchall()
+            for table_row in tables:
+                table = str(table_row[0])
+                if table in {"clientes", "historico_clientes"}:
+                    continue
+                columns = {
+                    str(column[1])
+                    for column in connection.execute(
+                        f'SELECT * FROM pragma_table_info("{table.replace(chr(34), chr(34) * 2)}")'
+                    ).fetchall()
+                }
+                if "cliente_id" in columns:
+                    quoted = table.replace('"', '""')
+                    row = connection.execute(
+                        f'SELECT 1 FROM "{quoted}" WHERE cliente_id=? LIMIT 1',
+                        (normalized_id,),
+                    ).fetchone()
+                    if row is not None:
+                        references.append((table, "cliente_id"))
+            if references:
+                raise ValueError(
+                    "Cliente possui compras, recebimentos ou histórico comercial e não pode "
+                    "ser excluído. Edite o cadastro para preservar os registros."
+                )
+            if any(str(row[0]) == "historico_clientes" for row in tables):
+                connection.execute(
+                    "DELETE FROM historico_clientes WHERE cliente_id=?", (normalized_id,)
+                )
+            deleted = connection.execute(
+                "DELETE FROM clientes WHERE id=?", (normalized_id,)
+            )
+            if deleted.rowcount != 1:
+                raise ValueError("Cliente não encontrado.")
+
     def get_or_create_final_consumer(self) -> int:
         with self.database.session(write=True) as connection:
             row = connection.execute(

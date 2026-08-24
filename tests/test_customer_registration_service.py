@@ -112,6 +112,45 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
         self.assertEqual(installment, (100,))
         self.assertEqual(self.history[-1], (cliente_id, "EDIÇÃO", "Dados cadastrais atualizados."))
 
+    def test_exclui_somente_cadastro_sem_saldo_ou_movimento(self) -> None:
+        vazio = self.service.criar(nome="Cadastro duplicado", numero_ficha=31, codigo="VAZIO")
+        self.service.excluir_cadastro_sem_movimento(vazio)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertIsNone(
+                connection.execute("SELECT id FROM clientes WHERE id=?", (vazio,)).fetchone()
+            )
+
+        com_saldo = self.service.criar(nome="Com saldo", numero_ficha=32, codigo="SALDO")
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                "UPDATE clientes SET saldo_devedor=10 WHERE id=?", (com_saldo,)
+            )
+            connection.commit()
+        with self.assertRaisesRegex(ValueError, "saldo devedor"):
+            self.service.excluir_cadastro_sem_movimento(com_saldo)
+
+        com_movimento = self.service.criar(
+            nome="Com movimento", numero_ficha=33, codigo="MOV"
+        )
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            connection.execute(
+                "CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY, cliente_id INTEGER)"
+            )
+            connection.execute(
+                "INSERT INTO movimentacoes(id, cliente_id) VALUES(1, ?)",
+                (com_movimento,),
+            )
+            connection.commit()
+        with self.assertRaisesRegex(ValueError, "histórico comercial"):
+            self.service.excluir_cadastro_sem_movimento(com_movimento)
+
+    def test_exclusao_recusa_consumidor_final(self) -> None:
+        consumer = self.service.criar(
+            nome="Consumidor Final", numero_ficha=None, codigo="CONSUMIDOR_FINAL"
+        )
+        with self.assertRaisesRegex(ValueError, "cadastro técnico"):
+            self.service.excluir_cadastro_sem_movimento(consumer)
+
     def test_criacao_concorrente_serializa_ficha_sem_unique(self) -> None:
         barrier = threading.Barrier(2)
 
