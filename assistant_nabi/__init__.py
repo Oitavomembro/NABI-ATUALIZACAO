@@ -54,6 +54,10 @@ from .customer_receipt_tools import PREPARE_CUSTOMER_RECEIPT
 from .product_stock_drafts import ProductCreateDraft, ProductStockDraftService, StockMovementDraft
 from .product_stock_gateway import NabiCodeProductStockAssistantGateway
 from .product_stock_tools import PREPARE_PRODUCT_CREATE, PREPARE_STOCK_MOVEMENT
+from .financial_drafts import FinancialDraft, FinancialDraftService
+from .financial_gateway import NabiCodeFinancialAssistantGateway
+from .financial_tools import PREPARE_FINANCIAL_SETTLEMENT, PREPARE_FINANCIAL_TITLE
+from .financial_composition import create_financial_assistant_components
 from .report_tools import REPORT_INDICATORS, register_report_read_tools
 from .cash_tools import CASH_CURRENT, register_cash_read_tools
 from .purchase_read_tools import (
@@ -113,6 +117,12 @@ __all__ = [
     "NabiCodeProductStockAssistantGateway",
     "PREPARE_PRODUCT_CREATE",
     "PREPARE_STOCK_MOVEMENT",
+    "FinancialDraft",
+    "FinancialDraftService",
+    "NabiCodeFinancialAssistantGateway",
+    "PREPARE_FINANCIAL_TITLE",
+    "PREPARE_FINANCIAL_SETTLEMENT",
+    "create_financial_assistant_components",
     "REPORT_INDICATORS",
     "CASH_CURRENT",
     "DraftConfirmationService",

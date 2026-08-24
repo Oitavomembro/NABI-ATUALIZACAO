@@ -2154,3 +2154,29 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   consulta posterior e reflexos comerciais. O vídeo atual não cobre essa prova;
 - nenhum dado visível do certificado, chave completa de acesso, CNPJ ou nome de
   pessoa foi transportado para o repositório. Produção fiscal continua bloqueada.
+
+### Checkpoint IA Nabi — títulos e baixas financeiras assistidas
+
+- branch isolada: `codex/ia-financeiro-assistido`;
+- commit de implementação: `67fa2b087e72a2fb30ed0ed187a4b6d967c99782`;
+- a Nabi prepara rascunhos imutáveis para criar contas a receber/pagar e para
+  efetuar baixa parcial ou total de título identificado por ID real;
+- preparação e revisão não gravam título, pagamento ou journal;
+- execução exige sessão real, permissões `financeiro/create` ou
+  `financeiro/pay`, confirmação humana reforçada, curta e vinculada ao hash;
+- a baixa revalida tipo, estado e saldo aberto imediatamente antes de consumir
+  a autorização; saldo alterado exige um novo rascunho;
+- criação/baixa e `assistant_operation_journal` são confirmados na mesma
+  transação SQLite; falha do journal reverte todos os efeitos;
+- replay durável retorna o resultado confirmado sem criar segundo título,
+  pagamento ou evento posterior; colisão da chave com outro hash falha fechada;
+- cancelamento, estorno, recorrências, conciliação e Caixa mutável não foram
+  expostos à Nabi neste checkpoint;
+- `main_qt.py`, `ui_qt/app.py`, painel Qt, Fiscal/SEFAZ e banco real não foram
+  alterados;
+- validação focada: `55 passed`; regressão ampliada de Nabi, Financeiro,
+  Commercial e schema: `238 passed, 38 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- pendência de integração: composição no shell/painel deve ocorrer somente em
+  checkpoint coordenado, preservando o estado seguro quando o executor não for
+  fornecido.

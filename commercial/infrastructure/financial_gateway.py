@@ -118,24 +118,48 @@ class NabiCodeFinancialGateway:
             str(row.get("documento") or row.get("origem_id") or ""),
         ) for row in rows)
 
-    def create_title(self, title_type: str, command: CreateFinancialTitleCommand, *, user: str) -> PersistedFinancialAction:
-        title_id = self.service.criar_titulo(
+    def create_title(self, title_type: str, command: CreateFinancialTitleCommand, *, user: str, idempotency_key=None, operation_fingerprint=None) -> PersistedFinancialAction:
+        values = dict(
             tipo=title_type, valor=command.amount, data_vencimento=command.due_date,
             pessoa_id=command.party_id, pessoa_nome=command.party_name,
             documento=command.document, descricao=command.description,
             observacao=command.notes, data_emissao=command.issue_date, usuario=user,
         )
+        if idempotency_key is not None or operation_fingerprint is not None:
+            if not idempotency_key or not operation_fingerprint:
+                raise ValueError("Chave e identificação idempotentes são obrigatórias juntas.")
+            result = self.service.criar_titulo_assistido(
+                idempotency_key=idempotency_key,
+                operation_fingerprint=operation_fingerprint, **values,
+            )
+            return PersistedFinancialAction(
+                result["title_id"], result["status"], result["open_amount"],
+                result["payment_id"], bool(result["idempotent_replay"]),
+            )
+        title_id = self.service.criar_titulo(**values)
         title = self.service.obter_titulo(title_id)
         return PersistedFinancialAction(title_id, title["status"], title["saldo_aberto"])
 
-    def settle(self, title_type: str, command: SettleFinancialTitleCommand, *, user: str) -> PersistedFinancialAction:
+    def settle(self, title_type: str, command: SettleFinancialTitleCommand, *, user: str, idempotency_key=None, operation_fingerprint=None) -> PersistedFinancialAction:
         title = self.service.obter_titulo(command.title_id)
         if str(title.get("tipo") or "").upper() != title_type:
             raise ValueError(f"O título não é do tipo {title_type}.")
-        result = self.service.pagar(
-            command.title_id, command.amount, forma_pagamento=command.payment_method,
-            observacao=command.notes, usuario=user, data_pagamento=command.payment_date,
+        values = dict(
+            forma_pagamento=command.payment_method, observacao=command.notes,
+            usuario=user, data_pagamento=command.payment_date,
         )
+        if idempotency_key is not None or operation_fingerprint is not None:
+            if not idempotency_key or not operation_fingerprint:
+                raise ValueError("Chave e identificação idempotentes são obrigatórias juntas.")
+            persisted = self.service.baixar_titulo_assistido(
+                command.title_id, command.amount, idempotency_key=idempotency_key,
+                operation_fingerprint=operation_fingerprint, **values,
+            )
+            return PersistedFinancialAction(
+                persisted["title_id"], persisted["status"], persisted["open_amount"],
+                persisted["payment_id"], bool(persisted["idempotent_replay"]),
+            )
+        result = self.service.pagar(command.title_id, command.amount, **values)
         return PersistedFinancialAction(result.titulo_id, result.status, result.saldo_aberto, result.pagamento_id)
 
     def cancel(self, title_id: int, *, user: str) -> PersistedFinancialAction:

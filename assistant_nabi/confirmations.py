@@ -91,7 +91,7 @@ class DraftConfirmationService:
                     "PURCHASE_RECEIPT", "PURCHASE_ORDER_CREATE", "SUPPLIER_CREATE",
                     "NFE_ENTRY_IMPORT", "CUSTOMER_CREATE", "CUSTOMER_RECEIPT",
                     "PRODUCT_CREATE", "STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST",
-                }
+                } or draft.operation_kind.startswith("FINANCIAL_")
                 else CapabilityLevel.SIMPLE_CONFIRMATION
             ),
         )
@@ -171,7 +171,7 @@ class DraftConfirmationService:
                 "PURCHASE_RECEIPT", "PURCHASE_ORDER_CREATE", "SUPPLIER_CREATE",
                 "NFE_ENTRY_IMPORT", "CUSTOMER_CREATE", "CUSTOMER_RECEIPT",
                 "PRODUCT_CREATE", "STOCK_RECEIVE", "STOCK_REMOVE", "STOCK_ADJUST",
-            }
+            } or operation.startswith("FINANCIAL_")
             else CapabilityLevel.SIMPLE_CONFIRMATION
         )
         if record.capability is not required:
