@@ -484,7 +484,7 @@ class FiscalSaleService:
             raise ValueError("A venda selecionada não possui documento autorizado para cancelar.")
         response, event = self.fiscal_service.send_event(
             event_type="CANCELAMENTO", access_key=str(row[0]), sequence=1,
-            password=password, actor=actor, protocol=str(row[1]),
+            password=password, protocol=str(row[1]),
             justification=str(justification or "").strip(),
         )
         if not response.success:

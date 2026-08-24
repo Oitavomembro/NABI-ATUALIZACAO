@@ -3693,7 +3693,10 @@ class FiscalService:
         self.validate_official_xml(xml, document_type="consulta")
         return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
-    def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, actor: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
+    def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="transmitir um evento fiscal"
+        )
         key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
         problems = self.validate_ready(operation="evento", model=model)

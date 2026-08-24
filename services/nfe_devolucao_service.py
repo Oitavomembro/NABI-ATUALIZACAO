@@ -562,7 +562,7 @@ class NFeDevolucaoService:
             raise ValueError("Somente devolução autorizada pode ser cancelada oficialmente.")
         response, event = fiscal_service.send_event(
             event_type="CANCELAMENTO", access_key=str(state.get("access_key") or ""),
-            sequence=int(sequence), password=password, actor=actor,
+            sequence=int(sequence), password=password,
             protocol=str(state.get("protocol") or ""), justification=justification,
         )
         events = list(state.get("events") or [])

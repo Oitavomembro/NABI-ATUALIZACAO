@@ -12170,7 +12170,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 response, _event = self.fiscal_service.send_event(
                     event_type="CCE", access_key=key, sequence=sequence,
-                    password=password, actor=self._usuario_financeiro(),
+                    password=password,
                     correction=correction.strip(),
                 )
                 if not response.success:
