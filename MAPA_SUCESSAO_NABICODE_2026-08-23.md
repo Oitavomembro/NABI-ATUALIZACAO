@@ -84,6 +84,9 @@ Legenda:
 - [x] checkpoint isolado de Clientes Qt implementado em `codex/clientes-qt` no commit `94fb107`: lista administrativa, busca, novo cadastro, edição e ficha/extrato usam somente `CustomerApplicationService`, IDs reais e DTOs imutáveis; a GUI não importa banco, repositório ou Fiscal, e preserva Enter/Shift+Enter/Esc, auto-repeat bloqueado, MoneyEdit e estética do Legacy;
 - [x] validação de Clientes Qt: 51 testes e 5 subtestes focados, depois 286 testes e 342 subtestes relacionados aprovados, além de `compileall` e `git diff --check`;
 - [~] composição do botão/atalho F3 de Clientes no shell Qt permanece pendente porque `main_qt.py` está temporariamente reservado à trilha IA; o diálogo e a fronteira Commercial estão completos e devem ser conectados somente na composição global, sem duplicar serviços;
+- [x] checkpoint isolado de Caixa Qt implementado em `codex/caixa-qt` no commit `e000b8c`: porta `CashApplicationService` fixa terminal e usuário fora da GUI e expõe sessão/resumo tipados; a janela Qt cobre abertura com/sem saldo, suprimento, sangria, valores por forma, histórico e fechamento pelo `CashService` transacional, sem SQL ou persistência direta na interface;
+- [x] validação de Caixa Qt: 32 testes focados e regressão relacionada com 243 testes e 341 subtestes aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do Caixa no shell Qt permanece pendente porque `main_qt.py`, `ui_qt/app.py` e `pdv_window.py` estão temporariamente reservados à trilha IA; conectar depois pela porta pronta, preservando permissões e identidade real do operador;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
