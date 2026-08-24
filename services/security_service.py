@@ -43,6 +43,7 @@ class SecurityService:
 
     CONFIG_KEY = "security_state_v1"
     LOGIN_THROTTLE_KEY = "security_login_throttle_v1"
+    INITIAL_SETUP_KEY = "configuracao_inicial_concluida_v1"
     MAX_LOGIN_FAILURES = 5
     LOGIN_COOLDOWN_SECONDS = 60
 
@@ -92,6 +93,80 @@ class SecurityService:
         """Informa se a instalação já possui uma identidade administrativa."""
 
         return bool(self._load()["users"])
+
+    def needs_existing_installation_migration(self) -> bool:
+        """Detecta base antiga com usuários, mas sem o marco do primeiro acesso."""
+
+        if not self.has_users():
+            return False
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.INITIAL_SETUP_KEY,)
+            ).fetchone()
+            value = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            return str(value or "").strip() != "1"
+        finally:
+            connection.close()
+
+    def complete_existing_installation_migration(
+        self, *, username: str, current_password: str, new_password: str
+    ) -> SecurityUser:
+        """Converte uma base antiga mediante prova da credencial administrativa atual."""
+
+        username = self._normalize_username(username)
+        if len(str(new_password or "")) < 8:
+            raise ValueError("A nova senha deve ter ao menos 8 caracteres.")
+        connection = self.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            marker = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.INITIAL_SETUP_KEY,)
+            ).fetchone()
+            marker_value = (
+                marker[0] if marker and not hasattr(marker, "keys")
+                else (marker["valor"] if marker else "")
+            )
+            if str(marker_value or "").strip() == "1":
+                raise PermissionError("A migração de segurança já foi concluída.")
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (self.CONFIG_KEY,)
+            ).fetchone()
+            raw = row[0] if row and not hasattr(row, "keys") else (row["valor"] if row else "")
+            state = json.loads(raw or "{}")
+            users = dict(state.get("users") or {})
+            data = users.get(username)
+            if not data or not data.get("active") or str(data.get("profile") or "").upper() != "ADMIN":
+                raise PermissionError("Informe um administrador ativo da instalação existente.")
+            if not self.verify_password(current_password, data.get("password") or {}):
+                raise PermissionError("A senha administrativa atual não confere.")
+            data["password"] = self.hash_password(new_password)
+            state["users"] = users
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.CONFIG_KEY, json.dumps(state, ensure_ascii=False, sort_keys=True)),
+            )
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.INITIAL_SETUP_KEY, "1"),
+            )
+            connection.execute(
+                "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) "
+                "VALUES(?,?,?,?,?,?,?)",
+                (
+                    datetime.now().strftime("%d/%m/%Y %H:%M:%S"), username,
+                    "SEGURANCA", "MIGRACAO_CREDENCIAL_LEGADA", username,
+                    "Credencial administrativa antiga validada e substituída.", "SUCESSO",
+                ),
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
+        self.session = None
+        return self.get_user(username)
 
     def complete_initial_setup(
         self,

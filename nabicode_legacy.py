@@ -863,6 +863,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 if not self.abrir_login_usuario(inicial=True):
                     self.destroy()
                     raise SystemExit(0)
+        elif self.security.needs_existing_installation_migration():
+            with startup_modal_scope():
+                if not self._executar_migracao_seguranca_legada():
+                    self.destroy()
+                    raise SystemExit(0)
+                if not self.abrir_login_usuario(inicial=True):
+                    self.destroy()
+                    raise SystemExit(0)
+        elif not self.abrir_login_usuario(inicial=True):
+            self.destroy()
+            raise SystemExit(0)
 
         self.title(obter_config("nome_loja") or "NabiCode — Gerenciador de Crediário Inteligente")
         apply_responsive_geometry(self, theme=UI_THEME)
@@ -957,10 +968,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.bind_all("<Any-KeyPress>", lambda _event: self.security.touch(), add="+")
         self.bind_all("<Any-Button>", lambda _event: self.security.touch(), add="+")
         self.after(250, self._monitorar_inatividade)
-        if not self.security.session and not self._login_usuarios_habilitado():
-            # Compatibilidade temporária somente para bases anteriores ao novo
-            # primeiro acesso. Instalações novas nunca passam por este caminho.
-            self.security.start_session_without_password("admin")
         self._janela_abertura_caixa = None
         self._janela_formulario_abertura_caixa = None
         self.after_idle(self._iniciar_worker_fiscal)
@@ -1073,6 +1080,65 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.wait_window(janela)
         return resultado["ok"]
 
+    def _executar_migracao_seguranca_legada(self):
+        """Protege uma base antiga antes de liberar qualquer módulo operacional."""
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Atualização de segurança do NabiCode")
+        janela.geometry("560x500")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(
+            janela, text="PROTEJA O ACESSO EXISTENTE", text_color="#d29922",
+            font=ctk.CTkFont(size=22, weight="bold"),
+        ).pack(anchor="w", padx=32, pady=(26, 6))
+        ctk.CTkLabel(
+            janela,
+            text=("Esta base foi criada antes do novo controle de acesso.\n"
+                  "Valide um administrador existente e defina uma nova senha."),
+            justify="left", wraplength=500,
+        ).pack(anchor="w", padx=32, pady=(0, 14))
+        campos = {}
+        for rotulo, chave, valor in (
+            ("Administrador existente*", "usuario", "admin"),
+            ("Senha atual*", "atual", ""),
+            ("Nova senha (mínimo 8 caracteres)*", "nova", ""),
+            ("Repita a nova senha*", "confirmacao", ""),
+        ):
+            ctk.CTkLabel(janela, text=rotulo).pack(anchor="w", padx=32, pady=(7, 2))
+            campo = ctk.CTkEntry(janela, height=36, show="" if chave == "usuario" else "●")
+            campo.pack(fill="x", padx=32)
+            if valor:
+                campo.insert(0, valor)
+            campos[chave] = campo
+
+        def concluir_migracao(event=None):
+            if campos["nova"].get() != campos["confirmacao"].get():
+                messagebox.showwarning("Atualização de segurança", "As novas senhas não coincidem.", parent=janela)
+                campos["nova"].delete(0, "end"); campos["confirmacao"].delete(0, "end")
+                campos["nova"].focus_set(); return "break"
+            try:
+                self.security.complete_existing_installation_migration(
+                    username=campos["usuario"].get(), current_password=campos["atual"].get(),
+                    new_password=campos["nova"].get(),
+                )
+            except Exception as exc:
+                campos["atual"].delete(0, "end")
+                messagebox.showerror("Atualização de segurança", str(exc), parent=janela)
+                campos["atual"].focus_set(); return "break"
+            resultado["ok"] = True
+            janela.destroy(); return "break"
+
+        ctk.CTkButton(
+            janela, text="Atualizar segurança [Enter]", command=concluir_migracao,
+            fg_color="#2ea043", height=42,
+        ).pack(fill="x", padx=32, pady=22)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        campos["usuario"].focus_set()
+        janela.bind("<Return>", concluir_migracao)
+        self.wait_window(janela)
+        return resultado["ok"]
+
     def _senha_administrativa_valida(self, senha):
         return self.security.confirm_manager_password(str(senha or ""))
 
@@ -1095,11 +1161,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _autorizar(self, modulo, acao="view", *, silencioso=False):
         if not self.security.session:
-            if self._login_usuarios_habilitado():
-                if not self.abrir_login_usuario():
-                    return False
-            else:
-                self.security.start_session_without_password("admin")
+            if not self.abrir_login_usuario():
+                return False
         if self.security.require(modulo, acao):
             self.security.touch()
             return True
@@ -1142,10 +1205,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         try:
             if self.security.session and self.security.is_expired():
                 self.security.logout("INATIVIDADE")
-            if not self.security.session and self._login_usuarios_habilitado():
+            if not self.security.session:
                 self.abrir_login_usuario()
-            elif not self.security.session:
-                self.security.start_session_without_password("admin")
         finally:
             self.after(30000, self._monitorar_inatividade)
 

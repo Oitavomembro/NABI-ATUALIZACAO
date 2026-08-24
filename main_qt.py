@@ -53,6 +53,7 @@ from services import NFeImportService
 from ui_qt.app import run
 from ui_qt.administration import (
     AdministrativeModuleHub, ApplicationLoginDialog, InitialSetupDialog,
+    LegacySecurityMigrationDialog,
     build_administrative_modules,
 )
 from licensing.gate import Capability
@@ -297,6 +298,9 @@ def main(argv=None) -> int:
                 return 5
         else:
             module_security.bootstrap_admin(system.get_config("admin_senha_hash"))
+            if module_security.needs_existing_installation_migration():
+                if LegacySecurityMigrationDialog(module_security).exec() != QDialog.DialogCode.Accepted:
+                    return 5
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
         module_actions = build_administrative_modules(

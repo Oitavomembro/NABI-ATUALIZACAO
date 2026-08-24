@@ -175,4 +175,35 @@ class InitialSecuritySetupTests(unittest.TestCase):
             )
         self.assertFalse(self.service.has_users())
 
+    def test_migracao_legada_exige_admin_atual_e_substitui_credencial(self):
+        self.service.bootstrap_admin(hashlib.sha256(b"senha-antiga").hexdigest())
+        self.assertTrue(self.service.needs_existing_installation_migration())
+        with self.assertRaises(PermissionError):
+            self.service.complete_existing_installation_migration(
+                username="admin", current_password="errada", new_password="nova-segura",
+            )
+        self.assertTrue(self.service.needs_existing_installation_migration())
+        self.service.complete_existing_installation_migration(
+            username="admin", current_password="senha-antiga", new_password="nova-segura",
+        )
+        self.assertFalse(self.service.needs_existing_installation_migration())
+        self.assertIsNone(self.service.authenticate("admin", "senha-antiga"))
+        self.assertIsNotNone(self.service.authenticate("admin", "nova-segura"))
+        connection = sqlite3.connect(self.db)
+        audit = connection.execute(
+            "SELECT acao FROM auditoria WHERE acao='MIGRACAO_CREDENCIAL_LEGADA'"
+        ).fetchone()
+        connection.close()
+        self.assertEqual(audit, ("MIGRACAO_CREDENCIAL_LEGADA",))
+
+    def test_migracao_legada_e_consumida_uma_unica_vez(self):
+        self.service.bootstrap_admin(hashlib.sha256(b"senha-antiga").hexdigest())
+        self.service.complete_existing_installation_migration(
+            username="admin", current_password="senha-antiga", new_password="nova-segura",
+        )
+        with self.assertRaises(PermissionError):
+            self.service.complete_existing_installation_migration(
+                username="admin", current_password="nova-segura", new_password="outra-segura",
+            )
+
 if __name__ == "__main__": unittest.main()
