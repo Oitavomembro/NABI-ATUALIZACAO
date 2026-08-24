@@ -2146,3 +2146,23 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - confirmação/liberação assíncrona de reserva exige desenho que preserve a
   identidade confiável capturada na origem sem depender de sessão viva do
   worker; não remover seus parâmetros até existir essa capacidade interna.
+
+### Auditoria fiscal de autoria — confirmação assíncrona da numeração
+
+- implementação: `13ba3a8` — `fix: preserva autoria na confirmacao fiscal`;
+- arquitetura: a confirmação não exige sessão viva do worker e não aceita um
+  novo ator. Ela reutiliza exclusivamente a identidade autenticada capturada em
+  `reserve_number`, na mesma reserva vinculada à chave autorizada;
+- reservas legadas ainda abertas sem identidade de origem falham fechadas e
+  permanecem `RESERVADO`; não é criada identidade retroativa nem fallback
+  `Sistema`. Reservas já confirmadas preservam a idempotência anterior;
+- correspondência de modelo, série, número e chave, além das barreiras contra
+  confirmação de reserva liberada ou chave divergente, foram preservadas;
+- o caminho síncrono e o worker removem o parâmetro externo `actor` ao confirmar;
+  o histórico `confirmed_by` deriva da reserva confiável;
+- testes focados: `4 passed`, `137 deselected`; regressão de
+  outbox/worker/venda: `49 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real, XML ou regra tributária foi alterada. Produção
+  fiscal permanece bloqueada;
+- liberação de reserva continua síncrona e será autenticada pelo operador atual
+  em checkpoint separado.
