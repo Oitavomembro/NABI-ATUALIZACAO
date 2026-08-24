@@ -482,7 +482,7 @@ class NFeDevolucaoService:
         }
         try:
             response, fiscal_record = fiscal_service.authorize_document(
-                xml=xml, access_key=access_key, password=password, actor=actor_name, model="55",
+                xml=xml, access_key=access_key, password=password, model="55",
                 reservation_id=reservation_id,
             )
         except Exception as exc:

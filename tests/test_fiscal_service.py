@@ -1457,7 +1457,7 @@ class FiscalServiceTests(unittest.TestCase):
             return FiscalResponse(True, "135", "Evento registrado", "EV123", raw_xml="<ret><cStat>135</cStat><nProt>EV123</nProt></ret>")
         self.service.transmit = fake_transmit
         try:
-            response, record = self.service.authorize_document(xml=xml, access_key=key, password=self.password, actor="admin")
+            response, record = self.service.authorize_document(xml=xml, access_key=key, password=self.password)
             self.assertTrue(response.success)
             self.assertTrue(Path(record["processed_path"]).is_file())
             self.assertTrue(self.service.consult_document(access_key=key, password=self.password).success)
@@ -1476,6 +1476,32 @@ class FiscalServiceTests(unittest.TestCase):
                 password=self.password, actor="forjado",
                 correction="Correção complementar suficientemente detalhada.",
             )
+
+    def test_autorizacao_fiscal_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.authorize_document(
+                xml=b"<NFe/>", access_key="1" * 44,
+                password=self.password, actor="forjado",
+            )
+
+    def test_autorizacao_fiscal_falha_fechado_antes_de_validar_assinar_ou_transmitir(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-documento",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "validate_ready") as ready, patch.object(
+            service, "sign_xml"
+        ) as sign, patch.object(service, "transmit") as transmit:
+            with self.assertRaises(PermissionError):
+                service.authorize_document(
+                    xml=b"<NFe/>", access_key="1" * 44,
+                    password=self.password,
+                )
+        ready.assert_not_called()
+        sign.assert_not_called()
+        transmit.assert_not_called()
 
     def test_evento_fiscal_falha_fechado_antes_de_validar_ou_transmitir(self):
         service = FiscalService(
@@ -2667,7 +2693,6 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
                 xml=xml,
                 access_key=key,
                 password=self.password,
-                actor="admin",
                 reservation_id=reservation["id"],
             )
         finally:
@@ -2694,7 +2719,6 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
                 xml=xml,
                 access_key=key,
                 password=self.password,
-                actor="admin",
                 reservation_id=reservation["id"],
             )
         finally:

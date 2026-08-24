@@ -3625,10 +3625,12 @@ class FiscalService:
         xml: bytes | str,
         access_key: str,
         password: str,
-        actor: str,
         model: str = "55",
         reservation_id: str = "",
     ) -> tuple[FiscalResponse, dict[str, Any]]:
+        actor = self._authenticated_fiscal_actor(
+            "transmit", operation="autorizar um documento fiscal"
+        )
         problems = self.validate_ready(operation="autorizacao", model=model)
         if problems:
             raise ValueError("; ".join(problems))
