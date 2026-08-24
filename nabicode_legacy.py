@@ -12012,9 +12012,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     return
                 queue = dict(row.get("_queue") or {})
                 try:
-                    self.fiscal_service.force_receipt_check(
-                        str(queue.get("id") or ""), actor=self._usuario_financeiro()
-                    )
+                    self.fiscal_service.force_receipt_check(str(queue.get("id") or ""))
                 except ValueError as exc:
                     messagebox.showwarning("Consultar recibo", str(exc), parent=janela)
                     return

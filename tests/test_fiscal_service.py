@@ -1891,7 +1891,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(second["operation"], "recibo")
         self.assertEqual(second["last_status_code"], "105")
         self.assertEqual(second["attempts"], 2)
-        forced = self.service.force_receipt_check(second["id"], actor="gerente")
+        forced = self.service.force_receipt_check(second["id"])
         self.assertEqual(forced["operation"], "recibo")
         self.assertEqual(forced["receipt_check_requested_by"], "gerente")
         self.assertLessEqual(datetime.fromisoformat(forced["next_attempt_at"]), datetime.now(timezone.utc))
@@ -1973,7 +1973,23 @@ class FiscalServiceTests(unittest.TestCase):
             access_key="7" * 44, actor="admin",
         )
         with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
-            self.service.force_receipt_check(item["id"], actor="admin")
+            self.service.force_receipt_check(item["id"])
+
+    def test_consulta_forcada_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.force_receipt_check("fila", actor="forjado")
+
+    def test_consulta_forcada_falha_fechado_antes_de_ler_a_fila(self):
+        service = FiscalService(
+            self.connect,
+            storage_dir=Path(self.tmp.name) / "sem-autorizacao-recibo",
+            actor_provider=lambda: "forjado",
+            authorization_provider=lambda _action: False,
+        )
+        with patch.object(service, "list_transmission_queue") as listed:
+            with self.assertRaises(PermissionError):
+                service.force_receipt_check("fila")
+        listed.assert_not_called()
 
     def test_retransmissao_em_lote_seleciona_apenas_nfce_em_contingencia(self):
         contingency_key = "2" * 34 + "9" + "2" * 9

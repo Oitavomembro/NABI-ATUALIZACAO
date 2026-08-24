@@ -3472,8 +3472,9 @@ class FiscalService:
         self._save_transmission_queue(rows)
         return dict(target)
 
-    def force_receipt_check(self, queue_id: str, *, actor: str) -> dict[str, Any]:
+    def force_receipt_check(self, queue_id: str) -> dict[str, Any]:
         """Agenda consulta imediata de recibo já existente sem reenviar a NF-e/NFC-e."""
+        actor = self._authenticated_outbox_actor("transmit")
         rows = self.list_transmission_queue()
         target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
         if target is None:
