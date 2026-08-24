@@ -127,6 +127,24 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertEqual(first.received_total, Decimal("50"))
         self.assertEqual((first.limit, first.offset), (2, 0))
 
+    def test_day_history_page_with_volume_never_materializes_more_than_limit(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.executemany(
+                """INSERT INTO movimentacoes
+                   (id,cliente_id,tipo,descricao,valor,data,vencimento,status_pagamento,valor_aberto)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                ((index, 1, "COMPRA", "VOLUME", 1, "02/08/2026 12:00:00", "", "PAGO", 0)
+                 for index in range(10, 5010)),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        page = self.repo.day_history_page(day=datetime(2026, 8, 2), limit=50)
+        self.assertEqual(len(page.movements), 50)
+        self.assertEqual(page.total_records, 5003)
+        self.assertEqual(page.sales_total, Decimal("5300"))
+
     def test_missing_products_table_returns_unavailable_indicator(self) -> None:
         conn = sqlite3.connect(self.db_path)
         try:
