@@ -11,6 +11,7 @@ from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QWidget
 from ui_qt.administration.login_dialog import ApplicationLoginDialog
 from ui_qt.administration.module_hub import AdministrativeModule
 from ui_qt.shell import LEGACY_NAVIGATION, NabiCodeShellWindow
+from ui_qt import app as qt_app
 
 
 @pytest.fixture(scope="module", autouse=True)
@@ -162,3 +163,28 @@ def test_qt_splash_wrapper_reuses_canonical_process_contract():
     stop.assert_called_once_with(paths[0])
     ensure.assert_called_once_with(process, timeout=15.0)
     cleanup.assert_called_once_with(*paths)
+
+
+def test_application_shell_does_not_construct_pdv_during_startup(qt_application):
+    with patch.object(qt_app, "PDVWindow", autospec=True) as pdv:
+        _application, shell = qt_app.create_shell_application(
+            object(), Security(), (dashboard_module(),), argv=[]
+        )
+        try:
+            pdv.assert_not_called()
+        finally:
+            shell.close()
+
+
+def test_attaching_nabi_panel_does_not_open_sales(qt_application):
+    panel = QWidget()
+    with patch.object(qt_app, "PDVWindow", autospec=True) as pdv:
+        _application, shell = qt_app.create_shell_application(
+            object(), Security(), (dashboard_module(),), argv=[],
+            assistant_panel_factory=lambda _parent: panel,
+        )
+        try:
+            assert shell.nabi_assistant_dock.widget() is panel
+            pdv.assert_not_called()
+        finally:
+            shell.close()
