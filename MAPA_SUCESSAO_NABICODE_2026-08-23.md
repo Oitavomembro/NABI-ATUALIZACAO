@@ -2885,6 +2885,9 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - branch/worktree: `codex/clientes-produtos-qt-visual`, derivada exatamente de
   `ead18da9d6b5217481db1ef8050e05ac18b207e0`, sem alterar a composição;
 - implementação: `f2cdef1` — `style: harmoniza clientes e produtos no Qt`;
+- correção visual solicitada pelo proprietário: `bc9a646` substitui o azul
+  dominante por acabamento metálico em aço/grafite, cabeçalhos prateados e
+  botões com relevo; azul/ciano permanece somente como filete discreto de foco;
 - Clientes e Produtos adotam metal grafite/preto, trilhas finas azul/ciano,
   foco visível, tabelas alternadas e colunas responsivas; vermelho permanece
   reservado à exclusão segura e aos alertas já existentes;
