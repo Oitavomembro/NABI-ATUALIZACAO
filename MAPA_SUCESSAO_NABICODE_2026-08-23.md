@@ -2304,3 +2304,24 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - o ciclo oficial de devolução deixa de aceitar autoria livre na autorização,
   baixa, cancelamento, reversão e recuperação. A entrada comercial por XML segue
   bloqueada para checkpoint coordenado com a composição Nabi/Legacy.
+
+### Auditoria fiscal de autoria — mutações da venda fiscal
+
+- implementação: `a10a9f4` — `fix: autentica mutacoes da venda fiscal`;
+- `FiscalSaleService.prepare` e `cancel_authorized` perderam parâmetros de ator
+  que não eram usados; reserva e evento já exigem a sessão oficial no serviço;
+- persistência transacional do rascunho/outbox, enfileiramento pendente e
+  finalização local do cancelamento não aceitam mais identidade externa. Cada
+  fronteira exige `fiscal/transmit` e captura o operador autenticado antes de
+  qualquer gravação ou consulta mutável;
+- a identidade capturada na transação continua armazenada na outbox para o
+  worker assíncrono, sem exigir sessão viva posterior nem criar fallback;
+- a venda comercial continua usando seu usuário próprio para estoque/financeiro,
+  separado da autoria técnica fiscal. Idempotência do documento/fila,
+  contingência, número reservado e bloqueios de resposta desconhecida foram
+  preservados;
+- testes focados de venda/outbox: `29 passed`; regressão de venda, outbox/worker,
+  autorização, cancelamento, Central e segurança: `253 passed`, `10 subtests
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada.
