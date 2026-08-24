@@ -27,8 +27,8 @@ from commercial.infrastructure.runtime import create_commercial_container
 from commercial.application.report_application_service import ReportApplicationService
 from commercial.application.cash_application_service import CashApplicationService
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
-from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from core.app_version import load_app_version
+from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from database import DatabaseManager
 from database.schema_initializer import initialize_database
 from database.sqlite_connection import backup_database

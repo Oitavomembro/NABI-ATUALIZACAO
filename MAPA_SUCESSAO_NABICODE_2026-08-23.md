@@ -83,13 +83,13 @@ Legenda:
 - [~] homologação manual pendente com catálogo real: legibilidade de nome/preço/estoque, F2, botão, seta/lista rápida, busca por nome/código/barras, Enter/Shift+Enter/Esc, mouse e retorno à Quantidade;
 - [x] checkpoint isolado de Clientes Qt implementado em `codex/clientes-qt` no commit `94fb107`: lista administrativa, busca, novo cadastro, edição e ficha/extrato usam somente `CustomerApplicationService`, IDs reais e DTOs imutáveis; a GUI não importa banco, repositório ou Fiscal, e preserva Enter/Shift+Enter/Esc, auto-repeat bloqueado, MoneyEdit e estética do Legacy;
 - [x] validação de Clientes Qt: 51 testes e 5 subtestes focados, depois 286 testes e 342 subtestes relacionados aprovados, além de `compileall` e `git diff --check`;
-- [~] composição do botão/atalho F3 de Clientes no shell Qt permanece pendente porque `main_qt.py` está temporariamente reservado à trilha IA; o diálogo e a fronteira Commercial estão completos e devem ser conectados somente na composição global, sem duplicar serviços;
+- [x] Clientes foi conectado ao hub/shell na composição global integrada em `3751c3a`, reutilizando a fronteira Commercial pronta e sem duplicar serviços;
 - [x] checkpoint isolado de Caixa Qt implementado em `codex/caixa-qt` no commit `e000b8c`: porta `CashApplicationService` fixa terminal e usuário fora da GUI e expõe sessão/resumo tipados; a janela Qt cobre abertura com/sem saldo, suprimento, sangria, valores por forma, histórico e fechamento pelo `CashService` transacional, sem SQL ou persistência direta na interface;
 - [x] validação de Caixa Qt: 32 testes focados e regressão relacionada com 243 testes e 341 subtestes aprovados, além de `compileall` e `git diff --check`;
-- [~] composição do Caixa no shell Qt permanece pendente porque `main_qt.py`, `ui_qt/app.py` e `pdv_window.py` estão temporariamente reservados à trilha IA; conectar depois pela porta pronta, preservando permissões e identidade real do operador;
+- [x] Caixa foi conectado ao hub/shell na composição global integrada em `3751c3a`, preservando permissões e identidade real do operador;
 - [x] checkpoint isolado de Financeiro Qt implementado em `codex/financeiro-qt` no commit `03e80a8`: contas a receber/pagar separadas, resumo, IDs reais, criação e baixa usam exclusivamente `FinancialQueryService`/`FinancialActionService`, `ActionContext` de UI e confirmação humana explícita; nenhuma persistência direta ou importação Fiscal na GUI;
 - [x] validação de Financeiro Qt: 51 testes focados e regressão relacionada com 243 testes e 333 subtestes aprovados, além de `compileall` e `git diff --check`;
-- [~] composição do Financeiro no shell Qt permanece pendente enquanto os arquivos de composição estão reservados à trilha IA; checkpoint suspenso limpo por prioridade da edição FICHÁRIO;
+- [x] Financeiro foi conectado ao hub/shell na composição global integrada em `3751c3a`, pela porta pronta e sem persistência na GUI;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
@@ -231,7 +231,7 @@ Legenda:
 - [x] integração conjunta Licenciamento V2 + Qt completo + Nabi: históricos preservados por merge normal; startup mantém portão fail-closed e monitoramento contínuo da licença antes de compor a ativação autenticada, rascunhos de venda, recebimentos idempotentes e revisão XML; validação conjunta pré-merge com 231 testes e 37 subtestes, painel com 16 testes, ativação com 1 teste e licenciamento com 25 testes aprovados;
 - [x] emissor externo V2 integrado à trilha conjunta pelo merge normal `780361d`, preservando os commits `35b3b80`, `84c0d49` e `4ee57e9`; nenhuma chave privada real foi criada ou incorporada;
 - [x] pesquisa ampla do PDV integrada por merge normal a partir da branch isolada `codex/pdv-pesquisa-acessivel` (`5246711`, `2f17ab0`, `a77a63f`), preservando pesquisa rápida, F2/botão, seleção exclusivamente por `product_id` real e fluxo de teclado; eventual orientação pela Nabi continua condicionada a porta Qt explícita, sem cliques livres, banco direto, produto inventado ou resolução automática de texto ambíguo;
-- [ ] experimento visual somente em perfil TESTE: preservar integralmente o splash original e acrescentar, perto do final do carregamento real, a mascote Nabi azul entrando/flutuando e pousando discretamente ao lado do nome; não alterar fundo, logotipo, proporções ou sequência existente, não atrasar artificialmente o startup e não promover para Produção/instalador sem aprovação visual expressa;
+- [!] experimento da mascote no splash cancelado expressamente pelo proprietário; preservar o splash original e não retomar essa alteração sem nova autorização explícita;
 - [ ] voz;
 - [ ] auditoria específica antes de qualquer integração indireta com fluxo fiscal;
 - [!] IA não pode executar ações mutáveis antes das travas de confirmação, permissão e auditoria.
@@ -1953,3 +1953,58 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   reforçado existente, com validação e cópia de segurança anterior;
 - validação integrada de Configurações, Impressão, Ajuda, backup/restauração e
   composição: `56 passed`; `compileall` e `git diff --check` aprovados.
+### Checkpoint isolado — Auditoria Administrativa Qt
+
+- branch/worktree: `codex/auditoria-admin-qt`, derivada da Central de Ajuda
+  `f77ba24`, sem alterar a integração;
+- implementação `b8385b7` — `feat: adiciona auditoria administrativa ao Qt`;
+- `AuditApplicationService` exige sessão válida e `technical:audit`, deriva a
+  autorização exclusivamente do `SecurityService` e limita cada consulta aos
+  500 eventos de segurança mais recentes;
+- a janela Qt é somente leitura, filtra localmente data, usuário, ação,
+  resultado e detalhes, e não permite inserir, editar, excluir ou escolher ator;
+- a persistência e consulta continuam no `AdminAuditService` e no repositório
+  oficial; a GUI não importa banco, SQL, Fiscal/SEFAZ ou Legacy;
+- F5 atualiza uma vez, Esc fecha somente a janela e Enter/auto-repeat na tabela
+  são consumidos sem disparar ação;
+- testes focados: `27 passed`; regressão Qt, segurança, auditoria e startup:
+  `254 passed`, `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual com usuário ADMIN e verificação de acesso
+  negado para perfis sem `technical:audit`. Nenhum push foi feito porque a etapa
+  ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
+  instalador e banco real não foram alterados.
+
+### Checkpoint isolado — Identificação Comercial da Loja Qt
+
+- branch/worktree: `codex/identidade-loja-qt`, derivada da Auditoria
+  `6de895c`, sem alterar a integração;
+- implementação `fa22971` — `feat: adiciona identidade comercial da loja ao Qt`;
+- a aba Loja expõe somente `nome_loja` e `rodape_cupom`, que são as duas chaves
+  comerciais realmente consumidas pelos comprovantes e PDFs existentes;
+- nome e rodapé são normalizados, possuem limites de 120/500 caracteres,
+  rejeitam controles inválidos e são gravados juntos por uma única transação;
+- CNPJ, emitente, certificado, ambiente, numeração e qualquer parâmetro fiscal
+  permanecem fora dessa interface e não são lidos nem alterados;
+- testes focados: `34 passed`; regressão Qt, Commercial, recibos, PDF e startup:
+  `357 passed`, `367 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual no perfil TESTE e geração de comprovante
+  não fiscal para confirmar nome/rodapé. Nenhum push foi feito porque a etapa
+  ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
+  instalador e banco real não foram alterados.
+
+### Auditoria de prontidão para integração da sequência administrativa Qt
+
+- ponta sequencial auditada: `e702e3a` em `codex/identidade-loja-qt`; ela contém
+  Configurações, Impressão, Ajuda, Auditoria e Identificação Comercial, com seus
+  respectivos commits documentais preservados;
+- comparação somente leitura contra `codex/integracao-nabi-pdv` em `1a3f0f9`
+  encontrou ancestral comum `3751c3a`;
+- o ajuste dispensável do startup foi removido em `e702e3a` —
+  `refactor: evita sobreposicao no startup Qt`; 19 testes de composição/startup
+  passaram e `git diff --check` foi aprovado;
+- após a correção, nenhum arquivo de código é alterado simultaneamente pelas duas
+  trilhas; a única reconciliação prevista no merge normal é este mapa, que deve
+  preservar integralmente as evidências Qt e IA;
+- integração, merge e promoção continuam reservados à conversa coordenadora.
+  Nenhum push foi feito, pois todos os checkpoints desta sequência ainda possuem
+  homologação visual/manual pendente.

@@ -59,6 +59,7 @@ class SettingsDialog(QDialog):
         self.tabs = QTabWidget()
         root.addWidget(self.tabs, 1)
         self._build_interface_tab()
+        self._build_store_tab()
         self._build_backup_tab()
         self._build_printing_tab()
         self._build_diagnostics_tab()
@@ -121,6 +122,15 @@ class SettingsDialog(QDialog):
         buttons.addWidget(self.save_backup); buttons.addWidget(self.backup_now)
         layout.addLayout(buttons); layout.addStretch(1)
         self.tabs.addTab(page, "Backup")
+
+    def _build_store_tab(self) -> None:
+        page=QWidget(); form=QFormLayout(page)
+        self.store_name=QLineEdit(); self.store_name.setMaxLength(120)
+        self.receipt_footer=QTextEdit(); self.receipt_footer.setMaximumHeight(130)
+        form.addRow("Nome exibido da loja",self.store_name); form.addRow("Rodapé dos comprovantes",self.receipt_footer)
+        note=QLabel("Estes dados são comerciais. CNPJ, certificado e parâmetros fiscais não são alterados aqui."); note.setWordWrap(True); note.setStyleSheet("color:#d29922")
+        form.addRow("",note); self.save_store=QPushButton("Salvar identificação comercial"); self.save_store.setObjectName("primary"); self.save_store.clicked.connect(self._save_store_identity); form.addRow("",self.save_store)
+        self.tabs.addTab(page,"Loja")
 
     def _build_diagnostics_tab(self) -> None:
         page = QWidget(); layout = QVBoxLayout(page)
@@ -188,6 +198,10 @@ class SettingsDialog(QDialog):
         self.cloud_backup.setText(directories[1] if len(directories) > 1 else "")
         self.daily.setChecked(snapshot.daily_backup_enabled)
         try:
+            store=self.service.load_store_identity(); self.store_name.setText(store.name); self.receipt_footer.setPlainText(store.receipt_footer)
+        except Exception as error:
+            self.store_name.setPlaceholderText(str(error))
+        try:
             printing = self.service.load_printing(); values = printing.values
             for category, (printer_key, printer, output_format) in self.document_outputs.items():
                 printer.addItems(printing.printers)
@@ -204,6 +218,7 @@ class SettingsDialog(QDialog):
             self.mode, self.workspace, self.density, self.theme, self.adaptive,
             self.background, self.local_backup, self.cloud_backup, self.daily,
             self.save_interface, self.save_backup,
+            self.store_name,self.receipt_footer,self.save_store,
             *(widget for _key, printer, output_format in self.document_outputs.values() for widget in (printer, output_format)),
             self.receipt_model, self.print_font,
             self.font_size, self.auto_cut, self.cut_type, self.cut_lines, self.save_printing,
@@ -212,6 +227,14 @@ class SettingsDialog(QDialog):
         self.backup_now.setEnabled(self.service.can("backup"))
         self.run_diagnostic.setEnabled(self.service.can("diagnose"))
         self.mode.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _save_store_identity(self) -> None:
+        try:
+            saved=self.service.save_store_identity(name=self.store_name.text(),receipt_footer=self.receipt_footer.toPlainText())
+            self.store_name.setText(saved.name); self.receipt_footer.setPlainText(saved.receipt_footer)
+            QMessageBox.information(self,"Loja","Identificação comercial salva.")
+        except Exception as error:
+            QMessageBox.warning(self,"Loja",str(error)); self.store_name.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _preview_receipt(self) -> None:
         try: self.receipt_preview.setPlainText(self.service.preview_receipt(self.receipt_model.currentText()))
