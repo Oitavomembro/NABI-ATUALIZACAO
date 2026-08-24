@@ -41,6 +41,12 @@ def schema(path: Path) -> None:
     );
     CREATE TABLE auditoria(data TEXT,usuario TEXT,modulo TEXT,acao TEXT,objeto TEXT,detalhes TEXT,resultado TEXT);
     CREATE TABLE configuracoes(chave TEXT PRIMARY KEY,valor TEXT);
+    CREATE TABLE assistant_operation_journal(
+      id INTEGER PRIMARY KEY AUTOINCREMENT,idempotency_key TEXT NOT NULL UNIQUE,
+      operation_kind TEXT NOT NULL,fingerprint TEXT NOT NULL,status TEXT NOT NULL,
+      result_json TEXT NOT NULL DEFAULT '',username TEXT NOT NULL,created_at TEXT NOT NULL,
+      committed_at TEXT NOT NULL DEFAULT ''
+    );
     """)
     conn.commit()
     conn.close()
@@ -101,6 +107,31 @@ def test_saldo_220_pagamento_20_e_aceito_e_reconciliado():
             "SELECT valor_parcela_decimal,valor_pago_decimal FROM parcelas WHERE movimentacao_id=10"
         )) == Decimal("200.00")
         conn.close()
+
+
+def test_recebimento_assistido_repetido_nao_duplica_pagamento():
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "db.sqlite"; schema(path)
+        conn = sqlite3.connect(path); add_customer(conn, 1, "100.00")
+        add_sale(conn, 10, 1, "100.00", [("100.00", "0")])
+        conn.commit(); conn.close()
+        kwargs = dict(
+            cliente_id=1, valor="20", alvo=None, forma_pagamento="PIX",
+            data_pagamento="2026-08-24", usuario="caixa",
+            idempotency_key="nabi:receipt:d1", operation_fingerprint="a" * 64,
+        )
+        first = service_for(path).receber_pagamento_cliente(**kwargs)
+        repeated = service_for(path).receber_pagamento_cliente(**kwargs)
+        assert repeated["pagamento_mov_id"] == first["pagamento_mov_id"]
+        assert repeated["novo_saldo"] == Decimal("80.00")
+        conn = sqlite3.connect(path)
+        assert conn.execute("SELECT COUNT(*) FROM movimentacoes WHERE tipo='PAGAMENTO'").fetchone()[0] == 1
+        assert conn.execute("SELECT status FROM assistant_operation_journal").fetchone()[0] == "COMMITTED"
+        conn.close()
+        with pytest.raises(PermissionError):
+            service_for(path).receber_pagamento_cliente(
+                **{**kwargs, "operation_fingerprint": "c" * 64}
+            )
 
 
 def test_multiplas_compras_e_parcelas_distribuem_sem_divergencia():
@@ -177,7 +208,10 @@ def test_falha_durante_persistencia_reverte_pagamento_inteiro():
         conn.commit(); conn.close()
         with pytest.raises(sqlite3.IntegrityError):
             service_for(path).receber_pagamento_cliente(
-                cliente_id=1, valor="20", alvo={"tipo": "AUTO"}, forma_pagamento="PIX", data_pagamento="2026-08-07"
+                cliente_id=1, valor="20", alvo={"tipo": "AUTO"},
+                forma_pagamento="PIX", data_pagamento="2026-08-07",
+                idempotency_key="nabi:receipt:rollback",
+                operation_fingerprint="b" * 64,
             )
         conn = sqlite3.connect(path)
         assert conn.execute("SELECT saldo_devedor_decimal FROM clientes WHERE id=1").fetchone()[0] == "100.00"
@@ -185,4 +219,5 @@ def test_falha_durante_persistencia_reverte_pagamento_inteiro():
         assert conn.execute("SELECT valor_pago_decimal FROM parcelas WHERE movimentacao_id=10").fetchone()[0] == "0"
         assert conn.execute("SELECT COUNT(*) FROM movimentacoes WHERE tipo='PAGAMENTO'").fetchone()[0] == 0
         assert conn.execute("SELECT valor_pago_decimal FROM titulos_financeiros WHERE origem_id='10'").fetchone()[0] == "0.00"
+        assert conn.execute("SELECT COUNT(*) FROM assistant_operation_journal").fetchone()[0] == 0
         conn.close()

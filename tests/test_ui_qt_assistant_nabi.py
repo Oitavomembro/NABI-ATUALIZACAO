@@ -69,6 +69,10 @@ class DraftService(Service):
         self.confirmations.append((token, draft_id, fingerprint))
         return SimpleNamespace(customer_id=45, record_number=5501), object()
 
+    def confirm_and_execute_customer_receipt(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        return SimpleNamespace(resource_id=92), object()
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
@@ -395,6 +399,30 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(service.confirmations[0][1], "customer-1")
         self.assertIn("Ficha 5501", panel.history.toPlainText())
         self.assertEqual(panel.status.text(), "Cliente cadastrado")
+
+    def test_recebimento_cliente_exibe_saldos_e_exige_confirmacao(self):
+        service = DraftService(); panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 15
+        panel._complete(15, AssistantTurn("Recebimento preparado", (ToolResult(
+            "req-receipt", "clientes.preparar_recebimento", True,
+            {
+                "draft_id": "receipt-1", "fingerprint": "f" * 64,
+                "operation_kind": "CUSTOMER_RECEIPT", "record_number": 3321,
+                "customer_name": "GUSTAVO", "amount": "100.00",
+                "previous_balance": "203.00", "expected_balance": "103.00",
+                "payment_method": "PIX", "payment_date": "2026-08-24",
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        preview = panel.history.toPlainText()
+        self.assertIn("Saldo antes: R$ 203.00", preview)
+        self.assertIn("Saldo restante: R$ 103.00", preview)
+        self.assertIn("nenhum pagamento foi registrado", preview)
+        panel.review_draft(); panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][1], "receipt-1")
+        self.assertIn("Movimento #92", panel.history.toPlainText())
+        self.assertEqual(panel.status.text(), "Recebimento registrado")
 
     def test_resposta_xml_atrasada_e_ignorada_apos_parar(self):
         panel = NabiAssistantPanel(Service(), nfe_entry_service=object())

@@ -115,6 +115,7 @@ class CommercialActionService:
         *,
         context: ActionContext,
         confirmation_granted: bool,
+        operation_fingerprint: str | None = None,
     ) -> CommercialActionResult:
         sensitivity = ActionSensitivity.SENSITIVE
         if not confirmation_granted:
@@ -127,7 +128,16 @@ class CommercialActionService:
                 message="Recebimento de cliente não configurado neste ambiente.",
             )
         try:
-            receipt = self._customer_receipts.receive(command, user=context.requested_by)
+            if operation_fingerprint:
+                receipt = self._customer_receipts.receive(
+                    command, user=context.requested_by,
+                    idempotency_key=f"nabi:receipt:{context.request_id}",
+                    operation_fingerprint=operation_fingerprint,
+                )
+            else:
+                receipt = self._customer_receipts.receive(
+                    command, user=context.requested_by
+                )
         except Exception as error:
             message = str(error) if isinstance(error, ValueError) else "Não foi possível registrar o recebimento."
             return CommercialActionResult(
@@ -137,7 +147,7 @@ class CommercialActionService:
             )
         event_failed = False
         callback = getattr(self._events, "customer_payment_received", None)
-        if callback is not None:
+        if callback is not None and not receipt.idempotent_replay:
             try:
                 callback(CustomerPaymentReceived(
                     receipt=receipt, request_id=context.request_id,
