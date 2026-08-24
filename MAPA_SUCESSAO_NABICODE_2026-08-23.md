@@ -2283,3 +2283,24 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - recuperações manuais/em lote dos efeitos pendentes continuam recebendo ator
   livre e são a próxima fronteira isolada. Elas não devem ganhar um segundo
   provedor de segurança; precisam consumir a sessão oficial na composição.
+
+### Auditoria fiscal de autoria — recuperação de estoque pendente
+
+- implementação: `4ca25de` — `fix: autentica recuperacao de estoque fiscal`;
+- as recuperações individual e em lote não aceitam mais ator externo nem usam
+  `Sistema`. Ambas exigem, antes de consultar ou alterar estoque, a porta de
+  sessão/permissão já composta em `FiscalService` com `fiscal/transmit`;
+- `FiscalService.require_authenticated_actor` apenas expõe a mesma autoridade
+  fail-closed existente para efeitos locais fiscais coordenados; não cria outro
+  provedor, fallback ou permissão;
+- o lote autentica uma vez e preserva a mesma identidade em todas as tentativas,
+  inclusive no histórico de falha. Idempotência, estados pendentes e tratamento
+  parcial do lote foram preservados;
+- testes focados da devolução: `41 passed`; regressão de devolução, autorização,
+  venda, cancelamento, outbox/worker e segurança: `281 passed`, `10 subtests
+  passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- o ciclo oficial de devolução deixa de aceitar autoria livre na autorização,
+  baixa, cancelamento, reversão e recuperação. A entrada comercial por XML segue
+  bloqueada para checkpoint coordenado com a composição Nabi/Legacy.
