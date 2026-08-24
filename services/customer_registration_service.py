@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Callable
 from datetime import datetime
 from decimal import Decimal
+import hashlib
+import json
 from typing import Any
 
 from repositories import ClienteRepository
@@ -96,6 +98,98 @@ class CustomerRegistrationService:
             self.set_config("proxima_ficha", str(ficha + 1))
         if self.history_callback:
             self.history_callback(cliente_id, "CADASTRO", "Cadastro criado.")
+        return cliente_id
+
+    def criar_assistido(
+        self,
+        *,
+        nome: str,
+        codigo: str = "",
+        numero_ficha: int | str | None,
+        cpf: str = "",
+        rg: str = "",
+        telefone: str = "",
+        endereco: str = "",
+        observacoes: str = "",
+        limite: Decimal | float | str = Decimal("0"),
+        usuario: str,
+        idempotency_key: str,
+        operation_fingerprint: str,
+    ) -> int:
+        """Cadastra pela automação com diário atômico e repetição segura."""
+        key = str(idempotency_key or "").strip()
+        fingerprint = str(operation_fingerprint or "").strip().lower()
+        actor = str(usuario or "").strip()
+        if not key or len(key) > 160:
+            raise ValueError("Chave idempotente do cadastro inválida.")
+        if len(fingerprint) != 64 or any(ch not in "0123456789abcdef" for ch in fingerprint):
+            raise ValueError("Impressão digital do cadastro inválida.")
+        if not actor:
+            raise PermissionError("Usuário autenticado é obrigatório para o cadastro assistido.")
+
+        nome_limpo = CustomerValidator.normalize_name(nome)
+        ficha = CustomerValidator.parse_record_number(numero_ficha)
+        if ficha is None:
+            raise ValueError("O cadastro assistido exige número de ficha explícito.")
+        limite_valor = CustomerValidator.parse_credit_limit(limite)
+        codigo_limpo = str(codigo or "").strip()
+        if not codigo_limpo:
+            codigo_limpo = "CLI" + hashlib.sha256(key.encode("utf-8")).hexdigest()[:12].upper()
+        dados = {
+            "codigo": codigo_limpo,
+            "numero_ficha": ficha,
+            "nome": nome_limpo,
+            "cpf": str(cpf or "").strip(),
+            "rg": str(rg or "").strip(),
+            "telefone": str(telefone or "").strip(),
+            "endereco": str(endereco or "").strip(),
+            "observacoes": str(observacoes or "").strip(),
+            "limite": limite_valor,
+            "saldo_devedor": 0.0,
+        }
+        replayed = False
+        with self.repository.transaction() as connection:
+            row = connection.execute(
+                "SELECT fingerprint,status,result_json FROM assistant_operation_journal "
+                "WHERE idempotency_key=?", (key,),
+            ).fetchone()
+            if row is not None:
+                if str(row[0]).lower() != fingerprint:
+                    raise PermissionError("A chave idempotente já pertence a outro cadastro.")
+                if str(row[1]).upper() != "COMMITTED":
+                    raise RuntimeError("O cadastro assistido possui estado persistente desconhecido.")
+                cliente_id = int(json.loads(str(row[2] or "{}"))["customer_id"])
+                replayed = True
+            else:
+                connection.execute(
+                    """INSERT INTO assistant_operation_journal
+                       (idempotency_key,operation_kind,fingerprint,status,result_json,username,created_at)
+                       VALUES(?,'CUSTOMER_CREATE',?,'PENDING','',?,datetime('now','localtime'))""",
+                    (key, fingerprint, actor),
+                )
+                if self.repository.ficha_existe(ficha, connection=connection):
+                    raise ValueError("Esta ficha já existe. Revise o cadastro antes de confirmar.")
+                cliente_id = self.repository.criar(dados, connection=connection)
+                payload = json.dumps(
+                    {"customer_id": int(cliente_id)},
+                    sort_keys=True, separators=(",", ":"),
+                )
+                updated = connection.execute(
+                    """UPDATE assistant_operation_journal
+                       SET status='COMMITTED',result_json=?,committed_at=datetime('now','localtime')
+                       WHERE idempotency_key=? AND status='PENDING'""",
+                    (payload, key),
+                )
+                if updated.rowcount != 1:
+                    raise RuntimeError("Não foi possível confirmar o diário idempotente.")
+
+        if replayed:
+            return cliente_id
+        atual = int(self.get_config("proxima_ficha") or 5500)
+        if ficha >= atual:
+            self.set_config("proxima_ficha", str(ficha + 1))
+        if self.history_callback:
+            self.history_callback(cliente_id, "CADASTRO", f"Cadastro assistido confirmado por {actor}.")
         return cliente_id
 
     def editar(

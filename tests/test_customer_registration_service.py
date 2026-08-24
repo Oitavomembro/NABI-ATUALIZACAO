@@ -29,6 +29,17 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
                     cpf TEXT, rg TEXT, telefone TEXT, endereco TEXT,
                     observacoes TEXT, limite REAL, saldo_devedor REAL
                 );
+                CREATE TABLE assistant_operation_journal (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    idempotency_key TEXT NOT NULL UNIQUE,
+                    operation_kind TEXT NOT NULL,
+                    fingerprint TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    result_json TEXT NOT NULL DEFAULT '',
+                    username TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    committed_at TEXT NOT NULL DEFAULT ''
+                );
                 """
             )
         self.config = {"proxima_ficha": "5500"}
@@ -58,6 +69,53 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
         self.assertEqual(row, ("CLI174321", 5500, "Maria da Silva", "123", "9999", 1234.56, 0.0))
         self.assertEqual(self.config["proxima_ficha"], "5501")
         self.assertEqual(self.history, [(customer_id, "CADASTRO", "Cadastro criado.")])
+
+    def test_cadastro_assistido_e_idempotente_e_atomico(self) -> None:
+        fingerprint = "a" * 64
+        first = self.service.criar_assistido(
+            nome="Cliente Nabi", numero_ficha=5500, limite="100,00",
+            usuario="operador", idempotency_key="nabi:customer:1",
+            operation_fingerprint=fingerprint,
+        )
+        repeated = self.service.criar_assistido(
+            nome="Cliente Nabi", numero_ficha=5500, limite="100,00",
+            usuario="operador", idempotency_key="nabi:customer:1",
+            operation_fingerprint=fingerprint,
+        )
+        self.assertEqual(first, repeated)
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertEqual(connection.execute("SELECT COUNT(*) FROM clientes").fetchone()[0], 1)
+            journal = connection.execute(
+                "SELECT operation_kind,status,username FROM assistant_operation_journal"
+            ).fetchone()
+        self.assertEqual(journal, ("CUSTOMER_CREATE", "COMMITTED", "operador"))
+        with self.assertRaises(PermissionError):
+            self.service.criar_assistido(
+                nome="Outro", numero_ficha=5501, usuario="operador",
+                idempotency_key="nabi:customer:1", operation_fingerprint="b" * 64,
+            )
+        with self.assertRaisesRegex(ValueError, "ficha já existe"):
+            self.service.criar_assistido(
+                nome="Duplicado", numero_ficha=5500, usuario="operador",
+                idempotency_key="nabi:customer:2", operation_fingerprint="c" * 64,
+            )
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            self.assertIsNone(connection.execute(
+                "SELECT status FROM assistant_operation_journal WHERE idempotency_key=?",
+                ("nabi:customer:2",),
+            ).fetchone())
+
+    def test_cadastro_assistido_exige_autoria_e_fingerprint_reais(self) -> None:
+        with self.assertRaises(PermissionError):
+            self.service.criar_assistido(
+                nome="Sem ator", numero_ficha=5500, usuario="",
+                idempotency_key="nabi:customer:3", operation_fingerprint="d" * 64,
+            )
+        with self.assertRaisesRegex(ValueError, "digital"):
+            self.service.criar_assistido(
+                nome="Sem hash", numero_ficha=5500, usuario="op",
+                idempotency_key="nabi:customer:4", operation_fingerprint="invalida",
+            )
 
     def test_rejeita_nome_vazio_ficha_duplicada_e_limite_negativo(self) -> None:
         with self.assertRaisesRegex(ValueError, "Nome"):

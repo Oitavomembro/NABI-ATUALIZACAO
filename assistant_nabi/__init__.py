@@ -45,6 +45,9 @@ from .nfe_entry_gateway import NabiCodeNFeEntryAssistantGateway
 from .confirmations import (
     ConfirmationChallenge, ConfirmedDraftAuthorization, DraftConfirmationService,
 )
+from .customer_drafts import CustomerRegistrationDraft, CustomerRegistrationDraftService
+from .customer_gateway import NabiCodeCustomerRegistrationGateway
+from .customer_tools import PREPARE_CUSTOMER_REGISTRATION
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -77,6 +80,10 @@ __all__ = [
     "NabiCodeNFeEntryAssistantGateway",
     "ConfirmationChallenge",
     "ConfirmedDraftAuthorization",
+    "CustomerRegistrationDraft",
+    "CustomerRegistrationDraftService",
+    "NabiCodeCustomerRegistrationGateway",
+    "PREPARE_CUSTOMER_REGISTRATION",
     "DraftConfirmationService",
     "AssistantApplicationService",
     "AssistantTurn",
