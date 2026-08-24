@@ -1408,3 +1408,14 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - nenhuma alíquota, CST/CSOSN, certificado, produção ou comunicação SEFAZ foi
   alterada. O próximo passo é ligar `actor` à sessão autenticada real sem
   confundir operador do sistema com responsável contábil declarado.
+
+### Correção de integração — entradas alinhadas ao schema 21
+
+- implementação: `7eadd38` — `fix: alinha entradas ao schema fiscal 21`;
+- a auditoria pós-migração encontrou `main_qt.py` e `fichario/runtime.py` ainda
+  inicializando o banco com a constante antiga `20`, apesar de o schema oficial
+  já estar em `21`;
+- ambas as entradas agora exigem schema `21`, e um teste de regressão impede que
+  Qt ou FICHÁRIO retornem silenciosamente à versão anterior;
+- validação focada: `25 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma regra fiscal, dado real ou comunicação SEFAZ foi alterada.
