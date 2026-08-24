@@ -415,17 +415,71 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
                 return b"<NFe><infNFe Id='NFe" + b"2" * 44 + b"'/></NFe>", "2" * 44
             def authorize_document(self, **kwargs):
                 response = SimpleNamespace(success=True, protocol="12345", status_code="100", message="Autorizado")
-                return response, {"processed_path": str(Path(self_dir) / "proc.xml")}
+                return response, {"processed_path": str(Path(self_dir) / "proc.xml"), "actor": "gerente"}
 
         self_dir = self.tmp.name
         state = self.service.emitir_devolucao_oficial(
             devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-            password="senha", actor="admin",
+            password="senha",
         )
         self.assertEqual(state["status"], "AUTORIZADA")
         self.assertEqual(state["protocol"], "12345")
         self.assertEqual(self.service.repository.buscar_rascunho(devolucao_id)["status"], "AUTORIZADA")
+        conn = sqlite3.connect(self.db_path)
+        self.assertEqual(
+            conn.execute(
+                "SELECT usuario FROM estoque_movimentacoes "
+                "WHERE origem='DEVOLUCAO_NFE'"
+            ).fetchone()[0],
+            "gerente",
+        )
+        conn.close()
+
+    def test_emissao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.emitir_devolucao_oficial(
+                1, fiscal_service=object(), issuer={}, document={},
+                item_overrides={}, password="senha", actor="forjado",
+            )
+
+    def test_autorizacao_sem_actor_autenticado_nao_baixa_estoque(self):
+        _, itens = self.service.localizar_nota("123")
+        devolucao_id = self.service.criar_rascunho(
+            referencia_nota="123", tipo="PARCIAL",
+            selecoes=[(itens[0].item_origem_id, 1)], motivo="Defeito",
+        )
+
+        class FiscalSemActor:
+            def build_document_xml(self, **kwargs):
+                return b"<NFe/>", "2" * 44
+
+            def authorize_document(self, **kwargs):
+                return SimpleNamespace(
+                    success=True, protocol="12345", status_code="100",
+                    message="Autorizado",
+                ), {}
+
+        with self.assertRaisesRegex(RuntimeError, "autoria técnica autenticada"):
+            self.service.emitir_devolucao_oficial(
+                devolucao_id, fiscal_service=FiscalSemActor(),
+                issuer={"cnpj": "98765432000198"}, document={},
+                item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
+                password="senha",
+            )
+        self.assertEqual(
+            self.service.estado_fiscal(devolucao_id)["status"],
+            "AUTORIZADA_PENDENTE_ESTOQUE",
+        )
+        conn = sqlite3.connect(self.db_path)
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM estoque_movimentacoes "
+                "WHERE origem='DEVOLUCAO_NFE'"
+            ).fetchone()[0],
+            0,
+        )
+        conn.close()
 
     def test_rejeicao_fiscal_fica_registrada_sem_autorizar(self):
         _, itens = self.service.localizar_nota("123")
@@ -444,7 +498,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         state = self.service.emitir_devolucao_oficial(
             devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-            password="senha", actor="admin",
+            password="senha",
         )
         self.assertEqual(state["status"], "REJEITADA")
         self.assertEqual(state["status_code"], "539")
@@ -536,7 +590,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             self.service.emitir_devolucao_oficial(
                 devolucao_id, fiscal_service=FiscalFake(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-                password="senha", actor="admin",
+                password="senha",
             )
 
     def test_tentativas_fiscais_preservam_rejeicao_e_erro(self):
@@ -556,7 +610,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         state = self.service.emitir_devolucao_oficial(
                 devolucao_id, fiscal_service=FiscalRejeita(), issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-            password="senha", actor="admin",
+            password="senha",
         )
         self.assertEqual(state["attempts"][-1]["result"], "REJEITADA")
         self.assertEqual(state["attempts"][-1]["status_code"], "539")
@@ -572,7 +626,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             self.service.emitir_devolucao_oficial(
                 devolucao_id, fiscal_service=FiscalFalha(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-                password="senha", actor="admin",
+                password="senha",
             )
         final_state = self.service.estado_fiscal(devolucao_id)
         self.assertEqual(final_state["status"], "ERRO_FISCAL")
@@ -593,7 +647,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             def build_document_xml(self, **kwargs):
                 return b"<NFe><infNFe Id='NFe" + b"8" * 44 + b"'/></NFe>", "8" * 44
             def authorize_document(self, **kwargs):
-                return SimpleNamespace(success=True, protocol="888", status_code="100", message="Autorizado"), {}
+                return SimpleNamespace(success=True, protocol="888", status_code="100", message="Autorizado"), {"actor": "gerente"}
             def send_event(self, **kwargs):
                 return SimpleNamespace(success=True, status_code="135", message="Cancelado"), {"event_type": "CANCELAMENTO", "actor": "gerente"}
 
@@ -601,7 +655,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         state = self.service.emitir_devolucao_oficial(
             devolucao_id, fiscal_service=fiscal, issuer={"cnpj": "98765432000198"},
             document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-            password="senha", actor="admin",
+            password="senha",
         )
         self.assertEqual(state["status"], "AUTORIZADA")
         conn = sqlite3.connect(self.db_path)
@@ -634,13 +688,13 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             def build_document_xml(self, **kwargs):
                 return b"<NFe><infNFe Id='NFe" + b"9" * 44 + b"'/></NFe>", "9" * 44
             def authorize_document(self, **kwargs):
-                return SimpleNamespace(success=True, protocol="999", status_code="100", message="Autorizado"), {}
+                return SimpleNamespace(success=True, protocol="999", status_code="100", message="Autorizado"), {"actor": "gerente"}
 
         with self.assertRaisesRegex(RuntimeError, "baixa de estoque falhou"):
             self.service.emitir_devolucao_oficial(
                 devolucao_id, fiscal_service=FiscalAutoriza(), issuer={"cnpj": "98765432000198"},
                 document={}, item_overrides={itens[0].item_origem_id: {"cfop": "5202"}},
-                password="senha", actor="admin",
+                password="senha",
             )
         self.assertEqual(self.service.estado_fiscal(devolucao_id)["status"], "AUTORIZADA_PENDENTE_ESTOQUE")
         conn = sqlite3.connect(self.db_path)
@@ -705,7 +759,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "já possui NF-e autorizada"):
             self.service.emitir_devolucao_oficial(
                 devolucao_id, fiscal_service=FiscalNaoDeveChamar(), issuer={}, document={},
-                item_overrides={}, password="x", actor="admin",
+                item_overrides={}, password="x",
             )
 
     def test_cancelamento_oficial_aceita_autorizada_pendente_sem_estoque_aplicado(self):

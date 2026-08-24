@@ -451,7 +451,6 @@ class NFeDevolucaoService:
         document: Mapping[str, Any],
         item_overrides: Mapping[int, Mapping[str, Any]] | None,
         password: str,
-        actor: str,
         reservation_id: str = "",
     ) -> dict[str, Any]:
         """Gera, assina e transmite a NF-e de devolução, registrando seu ciclo fiscal."""
@@ -462,7 +461,6 @@ class NFeDevolucaoService:
         if current_status in {"CANCELADA", "CANCELADA_PENDENTE_ESTOQUE"}:
             raise ValueError("Devolução cancelada não pode ser autorizada novamente.")
 
-        actor_name = str(actor or "Sistema")
         attempts = list(current.get("attempts") or [])
         xml, access_key = self.preparar_documento_fiscal(
             devolucao_id, fiscal_service=fiscal_service, issuer=issuer, document=document,
@@ -471,7 +469,7 @@ class NFeDevolucaoService:
         request_hash = sha256(xml).hexdigest()
         attempt = {
             "attempted_at": datetime.now().isoformat(timespec="seconds"),
-            "actor": actor_name,
+            "actor": "",
             "access_key": access_key,
             "request_sha256": request_hash,
             "reservation_id": str(reservation_id or ""),
@@ -491,7 +489,6 @@ class NFeDevolucaoService:
             state = dict(current)
             state.update({
                 "access_key": access_key,
-                "actor": actor_name,
                 "attempts": attempts[-100:],
                 "events": list(current.get("events") or []),
                 "last_error": str(exc),
@@ -501,11 +498,13 @@ class NFeDevolucaoService:
             raise
 
         status = "AUTORIZADA" if response.success else "REJEITADA"
+        actor_name = str(fiscal_record.get("actor") or "").strip()
         attempt.update({
             "result": status,
             "status_code": str(response.status_code or ""),
             "message": str(response.message or ""),
             "protocol": str(response.protocol or ""),
+            "actor": actor_name,
         })
         attempts.append(attempt)
         state = {
@@ -522,6 +521,16 @@ class NFeDevolucaoService:
         }
         if not response.success:
             return self.repository.salvar_estado_fiscal(devolucao_id, state, status=status)
+
+        if not actor_name:
+            state["last_error"] = (
+                "NF-e autorizada, mas o registro fiscal não contém autoria "
+                "técnica autenticada para baixar o estoque."
+            )
+            self.repository.salvar_estado_fiscal(
+                devolucao_id, state, status="AUTORIZADA_PENDENTE_ESTOQUE"
+            )
+            raise RuntimeError(state["last_error"])
 
         # A autorização fiscal é externa; os efeitos locais ficam explicitamente
         # pendentes até que a baixa de estoque seja concluída com auditoria.

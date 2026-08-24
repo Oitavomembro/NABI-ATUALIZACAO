@@ -4230,7 +4230,6 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 overrides[int(produto["item_origem_id"])] = {
                     "cfop": cfop, "cfop_analysis": analysis,
                 }
-            actor = self._usuario_financeiro()
             series = int(issuer_cfg.get("return_series") or 1)
             reservation = self.fiscal_service.reserve_number(
                 model="55", series=series, environment=config.get("environment")
@@ -4256,7 +4255,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 "presence": 9,
                 "payment_code": "90",
             }
-            return issuer, document, overrides, reservation, actor
+            return issuer, document, overrides, reservation
 
         def emitir_oficial():
             item = selecionado()
@@ -4271,7 +4270,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             reservation = None
             try:
-                issuer, document, overrides, reservation, actor = _dados_emissao_oficial(item)
+                issuer, document, overrides, reservation = _dados_emissao_oficial(item)
                 rascunho = NFE_DEVOLUCAO_SERVICE.repository.buscar_rascunho(int(item["id"])) or {}
                 analyses = [dict(value.get("cfop_analysis") or {}) for value in overrides.values()]
                 cfops = sorted({str(value.get("cfop") or "") for value in overrides.values()})
@@ -4291,7 +4290,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 estado = NFE_DEVOLUCAO_SERVICE.emitir_devolucao_oficial(
                     int(item["id"]), fiscal_service=self.fiscal_service, issuer=issuer,
                     document=document, item_overrides=overrides, password=senha,
-                    actor=actor, reservation_id=reservation["reservation_id"],
+                    reservation_id=reservation["reservation_id"],
                 )
                 registrar_auditoria("Fiscal", "Emitir NF-e de devolução", str(item["id"]),
                                    f"Status {estado.get('status')} | Chave {estado.get('access_key') or '-'}")
