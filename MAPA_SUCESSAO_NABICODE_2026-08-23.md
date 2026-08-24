@@ -2044,3 +2044,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   alterado. Produção fiscal permanece bloqueada;
 - cancelamento local da transmissão e autoria da importação manual de XML
   continuam pendentes para checkpoints separados.
+
+### Auditoria fiscal de autoria — cancelamento local da outbox
+
+- implementação: `ed4d9d7` — `fix: autentica cancelamento local da outbox`;
+- causa: `FiscalService.cancel_transmission` aceitava autoria livre mesmo ao
+  marcar localmente como cancelada uma fila que ainda poderia ser processada;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de ler ou alterar a fila. `FiscalSaleService` conserva
+  seu ator autenticado somente para a operação distinta de liberar numeração;
+- continuam proibidos o cancelamento local de transmissão concluída, iniciada
+  ou de resultado desconhecido. Nesses casos a consulta SEFAZ permanece
+  obrigatória antes de qualquer decisão comercial;
+- testes focados: `3 passed`, `128 deselected`; regressão de venda fiscal,
+  cancelamento oficial, outbox/worker, Central e segurança: `100 passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma chamada SEFAZ, XML, endpoint, prazo, regra tributária ou dado real foi
+  alterado. Produção fiscal permanece bloqueada;
+- autoria da importação manual de XML e retransmissão em lote de contingência
+  permanecem checkpoints independentes pendentes.
