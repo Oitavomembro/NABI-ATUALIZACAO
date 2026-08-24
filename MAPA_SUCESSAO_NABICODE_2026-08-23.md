@@ -1277,6 +1277,8 @@ importação no banco de produção antes da aprovação visual e de um backup m
   chave privada ou banco de cliente;
 - validação automatizada do endurecimento: `27 passed`, além dos `33 passed`
   obtidos na auditoria focada; `compileall` e `git diff --check` aprovados;
+- suíte completa final após alinhar a revisão: `1.877 passed`, `1 skipped`,
+  `409 subtests passed`, zero falhas;
 - atualização homologada:
   `build_output/fichario/updates/NabiCode_Fichario_ATUALIZACAO_2_5_1_R20_HOMOLOGACAO.zip`,
   SHA-256 `A784E61BBD6AB88F2BD61CD65CB03978085F4437FBD02E762BCED70158745B2D`;
