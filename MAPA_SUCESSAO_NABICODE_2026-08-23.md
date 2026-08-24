@@ -2322,6 +2322,8 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - a interface Legacy informa a exigência de oito caracteres para novos
   usuários; deixar o campo vazio ao editar continua significando manter a senha
   existente, nunca apagá-la;
-- validação focada final: `56 passed`; `compileall` e `git diff --check`
+- validação focada final: `56 passed`; regressão completa: `2110 passed`, `1
+  skipped`, `444 subtests passed`, zero falhas e apenas a depreciação externa
+  conhecida do `BrazilFiscalReport`; `compileall` e `git diff --check`
   aprovados; Fichário, Fiscal/SEFAZ e banco real não foram alterados;
 - nenhum push foi realizado.
