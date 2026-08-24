@@ -1799,3 +1799,24 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendência: homologação visual/manual da pesquisa, tópicos e teclado no Windows.
   Fiscal/SEFAZ, IA, Fichário, licenciamento, instalador e banco real não foram
   alterados.
+
+### Checkpoint isolado — Auditoria Administrativa Qt
+
+- branch/worktree: `codex/auditoria-admin-qt`, derivada da Central de Ajuda
+  `f77ba24`, sem alterar a integração;
+- implementação `b8385b7` — `feat: adiciona auditoria administrativa ao Qt`;
+- `AuditApplicationService` exige sessão válida e `technical:audit`, deriva a
+  autorização exclusivamente do `SecurityService` e limita cada consulta aos
+  500 eventos de segurança mais recentes;
+- a janela Qt é somente leitura, filtra localmente data, usuário, ação,
+  resultado e detalhes, e não permite inserir, editar, excluir ou escolher ator;
+- a persistência e consulta continuam no `AdminAuditService` e no repositório
+  oficial; a GUI não importa banco, SQL, Fiscal/SEFAZ ou Legacy;
+- F5 atualiza uma vez, Esc fecha somente a janela e Enter/auto-repeat na tabela
+  são consumidos sem disparar ação;
+- testes focados: `27 passed`; regressão Qt, segurança, auditoria e startup:
+  `254 passed`, `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual com usuário ADMIN e verificação de acesso
+  negado para perfis sem `technical:audit`. Nenhum push foi feito porque a etapa
+  ainda depende dessa homologação. Fiscal/SEFAZ, IA, Fichário, licenciamento,
+  instalador e banco real não foram alterados.
