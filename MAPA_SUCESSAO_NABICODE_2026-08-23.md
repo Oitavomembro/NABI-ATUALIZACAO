@@ -1538,3 +1538,23 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `2 subtests passed`; `compileall` e `git diff --check` aprovados;
 - pendências: composição/menu e homologação manual no Windows; qualquer editor
   visual de capacidades exige decisão explícita posterior.
+
+### Integração isolada — módulos administrativos Qt do projeto principal
+
+- branch/worktree: `codex/principal-modulos-qt`, derivada da integração limpa
+  `6bb266a`, sem alterar `codex/integracao-nabi-pdv`;
+- Clientes Qt integrado por merge normal `6bdfeeb`, preservando a versão atual
+  do FICHÁRIO R21 quando ela já era um superset funcional do checkpoint;
+- Caixa Qt integrado por merge normal `8cdf2f1`;
+- Financeiro Qt integrado por merge normal `097d267`;
+- Relatórios Qt integrado por merge normal `81159d7`;
+- Usuários e Permissões Qt integrado por merge normal `f66c66c`;
+- nenhum `main_qt.py`, painel Nabi, Fiscal/SEFAZ, instalador, atualizador,
+  licenciamento ou banco real foi alterado nesta integração;
+- regressão combinada: `107 passed`, `5 subtests passed`; `compileall` de
+  administration/commercial/ui_qt e `git diff --check` aprovados;
+- pendência deliberada: compor menus/atalhos somente depois de a trilha ativa
+  liberar os arquivos de entrada, usando sessão e permissões reais e sem
+  reimplementar serviços;
+- homologação visual/manual no Windows permanece necessária para todos os cinco
+  diálogos; nenhum push realizado.
