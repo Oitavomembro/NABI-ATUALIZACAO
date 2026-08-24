@@ -58,6 +58,7 @@ class NabiCodeShellWindow(QMainWindow):
         self.pdv_factory = pdv_factory
         self._modules = {m.module_id: m for m in self.modules if m.module_id}
         self._open_dialogs = {}
+        self._module_pages = {}
         self._pdv_window = None
         self._shortcuts = []
         self._active_module = "dashboard"
@@ -134,12 +135,13 @@ class NabiCodeShellWindow(QMainWindow):
 
     def _build_navigation(self):
         grid = QGridLayout(); grid.setSpacing(8); self.navigation_buttons = {}
+        self._navigation_items = {item.module_id: item for item in LEGACY_NAVIGATION}
         for index, item in enumerate(LEGACY_NAVIGATION):
             shortcut = f" [{item.shortcut}]" if item.shortcut else ""
             button = QPushButton(f"{item.icon} {item.label}{shortcut}")
             button.setObjectName(f"navigation_{item.module_id}"); button.setAccessibleName(item.label)
             button.setProperty("legacyOrder", index)
-            button.setStyleSheet(f"QPushButton{{background:{item.color}}}QPushButton:hover{{background:{item.hover_color}}}QPushButton:focus{{border:3px solid #ffffff}}")
+            self._style_navigation_button(button, item, active=False)
             button.clicked.connect(lambda _checked=False, selected=item.module_id: self.show_module(selected))
             button.installEventFilter(self); grid.addWidget(button, index // 5, index % 5)
             self.navigation_buttons[item.module_id] = button
@@ -169,8 +171,23 @@ class NabiCodeShellWindow(QMainWindow):
         self.security.touch()
 
     def _mark_active(self, module_id):
-        self._active_module = module_id; button = self.navigation_buttons.get(module_id)
+        self._active_module = module_id
+        for selected, button in self.navigation_buttons.items():
+            self._style_navigation_button(
+                button, self._navigation_items[selected], active=selected == module_id
+            )
+        button = self.navigation_buttons.get(module_id)
         if button is not None: button.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    @staticmethod
+    def _style_navigation_button(button, item, *, active):
+        border = "3px solid #ffffff" if active else "0"
+        button.setStyleSheet(
+            f"QPushButton{{background:{item.color};border:{border}}}"
+            f"QPushButton:hover{{background:{item.hover_color}}}"
+            "QPushButton:focus{border:3px solid #ffffff}"
+            "QPushButton:disabled{background:#21262d;color:#8b949e}"
+        )
 
     def show_module(self, module_id):
         if module_id == "vendas": return self.open_pdv()
@@ -183,7 +200,44 @@ class NabiCodeShellWindow(QMainWindow):
                 self.pages.setCurrentIndex(0); self._mark_active("dashboard"); return True
             except Exception as error:
                 QMessageBox.warning(self, "Início", str(error)); return False
+        if module_id in {
+            "clientes", "produtos", "financeiro", "caixa", "fiscal",
+            "relatorios", "configs",
+        }:
+            return self.open_primary_module(module_id)
         return self.open_module(module_id)
+
+    def open_primary_module(self, module_id):
+        """Exibe módulos principais dentro do shell, como as telas do Legacy."""
+
+        module = self._modules.get(module_id)
+        if module is None:
+            return False
+        try:
+            self._authorized(module)
+            page = self._module_pages.get(module_id)
+            if page is None:
+                page = module.factory(self.pages)
+                if not isinstance(page, QDialog):
+                    raise TypeError("O módulo deve fornecer uma tela Qt.")
+                page.setModal(False)
+                page.setWindowFlags(Qt.WindowType.Widget)
+                page.finished.connect(
+                    lambda _result, selected=module_id: self._primary_page_closed(selected)
+                )
+                self.pages.addWidget(page)
+                self._module_pages[module_id] = page
+            self.pages.setCurrentWidget(page)
+            page.show()
+            self._mark_active(module_id)
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, module.label, str(error))
+            return False
+
+    def _primary_page_closed(self, module_id):
+        if self._active_module == module_id:
+            self.show_module("dashboard")
 
     def open_module(self, module_id):
         module = self._modules.get(module_id)

@@ -108,6 +108,29 @@ def test_extra_module_goes_to_sidebar_without_reordering_legacy(qt_application):
         shell.close()
 
 
+def test_primary_module_is_embedded_and_reused_in_shell(qt_application):
+    created = []
+    def factory(parent):
+        dialog = QDialog(parent); created.append(dialog); return dialog
+    customers = AdministrativeModule(
+        "Clientes", "Cadastro", "F3", "clientes", "view", factory, "clientes"
+    )
+    shell = NabiCodeShellWindow(
+        Security(), (dashboard_module(), customers), lambda: QMainWindow()
+    )
+    try:
+        assert shell.show_module("clientes") is True
+        assert shell.pages.currentWidget() is created[0]
+        assert created[0].isWindow() is False
+        assert shell.show_module("clientes") is True
+        assert len(created) == 1
+        assert "border:3px solid #ffffff" in shell.navigation_buttons["clientes"].styleSheet()
+        created[0].reject(); qt_application.processEvents()
+        assert shell._active_module == "dashboard"
+    finally:
+        shell.close()
+
+
 def test_login_is_large_and_preserves_one_enter_per_transition(qt_application):
     security = Mock(); security.authenticate.return_value = object()
     dialog = ApplicationLoginDialog(security)
