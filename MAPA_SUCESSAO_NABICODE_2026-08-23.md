@@ -2001,3 +2001,27 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximas fronteiras independentes ainda pendentes incluem reenvio/consulta
   manual da outbox, cancelamento local da fila e autoria da importação manual de
   XML. Corrigir no máximo uma fronteira por checkpoint, sem fallback `Sistema`.
+
+### Auditoria fiscal de autoria — reenvio manual da outbox
+
+- implementação: `79ae421` — `fix: autentica reenvio manual fiscal`;
+- causa: `FiscalService.retry_transmission` aceitava `actor` livre e persistia
+  esse texto em `retried_by` ao reabrir uma fila que o worker poderia transmitir;
+- a API deixou de aceitar ator externo e chama `_authenticated_outbox_actor`
+  antes de listar ou alterar a fila, exigindo identidade ativa e permissão real
+  `fiscal/transmit` já ligadas a `SecurityService` no runtime Legacy;
+- ausência de sessão/permissão falha fechada antes de ler a fila; texto forjado
+  é rejeitado pela assinatura da API e a Central Fiscal não passa mais
+  `_usuario_financeiro()` para essa operação;
+- permanecem intactas as barreiras que proíbem reabrir documento concluído,
+  cancelado, com transmissão iniciada ou `RESPOSTA_DESCONHECIDA`; esta última
+  continua obrigatoriamente no fluxo de consulta/reconciliação, nunca reenvio;
+- validação diretamente relacionada: `4 passed`, `123 deselected`; regressão de
+  outbox/worker/Central/cancelamento/venda/segurança: `103 passed`;
+  `compileall` e `git diff --check` aprovados. A execução integral isolada de
+  `test_fiscal_service.py` foi encerrada pelo ambiente sem resumo; os testes do
+  reenvio e toda a regressão relacionada concluíram separadamente sem falhas;
+- nenhuma chamada SEFAZ, dado real, XML fiscal, segredo ou regra tributária foi
+  alterada. Produção fiscal permanece bloqueada;
+- consulta manual de recibo, cancelamento local de transmissão e autoria da
+  importação manual de XML continuam checkpoints independentes pendentes.
