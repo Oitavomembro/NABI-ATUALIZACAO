@@ -78,7 +78,10 @@ class UpdatePackageValidationService:
                 raise ValueError("O manifesto não contém a lista de arquivos.")
             normalized: list[dict[str, Any]] = []
             for item in files:
-                relative = str(item.get("path") or "").replace("\\", "/").lstrip("/")
+                raw_relative = str(item.get("path") or "").replace("\\", "/")
+                if raw_relative.startswith("/"):
+                    raise ValueError(f"Arquivo inválido ou ausente no pacote: {raw_relative}.")
+                relative = raw_relative
                 expected = str(item.get("sha256") or "").lower()
                 zip_name = f"payload/{relative}"
                 if not relative or ".." in Path(relative).parts or zip_name not in names:
@@ -89,8 +92,10 @@ class UpdatePackageValidationService:
                 normalized.append({**item, "path": relative, "sha256": expected})
             removed: list[str] = []
             for relative in manifest.get("remove") or []:
-                normalized_path = str(relative).replace("\\", "/").lstrip("/")
+                normalized_path = str(relative).replace("\\", "/")
                 if not normalized_path or ".." in Path(normalized_path).parts:
+                    raise ValueError(f"Caminho de remoção inválido: {relative}.")
+                if normalized_path.startswith("/") or Path(normalized_path).drive:
                     raise ValueError(f"Caminho de remoção inválido: {relative}.")
                 removed.append(normalized_path)
             manifest["files"] = normalized

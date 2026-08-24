@@ -133,6 +133,9 @@ def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
     spec = (root / "build_tools/pyinstaller/nabicode_fichario.spec").read_text(encoding="utf-8")
     runtime = (root / "fichario/update_runtime.py").read_text(encoding="utf-8")
     assert "NabiCode_Fichario_Updater" in build
+    assert '"--uac-admin"' in build
+    helper = (root / "build_tools/fichario_update_helper.py").read_text(encoding="utf-8")
+    assert "use_shell_broker" in helper
     assert "BUILD_INFO.txt" in build and "BUILD_INFO.txt" in spec
     assert "tempfile.mkdtemp" in build
     assert "trusted_public_keys.json" in spec

@@ -54,6 +54,7 @@ def main(argv=None) -> int:
         run([
             sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean",
             "--onefile", "--noconsole", "--name", "NabiCode_Fichario_Updater",
+            "--uac-admin",
             "--distpath", str(helper_dist), "--workpath", str(OUTPUT / "helper_work"),
             "--specpath", str(OUTPUT / "helper_spec"),
             "--paths", str(ROOT), str(ROOT / "build_tools" / "fichario_update_helper.py"),

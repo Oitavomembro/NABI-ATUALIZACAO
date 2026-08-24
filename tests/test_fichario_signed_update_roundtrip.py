@@ -87,6 +87,10 @@ def test_signed_clock_update_preserves_database_and_can_rollback(tmp_path):
     assert (install / "REVISAO.txt").read_text() == "20\n"
     assert _customer_names(database) == ["CLIENTE PRESERVADO"]
     assert service.validate_installed_files(state) == []
+    persisted = json.loads(service.state_file.read_text(encoding="utf-8"))
+    protected = Path(persisted["file_backup"])
+    assert protected.parent == install / ".nabicode_rollback"
+    assert (protected / "REVISAO.txt").read_text(encoding="utf-8") == "19\n"
 
     (install / "ATUALIZADO_EM.txt").write_text("CORROMPIDO", encoding="utf-8")
     assert service.validate_installed_files(state)

@@ -11,7 +11,9 @@ from unittest import mock
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 
-from services.update_package_service import UpdatePackageService, _original_process_alive
+from services.update_package_service import (
+    UpdatePackageService, _original_process_alive, validate_prepared_state,
+)
 from core.runtime_profile import DatabaseUsageLock
 from services.update_signature import sign_update_manifest
 
@@ -117,6 +119,40 @@ class UpdatePackageServiceTests(unittest.TestCase):
         self.assertIn("VERSAO.txt", state["backed_up"])
         self.assertIn("update_smoke_test.json", state["absent_before"])
         self.assertTrue(self.service.state_file.is_file())
+
+    def test_prepare_rejects_package_replaced_after_initial_validation(self):
+        package = self.make_package(files={"VERSAO.txt": b"2.4.38"})
+        original_manifest = self.service.validate(package)
+        self.make_package(files={"VERSAO.txt": b"2.4.38", "novo.txt": b"trocado"})
+        with self.assertRaisesRegex(ValueError, "mudou depois"):
+            self.service.prepare(package, original_manifest, "snapshot-1")
+
+    def test_helper_rejects_tampered_staging_and_install_directory(self):
+        package = self.make_package()
+        manifest = self.service.validate(package)
+        state = self.service.prepare(package, manifest, "snapshot-1")
+        staged = Path(state["staging"]) / "VERSAO.txt"
+        staged.write_text("MALICIOSO", encoding="utf-8")
+        with self.assertRaisesRegex(ValueError, "preparado inválido"):
+            validate_prepared_state(self.service.state_file, state, self.install)
+
+        staged.write_bytes(b"2.4.38")
+        escaped = dict(state, install_dir=str(self.root / "outro"))
+        with self.assertRaisesRegex(ValueError, "diretório de instalação"):
+            validate_prepared_state(self.service.state_file, escaped, self.install)
+
+    def test_helper_rejects_unsigned_rollback_paths(self):
+        package = self.make_package()
+        manifest = self.service.validate(package)
+        state = self.service.prepare(package, manifest, "snapshot-1")
+        valid_state = dict(state)
+        state["absent_before"] = ["../../fora.txt"]
+        with self.assertRaisesRegex(ValueError, "Caminho inseguro"):
+            validate_prepared_state(self.service.state_file, state, self.install)
+
+        valid_state["status"] = "ROLLBACK_PENDENTE"
+        with self.assertRaisesRegex(ValueError, "backup protegido"):
+            validate_prepared_state(self.service.state_file, valid_state, self.install)
 
     def test_validation_detects_changed_installed_file(self):
         package = self.make_package()
