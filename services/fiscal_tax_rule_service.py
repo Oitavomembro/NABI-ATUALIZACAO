@@ -107,6 +107,11 @@ class FiscalTaxRuleService:
         now = datetime.now().astimezone().isoformat()
         connection = self.connection_factory()
         try:
+            connection.execute("BEGIN IMMEDIATE")
+            if data["active"]:
+                self._reject_active_conflict(
+                    connection, data, exclude_rule_id=rule_id
+                )
             columns = tuple(data)
             if rule_id is None:
                 cursor = connection.execute(
@@ -127,6 +132,43 @@ class FiscalTaxRuleService:
             raise
         finally:
             connection.close()
+
+    @staticmethod
+    def _cest_scopes_overlap(first: str, second: str) -> bool:
+        return not first or not second or first == second
+
+    def _reject_active_conflict(
+        self,
+        connection,
+        data: Mapping[str, Any],
+        *,
+        exclude_rule_id: int | None = None,
+    ) -> None:
+        parameters: list[Any] = [
+            data["issuer_state"], data["destination_state"], data["tax_regime"],
+            data["ncm_prefix"], data["operation_kind"],
+        ]
+        exclusion = ""
+        if exclude_rule_id is not None:
+            exclusion = " AND id!=?"
+            parameters.append(int(exclude_rule_id))
+        rows = connection.execute(
+            "SELECT id,cest FROM fiscal_tax_rules WHERE active=1 "
+            "AND issuer_state=? AND destination_state=? AND tax_regime=? "
+            "AND ncm_prefix=? AND operation_kind=?" + exclusion,
+            tuple(parameters),
+        ).fetchall()
+        conflicting_ids = sorted(
+            int(row[0]) for row in rows
+            if self._cest_scopes_overlap(str(data["cest"]), str(row[1] or ""))
+        )
+        if conflicting_ids:
+            identifiers = ", ".join(str(identifier) for identifier in conflicting_ids)
+            raise ValueError(
+                "Conflito auditável na matriz fiscal: regra ativa de mesma precedência "
+                f"já existe para este escopo (IDs: {identifiers}). Desative a regra "
+                "anterior ou torne o escopo inequívoco."
+            )
 
     def get(self, rule_id: int, *, connection=None) -> FiscalTaxRule:
         own = connection is None
@@ -165,14 +207,29 @@ class FiscalTaxRuleService:
                 "difal_internal_rate,difal_interstate_rate,difal_fcp_rate,benefit_code,approved_by,approved_at "
                 "FROM fiscal_tax_rules WHERE active=1 AND issuer_state='BA' AND tax_regime=? AND operation_kind=? "
                 "AND destination_state IN (?, '*') ORDER BY LENGTH(ncm_prefix) DESC, "
-                "CASE WHEN destination_state=? THEN 0 ELSE 1 END, id DESC",
+                "CASE WHEN destination_state=? THEN 0 ELSE 1 END, id",
                 (regime, operation, destination, destination),
             )
+            matches: list[tuple[tuple[int, int], FiscalTaxRule]] = []
             for row in cursor.fetchall():
                 rule = FiscalTaxRule(*row)
                 if ncm_digits.startswith(rule.ncm_prefix) and (not rule.cest or rule.cest == cest_digits):
-                    return rule
-            return None
+                    precedence = (
+                        len(rule.ncm_prefix),
+                        1 if rule.destination_state == destination else 0,
+                    )
+                    matches.append((precedence, rule))
+            if not matches:
+                return None
+            best_precedence = max(precedence for precedence, _rule in matches)
+            best_rules = [rule for precedence, rule in matches if precedence == best_precedence]
+            if len(best_rules) > 1:
+                identifiers = ", ".join(str(rule.id) for rule in sorted(best_rules, key=lambda item: item.id))
+                raise ValueError(
+                    "Conflito auditável na matriz fiscal: múltiplas regras ativas de "
+                    f"mesma precedência são aplicáveis (IDs: {identifiers})."
+                )
+            return best_rules[0]
         finally:
             connection.close()
 

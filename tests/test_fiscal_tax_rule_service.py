@@ -103,3 +103,46 @@ def test_desativacao_preserva_historico_e_remove_regra_da_resolucao(service):
     assert service.resolve(
         tax_regime="SIMPLES_NACIONAL", ncm="94036000", destination_state="BA"
     ) is None
+
+
+def test_cadastro_recusa_conflito_ativo_de_mesma_precedencia(service):
+    existing = service.save(rule())
+
+    with pytest.raises(ValueError, match=rf"Conflito auditável.*IDs: {existing.id}"):
+        service.save(rule(name="Duplicada com conteúdo tributário diferente", icms_code="103"))
+
+    assert [item.id for item in service.list_rules()] == [existing.id]
+
+
+def test_cadastro_recusa_cest_especifico_sobre_regra_generica_de_mesma_precedencia(service):
+    existing = service.save(rule())
+
+    with pytest.raises(ValueError, match=rf"Conflito auditável.*IDs: {existing.id}"):
+        service.save(rule(name="CEST concorrente", cest="1234567"))
+
+
+def test_resolucao_de_dados_antigos_ambiguos_falha_fechado_sem_usar_id_desc(service):
+    first = service.save(rule(name="Primeira regra"))
+    connection = service.connection_factory()
+    try:
+        values = rule(name="Regra antiga concorrente", icms_code="103")
+        normalized = service.normalize(values)
+        columns = tuple(normalized)
+        cursor = connection.execute(
+            f"INSERT INTO fiscal_tax_rules ({','.join(columns)},created_at,updated_at) "
+            f"VALUES ({','.join('?' for _ in columns)},'2026-08-20','2026-08-20')",
+            tuple(normalized[column] for column in columns),
+        )
+        second_id = int(cursor.lastrowid)
+        connection.commit()
+    finally:
+        connection.close()
+
+    assert second_id > first.id
+    with pytest.raises(
+        ValueError,
+        match=rf"Conflito auditável.*IDs: {first.id}, {second_id}",
+    ):
+        service.resolve(
+            tax_regime="SIMPLES_NACIONAL", ncm="94036000", destination_state="BA"
+        )
