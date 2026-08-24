@@ -56,8 +56,8 @@ class UpdateAndFactoryIntegrationTests(unittest.TestCase):
         )
         self.assertGreater(automatic_session, create_ui)
         self.assertIn("def _login_usuarios_habilitado(self):", SOURCE)
-        self.assertIn("Login automático desativado", SOURCE)
-        self.assertIn("def abrir_login_usuario(self):", SOURCE)
+        self.assertIn('configuracao_inicial_concluida_v1', SOURCE)
+        self.assertIn("def abrir_login_usuario(self, inicial=False):", SOURCE)
         self.assertNotIn("self.after(250, self.abrir_login_usuario)", SOURCE)
 
 

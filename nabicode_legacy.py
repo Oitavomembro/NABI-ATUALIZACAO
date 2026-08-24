@@ -822,7 +822,8 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         )
         self.fiscal_cancellation_service.recover_pending_reversals()
         self.modo_pdv = self.pdv_service.normalizar_modo(obter_config("pdv_modo") or "BALCAO")
-        self.security.bootstrap_admin(obter_config("admin_senha_hash"))
+        if not primeira_vez:
+            self.security.bootstrap_admin(obter_config("admin_senha_hash"))
         # Migração corretiva 2.4.42: o login de abertura fica DESATIVADO em toda
         # instalação existente até que o proprietário marque e salve novamente a
         # opção na tela Segurança desta versão. Chaves antigas não autorizam mais
@@ -869,6 +870,15 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         if self._license_exit_requested:
             self.destroy()
             raise SystemExit(0)
+
+        if primeira_vez:
+            with startup_modal_scope():
+                if not self._executar_configuracao_inicial():
+                    self.destroy()
+                    raise SystemExit(0)
+                if not self.abrir_login_usuario(inicial=True):
+                    self.destroy()
+                    raise SystemExit(0)
 
         self.title(obter_config("nome_loja") or "NabiCode — Gerenciador de Crediário Inteligente")
         apply_responsive_geometry(self, theme=UI_THEME)
@@ -963,7 +973,10 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.bind_all("<Any-KeyPress>", lambda _event: self.security.touch(), add="+")
         self.bind_all("<Any-Button>", lambda _event: self.security.touch(), add="+")
         self.after(250, self._monitorar_inatividade)
-        self.security.start_session_without_password("admin")
+        if not self.security.session and not self._login_usuarios_habilitado():
+            # Compatibilidade temporária somente para bases anteriores ao novo
+            # primeiro acesso. Instalações novas nunca passam por este caminho.
+            self.security.start_session_without_password("admin")
         self._janela_abertura_caixa = None
         self._janela_formulario_abertura_caixa = None
         self.after_idle(self._iniciar_worker_fiscal)
@@ -1007,8 +1020,74 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             logger.exception("Não foi possível exibir a janela principal.")
 
     def _login_usuarios_habilitado(self):
-        # Login automático desativado: o NabiCode sempre inicia em sessão local.
-        return False
+        return str(obter_config("configuracao_inicial_concluida_v1") or "0") == "1"
+
+    def _executar_configuracao_inicial(self):
+        """Configura uma instalação nova sem liberar módulos operacionais."""
+        if self.security.has_users():
+            return False
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Configuração inicial do NabiCode")
+        janela.geometry("590x650")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(
+            janela, text="PRIMEIRO ACESSO", text_color="#00FF88",
+            font=ctk.CTkFont(size=23, weight="bold"),
+        ).pack(anchor="w", padx=32, pady=(26, 4))
+        aviso = ctk.CTkLabel(
+            janela,
+            text=("Configure a empresa e crie o primeiro administrador.\n"
+                  "Vendas, Financeiro e Fiscal permanecem bloqueados até concluir."),
+            justify="left", wraplength=520,
+        )
+        aviso.pack(anchor="w", padx=32, pady=(0, 12))
+        campos = {}
+        for rotulo, chave, valor, oculto in (
+            ("Empresa/loja*", "loja", "", False),
+            ("CNPJ", "cnpj", "", False),
+            ("E-mail", "email", "", False),
+            ("Usuário administrador*", "usuario", "admin", False),
+            ("Nome do administrador*", "nome", "Administrador", False),
+            ("Senha (mínimo 8 caracteres)*", "senha", "", True),
+            ("Repita a senha*", "confirmacao", "", True),
+        ):
+            ctk.CTkLabel(janela, text=rotulo).pack(anchor="w", padx=32, pady=(7, 2))
+            campo = ctk.CTkEntry(janela, height=36, show="●" if oculto else "")
+            campo.pack(fill="x", padx=32)
+            if valor:
+                campo.insert(0, valor)
+            campos[chave] = campo
+
+        def concluir(event=None):
+            if campos["senha"].get() != campos["confirmacao"].get():
+                messagebox.showwarning("Configuração inicial", "As senhas não coincidem.", parent=janela)
+                campos["senha"].delete(0, "end"); campos["confirmacao"].delete(0, "end")
+                campos["senha"].focus_set(); return "break"
+            try:
+                self.security.complete_initial_setup(
+                    username=campos["usuario"].get(), display_name=campos["nome"].get(),
+                    password=campos["senha"].get(), store_name=campos["loja"].get(),
+                    document=campos["cnpj"].get(), email=campos["email"].get(),
+                )
+            except Exception as exc:
+                messagebox.showerror("Configuração inicial", str(exc), parent=janela)
+                return "break"
+            resultado["ok"] = True
+            janela.destroy()
+            return "break"
+
+        botao = ctk.CTkButton(
+            janela, text="Concluir configuração [Enter]", command=concluir,
+            fg_color="#2ea043", height=42,
+        )
+        botao.pack(fill="x", padx=32, pady=22)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        campos["loja"].focus_set()
+        janela.bind("<Return>", concluir)
+        self.wait_window(janela)
+        return resultado["ok"]
 
     def _senha_administrativa_valida(self, senha):
         return self.security.confirm_manager_password(str(senha or ""))
@@ -1032,7 +1111,11 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def _autorizar(self, modulo, acao="view", *, silencioso=False):
         if not self.security.session:
-            self.security.start_session_without_password("admin")
+            if self._login_usuarios_habilitado():
+                if not self.abrir_login_usuario():
+                    return False
+            else:
+                self.security.start_session_without_password("admin")
         if self.security.require(modulo, acao):
             self.security.touch()
             return True
@@ -1040,12 +1123,44 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             messagebox.showerror("Acesso negado", f"Seu perfil não possui permissão para {modulo}:{acao}.", parent=self)
         return False
 
-    def abrir_login_usuario(self):
-        return None
+    def abrir_login_usuario(self, inicial=False):
+        if self.security.session and not self.security.is_expired():
+            return True
+        resultado = {"ok": False}
+        janela = ctk.CTkToplevel(self)
+        janela.title("Entrar no NabiCode")
+        janela.geometry("430x330")
+        janela.resizable(False, False)
+        self._preparar_janela_modal(janela)
+        ctk.CTkLabel(janela, text="ENTRAR NO NABICODE", text_color="#00FF88", font=ctk.CTkFont(size=21, weight="bold")).pack(anchor="w", padx=30, pady=(28, 16))
+        ctk.CTkLabel(janela, text="Usuário").pack(anchor="w", padx=30)
+        usuario = ctk.CTkEntry(janela, height=38); usuario.pack(fill="x", padx=30, pady=(3, 12))
+        ctk.CTkLabel(janela, text="Senha").pack(anchor="w", padx=30)
+        senha = ctk.CTkEntry(janela, height=38, show="●"); senha.pack(fill="x", padx=30, pady=(3, 18))
+
+        def autenticar(event=None):
+            session = self.security.authenticate(usuario.get(), senha.get())
+            senha.delete(0, "end")
+            if session is None:
+                messagebox.showwarning("Acesso negado", "Usuário ou senha inválidos.", parent=janela)
+                senha.focus_set(); return "break"
+            resultado["ok"] = True
+            janela.destroy(); return "break"
+
+        ctk.CTkButton(janela, text="Entrar [Enter]", command=autenticar, fg_color="#1f6feb", height=40).pack(fill="x", padx=30)
+        janela.protocol("WM_DELETE_WINDOW", janela.destroy)
+        janela.bind("<Return>", autenticar)
+        (usuario if inicial else usuario).focus_set()
+        self.wait_window(janela)
+        return resultado["ok"]
 
     def _monitorar_inatividade(self):
         try:
-            if not self.security.session:
+            if self.security.session and self.security.is_expired():
+                self.security.logout("INATIVIDADE")
+            if not self.security.session and self._login_usuarios_habilitado():
+                self.abrir_login_usuario()
+            elif not self.security.session:
                 self.security.start_session_without_password("admin")
         finally:
             self.after(30000, self._monitorar_inatividade)
