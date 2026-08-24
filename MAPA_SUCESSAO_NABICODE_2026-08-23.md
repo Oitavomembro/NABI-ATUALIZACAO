@@ -2123,3 +2123,26 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   usada. Produção fiscal permanece bloqueada;
 - confirmação/liberação de reserva e inicialização manual da numeração ainda
   recebem ator explícito e devem ser auditadas em checkpoints independentes.
+
+### Auditoria fiscal de autoria — inicialização da numeração
+
+- implementação: `f015aea` — `fix: autentica inicializacao da numeracao fiscal`;
+- causa: `FiscalService.initialize_numbering` aceitava ator livre numa operação
+  humana irreversível para o escopo ambiente/modelo/série;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  específica `fiscal/configure` antes de abrir a transação. A confirmação por
+  senha mestra na interface permanece apenas reforço de intenção, nunca fonte de
+  identidade ou autorização;
+- validações de modelo, série, próximo número, ambiente, inicialização única e
+  proibição de reconfigurar sequência existente foram preservadas;
+- a autenticação fiscal comum foi generalizada internamente para mensagens
+  coerentes por operação; as fronteiras já corrigidas da outbox continuam usando
+  a mesma permissão `fiscal/transmit`;
+- testes focados de inicialização/reserva: `18 passed`, `121 deselected`;
+  regressão de venda/outbox/segurança: `36 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma numeração real, rede SEFAZ ou regra tributária foi usada ou alterada.
+  Produção fiscal permanece bloqueada;
+- confirmação/liberação assíncrona de reserva exige desenho que preserve a
+  identidade confiável capturada na origem sem depender de sessão viva do
+  worker; não remover seus parâmetros até existir essa capacidade interna.
