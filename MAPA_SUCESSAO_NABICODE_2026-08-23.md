@@ -2263,3 +2263,23 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - emissão da devolução e recuperações manuais/em lote ainda possuem identidade
   comercial livre para efeitos de estoque e seguem pendentes de desenho único de
   sessão, sem autoridade paralela.
+
+### Auditoria fiscal de autoria — baixa de estoque da devolução autorizada
+
+- implementação: `9af5618` — `fix: vincula baixa ao ator fiscal autenticado`;
+- `NFeDevolucaoService.emitir_devolucao_oficial` não aceita mais ator externo.
+  A autoria do histórico e da baixa de estoque vem exclusivamente do registro
+  devolvido por `FiscalService.authorize_document`, já autenticado na sessão;
+- se a autorização for aceita sem a evidência de autoria, o estado externo é
+  preservado como `AUTORIZADA_PENDENTE_ESTOQUE`, nenhuma baixa é feita e não há
+  fallback `Sistema`;
+- rejeições continuam preservadas sem produzir efeito de estoque; erros antes de
+  existir registro fiscal não recebem identidade retroativa inventada;
+- testes focados da devolução: `39 passed`; regressão de devolução, autorização,
+  venda, cancelamento e outbox/worker: `269 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão real, dado real, regra tributária, XML, prazo ou endpoint
+  foi usado ou alterado. Produção fiscal permanece bloqueada;
+- recuperações manuais/em lote dos efeitos pendentes continuam recebendo ator
+  livre e são a próxima fronteira isolada. Elas não devem ganhar um segundo
+  provedor de segurança; precisam consumir a sessão oficial na composição.
