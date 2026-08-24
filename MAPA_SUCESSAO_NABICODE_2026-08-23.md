@@ -1866,4 +1866,7 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   repetição de commit no diário continua recusada;
 - validação focada: `15 passed`; a suíte completa anterior registrou `2031
   passed`, `1 skipped`, `444 subtests passed` e somente essa falha, agora
-  corrigida; repetição integral permanece como prova final do checkpoint.
+  corrigida;
+- repetição integral final: `2034 passed`, `1 skipped`, `2 warnings`, `444
+  subtests passed`, zero falhas; os avisos são a classe auxiliar já conhecida e
+  uma depreciação externa do `BrazilFiscalReport` no DANFE.
