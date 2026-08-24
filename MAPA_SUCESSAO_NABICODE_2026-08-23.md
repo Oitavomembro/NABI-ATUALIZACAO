@@ -1262,6 +1262,26 @@ Pendências deliberadas:
   que nenhum worker/arquivo/fila fiscal é iniciado ou criado;
 - nenhum push foi realizado.
 
+### Candidata integrada — segurança final e inventário de branches
+
+- branch: `codex/integracao-final-seguranca-ia`;
+- base: candidata consolidada `3ca8552`; merge de segurança adicional: `fa22b85`;
+- as trilhas Nabi Financeiro (`250f8d2`), Fornecedores/Pedidos (`af8e365`) e
+  Produtos/Estoque (`bdeb4c4`) já estavam integralmente presentes pelos merges
+  `2ef535e`, `b73f009` e `c848dfe`; nenhuma delas foi duplicada;
+- inventário de todas as branches locais confirmou que dossiê fiscal, autoria
+  fiscal e composição administrativa Qt possuem conteúdo idêntico já integrado;
+  duas referências do Fichário contêm somente documentação histórica e o splash
+  experimental foi revertido, portanto não devem ser mesclados artificialmente;
+- validação completa da candidata: `2161 passed`, `1 skipped`, `444 subtests
+  passed`, zero falhas e apenas a depreciação externa conhecida do
+  `BrazilFiscalReport`; `compileall` e `git diff --check` aprovados;
+- `.codex-remote-attachments/` permanece local, não versionado e fora de todos
+  os commits;
+- próximo passo: publicar somente esta candidata consolidada e usar seu hash
+  como nova base de continuidade; homologações físicas/fiscais continuam
+  separadas e não são substituídas pelos testes automatizados.
+
 ## Checkpoint FICHÁRIO — paridade operacional do projeto raiz
 
 Estado em `2026-08-23`, branch `codex/integracao-nabi-pdv`:
