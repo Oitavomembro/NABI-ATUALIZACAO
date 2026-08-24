@@ -6,6 +6,26 @@ O NabiCode Legacy é a referência obrigatória de organização. Melhorias Qt p
 ampliar legibilidade, DPI, desempenho e acessibilidade, mas não podem mudar a
 ordem, a identidade, os atalhos ou o caminho operacional dos módulos.
 
+O entrypoint oficial permanece `main.py`, que abre o Legacy completo. O
+`main_qt.py` continua sendo uma trilha separada de homologação comercial/não
+fiscal e não pode substituir o oficial enquanto Central Fiscal e demais
+entradas não tiverem paridade comprovada.
+
+## Identificação dos inicializadores no Windows
+
+- `C:\Users\Public\Desktop\NabiCode.lnk` aponta para
+  `C:\Program Files\NabiCode\NabiCode_v2_5_1.exe`;
+- `build_tools/pyinstaller/nabicode.spec` empacota `main.py`;
+- `C:\Users\Public\Desktop\NabiCode Fichario.lnk` aponta para o executável
+  separado da edição Fichário;
+- não foi encontrado atalho instalado para `main_qt.py`;
+- a janela `NABI VENDAS` observada veio da execução direta da trilha de
+  homologação Qt, não do atalho oficial do NabiCode.
+
+Consequência: o oficial Legacy não deve ser reconstruído nem substituído. A
+correção desta branch serve exclusivamente para aproximar a homologação Qt do
+contrato visual, mantendo identificação e promoção separadas.
+
 Ordem canônica preservada:
 
 1. Início — F1 — azul `#1f6feb`;
