@@ -1259,3 +1259,44 @@ importação no banco de produção antes da aprovação visual e de um backup m
   testes físicos de reinstalação e atualização no Windows;
 - este requisito está planejado, mas ainda não foi declarado concluído nem deve
   ser confundido com a geração atual do EXE de homologação.
+
+## Checkpoint isolado — Relatórios comerciais Qt
+
+Estado em `2026-08-23`, branch `codex/relatorios-qt`, criada do último HEAD
+commitado e limpo da integração `4fbeeff45e93aa7108ede614d8ff707635504d20`:
+
+- implementação: `2c6b5b7c6807142f09ade8a6a42093973faf8aa2` —
+  `feat: adiciona relatorios comerciais no Qt`;
+- a porta `ReportReadPort` e `ReportApplicationService` transportam consultas,
+  documentos imutáveis, resumos, indicadores e exportações sem expor conexão,
+  SQL ou objetos internos do Legacy à interface;
+- `NabiCodeReportGateway` reutiliza integralmente o `ReportService` oficial para
+  filtros, autorização, auditoria, totalização e exportação atômica CSV/XLSX/PDF;
+- o relatório `nfe` não é oferecido pela fachada comercial Qt. Central Fiscal,
+  Fiscal/SEFAZ, XML e regras fiscais permaneceram intocados;
+- `ReportDialog` reproduz o fluxo Legacy de tipo, período, pesquisa, status,
+  usuário, cálculo/listagem, totais e exportação, com tabela somente leitura;
+- Enter avança exatamente uma etapa, Enter no botão gera uma vez, Shift+Enter
+  retorna, auto-repeat é consumido, F5 atualiza e Esc fecha somente o diálogo;
+- a janela não importa banco, repositórios, Legacy, Fiscal ou SEFAZ; recebe
+  somente a fachada e o usuário real da sessão;
+- testes focados: `39 passed`; regressão Qt/Commercial relacionada:
+  `293 passed`, `359 subtests passed`; `compileall` e `git diff --check`
+  aprovados;
+- nenhum `main_qt.py`, `ui_qt/app.py`, FICHÁRIO, atualizador, instalador,
+  licenciamento, IA Nabi ou banco real foi alterado; nenhum push realizado.
+
+Pendências deliberadas:
+
+- integrar a composição somente depois de a trilha FICHÁRIO/atualizador estar
+  limpa e a trilha IA liberar seus arquivos de entrada;
+- decidir no checkpoint de composição onde o botão Relatórios aparecerá conforme
+  perfil e permissão `relatorios/view`;
+- homologar visualmente período, tabela larga, DPI, Enter/Shift+Enter/Esc e os
+  arquivos CSV/Excel/PDF no Windows;
+- histórico, indicadores personalizados, agendamento e impressão física ficam
+  para checkpoints separados, sem transportar o agendador Tk para a GUI Qt.
+
+Próximo checkpoint não sobreposto recomendado: preparar a camada Qt de
+Configurações/Usuários/Permissões em branch própria, sem composição global e sem
+alterar licenciamento, IA, FICHÁRIO ou atualizador.
