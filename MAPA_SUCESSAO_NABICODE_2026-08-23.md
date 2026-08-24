@@ -2852,3 +2852,30 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   chaves permanentes, revisão jurídica e dossiê/homologação oficial SEFAZ Bahia.
   Não há outro checkpoint automatizável de alto valor identificado sem invadir
   as trilhas reservadas de IA/Fichário ou inventar evidência fiscal.
+
+### Recuperação e modernização visual do shell Qt
+
+- a trilha `codex/qt-shell-paridade-legacy` foi integrada por avanço direto
+  sobre `7147c32`, sem conflito e preservando o inicializador Legacy oficial;
+- o Qt volta a abrir no Início, e não diretamente no PDV. A navegação mantém a
+  ordem operacional Início, Vendas, Clientes, Produtos, Financeiro, Caixa,
+  Central Fiscal, Relatórios e Configurações;
+- Central Fiscal permanece desabilitada no shell Qt e identifica explicitamente
+  que a operação fiscal continua no Legacy oficial até migração homologada;
+- cartões foram reorganizados em grade 3 x 3, ampliados e receberam linguagem
+  visual tecnológica de metal escuro com trilhas luminosas azul/ciano e
+  vermelho, inspirada apenas como direção estética e sem copiar ativos de
+  terceiros;
+- cartões do Início e resumos laterais seguem o padrão funcional aprovado no
+  Fichário, mas nenhuma regra ou dependência exclusiva da edição FICHÁRIO foi
+  transportada ao produto oficial;
+- valores monetários dos resumos usam formatação brasileira pelo `MoneyCodec`;
+- commit visual adicional: `548189f` — `style: moderniza cartoes do shell Qt`;
+- inspeção visual isolada no Windows aprovada tecnicamente, sem banco real e sem
+  contornar o portão de licença. Testes focados finais: `35 passed`;
+  `compileall` e `git diff --check` aprovados;
+- a apresentação final da Nabi deverá ser uma mascote azul flutuante, sem
+  moldura de janela, com balão recolhível e estados visuais de escuta,
+  pensamento, execução, confirmação e erro. O painel atual continua sendo
+  protótipo funcional até esse checkpoint; não copiar personagem, relógio,
+  voz ou arte de terceiros.
