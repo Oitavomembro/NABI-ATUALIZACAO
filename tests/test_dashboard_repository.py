@@ -117,6 +117,34 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertEqual(history.received_total, 50)
         self.assertEqual(history.movement_total, 350)
 
+    def test_day_history_page_limits_rows_but_preserves_full_day_totals(self) -> None:
+        first = self.repo.day_history_page(day=datetime(2026, 8, 2), limit=2)
+        second = self.repo.day_history_page(day=datetime(2026, 8, 2), limit=2, offset=2)
+        self.assertEqual([item.movement_id for item in first.movements], [3, 2])
+        self.assertEqual([item.movement_id for item in second.movements], [1])
+        self.assertEqual(first.total_records, 3)
+        self.assertEqual(first.sales_total, Decimal("300"))
+        self.assertEqual(first.received_total, Decimal("50"))
+        self.assertEqual((first.limit, first.offset), (2, 0))
+
+    def test_day_history_page_with_volume_never_materializes_more_than_limit(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.executemany(
+                """INSERT INTO movimentacoes
+                   (id,cliente_id,tipo,descricao,valor,data,vencimento,status_pagamento,valor_aberto)
+                   VALUES(?,?,?,?,?,?,?,?,?)""",
+                ((index, 1, "COMPRA", "VOLUME", 1, "02/08/2026 12:00:00", "", "PAGO", 0)
+                 for index in range(10, 5010)),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        page = self.repo.day_history_page(day=datetime(2026, 8, 2), limit=50)
+        self.assertEqual(len(page.movements), 50)
+        self.assertEqual(page.total_records, 5003)
+        self.assertEqual(page.sales_total, Decimal("5300"))
+
     def test_missing_products_table_returns_unavailable_indicator(self) -> None:
         conn = sqlite3.connect(self.db_path)
         try:

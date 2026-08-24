@@ -48,6 +48,16 @@ class DayHistory:
         return self.sales_total + self.received_total
 
 
+@dataclass(frozen=True)
+class DayHistoryPage:
+    movements: tuple[DayMovement, ...]
+    sales_total: Decimal
+    received_total: Decimal
+    total_records: int
+    limit: int
+    offset: int
+
+
 class DashboardRepository:
     """Consultas consolidadas do dashboard e dos resumos da tela de clientes."""
 
@@ -210,3 +220,44 @@ class DashboardRepository:
             elif movement_type == "PAGAMENTO":
                 received_total += value
         return DayHistory(movements=movements, sales_total=sales_total, received_total=received_total)
+
+    def day_history_page(
+        self, *, day: datetime | None = None, limit: int = 50, offset: int = 0
+    ) -> DayHistoryPage:
+        """Página limitada e totais do dia calculados no banco, sem carregar tudo."""
+        reference = day or datetime.now()
+        day_prefix = reference.strftime("%d/%m/%Y") + "%"
+        safe_limit = max(1, min(int(limit), 200))
+        safe_offset = max(0, int(offset))
+        rows = self.database.fetch_all(
+            """
+            SELECT m.id, m.data, c.nome, m.tipo, m.descricao, m.valor
+            FROM movimentacoes m
+            LEFT JOIN clientes c ON m.cliente_id = c.id
+            WHERE m.data LIKE ?
+            ORDER BY m.id DESC LIMIT ? OFFSET ?
+            """,
+            (day_prefix, safe_limit, safe_offset),
+        )
+        totals = self.database.fetch_one(
+            """
+            SELECT COUNT(*) AS quantidade,
+                   COALESCE(SUM(CASE WHEN tipo='COMPRA' THEN valor ELSE 0 END),0) AS vendas,
+                   COALESCE(SUM(CASE WHEN tipo='PAGAMENTO' THEN valor ELSE 0 END),0) AS recebimentos
+            FROM movimentacoes WHERE data LIKE ?
+            """,
+            (day_prefix,),
+        )
+        movements = tuple(DayMovement(
+            movement_id=int(row[0]), timestamp=str(row[1] or ""),
+            customer_name=str(row[2] or "Cliente não encontrado"),
+            movement_type=str(row[3] or ""), description=str(row[4] or ""),
+            value=DecimalStorage.to_decimal(row[5] or 0, field="valor da movimentação"),
+        ) for row in rows)
+        return DayHistoryPage(
+            movements=movements,
+            sales_total=DecimalStorage.to_decimal((totals[1] if totals else 0) or 0, field="vendas do dia"),
+            received_total=DecimalStorage.to_decimal((totals[2] if totals else 0) or 0, field="recebimentos do dia"),
+            total_records=int((totals[0] if totals else 0) or 0),
+            limit=safe_limit, offset=safe_offset,
+        )
