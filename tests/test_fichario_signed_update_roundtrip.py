@@ -53,7 +53,7 @@ def test_signed_clock_update_preserves_database_and_can_rollback(tmp_path):
     marker = "23/08/2026 18:45:37\n".encode()
     files = {"REVISAO.txt": b"20\n", "ATUALIZADO_EM.txt": marker}
     manifest = sign_update_manifest({
-        "product": "NabiCode", "version": "2.5.1", "revision": 20,
+        "product": "NabiCode", "version": "2.5.1", "revision": 21,
         "minimum_source_version": "2.5.1", "accepted_source_versions": ["2.5.1"],
         "files": [
             {"path": name, "sha256": hashlib.sha256(data).hexdigest(), "size": len(data)}
