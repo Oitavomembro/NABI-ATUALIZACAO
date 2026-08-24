@@ -2634,3 +2634,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   repetir a suíte completa e somente então executar o checkpoint coordenado da
   entrada de NF-e com SecurityService e broker Nabi compartilhando a mesma
   autoridade de sessão.
+
+### Integração coordenada — autoria da entrada comercial por NF-e
+
+- integração dos históricos: `cf3c236` — merge normal da trilha isolada
+  `codex/fiscal-outbox-auth` sobre a consolidada `112dacd`, preservando ambos os
+  históricos e reconciliando somente este mapa;
+- implementação: `e711ae2` — `fix: autentica entrada de nfe na sessao oficial`;
+- `NFeImportService` deixou de aceitar `usuario` livre nas operações mutáveis.
+  Importação, revisão, estorno, exclusão técnica e registro de resultado falham
+  fechados sem ator e permissões fornecidos pela sessão oficial;
+- a importação exige `compras/receive`, `financeiro/create` e as permissões de
+  produto coerentes com cada item (`view`, `create` e/ou `edit`). Revisão exige
+  `compras/receive` e `produtos/edit`; estorno exige `compras/receive` e
+  `financeiro/reconcile`; exclusão técnica exige `technical/delete`;
+- o broker da Nabi fornece somente `expected_actor` como trava contra troca de
+  sessão entre revisão e confirmação. O nome do grant não é autoridade e nunca
+  substitui o ator obtido do `SecurityService` compartilhado pelo shell Qt;
+- o Legacy liga seu serviço global à própria sessão oficial depois da criação do
+  `SecurityService`. Não há fallback `Sistema` ou `Administrador` nas mutações;
+- a composição Qt reutiliza a mesma instância de segurança para shell, Nabi e
+  entrada de NF-e. Como essa sessão pertence ao shell, parar ou falhar ao ativar
+  a Nabi encerra somente o runtime local e não desloga o operador do sistema;
+- testes focados: `43 passed`; regressão integral: `2145 passed`, `1 skipped`,
+  `444 subtests passed`; `compileall` completo e `git diff --check` aprovados;
+- nenhuma transmissão real, banco real, XML de cliente, regra tributária,
+  endpoint, prazo, Fiscal/SEFAZ ou estado de produção foi alterado. Produção
+  fiscal e homologação física continuam bloqueadas;
+- próximo passo seguro: revisão independente do merge e integração normal desta
+  branch na consolidada. Depois, continuar apenas pelas pendências fiscais
+  documentais/homologação oficial, sem inventar evidência nem ampliar regras.
