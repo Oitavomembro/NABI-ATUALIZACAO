@@ -2308,3 +2308,20 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   teste antigo; callback renomeado e repetição final das áreas afetadas: `60
   passed`; `compileall` e `git diff --check` aprovados;
 - nenhum push foi realizado.
+
+### Segurança — política de senha para usuários
+
+- implementação no commit `7eaa112`, branch `codex/seguranca-primeiro-acesso`;
+- criação de usuário e troca explícita de senha exigem no mínimo oito
+  caracteres; não é mais possível criar conta oficial com senha vazia;
+- a verificação preserva compatibilidade somente para hashes já existentes,
+  evitando bloquear credenciais antigas durante a migração assistida;
+- ao migrar uma base antiga, contas secundárias com algoritmo legado `none` são
+  desativadas na mesma transação; o administrador deverá definir senha segura e
+  reativá-las conscientemente;
+- a interface Legacy informa a exigência de oito caracteres para novos
+  usuários; deixar o campo vazio ao editar continua significando manter a senha
+  existente, nunca apagá-la;
+- validação focada final: `56 passed`; `compileall` e `git diff --check`
+  aprovados; Fichário, Fiscal/SEFAZ e banco real não foram alterados;
+- nenhum push foi realizado.
