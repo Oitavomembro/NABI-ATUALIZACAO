@@ -1727,3 +1727,30 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - pendência: homologação manual do login, F1, oito cartões, expiração e retorno
   ao PDV no Windows. Fiscal/SEFAZ, Fichário, licenciamento, instalador e banco
   real não foram alterados.
+
+### Checkpoint isolado — Configurações comerciais Qt
+
+- branch/worktree: `codex/configuracoes-qt`, derivada do consolidado
+  `3751c3a`, sem alterar a integração;
+- implementação `0110ebb` — `feat: adiciona configuracoes comerciais ao Qt`;
+- nova `SettingsApplicationService` exige sessão válida e permissões reais de
+  `configs`; leitura continua disponível a `configs:view`, enquanto alteração,
+  backup e diagnóstico falham fechados sem `edit`, `backup` ou `diagnose`;
+- preferências visuais são normalizadas pelo mesmo `UIPreferencesService` do
+  Legacy e isoladas pelo nome autenticado do usuário; senha ou identidade livre
+  não entram na janela;
+- destinos e política diária de backup são gravados atomicamente pelo
+  `SystemRepository.set_configs`; o backup Qt reutiliza `BackupService`, não
+  inclui diretório fiscal e nunca executa restauração pela interface;
+- diagnóstico reutiliza `SystemDiagnostics`, salva relatório na área mutável do
+  perfil e não muda dados de negócio;
+- a janela Qt preserva a organização escura do Legacy em abas Interface,
+  Backup e Diagnóstico; `Ctrl+G` abre o cartão no hub, mantendo F9 exclusivo do
+  PDV, Esc fecha a janela e auto-repeat de Enter é consumido;
+- validação focada e de infraestrutura: `72 passed`; regressão conjunta Qt,
+  Commercial, startup da Nabi e licença: `340 passed`, `367 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- pendências: homologação visual/manual do cartão Configurações, preferências,
+  backup em dois destinos e relatório de diagnóstico no perfil TESTE; impressão
+  e restauração continuam checkpoints separados. Fiscal/SEFAZ, IA, Fichário,
+  licenciamento, instalador e banco real não foram alterados.
