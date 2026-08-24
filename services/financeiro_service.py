@@ -8,6 +8,9 @@ from typing import Any
 
 from repositories.financeiro_repository import FinanceiroRepository
 from repositories.decimal_storage import DecimalStorage
+from repositories.assistant_operation_journal_repository import (
+    AssistantOperationJournalRepository,
+)
 from services.financeiro_calculator import FinanceiroCalculator
 
 
@@ -30,6 +33,7 @@ class FinanceiroService:
     def __init__(self, repository: FinanceiroRepository) -> None:
         self.repository = repository
         self.database = repository.database
+        self.operation_journal = AssistantOperationJournalRepository()
 
     _dinheiro = staticmethod(FinanceiroCalculator.dinheiro)
     _data_iso = staticmethod(FinanceiroCalculator.data_iso)
@@ -826,16 +830,13 @@ class FinanceiroService:
 
         with self.database.session(write=True) as connection:
             if key:
-                row = connection.execute(
-                    "SELECT fingerprint,status,result_json FROM assistant_operation_journal "
-                    "WHERE idempotency_key=?", (key,),
-                ).fetchone()
+                row = self.operation_journal.get(connection, key)
                 if row is not None:
-                    if str(row[0]).lower() != fingerprint:
+                    if row["fingerprint"].lower() != fingerprint:
                         raise PermissionError("A chave idempotente já pertence a outro conteúdo.")
-                    if str(row[1]).upper() != "COMMITTED":
+                    if row["status"].upper() != "COMMITTED":
                         raise RuntimeError("O recebimento assistido possui estado persistente desconhecido.")
-                    payload = json.loads(str(row[2] or "{}"))
+                    payload = json.loads(row["result_json"])
                     return {
                         "pagamento_mov_id": int(payload["pagamento_mov_id"]),
                         "valor": self._dinheiro(payload["valor"]),
@@ -846,11 +847,10 @@ class FinanceiroService:
                         "observacao": str(payload.get("observacao") or ""),
                         "idempotent_replay": True,
                     }
-                connection.execute(
-                    """INSERT INTO assistant_operation_journal
-                       (idempotency_key,operation_kind,fingerprint,status,result_json,username,created_at)
-                       VALUES(?,'CUSTOMER_RECEIPT',?,'PENDING','',?,datetime('now','localtime'))""",
-                    (key, fingerprint, str(usuario or "").strip()),
+                self.operation_journal.begin(
+                    connection, idempotency_key=key,
+                    operation_kind="CUSTOMER_RECEIPT", fingerprint=fingerprint,
+                    username=str(usuario or "").strip(),
                 )
             reconciliacao_antes = self._reconciliar_cliente_transacao(
                 connection, int(cliente_id), corrigir=True
@@ -974,14 +974,9 @@ class FinanceiroService:
                     "forma_pagamento": forma,
                     "observacao": observacao,
                 }, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                updated = connection.execute(
-                    """UPDATE assistant_operation_journal
-                       SET status='COMMITTED',result_json=?,committed_at=datetime('now','localtime')
-                       WHERE idempotency_key=? AND status='PENDING'""",
-                    (payload, key),
+                self.operation_journal.commit(
+                    connection, idempotency_key=key, result_json=payload
                 )
-                if updated.rowcount != 1:
-                    raise RuntimeError("Não foi possível confirmar o diário idempotente.")
 
         return {
             "pagamento_mov_id": pagamento_mov_id,
