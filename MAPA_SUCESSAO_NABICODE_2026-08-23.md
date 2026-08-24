@@ -2047,6 +2047,18 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   continuam pendentes para checkpoints separados. Produção fiscal permanece
   bloqueada e este checkpoint não declara conformidade geral.
 
+### Integração consolidada — autoria segura da outbox fiscal
+
+- a correção `bcf606c` foi auditada e integrada por merge normal no commit
+  `3832dcd`, preservando os históricos fiscal e consolidado;
+- a resolução documental preservou integralmente as evidências administrativas,
+  da Nabi e fiscais, sem alterar regras tributárias ou comunicação SEFAZ;
+- validação fiscal integrada: `214 passed`, `10 subtests passed`, zero falhas;
+- regressão completa após o merge: `2064 passed`, `1 skipped`, `444 subtests
+  passed`, zero falhas; `compileall` e `git diff --check` aprovados;
+- produção fiscal continua bloqueada e as demais fronteiras de autoria seguem
+  como checkpoints independentes, sem aprovação implícita de conformidade.
+
 ### Evidência operacional externa — entrada de compra por XML
 
 - vídeo recebido em `2026-08-24`, duração `00:01:31.07`, resolução `1600x900`,
