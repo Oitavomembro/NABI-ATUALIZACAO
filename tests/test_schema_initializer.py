@@ -119,6 +119,46 @@ class SchemaInitializerTests(unittest.TestCase):
         finally:
             connection.close()
 
+    def test_schema_21_backfill_legacy_tax_rule_is_append_only_and_idempotent(self):
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.executescript("""
+                CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT);
+                INSERT INTO configuracoes VALUES ('db_schema_version', '20');
+                CREATE TABLE fiscal_tax_rules (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,name TEXT NOT NULL,active INTEGER NOT NULL,
+                    issuer_state TEXT NOT NULL,destination_state TEXT NOT NULL,tax_regime TEXT NOT NULL,
+                    ncm_prefix TEXT NOT NULL,cest TEXT NOT NULL,operation_kind TEXT NOT NULL,
+                    icms_code TEXT NOT NULL,icms_rate TEXT NOT NULL,icms_base_reduction TEXT NOT NULL,
+                    sn_credit_rate TEXT NOT NULL,st_mva TEXT NOT NULL,st_rate TEXT NOT NULL,
+                    fcp_st_rate TEXT NOT NULL,difal_internal_rate TEXT NOT NULL,
+                    difal_interstate_rate TEXT NOT NULL,difal_fcp_rate TEXT NOT NULL,
+                    benefit_code TEXT NOT NULL,approved_by TEXT NOT NULL,approved_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,updated_at TEXT NOT NULL
+                );
+                INSERT INTO fiscal_tax_rules VALUES
+                    (1,'Legada',1,'BA','*','SIMPLES_NACIONAL','9403','','VENDA','102',
+                     '0','0','0','0','0','0','0','0','0','','CONTADOR','2026-08-20',
+                     '2026-08-20T10:00:00-03:00','2026-08-20T10:00:00-03:00');
+            """)
+            connection.commit()
+        finally:
+            connection.close()
+
+        self.initialize(version=21)
+        self.initialize(version=21)
+        connection = sqlite3.connect(self.db_path)
+        try:
+            rows = connection.execute(
+                "SELECT event_kind,actor,revision_number FROM fiscal_tax_rule_revisions WHERE rule_id=1"
+            ).fetchall()
+            self.assertEqual([("LEGACY_SEM_TRILHA", "NAO_INFORMADO", 1)], rows)
+            with self.assertRaises(sqlite3.IntegrityError):
+                connection.execute("DELETE FROM fiscal_tax_rule_revisions WHERE rule_id=1")
+        finally:
+            connection.close()
+        self.assertEqual([(20, 21)], self.backups)
+
     def test_legacy_products_table_without_nome_is_migrated_before_indexes(self):
         connection = sqlite3.connect(self.db_path)
         try:

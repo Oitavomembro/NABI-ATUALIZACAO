@@ -12,7 +12,7 @@ from database.maintenance import DatabaseMaintenanceService
 TABLES = ("clientes", "produtos", "movimentacoes", "parcelas", "configuracoes", "historico_clientes")
 
 
-def create_database(path: Path, schema=20) -> None:
+def create_database(path: Path, schema=21) -> None:
     connection = sqlite3.connect(path)
     connection.executescript(f"""
         CREATE TABLE configuracoes(chave TEXT PRIMARY KEY, valor TEXT);
@@ -36,7 +36,7 @@ def create_database(path: Path, schema=20) -> None:
 def maintenance(tmp_path):
     database = tmp_path / "fichario.db"; create_database(database)
     return DatabaseMaintenanceService(
-        database, tmp_path / "backups", expected_schema_version=20, required_tables=TABLES
+        database, tmp_path / "backups", expected_schema_version=21, required_tables=TABLES
     )
 
 

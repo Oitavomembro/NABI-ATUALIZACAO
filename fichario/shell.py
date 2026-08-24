@@ -349,7 +349,7 @@ class FicharioWindow(QMainWindow):
     def _maintenance(self) -> DatabaseMaintenanceService:
         return DatabaseMaintenanceService(
             self.database.database_path, configured_backup_directory(self.profile),
-            expected_schema_version=20,
+            expected_schema_version=21,
             required_tables=(
                 "clientes", "produtos", "movimentacoes", "parcelas",
                 "configuracoes", "historico_clientes",

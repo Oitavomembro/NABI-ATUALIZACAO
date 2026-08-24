@@ -35,7 +35,7 @@ class FicharioUpdateRuntime:
     def maintenance(self) -> DatabaseMaintenanceService:
         return DatabaseMaintenanceService(
             self.database_path, self.profile.paths.backups,
-            expected_schema_version=20,
+            expected_schema_version=21,
             required_tables=(
                 "clientes", "movimentacoes", "parcelas", "configuracoes",
                 "historico_clientes",

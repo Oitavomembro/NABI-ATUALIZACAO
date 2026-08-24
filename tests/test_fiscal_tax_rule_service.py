@@ -1,5 +1,6 @@
 import sqlite3
 import tempfile
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 import pytest
@@ -18,6 +19,18 @@ CREATE TABLE fiscal_tax_rules (
  difal_fcp_rate TEXT NOT NULL,benefit_code TEXT NOT NULL,approved_by TEXT NOT NULL,
  approved_at TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL
 )
+;
+CREATE TABLE fiscal_tax_rule_revisions (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,rule_id INTEGER NOT NULL,
+ revision_number INTEGER NOT NULL,event_kind TEXT NOT NULL,payload_json TEXT NOT NULL,
+ previous_hash TEXT NOT NULL DEFAULT '',current_hash TEXT NOT NULL,actor TEXT NOT NULL,
+ change_reason TEXT NOT NULL DEFAULT '',recorded_at TEXT NOT NULL,
+ UNIQUE(rule_id,revision_number)
+);
+CREATE TRIGGER trg_fiscal_tax_rule_revisions_no_update
+BEFORE UPDATE ON fiscal_tax_rule_revisions BEGIN SELECT RAISE(ABORT, 'append-only'); END;
+CREATE TRIGGER trg_fiscal_tax_rule_revisions_no_delete
+BEFORE DELETE ON fiscal_tax_rule_revisions BEGIN SELECT RAISE(ABORT, 'append-only'); END
 """
 
 
@@ -26,7 +39,7 @@ def service():
     with tempfile.TemporaryDirectory() as folder:
         path = Path(folder) / "rules.db"
         connection = sqlite3.connect(path)
-        connection.execute(SCHEMA)
+        connection.executescript(SCHEMA)
         connection.commit()
         connection.close()
         yield FiscalTaxRuleService(lambda: sqlite3.connect(path))
@@ -146,3 +159,83 @@ def test_resolucao_de_dados_antigos_ambiguos_falha_fechado_sem_usar_id_desc(serv
         service.resolve(
             tax_regime="SIMPLES_NACIONAL", ncm="94036000", destination_state="BA"
         )
+
+
+def test_historico_tecnico_encadeia_create_update_e_deactivate_sem_mudar_api(service):
+    saved = service.save(rule(), actor="operador", change_reason="cadastro aprovado")
+    updated = service.save(
+        rule(name="Venda regular revisada"), rule_id=saved.id,
+        actor="gerente", change_reason="revisão técnica",
+    )
+    service.deactivate(updated.id)
+
+    assert updated.id == saved.id
+    revisions = service.list_revisions(saved.id)
+    assert [item["event_kind"] for item in revisions] == ["CREATED", "UPDATED", "DEACTIVATED"]
+    assert [item["revision_number"] for item in revisions] == [1, 2, 3]
+    assert revisions[0]["actor"] == "operador"
+    assert revisions[1]["previous_hash"] == revisions[0]["current_hash"]
+    assert service.verify_revision_chain(saved.id) == {
+        "valid": True, "rule_id": saved.id, "revision_count": 3,
+    }
+
+
+def test_actor_ausente_e_registrado_sem_inventar_identidade(service):
+    saved = service.save(rule())
+    assert service.list_revisions(saved.id)[0]["actor"] == "NAO_INFORMADO"
+
+
+def test_historico_e_append_only_e_adulteracao_e_detectada(service):
+    saved = service.save(rule())
+    connection = service.connection_factory()
+    try:
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(
+                "UPDATE fiscal_tax_rule_revisions SET actor='forjado' WHERE rule_id=?",
+                (saved.id,),
+            )
+        connection.rollback()
+        with pytest.raises(sqlite3.IntegrityError, match="append-only"):
+            connection.execute(
+                "DELETE FROM fiscal_tax_rule_revisions WHERE rule_id=?", (saved.id,)
+            )
+        connection.rollback()
+        connection.execute("DROP TRIGGER trg_fiscal_tax_rule_revisions_no_update")
+        connection.execute(
+            "UPDATE fiscal_tax_rule_revisions SET payload_json='{}' WHERE rule_id=?",
+            (saved.id,),
+        )
+        connection.commit()
+    finally:
+        connection.close()
+    assert service.verify_revision_chain(saved.id)["valid"] is False
+
+
+def test_falha_do_journal_reverte_a_regra_na_mesma_transacao(service):
+    connection = service.connection_factory()
+    try:
+        connection.execute("""
+            CREATE TRIGGER reject_revision BEFORE INSERT ON fiscal_tax_rule_revisions
+            BEGIN SELECT RAISE(ABORT, 'falha simulada no journal'); END
+        """)
+        connection.commit()
+    finally:
+        connection.close()
+
+    with pytest.raises(sqlite3.IntegrityError, match="falha simulada"):
+        service.save(rule())
+    assert service.list_rules(include_inactive=True) == []
+
+
+def test_updates_concorrentes_serializam_numeros_de_revisao(service):
+    saved = service.save(rule())
+
+    def update(name):
+        return service.save(rule(name=name), rule_id=saved.id).id
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        assert list(executor.map(update, ("Revisão A", "Revisão B"))) == [saved.id, saved.id]
+
+    revisions = service.list_revisions(saved.id)
+    assert [item["revision_number"] for item in revisions] == [1, 2, 3]
+    assert service.verify_revision_chain(saved.id)["valid"] is True

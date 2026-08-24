@@ -288,7 +288,7 @@ PDF_DIR = os.path.join(APP_DIR, "pdf_cupons_moveis")
 
 APP_VERSION = _ler_versao_aplicacao()
 APP_VERSION_LABEL = "Pesquisa global Ctrl+K"
-DB_SCHEMA_VERSION = 20
+DB_SCHEMA_VERSION = 21
 ULTIMA_ATUALIZACAO_BANCO = {"executada": False, "de": 0, "para": DB_SCHEMA_VERSION, "backup": ""}
 
 LOG_DIR = os.path.join(APP_DIR, "logs")

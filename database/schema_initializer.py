@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 from datetime import datetime, timedelta
 from typing import Callable, Any
@@ -892,6 +893,67 @@ def initialize_database(
         CREATE INDEX IF NOT EXISTS idx_fiscal_tax_rules_match
         ON fiscal_tax_rules(active,issuer_state,destination_state,tax_regime,ncm_prefix,cest)
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS fiscal_tax_rule_revisions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rule_id INTEGER NOT NULL,
+            revision_number INTEGER NOT NULL,
+            event_kind TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            previous_hash TEXT NOT NULL DEFAULT '',
+            current_hash TEXT NOT NULL,
+            actor TEXT NOT NULL DEFAULT 'NAO_INFORMADO',
+            change_reason TEXT NOT NULL DEFAULT '',
+            recorded_at TEXT NOT NULL,
+            UNIQUE(rule_id,revision_number),
+            FOREIGN KEY(rule_id) REFERENCES fiscal_tax_rules(id)
+        )
+    """)
+    cursor.execute("""
+        CREATE INDEX IF NOT EXISTS idx_fiscal_tax_rule_revisions_rule
+        ON fiscal_tax_rule_revisions(rule_id,revision_number)
+    """)
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_fiscal_tax_rule_revisions_no_update
+        BEFORE UPDATE ON fiscal_tax_rule_revisions
+        BEGIN
+            SELECT RAISE(ABORT, 'historico fiscal append-only nao pode ser alterado');
+        END
+    """)
+    cursor.execute("""
+        CREATE TRIGGER IF NOT EXISTS trg_fiscal_tax_rule_revisions_no_delete
+        BEFORE DELETE ON fiscal_tax_rule_revisions
+        BEGIN
+            SELECT RAISE(ABORT, 'historico fiscal append-only nao pode ser excluido');
+        END
+    """)
+    # Backfill técnico idempotente. Ele preserva o estado encontrado, mas não
+    # autentica juridicamente autoria, aprovação contábil ou não repúdio.
+    from services.fiscal_tax_rule_service import FiscalTaxRuleService
+    revision_columns = FiscalTaxRuleService.REVISION_PAYLOAD_COLUMNS
+    legacy_rules = cursor.execute(
+        f"SELECT {','.join(revision_columns)} FROM fiscal_tax_rules r "
+        "WHERE NOT EXISTS (SELECT 1 FROM fiscal_tax_rule_revisions h WHERE h.rule_id=r.id)"
+    ).fetchall()
+    for legacy_row in legacy_rules:
+        payload = dict(zip(revision_columns, legacy_row))
+        payload["active"] = bool(payload["active"])
+        payload_json = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        recorded_at = str(payload.get("updated_at") or payload.get("created_at") or datetime.now().astimezone().isoformat())
+        current_hash = FiscalTaxRuleService.revision_hash(
+            rule_id=int(payload["id"]), revision_number=1,
+            event_kind="LEGACY_SEM_TRILHA", payload_json=payload_json,
+            previous_hash="", actor="NAO_INFORMADO", change_reason="",
+            recorded_at=recorded_at,
+        )
+        cursor.execute(
+            "INSERT INTO fiscal_tax_rule_revisions "
+            "(rule_id,revision_number,event_kind,payload_json,previous_hash,current_hash,actor,change_reason,recorded_at) "
+            "VALUES (?,1,'LEGACY_SEM_TRILHA',?,'',?,'NAO_INFORMADO','',?)",
+            (int(payload["id"]), payload_json, current_hash, recorded_at),
+        )
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS documentos_emitidos (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

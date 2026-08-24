@@ -20,7 +20,7 @@ def _database(path: Path) -> None:
     connection = sqlite3.connect(path)
     connection.executescript("""
         CREATE TABLE configuracoes(chave TEXT PRIMARY KEY, valor TEXT);
-        INSERT INTO configuracoes VALUES('db_schema_version','20');
+        INSERT INTO configuracoes VALUES('db_schema_version','21');
         CREATE TABLE clientes(id INTEGER PRIMARY KEY, nome TEXT);
         INSERT INTO clientes VALUES(7,'CLIENTE PRESERVADO');
         CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY);
@@ -68,7 +68,7 @@ def test_signed_clock_update_preserves_database_and_can_rollback(tmp_path):
 
     database = appdata / "fichario.db"; appdata.mkdir(); _database(database)
     maintenance = DatabaseMaintenanceService(
-        database, appdata / "backups", expected_schema_version=20,
+        database, appdata / "backups", expected_schema_version=21,
         required_tables=("clientes", "movimentacoes", "parcelas", "historico_clientes"),
     )
     backup, report = maintenance.create_backup(prefix="antes_atualizacao")

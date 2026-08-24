@@ -146,6 +146,15 @@ def test_build_fichario_inclui_helper_externo_e_relogio_do_build():
     assert 'BUILD: {self._build_info()}' in shell
 
 
+def test_backup_e_atualizacao_fichario_exigem_schema_21():
+    root = Path(__file__).resolve().parents[1]
+    shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
+    runtime = (root / "fichario/update_runtime.py").read_text(encoding="utf-8")
+    assert "expected_schema_version=21" in shell
+    assert "expected_schema_version=21" in runtime
+    assert "expected_schema_version=20" not in shell + runtime
+
+
 def test_recebimento_separa_revisao_confirmacao_e_oferece_comprovante_oficial():
     root = Path(__file__).parents[1]
     dialog = (root / "fichario/receipt_dialog.py").read_text(encoding="utf-8")

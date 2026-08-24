@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
+import hashlib
+import json
 from typing import Any, Mapping
 
 
@@ -32,7 +34,7 @@ class FiscalTaxRule:
 
 
 class FiscalTaxRuleService:
-    """Matriz explícita: nunca deduz tributação apenas por NCM ou UF."""
+    """Matriz explícita com histórico técnico local, sem não repúdio jurídico."""
 
     VALID_REGIMES = {"SIMPLES_NACIONAL", "LUCRO_PRESUMIDO", "LUCRO_REAL", "MEI"}
     VALID_ICMS_CODES = {
@@ -102,12 +104,40 @@ class FiscalTaxRuleService:
             raise ValueError("Regra com ICMS-ST exige CEST explícito.")
         return normalized
 
-    def save(self, values: Mapping[str, Any], *, rule_id: int | None = None) -> FiscalTaxRule:
+    REVISION_PAYLOAD_COLUMNS = (
+        "id", "name", "active", "issuer_state", "destination_state", "tax_regime",
+        "ncm_prefix", "cest", "operation_kind", "icms_code", "icms_rate",
+        "icms_base_reduction", "sn_credit_rate", "st_mva", "st_rate", "fcp_st_rate",
+        "difal_internal_rate", "difal_interstate_rate", "difal_fcp_rate",
+        "benefit_code", "approved_by", "approved_at", "created_at", "updated_at",
+    )
+
+    @staticmethod
+    def revision_hash(
+        *, rule_id: int, revision_number: int, event_kind: str, payload_json: str,
+        previous_hash: str, actor: str, change_reason: str, recorded_at: str,
+    ) -> str:
+        envelope = {
+            "actor": actor, "change_reason": change_reason, "event_kind": event_kind,
+            "payload_json": payload_json, "previous_hash": previous_hash,
+            "recorded_at": recorded_at, "revision_number": int(revision_number),
+            "rule_id": int(rule_id),
+        }
+        canonical = json.dumps(
+            envelope, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest().upper()
+
+    def save(
+        self, values: Mapping[str, Any], *, rule_id: int | None = None,
+        actor: str = "", change_reason: str = "",
+    ) -> FiscalTaxRule:
         data = self.normalize(values)
         now = datetime.now().astimezone().isoformat()
         connection = self.connection_factory()
         try:
             connection.execute("BEGIN IMMEDIATE")
+            is_create = rule_id is None
             if data["active"]:
                 self._reject_active_conflict(
                     connection, data, exclude_rule_id=rule_id
@@ -121,10 +151,17 @@ class FiscalTaxRuleService:
                 )
                 rule_id = int(cursor.lastrowid)
             else:
-                connection.execute(
+                cursor = connection.execute(
                     f"UPDATE fiscal_tax_rules SET {','.join(f'{column}=?' for column in columns)},updated_at=? WHERE id=?",
                     tuple(data[column] for column in columns) + (now, int(rule_id)),
                 )
+                if cursor.rowcount != 1:
+                    raise ValueError("Regra fiscal não encontrada.")
+            self._append_revision(
+                connection, int(rule_id),
+                event_kind="CREATED" if is_create else "UPDATED",
+                actor=actor, change_reason=change_reason, recorded_at=now,
+            )
             connection.commit()
             return self.get(int(rule_id), connection=connection)
         except Exception:
@@ -132,6 +169,42 @@ class FiscalTaxRuleService:
             raise
         finally:
             connection.close()
+
+    def _append_revision(
+        self, connection, rule_id: int, *, event_kind: str, actor: str,
+        change_reason: str, recorded_at: str,
+    ) -> None:
+        row = connection.execute(
+            f"SELECT {','.join(self.REVISION_PAYLOAD_COLUMNS)} FROM fiscal_tax_rules WHERE id=?",
+            (rule_id,),
+        ).fetchone()
+        if row is None:
+            raise ValueError("Regra fiscal não encontrada para registrar revisão.")
+        payload = dict(zip(self.REVISION_PAYLOAD_COLUMNS, row))
+        payload["active"] = bool(payload["active"])
+        payload_json = json.dumps(
+            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":")
+        )
+        previous = connection.execute(
+            "SELECT revision_number,current_hash FROM fiscal_tax_rule_revisions "
+            "WHERE rule_id=? ORDER BY revision_number DESC LIMIT 1", (rule_id,),
+        ).fetchone()
+        revision_number = int(previous[0]) + 1 if previous else 1
+        previous_hash = str(previous[1]) if previous else ""
+        normalized_actor = str(actor or "").strip() or "NAO_INFORMADO"
+        normalized_reason = str(change_reason or "").strip()
+        current_hash = self.revision_hash(
+            rule_id=rule_id, revision_number=revision_number, event_kind=event_kind,
+            payload_json=payload_json, previous_hash=previous_hash,
+            actor=normalized_actor, change_reason=normalized_reason, recorded_at=recorded_at,
+        )
+        connection.execute(
+            "INSERT INTO fiscal_tax_rule_revisions "
+            "(rule_id,revision_number,event_kind,payload_json,previous_hash,current_hash,actor,change_reason,recorded_at) "
+            "VALUES (?,?,?,?,?,?,?,?,?)",
+            (rule_id, revision_number, event_kind, payload_json, previous_hash,
+             current_hash, normalized_actor, normalized_reason, recorded_at),
+        )
 
     @staticmethod
     def _cest_scopes_overlap(first: str, second: str) -> bool:
@@ -247,15 +320,23 @@ class FiscalTaxRuleService:
         finally:
             connection.close()
 
-    def deactivate(self, rule_id: int) -> None:
+    def deactivate(
+        self, rule_id: int, *, actor: str = "", change_reason: str = ""
+    ) -> None:
         connection = self.connection_factory()
         try:
+            connection.execute("BEGIN IMMEDIATE")
+            now = datetime.now().astimezone().isoformat()
             cursor = connection.execute(
                 "UPDATE fiscal_tax_rules SET active=0,updated_at=? WHERE id=? AND active=1",
-                (datetime.now().astimezone().isoformat(), int(rule_id)),
+                (now, int(rule_id)),
             )
             if cursor.rowcount != 1:
                 raise ValueError("Regra fiscal ativa não encontrada.")
+            self._append_revision(
+                connection, int(rule_id), event_kind="DEACTIVATED", actor=actor,
+                change_reason=change_reason, recorded_at=now,
+            )
             connection.commit()
         except Exception:
             connection.rollback()
@@ -266,3 +347,36 @@ class FiscalTaxRuleService:
     @staticmethod
     def as_dict(rule: FiscalTaxRule) -> dict[str, Any]:
         return asdict(rule)
+
+    def list_revisions(self, rule_id: int) -> list[dict[str, Any]]:
+        connection = self.connection_factory()
+        try:
+            cursor = connection.execute(
+                "SELECT id,rule_id,revision_number,event_kind,payload_json,previous_hash,"
+                "current_hash,actor,change_reason,recorded_at "
+                "FROM fiscal_tax_rule_revisions WHERE rule_id=? ORDER BY revision_number",
+                (int(rule_id),),
+            )
+            columns = [column[0] for column in cursor.description]
+            return [dict(zip(columns, row)) for row in cursor.fetchall()]
+        finally:
+            connection.close()
+
+    def verify_revision_chain(self, rule_id: int) -> dict[str, Any]:
+        revisions = self.list_revisions(rule_id)
+        previous_hash = ""
+        for expected_number, revision in enumerate(revisions, 1):
+            expected_hash = self.revision_hash(
+                rule_id=int(revision["rule_id"]), revision_number=expected_number,
+                event_kind=str(revision["event_kind"]), payload_json=str(revision["payload_json"]),
+                previous_hash=previous_hash, actor=str(revision["actor"]),
+                change_reason=str(revision["change_reason"]), recorded_at=str(revision["recorded_at"]),
+            )
+            if (
+                int(revision["revision_number"]) != expected_number
+                or str(revision["previous_hash"]) != previous_hash
+                or str(revision["current_hash"]) != expected_hash
+            ):
+                return {"valid": False, "rule_id": int(rule_id), "failed_revision": expected_number}
+            previous_hash = expected_hash
+        return {"valid": True, "rule_id": int(rule_id), "revision_count": len(revisions)}
