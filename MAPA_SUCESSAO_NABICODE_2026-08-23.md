@@ -2104,3 +2104,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   coordenação com `main_qt.py`/gateway para existir uma única porta de sessão;
   esta branch não pode alterar esses arquivos e não deve introduzir autoridade
   paralela ou fallback `Sistema`.
+
+### Auditoria fiscal de autoria — reserva de numeração
+
+- implementação: `281c28c` — `fix: autentica reserva de numeracao fiscal`;
+- causa: `FiscalService.reserve_number` aceitava ator livre e o gravava na
+  reserva antes de emissão de NF-e/NFC-e;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de iniciar a transação de numeração. Venda fiscal e
+  devolução continuam fornecendo modelo/série/ambiente, mas não identidade;
+- sequência monotônica, escopo ambiente/modelo/série, TTL, recuperação de
+  reserva expirada, bloqueio de reutilização e vínculo a documento fiscal foram
+  preservados;
+- testes focados: `15 passed`, `122 deselected`; regressão de venda,
+  cancelamento e outbox: `80 passed`; `compileall` e `git diff --check`
+  aprovados;
+- nenhuma rede SEFAZ, dado real, regra tributária ou numeração de produção foi
+  usada. Produção fiscal permanece bloqueada;
+- confirmação/liberação de reserva e inicialização manual da numeração ainda
+  recebem ator explícito e devem ser auditadas em checkpoints independentes.
