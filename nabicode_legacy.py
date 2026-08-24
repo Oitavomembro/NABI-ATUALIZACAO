@@ -4335,7 +4335,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             try:
                 novo_estado = NFE_DEVOLUCAO_SERVICE.cancelar_devolucao_oficial(
                     int(item["id"]), fiscal_service=self.fiscal_service, password=senha,
-                    actor=self._usuario_financeiro(), justification=justificativa,
+                    justification=justificativa,
                 )
                 registrar_auditoria("Fiscal", "Cancelar NF-e de devolução", str(item["id"]),
                                    f"Status {novo_estado.get('status')}")

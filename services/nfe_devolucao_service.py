@@ -555,7 +555,7 @@ class NFeDevolucaoService:
 
     def cancelar_devolucao_oficial(
         self, devolucao_id: int, *, fiscal_service: FiscalService, password: str,
-        actor: str, justification: str, sequence: int = 1
+        justification: str, sequence: int = 1
     ) -> dict[str, Any]:
         state = self.repository.carregar_estado_fiscal(devolucao_id)
         if str(state.get("status") or "").upper() not in {"AUTORIZADA", "AUTORIZADA_PENDENTE_ESTOQUE"}:
@@ -572,9 +572,19 @@ class NFeDevolucaoService:
         state["last_event_message"] = response.message
         if not response.success:
             return self.repository.salvar_estado_fiscal(devolucao_id, state, status="AUTORIZADA")
+        actor_name = str(event.get("actor") or "").strip()
+        if not actor_name:
+            state["last_error"] = (
+                "Cancelamento fiscal aceito, mas o evento não contém autoria "
+                "técnica autenticada para reverter o estoque."
+            )
+            self.repository.salvar_estado_fiscal(
+                devolucao_id, state, status="CANCELADA_PENDENTE_ESTOQUE"
+            )
+            raise RuntimeError(state["last_error"])
         try:
             state["stock_reversal"] = self.repository.reverter_saida_estoque(
-                devolucao_id, usuario=str(actor or "Sistema")
+                devolucao_id, usuario=actor_name
             )
         except Exception as exc:
             state["last_error"] = f"Cancelamento fiscal aceito, mas a reversão de estoque falhou: {exc}"

@@ -461,14 +461,59 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
 
         class FiscalFake:
             def send_event(self, **kwargs):
-                return SimpleNamespace(success=True, status_code="135", message="Evento registrado"), {"event_type": "CANCELAMENTO"}
+                return SimpleNamespace(success=True, status_code="135", message="Evento registrado"), {"event_type": "CANCELAMENTO", "actor": "gerente"}
 
         state = self.service.cancelar_devolucao_oficial(
-            devolucao_id, fiscal_service=FiscalFake(), password="senha", actor="admin",
+            devolucao_id, fiscal_service=FiscalFake(), password="senha",
             justification="Cancelamento solicitado pelo cliente",
         )
         self.assertEqual(state["status"], "CANCELADA")
         self.assertEqual(len(state["events"]), 1)
+
+    def test_cancelamento_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.cancelar_devolucao_oficial(
+                1, fiscal_service=object(), password="senha",
+                justification="Cancelamento solicitado pelo cliente",
+                actor="forjado",
+            )
+
+    def test_evento_sem_actor_autenticado_nao_reverte_estoque(self):
+        _, itens = self.service.localizar_nota("123")
+        devolucao_id = self.service.criar_rascunho(
+            referencia_nota="123", tipo="PARCIAL",
+            selecoes=[(itens[0].item_origem_id, 1)], motivo="Defeito",
+        )
+        self.service.repository.salvar_estado_fiscal(
+            devolucao_id,
+            {"access_key": "4" * 44, "protocol": "123", "events": []},
+            status="AUTORIZADA",
+        )
+
+        class FiscalSemActor:
+            def send_event(self, **kwargs):
+                return SimpleNamespace(
+                    success=True, status_code="135", message="Evento registrado"
+                ), {"event_type": "CANCELAMENTO"}
+
+        with self.assertRaisesRegex(RuntimeError, "autoria técnica autenticada"):
+            self.service.cancelar_devolucao_oficial(
+                devolucao_id, fiscal_service=FiscalSemActor(), password="senha",
+                justification="Cancelamento solicitado pelo cliente",
+            )
+        self.assertEqual(
+            self.service.estado_fiscal(devolucao_id)["status"],
+            "CANCELADA_PENDENTE_ESTOQUE",
+        )
+        conn = sqlite3.connect(self.db_path)
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM estoque_movimentacoes "
+                "WHERE origem='CANCELAMENTO_DEVOLUCAO_NFE'"
+            ).fetchone()[0],
+            0,
+        )
+        conn.close()
 
 
     def test_devolucao_cancelada_nao_pode_ser_reautorizada(self):
@@ -550,7 +595,7 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             def authorize_document(self, **kwargs):
                 return SimpleNamespace(success=True, protocol="888", status_code="100", message="Autorizado"), {}
             def send_event(self, **kwargs):
-                return SimpleNamespace(success=True, status_code="135", message="Cancelado"), {"event_type": "CANCELAMENTO"}
+                return SimpleNamespace(success=True, status_code="135", message="Cancelado"), {"event_type": "CANCELAMENTO", "actor": "gerente"}
 
         fiscal = FiscalAutoriza()
         state = self.service.emitir_devolucao_oficial(
@@ -565,13 +610,14 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         conn.close()
 
         cancelled = self.service.cancelar_devolucao_oficial(
-            devolucao_id, fiscal_service=fiscal, password="senha", actor="admin",
+            devolucao_id, fiscal_service=fiscal, password="senha",
             justification="Cancelamento por erro operacional",
         )
         self.assertEqual(cancelled["status"], "CANCELADA")
         conn = sqlite3.connect(self.db_path)
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE codigo='A1'").fetchone()[0], 20.0)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM estoque_movimentacoes WHERE origem='CANCELAMENTO_DEVOLUCAO_NFE'").fetchone()[0], 1)
+        self.assertEqual(conn.execute("SELECT usuario FROM estoque_movimentacoes WHERE origem='CANCELAMENTO_DEVOLUCAO_NFE'").fetchone()[0], "gerente")
         conn.close()
 
     def test_autorizacao_com_estoque_insuficiente_fica_pendente(self):
@@ -674,9 +720,9 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         )
         class FiscalCancela:
             def send_event(self, **kwargs):
-                return SimpleNamespace(success=True, status_code="135", message="Cancelado"), {"event_type": "CANCELAMENTO"}
+                return SimpleNamespace(success=True, status_code="135", message="Cancelado"), {"event_type": "CANCELAMENTO", "actor": "gerente"}
         estado = self.service.cancelar_devolucao_oficial(
-            devolucao_id, fiscal_service=FiscalCancela(), password="x", actor="admin",
+            devolucao_id, fiscal_service=FiscalCancela(), password="x",
             justification="Cancelamento por erro operacional",
         )
         self.assertEqual(estado["status"], "CANCELADA")
