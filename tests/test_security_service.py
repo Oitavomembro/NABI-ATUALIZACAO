@@ -167,6 +167,39 @@ class InitialSecuritySetupTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.service.complete_initial_setup(**arguments)
 
+    def test_primeiro_acesso_adquire_lock_antes_de_ler_estado(self):
+        statements = []
+
+        class RecordingConnection:
+            def __init__(self, connection):
+                self.connection = connection
+
+            def execute(self, statement, parameters=()):
+                statements.append(statement)
+                return self.connection.execute(statement, parameters)
+
+            def executemany(self, statement, parameters):
+                return self.connection.executemany(statement, parameters)
+
+            def commit(self):
+                return self.connection.commit()
+
+            def rollback(self):
+                return self.connection.rollback()
+
+            def close(self):
+                return self.connection.close()
+
+        service = SecurityService(
+            lambda: RecordingConnection(sqlite3.connect(self.db))
+        )
+        statements.clear()
+        service.complete_initial_setup(
+            username="dono", display_name="Dono", password="segura123",
+            store_name="Loja Nabi",
+        )
+        self.assertEqual(statements[0], "BEGIN IMMEDIATE")
+
     def test_falha_de_validacao_nao_cria_usuario_parcial(self):
         with self.assertRaises(ValueError):
             self.service.complete_initial_setup(

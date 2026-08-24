@@ -205,6 +205,7 @@ class SecurityService:
 
         connection = self.connection_factory()
         try:
+            connection.execute("BEGIN IMMEDIATE")
             row = connection.execute(
                 "SELECT valor FROM configuracoes WHERE chave=?", (self.CONFIG_KEY,)
             ).fetchone()
