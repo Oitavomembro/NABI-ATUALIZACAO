@@ -52,6 +52,7 @@ from .customer_receipt_drafts import CustomerReceiptDraft, CustomerReceiptDraftS
 from .customer_receipt_gateway import NabiCodeCustomerReceiptAssistantGateway
 from .customer_receipt_tools import PREPARE_CUSTOMER_RECEIPT
 from .report_tools import REPORT_INDICATORS, register_report_read_tools
+from .cash_tools import CASH_CURRENT, register_cash_read_tools
 from .model_artifact import ModelArtifactManifest, verify_model_artifact
 from .model_catalog import QWEN3_1_7B_Q4_K_M_CANDIDATE
 from .local_runtime import LocalLlamaServer
@@ -93,6 +94,7 @@ __all__ = [
     "NabiCodeCustomerReceiptAssistantGateway",
     "PREPARE_CUSTOMER_RECEIPT",
     "REPORT_INDICATORS",
+    "CASH_CURRENT",
     "DraftConfirmationService",
     "AssistantApplicationService",
     "AssistantTurn",
@@ -119,6 +121,7 @@ __all__ = [
     "ToolSchema",
     "register_commercial_read_tools",
     "register_report_read_tools",
+    "register_cash_read_tools",
     "OPEN_PRODUCT_SEARCH",
     "register_ui_intent_tools",
     "create_read_only_assistant",

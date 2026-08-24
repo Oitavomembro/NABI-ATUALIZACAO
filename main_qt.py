@@ -25,6 +25,7 @@ from assistant_nabi import (
 )
 from commercial.infrastructure.runtime import create_commercial_container
 from commercial.application.report_application_service import ReportApplicationService
+from commercial.application.cash_application_service import CashApplicationService
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
 from database import DatabaseManager
@@ -34,6 +35,7 @@ from services.network_config_service import NetworkConfigService, NetworkPaths
 from services.admin_audit_service import AdminAuditService
 from services.security_service import SecurityService
 from services.report_service import ReportService
+from services.cash_service import CashService
 from repositories.system_repository import SystemRepository
 from repositories import NFeImportRepository
 from services import NFeImportService
@@ -92,6 +94,12 @@ def _create_assistant_activation(
         output_dir=report_output / "relatorios",
         authorize=lambda _action, _report: security.require("relatorios", "view"),
     )))
+    terminal = str(system.get_config("caixa_terminal") or "CAIXA-1")
+
+    def cash_service_factory(actor):
+        return CashApplicationService(
+            CashService(database.connect), terminal=terminal, user=actor.username
+        )
 
     def runtime_factory():
         return LocalLlamaServer(
@@ -108,6 +116,7 @@ def _create_assistant_activation(
             query_service=container.query,
             financial_query_service=getattr(container, "financial_query", None),
             report_service=report_service,
+            cash_service_factory=cash_service_factory,
             security_service=security,
             audit_service=audit,
             session_id=session_id,

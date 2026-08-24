@@ -15,6 +15,7 @@ from .ui_tools import register_ui_intent_tools
 from .customer_tools import register_customer_draft_tools
 from .customer_receipt_tools import register_customer_receipt_tools
 from .report_tools import register_report_read_tools
+from .cash_tools import register_cash_read_tools
 
 
 def create_read_only_assistant(
@@ -27,6 +28,7 @@ def create_read_only_assistant(
     event_bus=None,
     financial_query_service=None,
     report_service=None,
+    cash_service_factory=None,
 ) -> AssistantApplicationService:
     """Compõe a Nabi de consulta usando apenas sessão, auditoria e fachada oficiais."""
 
@@ -47,6 +49,7 @@ def create_read_only_assistant(
     register_commercial_read_tools(registry, query_service)
     register_financial_read_tools(registry, financial_query_service)
     register_report_read_tools(registry, report_service)
+    register_cash_read_tools(registry, cash_service_factory)
     return AssistantApplicationService(
         model=model,
         registry=registry,
@@ -60,6 +63,7 @@ def create_draft_assistant(
     nfe_entry_draft_service=None, nfe_entry_executor=None,
     financial_query_service=None,
     report_service=None,
+    cash_service_factory=None,
     customer_draft_service=None, customer_executor=None,
     customer_receipt_draft_service=None, customer_receipt_executor=None,
 ) -> AssistantApplicationService:
@@ -82,6 +86,7 @@ def create_draft_assistant(
     register_commercial_read_tools(registry, query_service)
     register_financial_read_tools(registry, financial_query_service)
     register_report_read_tools(registry, report_service)
+    register_cash_read_tools(registry, cash_service_factory)
     register_ui_intent_tools(registry)
     drafts = SaleDraftService(query_service)
     draft_catalog = AssistantDraftCatalog(
