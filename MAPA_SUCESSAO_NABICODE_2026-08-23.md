@@ -81,6 +81,15 @@ Legenda:
 - [x] filtro do PDV ficou seguro durante montagem/destruição da janela no commit `2f17ab0`, sem mudar regra comercial;
 - [x] validação: 139 testes e 2 subtestes focados, depois 269 testes e 338 subtestes Qt/Commercial/backend relacionados, todos aprovados; teste de lock afetado pela execução concorrente foi repetido isoladamente e aprovado;
 - [~] homologação manual pendente com catálogo real: legibilidade de nome/preço/estoque, F2, botão, seta/lista rápida, busca por nome/código/barras, Enter/Shift+Enter/Esc, mouse e retorno à Quantidade;
+- [x] checkpoint isolado de Clientes Qt implementado em `codex/clientes-qt` no commit `94fb107`: lista administrativa, busca, novo cadastro, edição e ficha/extrato usam somente `CustomerApplicationService`, IDs reais e DTOs imutáveis; a GUI não importa banco, repositório ou Fiscal, e preserva Enter/Shift+Enter/Esc, auto-repeat bloqueado, MoneyEdit e estética do Legacy;
+- [x] validação de Clientes Qt: 51 testes e 5 subtestes focados, depois 286 testes e 342 subtestes relacionados aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do botão/atalho F3 de Clientes no shell Qt permanece pendente porque `main_qt.py` está temporariamente reservado à trilha IA; o diálogo e a fronteira Commercial estão completos e devem ser conectados somente na composição global, sem duplicar serviços;
+- [x] checkpoint isolado de Caixa Qt implementado em `codex/caixa-qt` no commit `e000b8c`: porta `CashApplicationService` fixa terminal e usuário fora da GUI e expõe sessão/resumo tipados; a janela Qt cobre abertura com/sem saldo, suprimento, sangria, valores por forma, histórico e fechamento pelo `CashService` transacional, sem SQL ou persistência direta na interface;
+- [x] validação de Caixa Qt: 32 testes focados e regressão relacionada com 243 testes e 341 subtestes aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do Caixa no shell Qt permanece pendente porque `main_qt.py`, `ui_qt/app.py` e `pdv_window.py` estão temporariamente reservados à trilha IA; conectar depois pela porta pronta, preservando permissões e identidade real do operador;
+- [x] checkpoint isolado de Financeiro Qt implementado em `codex/financeiro-qt` no commit `03e80a8`: contas a receber/pagar separadas, resumo, IDs reais, criação e baixa usam exclusivamente `FinancialQueryService`/`FinancialActionService`, `ActionContext` de UI e confirmação humana explícita; nenhuma persistência direta ou importação Fiscal na GUI;
+- [x] validação de Financeiro Qt: 51 testes focados e regressão relacionada com 243 testes e 333 subtestes aprovados, além de `compileall` e `git diff --check`;
+- [~] composição do Financeiro no shell Qt permanece pendente enquanto os arquivos de composição estão reservados à trilha IA; checkpoint suspenso limpo por prioridade da edição FICHÁRIO;
 - [!] PDV Qt não pode ser tratado como pronto antes dos itens acima.
 
 ### Fiscal
@@ -1498,3 +1507,74 @@ importação no banco de produção antes da aprovação visual e de um backup m
   corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
   permanente de atualização por cerimônia segura para permitir R21→R22 sem
   reconstruir instalador. Nenhum bypass de assinatura foi introduzido.
+
+### Checkpoint isolado — Relatórios comerciais Qt
+
+- implementação de origem: `2c6b5b7` — `feat: adiciona relatorios comerciais no Qt`;
+- `ReportReadPort`, `ReportApplicationService` e DTOs imutáveis transportam
+  consultas, resumos, indicadores e exportações sem expor conexão ou SQL à GUI;
+- `NabiCodeReportGateway` reutiliza o `ReportService` oficial para filtros,
+  autorização, auditoria, totalização e exportação atômica CSV/XLSX/PDF;
+- relatório `nfe` não é exposto pela fachada comercial; Central Fiscal,
+  Fiscal/SEFAZ, XML e regras tributárias permanecem fora desse diálogo;
+- Enter executa uma etapa, Shift+Enter retorna, auto-repeat é consumido, F5
+  atualiza e Esc fecha somente o diálogo;
+- validação na origem: `39 passed`; regressão relacionada: `293 passed`,
+  `359 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: composição global por sessão/permissão e homologação visual e das
+  exportações no Windows, sem transportar o agendador Tk para a GUI Qt.
+
+### Checkpoint isolado — Administração de Usuários Qt
+
+- implementação de origem: `042c399` — `feat: adiciona administracao de usuarios no Qt`;
+- `UserAdministrationService` é a única porta da GUI e reutiliza o
+  `SecurityService`; identidade e autoridade vêm da sessão interna real;
+- sessão ausente/expirada e operador sem `technical/users` falham fechados;
+  ADMIN continua coberto pelo wildcard oficial;
+- criação, edição, senha e ativação preservam PBKDF2, username imutável e a
+  proteção que impede remover ou desativar o último administrador;
+- a GUI não importa banco, repositório, Legacy, Fiscal ou SEFAZ e controla
+  F3/F4/F5/Esc, Enter, Shift+Enter e auto-repeat;
+- edição livre de perfis/permissões permanece deliberadamente fora do escopo
+  para evitar escalada acidental;
+- validação na origem: `19 passed`; regressão relacionada: `182 passed`,
+  `2 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendências: composição/menu e homologação manual no Windows; qualquer editor
+  visual de capacidades exige decisão explícita posterior.
+
+### Integração isolada — módulos administrativos Qt do projeto principal
+
+- branch/worktree: `codex/principal-modulos-qt`, derivada da integração limpa
+  `6bb266a`, sem alterar `codex/integracao-nabi-pdv`;
+- Clientes Qt integrado por merge normal `6bdfeeb`, preservando a versão atual
+  do FICHÁRIO R21 quando ela já era um superset funcional do checkpoint;
+- Caixa Qt integrado por merge normal `8cdf2f1`;
+- Financeiro Qt integrado por merge normal `097d267`;
+- Relatórios Qt integrado por merge normal `81159d7`;
+- Usuários e Permissões Qt integrado por merge normal `f66c66c`;
+- nenhum `main_qt.py`, painel Nabi, Fiscal/SEFAZ, instalador, atualizador,
+  licenciamento ou banco real foi alterado nesta integração;
+- regressão combinada: `107 passed`, `5 subtests passed`; `compileall` de
+  administration/commercial/ui_qt e `git diff --check` aprovados;
+- pendência deliberada: compor menus/atalhos somente depois de a trilha ativa
+  liberar os arquivos de entrada, usando sessão e permissões reais e sem
+  reimplementar serviços;
+- homologação visual/manual no Windows permanece necessária para todos os cinco
+  diálogos; nenhum push realizado.
+
+### Checkpoint isolado — hub administrativo Qt preparado
+
+- implementação local: `763dbdc` — `feat: prepara hub administrativo Qt`;
+- novo `AdministrativeModuleHub` reúne Clientes, Caixa, Financeiro, Relatórios e
+  Usuários por descritores/fábricas, sem importar banco ou persistência na GUI;
+- identidade e autorização são obtidas exclusivamente da sessão do
+  `SecurityService`; sessão ausente/expirada e permissão negada falham fechadas,
+  e a identidade nunca é aceita como texto da tela filha;
+- visual usa os cartões escuros, contraste verde Nabi, dimensões amplas e
+  linguagem operacional do Legacy; Enter abre exatamente uma janela,
+  Shift+Enter retorna, Esc fecha o hub e auto-repeat é consumido;
+- validação focada do hub e dos cinco módulos: `29 passed`; `compileall` e
+  `git diff --check` aprovados;
+- `main_qt.py` e `ui_qt/app.py` permaneceram intocados porque seguem reservados
+  à trilha IA; próximo passo é conectar este hub ao shell somente após liberação
+  coordenada desses arquivos e então homologar visualmente no Windows.
