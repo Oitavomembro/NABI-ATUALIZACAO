@@ -2063,3 +2063,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   alterado. Produção fiscal permanece bloqueada;
 - autoria da importação manual de XML e retransmissão em lote de contingência
   permanecem checkpoints independentes pendentes.
+
+### Auditoria fiscal de autoria — retransmissão em lote de contingência
+
+- implementação: `49cb679` — `fix: autentica retransmissao de contingencia`;
+- causa: `FiscalService.retry_contingency_batch` aceitava `actor` livre ao
+  reagendar várias NFC-e de contingência para processamento posterior;
+- a API não aceita mais ator externo e exige sessão ativa com permissão
+  `fiscal/transmit` antes de listar ou alterar a fila; a Central Fiscal deixou
+  de fornecer `_usuario_financeiro()`;
+- a seleção continua restrita a modelo `65`, emissão em contingência e operações
+  de autorização/recibo ainda não concluídas, canceladas, iniciadas ou de
+  resposta desconhecida. XML, `tpEmis`, prazos e worker não foram alterados;
+- testes focados: `3 passed`, `130 deselected`; regressão de
+  outbox/worker/Central/venda/segurança: `72 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma rede SEFAZ, dado real ou regra fiscal foi usada ou alterada. Produção
+  fiscal permanece bloqueada;
+- autoria da importação manual de XML permanece como próximo checkpoint
+  independente de alto risco.
