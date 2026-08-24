@@ -604,12 +604,21 @@ class NFeDevolucaoService:
         return self.repository.salvar_estado_fiscal(devolucao_id, state, status="CANCELADA")
 
     def recuperar_efeito_estoque_pendente(
-        self, devolucao_id: int, *, actor: str = "Sistema"
+        self, devolucao_id: int, *, fiscal_service: FiscalService
     ) -> dict[str, Any]:
         """Conclui, de forma idempotente, o efeito local de uma operação fiscal já aceita."""
+        actor_name = fiscal_service.require_authenticated_actor(
+            "transmit", operation="recuperar o efeito de estoque de uma devolução fiscal"
+        )
+        return self._recuperar_efeito_estoque_pendente(
+            int(devolucao_id), actor_name=actor_name
+        )
+
+    def _recuperar_efeito_estoque_pendente(
+        self, devolucao_id: int, *, actor_name: str
+    ) -> dict[str, Any]:
         estado = self.repository.carregar_estado_fiscal(int(devolucao_id))
         status = str(estado.get("status") or "").strip().upper()
-        actor_name = str(actor or "Sistema").strip() or "Sistema"
         if status == "AUTORIZADA_PENDENTE_ESTOQUE":
             efeito = self.repository.aplicar_saida_estoque(int(devolucao_id), usuario=actor_name)
             estado["stock_effect"] = efeito
@@ -641,22 +650,27 @@ class NFeDevolucaoService:
         raise ValueError("A devolução não possui efeito de estoque pendente para recuperação.")
 
     def recuperar_pendencias_estoque(
-        self, *, actor: str = "Sistema", limite: int = 200
+        self, *, fiscal_service: FiscalService, limite: int = 200
     ) -> dict[str, Any]:
         """Tenta concluir todas as pendências locais sem interromper o lote no primeiro erro."""
+        actor_name = fiscal_service.require_authenticated_actor(
+            "transmit", operation="recuperar efeitos de estoque de devoluções fiscais"
+        )
         concluidas: list[int] = []
         falhas: list[dict[str, Any]] = []
         for item in self.repository.listar_pendencias_estoque(limite=limite):
             devolucao_id = int(item["id"])
             try:
-                self.recuperar_efeito_estoque_pendente(devolucao_id, actor=actor)
+                self._recuperar_efeito_estoque_pendente(
+                    devolucao_id, actor_name=actor_name
+                )
                 concluidas.append(devolucao_id)
             except Exception as exc:
                 estado = self.repository.carregar_estado_fiscal(devolucao_id)
                 estado["last_error"] = str(exc)
                 estado.setdefault("local_recovery", []).append({
                     "action": "RECUPERAR_ESTOQUE",
-                    "actor": str(actor or "Sistema"),
+                    "actor": actor_name,
                     "at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                     "result": "ERRO",
                     "message": str(exc),

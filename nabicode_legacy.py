@@ -4364,7 +4364,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                 return
             try:
                 estado = NFE_DEVOLUCAO_SERVICE.recuperar_efeito_estoque_pendente(
-                    int(item["id"]), actor=self._usuario_financeiro()
+                    int(item["id"]), fiscal_service=self.fiscal_service
                 )
                 registrar_auditoria(
                     "Fiscal", "Recuperar estoque de devolução", str(item["id"]),
@@ -4387,7 +4387,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ):
                 return
             resultado = NFE_DEVOLUCAO_SERVICE.recuperar_pendencias_estoque(
-                actor=self._usuario_financeiro()
+                fiscal_service=self.fiscal_service
             )
             carregar()
             if resultado["falhas"]:

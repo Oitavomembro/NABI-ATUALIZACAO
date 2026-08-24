@@ -3528,6 +3528,10 @@ class FiscalService:
             )
         return actor
 
+    def require_authenticated_actor(self, action: str, *, operation: str) -> str:
+        """Expõe a mesma autoridade de sessão a efeitos locais fiscais coordenados."""
+        return self._authenticated_fiscal_actor(action, operation=operation)
+
     def _authenticated_outbox_actor(self, action: str) -> str:
         return self._authenticated_fiscal_actor(
             action, operation="alterar a fila fiscal"

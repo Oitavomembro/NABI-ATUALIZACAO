@@ -71,6 +71,9 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         conn.close()
         repo = NFeDevolucaoRepository(DatabaseManager(self.db_path))
         self.service = NFeDevolucaoService(repo)
+        self.fiscal_auth = SimpleNamespace(
+            require_authenticated_actor=lambda action, operation: "gerente"
+        )
         self.documento = NFeDocument(
             chave="1" * 44,
             numero="123",
@@ -712,13 +715,52 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         self.service.repository.salvar_estado_fiscal(
             devolucao_id, estado, status="AUTORIZADA_PENDENTE_ESTOQUE"
         )
-        recuperado = self.service.recuperar_efeito_estoque_pendente(devolucao_id, actor="admin")
+        recuperado = self.service.recuperar_efeito_estoque_pendente(
+            devolucao_id, fiscal_service=self.fiscal_auth
+        )
         self.assertEqual(recuperado["status"], "AUTORIZADA")
-        novamente = self.service.recuperar_efeito_estoque_pendente(devolucao_id, actor="admin")
+        novamente = self.service.recuperar_efeito_estoque_pendente(
+            devolucao_id, fiscal_service=self.fiscal_auth
+        )
         self.assertEqual(novamente["status"], "AUTORIZADA")
         conn = sqlite3.connect(self.db_path)
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE codigo='A1'").fetchone()[0], 18.0)
         self.assertEqual(conn.execute("SELECT COUNT(*) FROM estoque_movimentacoes WHERE origem='DEVOLUCAO_NFE'").fetchone()[0], 1)
+        self.assertEqual(conn.execute("SELECT usuario FROM estoque_movimentacoes WHERE origem='DEVOLUCAO_NFE'").fetchone()[0], "gerente")
+        conn.close()
+
+    def test_recuperacao_nao_aceita_actor_livre(self):
+        with self.assertRaisesRegex(TypeError, "actor"):
+            self.service.recuperar_efeito_estoque_pendente(
+                1, fiscal_service=self.fiscal_auth, actor="forjado"
+            )
+
+    def test_recuperacao_falha_fechado_antes_de_alterar_estoque(self):
+        _, itens = self.service.localizar_nota("123")
+        devolucao_id = self.service.criar_rascunho(
+            referencia_nota="123", tipo="PARCIAL",
+            selecoes=[(itens[0].item_origem_id, 1)], motivo="Defeito",
+        )
+        self.service.repository.salvar_estado_fiscal(
+            devolucao_id, {}, status="AUTORIZADA_PENDENTE_ESTOQUE"
+        )
+
+        class FiscalSemPermissao:
+            def require_authenticated_actor(self, action, *, operation):
+                raise PermissionError("sessão fiscal obrigatória")
+
+        with self.assertRaisesRegex(PermissionError, "sessão fiscal"):
+            self.service.recuperar_efeito_estoque_pendente(
+                devolucao_id, fiscal_service=FiscalSemPermissao()
+            )
+        conn = sqlite3.connect(self.db_path)
+        self.assertEqual(
+            conn.execute(
+                "SELECT COUNT(*) FROM estoque_movimentacoes "
+                "WHERE origem='DEVOLUCAO_NFE'"
+            ).fetchone()[0],
+            0,
+        )
         conn.close()
 
     def test_recupera_reversao_pendente_apos_cancelamento(self):
@@ -731,12 +773,16 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
             devolucao_id, {"status": "AUTORIZADA_PENDENTE_ESTOQUE"},
             status="AUTORIZADA_PENDENTE_ESTOQUE",
         )
-        self.service.recuperar_efeito_estoque_pendente(devolucao_id, actor="admin")
+        self.service.recuperar_efeito_estoque_pendente(
+            devolucao_id, fiscal_service=self.fiscal_auth
+        )
         estado = self.service.estado_fiscal(devolucao_id)
         self.service.repository.salvar_estado_fiscal(
             devolucao_id, estado, status="CANCELADA_PENDENTE_ESTOQUE"
         )
-        recuperado = self.service.recuperar_efeito_estoque_pendente(devolucao_id, actor="admin")
+        recuperado = self.service.recuperar_efeito_estoque_pendente(
+            devolucao_id, fiscal_service=self.fiscal_auth
+        )
         self.assertEqual(recuperado["status"], "CANCELADA")
         conn = sqlite3.connect(self.db_path)
         self.assertEqual(conn.execute("SELECT estoque_atual FROM produtos WHERE codigo='A1'").fetchone()[0], 20.0)
@@ -792,7 +838,9 @@ class NFeDevolucaoServiceTests(unittest.TestCase):
         conn = sqlite3.connect(self.db_path)
         conn.execute("UPDATE produtos SET estoque_atual=0 WHERE codigo='A1'")
         conn.commit(); conn.close()
-        resultado = self.service.recuperar_pendencias_estoque(actor="admin")
+        resultado = self.service.recuperar_pendencias_estoque(
+            fiscal_service=self.fiscal_auth
+        )
         self.assertEqual(resultado["concluidas"], [])
         self.assertEqual(resultado["falhas"][0]["devolucao_id"], ok_id)
         self.assertEqual(self.service.estado_fiscal(ok_id)["status"], "AUTORIZADA_PENDENTE_ESTOQUE")
