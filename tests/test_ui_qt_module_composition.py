@@ -46,6 +46,15 @@ def test_configuracao_inicial_consumo_de_auto_repeat_nao_grava():
     security=Mock();dialog=InitialSetupDialog(security);event=QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier,"",True,1)
     assert dialog.eventFilter(dialog.finish,event) is True;security.complete_initial_setup.assert_not_called();dialog.close()
 
+def test_nabi_orienta_primeiro_acesso_sem_modelo_local():
+    dialog=InitialSetupDialog(Mock())
+    assert "NABI" in dialog.nabi_guidance.text()
+    dialog._show_guidance(dialog.document)
+    assert "modo não fiscal" in dialog.nabi_guidance.text()
+    dialog._show_guidance(dialog.password)
+    assert "oito caracteres" in dialog.nabi_guidance.text()
+    dialog.close()
+
 def test_migracao_legada_exige_confirmacao_e_consumo_unico():
     security=Mock();dialog=LegacySecurityMigrationDialog(security);dialog.current_password.setText("antiga");dialog.new_password.setText("nova-segura");dialog.confirmation.setText("diferente")
     with patch("ui_qt.administration.legacy_security_migration_dialog.QMessageBox.warning"):dialog.complete()

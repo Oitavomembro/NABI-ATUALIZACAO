@@ -25,6 +25,14 @@ class InitialSetupDialog(QDialog):
         )
         note.setWordWrap(True)
         root.addWidget(note)
+        self.nabi_guidance = QLabel()
+        self.nabi_guidance.setObjectName("nabiOnboardingGuide")
+        self.nabi_guidance.setWordWrap(True)
+        self.nabi_guidance.setStyleSheet(
+            "QLabel#nabiOnboardingGuide{background:#111b26;border:1px solid #21b7d8;"
+            "border-radius:10px;padding:12px;color:#e8f6ff;font-size:14px;}"
+        )
+        root.addWidget(self.nabi_guidance)
         form = QFormLayout()
         self.store_name = QLineEdit()
         self.document = QLineEdit(); self.document.setMaxLength(18)
@@ -51,9 +59,29 @@ class InitialSetupDialog(QDialog):
         )
         for field in self.fields:
             field.installEventFilter(self)
+        self._guidance = {
+            self.store_name: "Olá! Eu sou a Nabi. Primeiro, informe o nome que aparecerá nas telas e comprovantes.",
+            self.document: "Digite o CNPJ da empresa. No modo não fiscal ele identifica a empresa, sem iniciar comunicação fiscal.",
+            self.email: "Informe um e-mail administrativo para contato e recuperação. Nada será enviado automaticamente.",
+            self.username: "Escolha o nome usado para entrar no NabiCode. Anote-o exatamente como foi digitado.",
+            self.display_name: "Informe o nome que aparecerá na auditoria das operações.",
+            self.password: "Crie uma senha exclusiva com pelo menos oito caracteres. Eu nunca mostro nem armazeno essa senha em texto aberto.",
+            self.password_confirmation: "Repita a senha. Depois desta etapa, o acesso exigirá usuário e senha.",
+            self.finish: "Vou validar os dados e criar somente o primeiro administrador. Depois ajudarei com caixa, impressão e backup.",
+        }
+        self._show_guidance(self.store_name)
         self.store_name.setFocus()
 
+    def _show_guidance(self, field) -> None:
+        message = self._guidance.get(field)
+        if message:
+            self.nabi_guidance.setText(
+                f"<b>NABI • ASSISTENTE DE CONFIGURAÇÃO</b><br>{message}"
+            )
+
     def eventFilter(self, watched, event):
+        if watched in self.fields and event.type() == QEvent.Type.FocusIn:
+            self._show_guidance(watched)
         if watched in self.fields and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
             event.accept()
             if event.isAutoRepeat():
