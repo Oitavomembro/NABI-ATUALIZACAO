@@ -4112,3 +4112,28 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - nenhuma dessas etapas fez push, instalador, transmissão fiscal, alteração em
   banco real ou armazenamento de segredo. Homologação visual no Windows e o
   ciclo E2E integrado continuam necessários antes de release.
+
+## Rascunho durável da entrada de NF-e de compra — 25/08/2026
+
+- commit `4f5d1d2` adiciona persistência desacoplada
+  para a revisão de NF-e, identificada conjuntamente por usuário, empresa, chave
+  e SHA-256 do XML;
+- vínculo/ação, nome, código de barras, tipo/fator, unidade, margem, preço e página
+  atual são salvos automaticamente; o catálogo `Notas pendentes` permite reabrir
+  a revisão após reinício com o estado preservado;
+- retomada revalida sessão, permissão, empresa, existência e SHA-256 do arquivo,
+  chave e estrutura do estado. Corrupção, XML alterado, outro usuário ou outra
+  empresa falham fechados e preservam o rascunho;
+- descarte exige confirmação explícita, marca o registro e grava auditoria. A
+  conclusão só é marcada depois que a importação oficial atômica retorna sucesso;
+  qualquer exceção final mantém a nota pendente;
+- nenhuma gravação de produto, estoque ou Financeiro foi acrescentada ao
+  checkpoint automático. Essas mutações continuam exclusivamente na confirmação
+  final do serviço oficial;
+- validação da implementação: 91 testes aprovados pelo checkpoint original; após
+  revisão adicional, 53 testes focados aprovados, cobrindo reinício, corrupção, isolamento
+  por usuário/empresa, XML alterado, falha final, conclusão e idempotência, junto
+  da regressão de UI e importação atômica relacionada;
+- nenhuma rede, certificado, SEFAZ, banco operacional ou Nabi foi acessado; nenhum
+  push foi realizado. Próximo passo: homologação
+  visual do catálogo/retomada antes de integrar.
