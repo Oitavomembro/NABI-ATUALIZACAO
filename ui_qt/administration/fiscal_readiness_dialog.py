@@ -80,11 +80,19 @@ class FiscalReadinessDialog(QDialog):
         return self.reload()
 
     def _clear(self) -> None:
-        while self.content.count():
-            item = self.content.takeAt(0)
+        def discard(item) -> None:
             widget = item.widget()
             if widget is not None:
                 widget.deleteLater()
+                return
+            layout = item.layout()
+            if layout is not None:
+                while layout.count():
+                    discard(layout.takeAt(0))
+                layout.deleteLater()
+
+        while self.content.count():
+            discard(self.content.takeAt(0))
 
     def reload(self) -> bool:
         try:

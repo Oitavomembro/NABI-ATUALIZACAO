@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox
 
 from ui_qt.administration.fiscal_readiness_dialog import (
     FiscalConfigurationDialog, FiscalReadinessDialog,
@@ -59,6 +59,19 @@ def test_clique_atualizar_recarrega_e_fechar_encerra():
     assert application.snapshot.call_count == 2
     QTest.mouseClick(dialog.close_button, Qt.MouseButton.LeftButton)
     assert dialog.result() == QDialog.DialogCode.Rejected
+
+
+def test_atualizacoes_repetidas_substituem_conteudo_sem_sobrepor_rotulos():
+    application = Mock(); application.snapshot.return_value = snapshot()
+    dialog = FiscalReadinessDialog(application)
+    for _ in range(3):
+        assert dialog.reload() is True
+        QApplication.sendPostedEvents(None, QEvent.Type.DeferredDelete)
+    labels = [label.text() for label in dialog.findChildren(QLabel)]
+    assert labels.count("Ambiente") == 1
+    assert labels.count("CNPJ emitente") == 1
+    assert labels.count("Certificado A1") == 1
+    dialog.close()
 
 
 def test_enter_configura_uma_vez_e_auto_repeat_nao_abre():
