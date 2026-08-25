@@ -3442,6 +3442,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - pendências: o instalador final não foi gerado; instalação/desinstalação física,
   ativação com licença TESTE real, DPI/tela, atalhos e abertura em uma segunda
   máquina Windows continuam exigindo homologação humana antes de release.
+
+#### Correção confirmada na homologação visual de primeiro uso
+
+- `6f08e33` — `fix: mantem ativacao aberta no primeiro uso`;
+- a execução real sem licença revelou que o Qt oficial apenas mostrava o bloqueio
+  e encerrava. Agora permanece em diálogo restrito, mostra e copia o código da
+  máquina e permite selecionar uma `.nabilic`, sempre antes de rede, banco e
+  serviços;
+- somente uma licença assinada que libere a capacidade Qt permite continuar;
+  falha, cancelamento ou edição incompatível permanecem bloqueados;
+- o ensaio descartável passou a fechar explicitamente a conexão SQLite de
+  verificação, eliminando o arquivo temporário preso no Windows;
+- validação focada: `26 passed`; ensaio completo novamente aprovado com licença
+  temporária em memória, banco novo, administrador, login, shell e Vendas, sem
+  rede fiscal; `compileall` e `git diff --check` aprovados;
+- ativação manual TESTE, criação do administrador e login foram confirmados pelo
+  proprietário. A rodada visual seguinte encontrou lacunas de UX/integração que
+  seguem em checkpoints isolados e não devem ser confundidas com Fiscal.
 ## Integração resiliente/contábil — validação de abertura e regressão
 
 - branch: `codex/integracao-resiliencia-contabil`;
