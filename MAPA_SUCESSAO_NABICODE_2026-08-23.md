@@ -2925,3 +2925,28 @@ Estratégia de produto para aproveitar a transição sem reduzir conformidade:
 - manter o produto utilizável em Comercial/NÃO FISCAL enquanto a configuração fiscal não estiver aprovada, sem permitir emissão fiscal por fallback;
 - planejar migração e onboarding rápidos para escritórios contábeis e carteiras de MEIs, com pacotes Essencial/Completo padronizados e sem dependência de fornecedor contábil específico;
 - não anunciar “conforme 2027” antes da auditoria jurídica, técnica e de homologação real de cada documento aplicável.
+
+## Regra permanente de evolução do produto
+
+Critério de entrada: uma capacidade entra no NabiCode oficial somente quando reduz trabalho, preserva as regras existentes, possui fronteira autorizada, falha fechada, testes proporcionais ao risco e caminho de atualização/migração sem perda de dados.
+
+Prioridades aprovadas para entrada progressiva:
+
+- perfil empresarial único e onboarding guiado;
+- Central do Contador em camadas, conciliação e intercâmbio universal;
+- Central de Socorro com diagnóstico determinístico e autorreparo apenas reversível;
+- backup autenticado/criptografado e restauração comprovada;
+- conectores fiscais versionados conforme documentos e vigências oficiais;
+- Nabi global por portas tipadas, com confirmação, idempotência e auditoria;
+- acessibilidade, paginação, desempenho e mensagens humanas.
+
+Critério de retirada/proibição:
+
+- edições diferentes do NabiCode oficial por regime, telas duplicadas, botões provisórios ou sem ação;
+- carregamento integral desnecessário, acesso direto da GUI/IA ao banco e identidade fornecida livremente pelo chamador;
+- senha mestra universal, permissão implícita, função escondida que contorne autorização ou fallback fiscal;
+- autorreparo de venda, Caixa, estoque, Fiscal, licenciamento, usuários, backup/restore ou atualização sem o nível de confirmação exigido;
+- logs/pacotes de suporte com segredo ou dado pessoal cru;
+- lançamento contábil, regra tributária ou alegação de conformidade inventados.
+
+O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compartilháveis podem ser reaproveitadas após auditoria; regras exclusivas do Fichário não entram incidentalmente no NabiCode oficial.
