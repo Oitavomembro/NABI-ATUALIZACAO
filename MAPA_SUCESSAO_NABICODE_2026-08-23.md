@@ -3039,3 +3039,42 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: revisão cruzada, merge normal na consolidada e somente depois
   composição explícita no menu autorizado. Homologação visual Windows e geração
   em banco TESTE continuam obrigatórias antes de promoção.
+
+### Entrega contábil confiável — outbox e pasta local
+
+- branch/worktree isolados: `codex/entrega-contabil-confiavel` em
+  `NabiCode-QT-EntregaContabil-codex`, derivados exatamente da Central do
+  Contador `aa3cf7d`, sem composição com shell ou `main_qt.py`;
+- implementação: `e544928` — `feat: adiciona entrega contabil confiavel`;
+- `AccountantDeliveryService` exige destinatário válido, CNPJ confirmado,
+  consentimento booleano explícito, competência, perfil e pacote mensal íntegro.
+  CNPJ/competência/perfil precisam coincidir com o manifesto validado;
+- a validação e os SHA-256 do ZIP/manifesto ocorrem sobre snapshot imutável no
+  spool. O nome do destinatário não é persistido: somente seu hash e os instantes
+  das confirmações entram na outbox SQLite separada do banco operacional;
+- estados duráveis: `PREPARADO`, `ENFILEIRADO`, `ENVIADO_AO_TRANSPORTE`,
+  `RECEBIDO_CONFIRMADO`, `FALHA` e `DESCONHECIDO`. Aceite do adaptador nunca é
+  apresentado como recebimento; confirmação exige consulta e recibo coerente;
+- chave idempotente, pacote, manifesto, CNPJ, competência, perfil, destinatário,
+  tipo e configuração do transporte são vinculados pelo fingerprint da operação.
+  Retry definido reutiliza a mesma chave; payload divergente falha fechado;
+- resultado ambíguo impede reenvio e exige consulta. Resposta/recibo com referência
+  ou hash divergentes não promovem sucesso, e troca silenciosa da pasta preparada
+  é recusada;
+- `LOCAL_FOLDER_V1` atua somente sobre pasta local, rede já montada ou OneDrive
+  já sincronizado. A pasta precisa existir; ZIP e recibo JSON são publicados por
+  cópia temporária, sincronização e operação atômica sem sobrescrever colisões;
+- se houver queda entre ZIP e recibo, a consulta verifica o hash do ZIP e pode
+  reconstruir o recibo ausente antes de confirmar, sem repetir a cópia;
+- Domínio/Onvio, e-mail e portais permanecem apenas portas futuras documentadas.
+  Nenhuma API, endpoint, token, senha, credencial ou compatibilidade foi inventada;
+- testes adversariais próprios: `25 passed`; regressão conjunta de entrega,
+  pacote mensal, reconciliação, aplicação e Central Qt: `60 passed`;
+  `compileall` de `services`/`tests` e `git diff --check` aprovados;
+- nenhuma transmissão real, rede paga, dado real, regra contábil/tributária,
+  Fiscal/SEFAZ, IA, shell, banco operacional ou credencial foi usada ou alterada;
+- próximos passos: revisão cruzada e integração normal na trilha escolhida pela
+  coordenação; somente depois, composição explícita na Central e homologação
+  manual com pasta TESTE local, compartilhamento Windows controlado e pasta
+  OneDrive já existente. Recebimento confirmado não substitui a revisão do
+  contador e nenhuma integração externa está liberada.
