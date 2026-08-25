@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 import sqlite3
+import time
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Iterator
@@ -47,6 +48,26 @@ def _require_effective(actual: dict[str, int | str], expected: dict[str, int | s
         )
 
 
+def _set_journal_mode(connection: sqlite3.Connection, expected: str, timeout: float) -> None:
+    """Tolera somente a disputa transitória entre conexões que aplicam o mesmo modo."""
+    deadline = time.monotonic() + min(max(float(timeout), 0.0), 2.0)
+    while True:
+        try:
+            connection.execute(f"PRAGMA journal_mode={expected}")
+            return
+        except sqlite3.OperationalError as exc:
+            if "locked" not in str(exc).casefold():
+                raise
+            try:
+                if str(_pragma_scalar(connection, "journal_mode")).casefold() == expected.casefold():
+                    return
+            except sqlite3.Error:
+                pass
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.02)
+
+
 def configure_connection(
     connection: sqlite3.Connection,
     *,
@@ -68,7 +89,8 @@ def configure_connection(
         else:
             connection.execute("PRAGMA query_only=OFF")
             memory = _is_memory_database(connection)
-            connection.execute(f"PRAGMA journal_mode={'MEMORY' if memory else 'DELETE' if network_mode else 'WAL'}")
+            journal = "MEMORY" if memory else "DELETE" if network_mode else "WAL"
+            _set_journal_mode(connection, journal, timeout)
             connection.execute(f"PRAGMA synchronous={'FULL' if network_mode else 'NORMAL'}")
         actual = effective_pragmas(connection)
         expected: dict[str, int | str] = {
