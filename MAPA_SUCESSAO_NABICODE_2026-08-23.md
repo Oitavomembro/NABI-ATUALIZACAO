@@ -2929,3 +2929,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   FICHÁRIO, alterar serviços ou misturar a modernização com Fiscal/SEFAZ/IA;
 - a composição global e os módulos fora desta branch precisam ser coordenados
   com a conversa integradora para evitar colisão de arquivos.
+
+### Harmonização visual isolada — Administração Qt
+
+- branch/worktree: `codex/administracao-qt-visual` em
+  `NabiCode-QT-AdministracaoVisual-codex`, derivada exatamente de `b3bfba8`;
+- implementação: `f45f14b` — `style: harmoniza administracao Qt em acabamento metalico`;
+- login, primeiro acesso, migração de credenciais antigas, usuários,
+  configurações, auditoria, ajuda e hub administrativo receberam acabamento
+  tecnológico em aço/grafite/prata, relevo discreto e filete ciano de foco;
+- vermelho permanece restrito à ação crítica já existente de
+  ativar/desativar usuário; alertas mantêm sua semântica e não foram
+  transformados em ações operacionais;
+- hierarquia, posição, campos, abas, IDs, permissões, atalhos,
+  Enter/Shift+Enter/Esc, bloqueio de auto-repeat e chamadas aos serviços foram
+  preservados; funções restritas não foram reveladas nem ganharam atalhos;
+- o aviso já existente de que a identificação comercial não altera CNPJ,
+  certificado ou parâmetros fiscais foi somente preservado/estilizado. Nenhum
+  fluxo fiscal novo, regra, XML, certificado, pré-voo ou chamada SEFAZ foi
+  incluído;
+- validação direta: `39 passed`; regressão ampliada de segurança, startup e
+  serviços administrativos: `68 passed`, `3 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- pendência visual: homologar em Windows real, inclusive escalas/DPI, login,
+  primeiro acesso, migração, tabelas, abas e ação crítica de usuário;
+- requisito futuro separado para a trilha fiscal: avaliar importação assistida
+  de XML autorizado para sugerir somente dados comprováveis do emitente na
+  configuração fiscal. Toda sugestão deve exigir revisão humana, nunca importar
+  segredos (PFX, senha ou CSC), nunca presumir regime/série/ambiente e nunca
+  contornar os portões oficiais de CNPJ, certificado A1 correspondente,
+  ambiente, série/numeração e pré-voo.
