@@ -37,6 +37,7 @@ class AssistantApplicationService:
         procurement_executor=None,
         product_stock_executor=None,
         financial_executor=None,
+        safe_error_recovery_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -52,6 +53,7 @@ class AssistantApplicationService:
         self._procurement_executor = procurement_executor
         self._product_stock_executor = product_stock_executor
         self._financial_executor = financial_executor
+        self._safe_error_recovery_executor = safe_error_recovery_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -103,6 +105,9 @@ class AssistantApplicationService:
             "STOCK_RECEIVE": ("produtos", "edit"),
             "STOCK_REMOVE": ("produtos", "edit"),
             "STOCK_ADJUST": ("produtos", "edit"),
+            "PRODUCT_NCM_CORRECTION": ("produtos", "edit"),
+            "FISCAL_RECONCILE_UNKNOWN": ("fiscal", "transmit"),
+            "FISCAL_CHECK_RECEIPT": ("fiscal", "transmit"),
         }.get(str(getattr(draft, "operation_kind", "")))
         operation_kind = str(getattr(draft, "operation_kind", ""))
         if operation_kind.startswith("FINANCIAL_CREATE_"):
@@ -206,6 +211,21 @@ class AssistantApplicationService:
             raise TypeError("O rascunho confirmado não é de produto/estoque.")
         draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._product_stock_executor.execute(draft, authorization)
+        return result, authorization
+
+    def confirm_and_execute_safe_recovery(
+        self, token: str, draft_id: str, fingerprint: str
+    ):
+        if self._safe_error_recovery_executor is None:
+            raise RuntimeError("Recuperação segura assistida não está configurada.")
+        draft = self._drafts.get(draft_id)
+        if getattr(draft, "operation_kind", "") not in {
+            "PRODUCT_NCM_CORRECTION", "FISCAL_RECONCILE_UNKNOWN",
+            "FISCAL_CHECK_RECEIPT",
+        }:
+            raise TypeError("O rascunho confirmado não é uma recuperação segura.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        result = self._safe_error_recovery_executor.execute(draft, authorization)
         return result, authorization
 
     def invalidate_confirmations(self) -> None:

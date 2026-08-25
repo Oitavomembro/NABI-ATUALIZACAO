@@ -3476,3 +3476,59 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão integral final: `2313 passed`, `1 skipped`, `460 subtests passed`, zero falhas e dois avisos externos/conhecidos;
 - `git diff --check` aprovado; nenhum banco, certificado, XML real, chave ou segredo foi usado;
 - novas interfaces permanecem desacopladas do shell até checkpoint próprio de composição e homologação visual.
+
+### Trilhos seguros da Nabi para erros e onboarding técnico
+
+- branch/worktree isolados: `codex/nabi-erros-seguros` em
+  `NabiCode-QT-NabiErrosSeguros-codex`, derivados do commit confirmado
+  `52bbfe2a361629471cc8e0dfa5a9694f56e0c0f0` de
+  `codex/homologacao-primeiro-uso`; o checkout de origem tinha alterações locais
+  e foi preservado sem sobrescrita;
+- implementação: `0a828a8` — `feat: adiciona trilhos seguros da Nabi para erros`;
+- a auditoria confirmou que o broker opaco de confirmação e o outbox fiscal já
+  existiam. A implementação reutiliza ambos e cobre somente as lacunas Nabi:
+  diagnóstico/rascunho de NCM, consulta/reconciliação fiscal segura e roteiro
+  técnico pós-licença independente de GGUF;
+- `produtos.diagnosticar_ncm` nunca sugere classificação. O rascunho exige NCM
+  explícito com exatamente oito dígitos não genéricos, fonte humana/documental
+  permitida (`CONTADOR`, `DOCUMENTO_FISCAL`, `FORNECEDOR` ou `TABELA_OFICIAL`)
+  e referência verificável; nada é persistido antes de confirmação reforçada;
+- a execução deriva o ator da sessão oficial, consome autorização opaca de uso
+  único, detecta NCM alterado desde a revisão e grava atomicamente somente a
+  coluna `ncm` e o diário idempotente. Preço, descrição, estoque e demais dados
+  comerciais permanecem intactos; nenhuma autorização fiscal é alegada;
+- `fiscal.diagnosticar_fila` lê o estado real do outbox existente e devolve
+  resultado sanitizado. `RESPOSTA_DESCONHECIDA` só admite rascunho de
+  reconciliação por recibo/chave; recibo pendente só admite consulta. Estado sem
+  referência, erro comum, estado terminal ou desconhecido falha fechado;
+- nenhuma ferramenta Nabi chama `retry_transmission`, `transmit` ou
+  `authorize_document`. O gateway delega exclusivamente a
+  `reconcile_unknown` e `force_receipt_check`, que mantêm autenticação e regras
+  do `FiscalService`; venda comercial fica preservada e o retorno fixa
+  `authorization_claimed=false` e `blind_resend_performed=false`;
+- `NabiTechnicalOnboardingService` é uma porta somente leitura, determinística e
+  sem dependência de modelo/GGUF. Antes de licença operacional com recurso Nabi,
+  falha antes até de consultar a prontidão; depois, ordena empresa/CNPJ, regime,
+  usuários/acessos, caixa, impressão e backup. Fiscal aparece somente se o perfil
+  estiver habilitado e permanece checklist/readiness informativo, sempre com
+  `fiscal_release_authorized=false`;
+- o guia visual de primeiro acesso publicado posteriormente na branch de origem
+  não foi alterado nem regravado. A futura integração visual deve apenas chamar
+  a porta determinística deste checkpoint;
+- testes adversariais cobrem NCM ausente/inválido/genérico, fonte de IA recusada,
+  ausência de evidência, confirmação reforçada/uso único, usuário forjado,
+  concorrência/stale, rollback, idempotência, preservação comercial, estados do
+  outbox, mudança de estado, ausência de recibo/chave, consulta de recibo sem
+  reenvio, socket bloqueado, licença ausente/recurso Nabi ausente, regime não
+  inferido e Fiscal habilitado/desabilitado sem liberação;
+- regressão Nabi/outbox/licença: `200 passed`, `38 subtests passed`; regressão de
+  FiscalService, produtos, perfil empresarial e composição licenciada:
+  `185 passed`, `10 subtests passed`; `compileall` e `git diff --check`
+  aprovados;
+- as provas usam adapters fake determinísticos e SQLite exclusivamente em
+  memória para atomicidade. Nenhum socket, certificado, XML, senha, banco real
+  ou chamada SEFAZ foi usado;
+- não foram alterados `main_qt.py`, licenciamento, UI/UX, PDV, regras
+  tributárias, schema, endpoint, certificado ou worker fiscal. A composição no
+  shell/guia visual permanece checkpoint posterior; isto não é homologação
+  fiscal real e não libera PRODUÇÃO.
