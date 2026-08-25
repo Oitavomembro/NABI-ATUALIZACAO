@@ -172,9 +172,11 @@ def test_intercambio_tem_ids_idempotentes_e_nao_inventa_contas(package_service, 
 
 
 def test_pacote_deterministico_com_mesmos_dados(package_service, tmp_path):
+    import time
     _, service = package_service
     first, second = tmp_path / "a.zip", tmp_path / "b.zip"
     service.export(cnpj="12345678000195", competence="2026-08", profile="COMPLETO", output_path=first)
+    time.sleep(1.1)  # atravessa o relógio: metadados do XLSX/ZIP não podem variar
     service.export(cnpj="12345678000195", competence="2026-08", profile="COMPLETO", output_path=second)
     assert first.read_bytes() == second.read_bytes()
 

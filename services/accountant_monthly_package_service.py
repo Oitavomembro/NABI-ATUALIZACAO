@@ -52,18 +52,28 @@ class AccountantMonthlyPackageService:
         self.fiscal_service = fiscal_service
         self.reconciliation_service = reconciliation_service or AccountingReconciliationService(connection_factory)
 
-    def export(self, *, cnpj: str, competence: str, profile: str, output_path: str | Path) -> AccountantPackageResult:
+    @classmethod
+    def normalize_request(cls, *, cnpj: str, competence: str, profile: str,
+                          output_path: str | Path) -> tuple[str, str, str, Path]:
+        """Valida a mesma solicitação usada pela exportação, sem criar arquivos."""
         document = re.sub(r"\D", "", str(cnpj or ""))
         from services.fiscal_service import FiscalService
         if not FiscalService._is_valid_cnpj(document):
             raise ValueError("Informe um CNPJ válido para identificar o pacote.")
-        period_start, period_end = self._competence(competence)
+        cls._competence(competence)
         normalized_profile = str(profile or "").strip().upper()
-        if normalized_profile not in self.PROFILES:
+        if normalized_profile not in cls.PROFILES:
             raise ValueError("Perfil inválido. Use ESSENCIAL, COMPLETO ou AUDITORIA.")
         destination = Path(output_path).expanduser().resolve()
         if destination.suffix.casefold() != ".zip":
             raise ValueError("O pacote mensal deve ser gravado em arquivo ZIP.")
+        return document, str(competence).strip(), normalized_profile, destination
+
+    def export(self, *, cnpj: str, competence: str, profile: str, output_path: str | Path) -> AccountantPackageResult:
+        document, competence, normalized_profile, destination = self.normalize_request(
+            cnpj=cnpj, competence=competence, profile=profile, output_path=output_path,
+        )
+        period_start, period_end = self._competence(competence)
         destination.parent.mkdir(parents=True, exist_ok=True)
 
         connection = self.connection_factory()
@@ -605,7 +615,15 @@ class AccountantMonthlyPackageService:
                 info = zipfile.ZipInfo(name, cls.ZIP_TIME)
                 info.compress_type = zipfile.ZIP_DEFLATED
                 info.external_attr = 0o600 << 16
-                target.writestr(info, source.read(name))
+                data = source.read(name)
+                if name == "docProps/core.xml":
+                    # openpyxl sobrescreve ``modified`` com o relógio durante
+                    # save(), mesmo quando a propriedade foi fixada antes.
+                    data = re.sub(
+                        br"(<dcterms:modified\b[^>]*>)[^<]*(</dcterms:modified>)",
+                        br"\g<1>1980-01-01T00:00:00Z\g<2>", data,
+                    )
+                target.writestr(info, data)
         return normalized.getvalue()
 
     @classmethod
