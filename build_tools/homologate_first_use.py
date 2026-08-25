@@ -7,7 +7,7 @@ import os
 import sys
 import tempfile
 import uuid
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from unittest import mock
@@ -224,7 +224,7 @@ def run(root: Path) -> dict[str, object]:
         QTimer.singleShot(0, qt.quit)
         qt.exec()
 
-        with database.connect() as connection:
+        with closing(database.connect()) as connection:
             schema = int(connection.execute(
                 "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
             ).fetchone()[0])

@@ -75,6 +75,20 @@ def test_entrypoints_bloqueiam_antes_de_banco_worker_e_import_legacy():
     assert qt_gate < qt.index("DatabaseManager(database_path", qt.index("def main"))
 
 
+def test_qt_sem_licenca_oferece_ativacao_antes_de_banco_e_rede():
+    root = Path(__file__).parents[1]
+    source = (root / "main_qt.py").read_text(encoding="utf-8")
+    start = source.index("def main")
+    activation = source.index("LicenseActivationDialog(", start)
+    assert activation < source.index("_network_configuration(profile)", start)
+    assert activation < source.index("DatabaseUsageLock(", start)
+    dialog = (root / "licensing/activation_dialog.py").read_text(encoding="utf-8")
+    assert "Copiar código da máquina" in dialog
+    assert "Selecionar licença .nabilic" in dialog
+    assert "QApplication.clipboard().setText(self._machine_code_value)" in dialog
+    assert "LicenseGate(decision).allows(Capability.QT)" in dialog
+
+
 def test_licenciamento_nao_importa_modulos_fiscais_ia_ou_banco():
     sources = "\n".join(
         path.read_text(encoding="utf-8") for path in (ROOT / "licensing").glob("*.py")

@@ -58,8 +58,11 @@ from ui_qt.administration import (
     LegacySecurityMigrationDialog,
     build_administrative_modules,
 )
-from licensing.gate import Capability
-from licensing.runtime import evaluate_runtime_gate, startup_block_message
+from licensing.gate import Capability, LicenseGate
+from licensing.activation_dialog import LicenseActivationDialog
+from licensing.runtime import (
+    build_runtime_license_service, evaluate_runtime_gate, startup_block_message,
+)
 
 SCHEMA_VERSION = 21
 
@@ -299,11 +302,15 @@ def main(argv=None) -> int:
         return restricted_result
     license_gate = evaluate_runtime_gate(profile.app_dir)
     if not license_gate.allows(Capability.QT):
-        QMessageBox.warning(
-            None, "Licença NabiCode V2",
-            startup_block_message(license_gate, Capability.QT),
+        license_service = build_runtime_license_service(profile.app_dir)
+        activation = LicenseActivationDialog(
+            license_service, license_gate.decision
         )
-        return 3
+        if activation.exec() != QDialog.DialogCode.Accepted:
+            return 3
+        license_gate = LicenseGate(license_service.evaluate())
+        if not license_gate.allows(Capability.QT):
+            return 3
     configuration = _network_configuration(profile)
     database_path = profile.validate_database(
         configuration.get("db_path") or profile.paths.database
