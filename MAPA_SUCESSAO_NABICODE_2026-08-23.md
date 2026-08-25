@@ -3460,6 +3460,12 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - ativação manual TESTE, criação do administrador e login foram confirmados pelo
   proprietário. A rodada visual seguinte encontrou lacunas de UX/integração que
   seguem em checkpoints isolados e não devem ser confundidas com Fiscal.
+- `0e95e6d` adiciona a Nabi como guia determinístico já no primeiro acesso após
+  a licença: orienta empresa, CNPJ, e-mail, usuário e senha, inclusive no modo
+  não fiscal e sem depender de modelo GGUF. Antes da licença a IA permanece
+  desligada; nenhuma orientação inicia banco, rede ou comunicação fiscal.
+- validação do guia: `14 passed` na composição Qt e `3 passed` no ensaio de
+  primeiro uso; `compileall` e `git diff --check` aprovados.
 ## Integração resiliente/contábil — validação de abertura e regressão
 
 - branch: `codex/integracao-resiliencia-contabil`;
