@@ -2881,3 +2881,28 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Fechamento manual oficial do Caixa — atomicidade e idempotência
+
+- branch isolada `codex/caixa-fechamento-idempotente`, derivada de `1cfdfa4`;
+- implementação `d57fefb` — `fix: torna fechamento do caixa idempotente`;
+- saldo esperado, validação da diferença, atualização da sessão, auditoria e
+  confirmação do novo `cash_closing_journal` ocorrem sob a mesma transação
+  `BEGIN IMMEDIATE`; qualquer falha reverte integralmente o fechamento;
+- o fingerprint canônico vincula sessão, terminal, valor contado, observação e
+  operador autenticado. Repetição idêntica retorna a sessão oficial já fechada
+  sem nova auditoria; payload divergente ou diário inconsistente falha fechado;
+- a porta manual `CashApplicationService.close` exige sessão ativa, ator real e
+  a permissão Legacy existente `financeiro/view`; texto anteriormente capturado
+  pela GUI não é autoridade para o fechamento;
+- ausência/falha da auditoria ou do journal bloqueia e reverte a operação.
+  Concorrência idêntica produz exatamente um fechamento, um journal e uma
+  auditoria;
+- validação focada final: `38 passed`; núcleo/Qt/esquema: `60 passed`;
+  regressões adicionais do Caixa/Legacy: `42 passed`; Commercial relacionado:
+  `22 passed`; `compileall` completo e `git diff --check` aprovados;
+- não houve alteração em IA Nabi, `main_qt.py`, shell, PDV, pagamentos,
+  Fiscal/SEFAZ, licenciamento, banco real ou estilos;
+- próximo passo: revisão independente e integração normal na consolidada. A
+  branch pode ser promovida somente após confirmação do hash remoto e regressão
+  cruzada na base de integração.
