@@ -1,23 +1,15 @@
 from __future__ import annotations
 
 import logging
-import re
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 
 
-_SENSITIVE_PATTERNS = (
-    re.compile(r"(?i)\b(authorization)\b\s*[:=]\s*bearer\s+([^\s,;]+)"),
-    re.compile(r"(?i)\b(senha|password|token|access[_-]?token|refresh[_-]?token|client[_-]?secret|api[_-]?key|chave privada)\b\s*[:=]\s*([^\s,;&]+)"),
-    re.compile(r"-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----.*?-----END (?:RSA |EC |OPENSSH )?PRIVATE KEY-----", re.DOTALL),
-)
+from core.sensitive_data import sanitize_text
 
 
 def redact_sensitive(value: object) -> str:
-    text = str(value)
-    for pattern in _SENSITIVE_PATTERNS:
-        text = pattern.sub(lambda match: f"{match.group(1)}=<omitido>" if match.lastindex else "<chave privada omitida>", text)
-    return text
+    return sanitize_text(value)
 
 
 class RedactingFormatter(logging.Formatter):
