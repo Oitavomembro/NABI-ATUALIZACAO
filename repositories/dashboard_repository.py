@@ -21,6 +21,14 @@ class ClientSummary:
 
 
 @dataclass(frozen=True)
+class ClientSegmentPage:
+    ids: tuple[int, ...]
+    total_records: int
+    limit: int
+    offset: int
+
+
+@dataclass(frozen=True)
 class DashboardIndicators:
     overdue_count: int
     overdue_value: Decimal
@@ -109,6 +117,15 @@ class DashboardRepository:
         self, segment: str, term: str = "", *, limit: int = 200,
         now: datetime | None = None,
     ) -> tuple[int, ...]:
+        return self.client_segment_page(
+            segment, term, limit=limit, offset=0, now=now
+        ).ids
+
+    def client_segment_page(
+        self, segment: str, term: str = "", *, limit: int = 200,
+        offset: int = 0, now: datetime | None = None,
+    ) -> ClientSegmentPage:
+        """Retorna uma página limitada e o total completo do segmento."""
         normalized = str(segment or "").strip().lower()
         conditions = {
             "all": "1=1",
@@ -126,10 +143,11 @@ class DashboardRepository:
         if normalized not in conditions:
             raise ValueError("Segmento de clientes inválido.")
         clean_term = " ".join(str(term or "").strip().casefold().split())
-        params: list[Any] = []
+        where_params: list[Any] = []
+        order_params: list[Any] = []
         reference = now or datetime.now()
         if normalized in {"owing", "alert"}:
-            params.append((reference - timedelta(days=60)).strftime("%Y-%m-%d"))
+            where_params.append((reference - timedelta(days=60)).strftime("%Y-%m-%d"))
         where = conditions[normalized]
         if clean_term:
             search = f"%{clean_term}%"
@@ -139,27 +157,44 @@ class DashboardRepository:
                 OR LOWER(COALESCE(c.rg,'')) LIKE ? OR LOWER(COALESCE(c.telefone,'')) LIKE ?
                 OR LOWER(COALESCE(c.endereco,'')) LIKE ?)
             """
-            params.extend([search] * 7)
+            where_params.extend([search] * 7)
             order = """CASE
                 WHEN CAST(COALESCE(c.numero_ficha,'') AS TEXT)=? THEN 0
                 WHEN LOWER(TRIM(COALESCE(c.nome,'')))=? THEN 1
                 WHEN LOWER(TRIM(COALESCE(c.nome,''))) LIKE ? THEN 2
                 WHEN INSTR(' ' || LOWER(TRIM(COALESCE(c.nome,''))), ' ' || ?) > 0 THEN 3
                 ELSE 4 END, c.nome COLLATE NOCASE, c.numero_ficha"""
-            params.extend([clean_term, clean_term, f"{clean_term}%", clean_term])
+            order_params.extend([clean_term, clean_term, f"{clean_term}%", clean_term])
         else:
-            order = "CASE WHEN c.numero_ficha IS NULL THEN 1 ELSE 0 END, c.numero_ficha, c.nome COLLATE NOCASE"
-        rows = self.database.fetch_all(
-            f"""WITH primeiro_vencimento AS (
+            order = "(c.numero_ficha IS NULL), c.numero_ficha, c.nome COLLATE NOCASE, c.id"
+        safe_limit = max(1, min(int(limit), 500))
+        safe_offset = max(0, int(offset))
+        cte = """WITH primeiro_vencimento AS (
                     SELECT cliente_id, MIN(NULLIF(vencimento,'')) AS vencimento
                     FROM movimentacoes WHERE status_pagamento='PENDENTE' GROUP BY cliente_id
-                )
+                )"""
+        with self.database.session() as connection:
+            connection.execute("BEGIN")
+            total_row = connection.execute(
+                f"""{cte}
+                SELECT COUNT(*) FROM clientes c
+                LEFT JOIN primeiro_vencimento pv ON pv.cliente_id=c.id
+                WHERE {where}""",
+                tuple(where_params),
+            ).fetchone()
+            rows = connection.execute(
+                f"""{cte}
                 SELECT c.id FROM clientes c
                 LEFT JOIN primeiro_vencimento pv ON pv.cliente_id=c.id
-                WHERE {where} ORDER BY {order} LIMIT ?""",
-            (*params, max(1, min(int(limit), 500))),
+                WHERE {where} ORDER BY {order} LIMIT ? OFFSET ?""",
+                (*where_params, *order_params, safe_limit, safe_offset),
+            ).fetchall()
+        return ClientSegmentPage(
+            ids=tuple(int(row[0]) for row in rows),
+            total_records=int((total_row[0] if total_row else 0) or 0),
+            limit=safe_limit,
+            offset=safe_offset,
         )
-        return tuple(int(row[0]) for row in rows)
 
     def indicators(self, *, now: datetime | None = None) -> DashboardIndicators:
         reference = now or datetime.now()

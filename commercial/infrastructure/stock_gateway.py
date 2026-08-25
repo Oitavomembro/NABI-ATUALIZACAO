@@ -22,6 +22,14 @@ class NabiCodeProductStockGateway:
         self.stock_service = stock_service
         self.stock_repository = stock_service.repository
 
+    def _limited_rows(self, term: str, limit: int):
+        try:
+            return self.products.listar(term, limit=limit)
+        except TypeError as exc:
+            if "unexpected keyword argument 'limit'" not in str(exc):
+                raise
+            return self.products.listar(term)[:limit]
+
     @staticmethod
     def _details(row) -> ProductDetails:
         return ProductDetails(
@@ -39,14 +47,17 @@ class NabiCodeProductStockGateway:
 
     def search_details(self, term: str, *, limit: int = 30) -> tuple[ProductDetails, ...]:
         safe_limit = max(1, min(int(limit), 200))
-        return tuple(self._details(row) for row in self.products.listar(str(term or ""))[:safe_limit])
+        return tuple(
+            self._details(row)
+            for row in self._limited_rows(str(term or ""), safe_limit)
+        )
 
     def get_by_barcode(self, barcode: str) -> ProductDetails | None:
         normalized = str(barcode or "").strip()
         if not normalized:
             return None
         matches = [
-            row for row in self.products.listar(normalized)
+            row for row in self._limited_rows(normalized, 2)
             if str(row.get("codigo_barras") or "").strip() == normalized
         ]
         if len(matches) > 1:

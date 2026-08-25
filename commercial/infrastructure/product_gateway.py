@@ -26,9 +26,16 @@ class NabiCodeProductGateway:
 
     def search(self, term: str, *, limit: int = 30) -> tuple[ProductRecord, ...]:
         safe_limit = max(1, min(int(limit), 200))
+        try:
+            rows = self.product_service.listar(str(term or ""), limit=safe_limit)
+        except TypeError as exc:
+            if "unexpected keyword argument 'limit'" not in str(exc):
+                raise
+            # Compatibilidade com portas de terceiros anteriores ao limite SQL.
+            rows = self.product_service.listar(str(term or ""))[:safe_limit]
         return tuple(
             self._record(data)
-            for data in self.product_service.listar(str(term or ""))[:safe_limit]
+            for data in rows
         )
 
     def get(self, product_id: int) -> ProductRecord | None:
