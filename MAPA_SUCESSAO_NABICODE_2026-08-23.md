@@ -3194,3 +3194,69 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: revisão cruzada, merge normal na consolidada e somente depois
   composição explícita no menu autorizado. Homologação visual Windows e geração
   em banco TESTE continuam obrigatórias antes de promoção.
+### Perfil empresarial unificado — serviço versionado
+
+- branch isolada: `codex/perfil-empresarial-unificado`, derivada exatamente de
+  `1cfdfa4`, sem UI e sem integração com a principal;
+- implementação: `2b21aa7` — `feat: versiona perfil empresarial confirmado`;
+- `CompanyProfileService` e seus DTOs imutáveis registram CNPJ validado, razão
+  social, regime (`MEI`, Simples, Presumido, Real ou Outro), enquadramento
+  (`MEI`, `ME`, `EPP` ou Outro), CNAEs/atividades, UF, município, IE/IM, tipos
+  declarados de operação/documento, fonte, data da fonte, ator, confirmação e
+  vigência;
+- licença, perfil empresarial e permissões são fronteiras independentes. A
+  leitura exige sessão oficial com `configs/view`; confirmação e rollback
+  exigem `configs/edit`. Permissão `fiscal/configure` não concede alteração do
+  perfil, e nenhuma chave/licença participa da autorização;
+- toda alteração cria nova versão e auditoria na mesma transação. Vigências são
+  fechadas sem apagar versões; mudança MEI→ME/EPP e rollback preservam a linha
+  histórica. Concorrência otimista impede sobrescrita de revisão antiga;
+- versões formam cadeia SHA-256 de conteúdo para detectar adulteração
+  estrutural. Essa cadeia não é assinatura/não-repúdio e não substitui o log de
+  auditoria; ausência ou falha da auditoria reverte toda alteração;
+- `prepare_legacy_migration` transforma configuração fiscal/básica antiga em
+  rascunho não confirmado e não persistido. CNAEs, operações ou obrigações
+  ausentes nunca são inferidos;
+- readiness é determinístico e exclusivamente informativo: distingue
+  `INCOMPLETO`, `AGENDADO` e `PRONTO_INFORMATIVO`, lista campos ausentes e
+  mantém `enables_fiscal=false`. Vigência futura não ativa antecipadamente;
+- o serviço não consulta internet, não decide obrigação pelo CNPJ, não habilita
+  Fiscal/SEFAZ e não altera regras tributárias ou endpoints;
+- testes focados: `17 passed`; regressão de Segurança, onboarding/configuração
+  fiscal e FiscalService: `195 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- testes cobrem sessão ausente, permissão insuficiente, confirmação explícita,
+  CNPJ/CNAE inválidos, fonte futura, campos ausentes, vigência futura, mudança
+  MEI→EPP, concorrência, rollback, auditoria ausente, JSON corrompido, cadeia
+  adulterada, migração legada sem persistência e separação de licença/Fiscal;
+- nenhum schema, UI, banco real, certificado, segredo, transmissão, outbox,
+  regra Fiscal/SEFAZ, licença ou permissão persistida foi alterado.
+
+### Onboarding Qt do perfil empresarial unificado
+
+- branch/worktree isolados: `codex/onboarding-perfil-empresarial-qt` em
+  `NabiCode-QT-OnboardingPerfil-codex`, derivados exatamente de `3d875d5`;
+- implementação: `aa9891f` — `feat: cria onboarding Qt do perfil empresarial`;
+- `CompanyProfileDialog` guia criação ou revisão de CNPJ, razão social, regime,
+  enquadramento, CNAEs, UF/município, IE/IM, operações, documentos, fonte e
+  vigência. A tela não foi conectada ao shell neste checkpoint;
+- licença, permissões e perfil empresarial são explicados como controles
+  independentes. O readiness permanece informativo, exibe explicitamente
+  `enables_fiscal=false` e não habilita Fiscal/SEFAZ;
+- a configuração antiga pode ser carregada somente como rascunho. Ela nunca se
+  autoconfirma ou persiste; campos e obrigações ausentes continuam sem inferência;
+- revisão validada e normalizada é obrigatória e não grava dados. Uma segunda
+  confirmação consciente é exigida antes de chamar a transação oficial; qualquer
+  edição invalida a revisão e uma trava impede reentrada/dupla confirmação;
+- leitura/revisão exige sessão real com `configs/view`; confirmação exige
+  `configs/edit` e registra o ator da sessão. Concorrência otimista bloqueia uma
+  revisão antiga e preserva a versão confirmada por outra sessão;
+- Enter avança uma etapa, Shift+Enter retorna, Esc cancela e auto-repeat é
+  consumido sem ação; cancelamento e falhas de permissão não persistem dados;
+- testes focados finais: `28 passed`; regressão ampliada de perfil, Segurança,
+  Configurações e Fiscal: `220 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum `main_qt.py`, `ui_qt/app.py`, shell, licença, banco real, certificado,
+  regra Fiscal/SEFAZ, transmissão ou endpoint foi alterado. Próximo passo seguro:
+  revisão independente e integração normal; conexão ao shell deve ser checkpoint
+  posterior, separado e explicitamente autorizado.
