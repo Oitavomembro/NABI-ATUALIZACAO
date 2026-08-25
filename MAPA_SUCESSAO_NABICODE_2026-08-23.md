@@ -3445,3 +3445,9 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - não há autorreparo, SQL, shell, credencial, gravação operacional ou conexão a
   `main_qt.py`/shell. Fiscal/SEFAZ, Caixa, estoque, vendas, licença e banco real
   permaneceram intocados; conexão ao shell exige checkpoint posterior separado.
+### Conexão mínima da Central de Socorro ao hub
+
+- a Central de Socorro diagnóstica passou a aparecer no hub administrativo sob `configs/view`, sem criar atalho oculto ou contornar sessão/permissões;
+- banco usa `quick_check` em conexão SQLite `mode=ro` e `query_only`; pastas e backups são apenas inspecionados; impressoras são consultadas e a Nabi ausente permanece inconclusiva;
+- nenhum diretório, backup, banco ou configuração é criado/alterado pelo novo módulo;
+- validação focada de composição, serviço e Qt: `25 passed`; `compileall` e `git diff --check` aprovados.
