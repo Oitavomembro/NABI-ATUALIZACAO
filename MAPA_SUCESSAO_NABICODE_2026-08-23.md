@@ -4021,3 +4021,28 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `compileall` e `git diff --check` aprovados;
 - nenhuma transmissão, autorização, consulta, XML, certificado, senha ou endpoint
   real foi usado. Produção fiscal e homologação SEFAZ continuam bloqueadas.
+
+## Integração final — visual, Nabi contextual e manutenção segura — 25/08/2026
+
+- `0d50ae7` aplica preferências visuais no shell com prévia imediata, restauração
+  ao cancelar e carregamento por usuário no início. Fundo, imagem e cores
+  estéticas são validados; cores semânticas de perigo/bloqueio não são
+  substituídas pela personalização. Validação focada: `67 passed`, além de
+  `compileall` e `git diff --check`;
+- `6ce591e` adiciona portas contextuais tipadas para a Nabi explicar e abrir,
+  somente por callbacks explícitos, configuração empresarial/fiscal e
+  importações XML. Os contratos rejeitam senha, caminho livre, ID inventado e
+  confirmação; não há banco direto, clique livre ou comunicação SEFAZ.
+  Regressão ampliada: `207 passed`, `38 subtests passed`, `compileall` e
+  `git diff --check`;
+- `987b886` cria serviço autenticado e janela isolada para analisar pacote
+  NabiMig sem importar, verificar backup somente em TEMP e preparar restauração
+  com pré-backup e confirmação forte sem substituir o banco ativo. A revisão do
+  agente principal encontrou e corrigiu incompatibilidade real do filtro de
+  eventos com PySide6 antes do commit; testes focados e compilação passaram;
+- a manutenção de dados ainda não está ligada ao menu técnico/composição. Esse
+  wiring deve ser um checkpoint separado, pois depende das instâncias oficiais
+  de migração, backup e auditoria e não pode criar uma segunda autoridade;
+- nenhuma dessas etapas fez push, instalador, transmissão fiscal, alteração em
+  banco real ou armazenamento de segredo. Homologação visual no Windows e o
+  ciclo E2E integrado continuam necessários antes de release.
