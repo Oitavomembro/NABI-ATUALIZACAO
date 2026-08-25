@@ -54,6 +54,11 @@ CREATE TABLE estoque_movimentacoes (
  usuario TEXT NOT NULL DEFAULT 'Sistema', data TEXT NOT NULL,
  FOREIGN KEY(produto_id) REFERENCES produtos(id)
 );
+CREATE TABLE auditoria (
+ id INTEGER PRIMARY KEY AUTOINCREMENT, data TEXT NOT NULL, usuario TEXT NOT NULL,
+ modulo TEXT NOT NULL, acao TEXT NOT NULL, objeto TEXT NOT NULL DEFAULT '',
+ detalhes TEXT NOT NULL DEFAULT '', resultado TEXT NOT NULL
+);
 """
 
 

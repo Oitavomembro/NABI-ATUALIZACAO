@@ -20,6 +20,7 @@ class Security:
 
 class Audit:
     def record_event(self, *args, **kwargs): pass
+    def record_event_strict(self, *args, **kwargs): pass
 
 
 class Queries:

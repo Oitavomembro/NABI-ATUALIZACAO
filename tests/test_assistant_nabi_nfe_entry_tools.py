@@ -30,6 +30,7 @@ class Security:
 
 class Audit:
     def record_event(self, *args, **kwargs): return None
+    def record_event_strict(self, *args, **kwargs): return None
 
 
 class CommercialQueries:

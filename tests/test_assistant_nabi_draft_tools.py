@@ -20,6 +20,7 @@ class Security:
 class Audit:
     def __init__(self): self.events = []
     def record_event(self, *args, **kwargs): self.events.append((args, kwargs))
+    def record_event_strict(self, *args, **kwargs): self.events.append((args, kwargs))
 
 
 class Queries:
