@@ -3005,3 +3005,37 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - o material é chamado de pacote de fontes, nunca de EFD, PGDAS, SPED ou DRE
   contábil, e não apura imposto. Nenhum schema, regra de negócio, Fiscal
   operacional/SEFAZ, Qt, Nabi, backup, Caixa, licença ou banco real foi alterado.
+
+### Central do Contador Qt — preparação e exportação segura
+
+- branch/worktree isolados: `codex/central-contador-qt` em
+  `NabiCode-QT-CentralContador-codex`, derivados exatamente do pacote em camadas
+  `885cd75` e sem conexão ao shell ou `main_qt.py`;
+- implementação: `74f3539` — `feat: adiciona Central do Contador Qt`;
+- a tela apresenta competência, CNPJ confirmado e destino, com Essencial e
+  Completo como caminhos principais e Auditoria somente em opção avançada;
+- os três perfis usam exclusivamente `AccountantMonthlyPackageService` e não
+  oferecem filtros para omitir movimentos. A interface explica conteúdos,
+  pendências externas, separação entre competência/caixa e que o pacote não é
+  EFD, PGDAS, SPED, DRE contábil nem apuração tributária;
+- revisão e geração são ações separadas. A revisão produz plano imutável com
+  SHA-256 vinculado a CNPJ, competência, perfil, destino e operador; qualquer
+  alteração invalida a geração. Sessão e `relatorios/generate` são revalidadas
+  nas duas ações, e troca de operador falha fechada;
+- exportação roda por `QThreadPool`, bloqueia reentrada, descarta resultado
+  atrasado e preserva Enter, Shift+Enter, Esc e consumo de auto-repeat;
+- o semáforo mostra somente estados reais `CONCILIADO`, `PENDENTE` ou
+  `DIVERGENTE`, além de quantidade de arquivos, movimentos e pendências. Nunca
+  antecipa sucesso nem substitui a revisão do contador;
+- defeito histórico de determinismo corrigido: o `openpyxl` atualizava o campo
+  interno `modified` do XLSX durante `save()`, alterando ZIP/hash conforme o
+  segundo do relógio. O metadado agora é normalizado e o teste atravessa um
+  segundo entre duas exportações idênticas;
+- validação focada da Central/pacote/reconciliação: `35 passed`; regressão
+  ampliada de pacote, relatórios, segurança e Qt: `86 passed`; `compileall` e
+  `git diff --check` aprovados;
+- não foram alterados Fiscal/SEFAZ operacional, IA, banco real, shell,
+  `main_qt.py` ou regras contábeis/tributárias;
+- próximo passo: revisão cruzada, merge normal na consolidada e somente depois
+  composição explícita no menu autorizado. Homologação visual Windows e geração
+  em banco TESTE continuam obrigatórias antes de promoção.
