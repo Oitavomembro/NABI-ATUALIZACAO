@@ -144,25 +144,177 @@ def test_extra_module_goes_to_sidebar_without_reordering_legacy(qt_application):
         shell.close()
 
 
-def test_primary_module_is_embedded_and_reused_in_shell(qt_application):
+def test_customers_and_products_open_as_reused_maximized_windows(qt_application):
     created = []
     def factory(parent):
         dialog = QDialog(parent); created.append(dialog); return dialog
     customers = AdministrativeModule(
         "Clientes", "Cadastro", "F3", "clientes", "view", factory, "clientes"
     )
+    products = AdministrativeModule(
+        "Produtos", "Catálogo", "F4", "produtos", "view", factory, "produtos"
+    )
     shell = NabiCodeShellWindow(
-        Security(), (dashboard_module(), customers), lambda: QMainWindow()
+        Security(), (dashboard_module(), customers, products), lambda: QMainWindow()
     )
     try:
         assert shell.show_module("clientes") is True
-        assert shell.pages.currentWidget() is created[0]
-        assert created[0].isWindow() is False
+        qt_application.processEvents()
+        assert shell._wide_windows["clientes"] is created[0]
+        assert created[0].isWindow() is True
+        assert created[0].isMaximized() is True
         assert shell.show_module("clientes") is True
         assert len(created) == 1
         assert "border:3px solid #ffffff" in shell.navigation_buttons["clientes"].styleSheet()
-        created[0].reject(); qt_application.processEvents()
+        assert shell.show_module("produtos") is True
+        qt_application.processEvents()
+        assert created[1].isMaximized() is True
+        created[1].reject(); qt_application.processEvents()
         assert shell._active_module == "dashboard"
+    finally:
+        shell.close()
+
+
+def test_summary_cards_open_the_matching_authorized_customer_filter(qt_application):
+    opened = []
+    def filtered(parent, segment, title):
+        opened.append((segment, title))
+        return QDialog(parent)
+    customers = AdministrativeModule(
+        "Clientes", "Cadastro", "F3", "clientes", "view", lambda p: QDialog(p),
+        "clientes", filtered_factory=filtered,
+    )
+    security = Security()
+    shell = NabiCodeShellWindow(
+        security, (dashboard_module(), customers), lambda: QMainWindow()
+    )
+    try:
+        for key, expected in (
+            ("total", "all"), ("current", "current"),
+            ("owing", "owing"), ("alert", "alert"),
+        ):
+            assert shell.open_customer_segment(key) is True
+            qt_application.processEvents()
+            assert opened[-1][0] == expected
+            assert shell._wide_windows["clientes"].property("customerSegment") == expected
+        assert security.touches >= 4
+    finally:
+        shell.close()
+
+
+def test_summary_card_arrows_move_focus_and_enter_keeps_single_action(qt_application):
+    customers = AdministrativeModule(
+        "Clientes", "Cadastro", "F3", "clientes", "view", lambda p: QDialog(p),
+        "clientes", filtered_factory=lambda p, _segment, _title: QDialog(p),
+    )
+    shell = NabiCodeShellWindow(
+        Security(), (dashboard_module(), customers), lambda: QMainWindow()
+    )
+    shell.open_customer_segment = Mock(return_value=True)
+    try:
+        shell.show(); shell.summary_labels["total"].setFocus(); qt_application.processEvents()
+        down = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Down, Qt.KeyboardModifier.NoModifier)
+        assert shell.eventFilter(shell.summary_labels["total"], down) is True
+        qt_application.processEvents(); assert shell.summary_labels["current"].hasFocus()
+        enter = QKeyEvent(QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier)
+        assert shell.eventFilter(shell.summary_labels["current"], enter) is True
+        shell.open_customer_segment.assert_called_once_with("current")
+    finally:
+        shell.close()
+
+
+def test_footer_actions_inherit_the_shell_theme(qt_application):
+    shell = NabiCodeShellWindow(Security(), (dashboard_module(),), Mock())
+    try:
+        for button in (shell.help_button, shell.support_button, shell.panic_button):
+            assert button.property("shellFooterAction") is True
+            assert button.styleSheet() == ""
+        assert 'QPushButton[shellFooterAction="true"]' in shell.styleSheet()
+    finally:
+        shell.close()
+
+
+def test_navigation_arrows_move_focus_and_enter_activates_once(qt_application):
+    pdv = QMainWindow()
+    factory = Mock(return_value=pdv)
+    shell = NabiCodeShellWindow(Security(), (dashboard_module(),), factory)
+    try:
+        shell.show(); shell.navigation_buttons["dashboard"].setFocus()
+        qt_application.processEvents()
+        right = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Right, Qt.KeyboardModifier.NoModifier
+        )
+        assert shell.eventFilter(shell.navigation_buttons["dashboard"], right) is True
+        qt_application.processEvents()
+        assert shell.navigation_buttons["vendas"].hasFocus()
+        enter = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return, Qt.KeyboardModifier.NoModifier
+        )
+        assert shell.eventFilter(shell.navigation_buttons["vendas"], enter) is True
+        factory.assert_called_once_with()
+    finally:
+        shell.close()
+
+
+def test_secret_menu_requires_permission_and_administrative_password(qt_application):
+    technical = AdministrativeModule(
+        "Auditoria", "Acessos", "Ctrl+L", "technical", "audit",
+        lambda p: QDialog(p), "auditoria",
+    )
+    security = Mock()
+    security.session = SimpleNamespace(user=SimpleNamespace(display_name="Administrador"))
+    security.is_expired.return_value = False
+    security.require.return_value = True
+    security.confirm_manager_password.return_value = True
+    shell = NabiCodeShellWindow(
+        security, (dashboard_module(), technical), lambda: QMainWindow()
+    )
+    try:
+        hub = Mock(spec=QDialog)
+        with patch(
+            "ui_qt.shell.main_window.QInputDialog.getText", return_value=("senha", True)
+        ), patch("ui_qt.shell.main_window._create_administrative_hub", return_value=hub) as factory:
+            assert shell.open_restricted_menu() is True
+        security.require.assert_any_call("technical", "view")
+        security.confirm_manager_password.assert_called_once_with("senha")
+        assert factory.call_args.args[1] == (technical,)
+        hub.exec.assert_called_once_with()
+
+        security.require.return_value = False
+        security.confirm_manager_password.reset_mock()
+        with patch("ui_qt.shell.main_window.QInputDialog.getText") as password, patch(
+            "ui_qt.shell.main_window.QMessageBox.warning"
+        ):
+            assert shell.open_restricted_menu() is False
+        password.assert_not_called()
+        security.confirm_manager_password.assert_not_called()
+
+        security.require.return_value = True
+        security.confirm_manager_password.return_value = False
+        with patch(
+            "ui_qt.shell.main_window.QInputDialog.getText", return_value=("errada", True)
+        ), patch("ui_qt.shell.main_window._create_administrative_hub") as factory, patch(
+            "ui_qt.shell.main_window.QMessageBox.warning"
+        ):
+            assert shell.open_restricted_menu() is False
+        factory.assert_not_called()
+    finally:
+        shell.close()
+
+
+def test_secret_menu_only_triggers_after_ten_clicks_inside_legacy_window(qt_application):
+    shell = NabiCodeShellWindow(Security(), (dashboard_module(),), Mock())
+    shell.open_restricted_menu = Mock(return_value=True)
+    try:
+        with patch("ui_qt.shell.main_window.time.monotonic", side_effect=[1.0 + i / 10 for i in range(10)]):
+            assert [shell._logo_clicked() for _ in range(9)] == [False] * 9
+            assert shell._logo_clicked() is True
+        shell.open_restricted_menu.assert_called_once_with()
+
+        shell.open_restricted_menu.reset_mock()
+        with patch("ui_qt.shell.main_window.time.monotonic", side_effect=[10.0,10.1,16.0]+[16.1+i/10 for i in range(8)]):
+            assert [shell._logo_clicked() for _ in range(11)] == [False] * 11
+        shell.open_restricted_menu.assert_not_called()
     finally:
         shell.close()
 

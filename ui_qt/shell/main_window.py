@@ -1,15 +1,22 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import time
 
 from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-    QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget, QInputDialog,
 )
 
 from commercial.domain.money import MoneyCodec
+
+
+def _create_administrative_hub(security, modules, parent, **kwargs):
+    # Import tardio: o shell também é usado durante a composição da aplicação.
+    from ui_qt.administration.module_hub import AdministrativeModuleHub
+    return AdministrativeModuleHub(security, modules, parent, **kwargs)
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +51,23 @@ QPushButton { color:#f0f6fc; border:0; border-radius:12px; min-height:44px;
  font-size:14px; font-weight:800; padding:0 12px; }
 QPushButton:focus { border:3px solid #ffffff; }
 QPushButton:disabled { color:#8b949e; background:#21262d; }
+QPushButton[shellFooterAction="true"] {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,
+ stop:0 #314354,stop:0.12 #22303d,stop:1 #101821);
+ border:1px solid #42576a; border-left:5px solid #00d084;
+ border-bottom:4px solid #071019; text-align:left;
+}
+QPushButton[shellFooterAction="true"]:hover { border-top:2px solid #00e5ff; }
+QPushButton[shellFooterAction="true"]:pressed { background:#09111a; border-bottom:1px solid #071019; }
+QPushButton#panicAction { border-left:5px solid #ff3b5c; }
+QPushButton#summaryCard {
+ background:qlineargradient(x1:0,y1:0,x2:1,y2:1,
+ stop:0 #303a46,stop:0.18 #202833,stop:1 #11161d);
+ border:1px solid #3b4654; border-left:5px solid #00d084;
+ border-radius:8px; min-height:42px; padding:8px 10px;
+ font-size:13px; font-weight:800; text-align:left;
+}
+QPushButton#summaryCard:hover { border-top:2px solid #00e5ff; }
 """
 
 
@@ -91,6 +115,14 @@ class _SummaryWorker(QRunnable):
 class NabiCodeShellWindow(QMainWindow):
     """Janela principal com a mesma hierarquia operacional do NabiCode Legacy."""
 
+    WIDE_PRIMARY_MODULES = frozenset({"clientes", "produtos"})
+    CUSTOMER_SEGMENTS = {
+        "total": ("all", "TODOS OS CLIENTES"),
+        "current": ("current", "CLIENTES EM DIA"),
+        "owing": ("owing", "CLIENTES DEVENDO"),
+        "alert": ("alert", "ATRASADOS HÁ MAIS DE 60 DIAS"),
+    }
+
     def __init__(
         self, security, modules, pdv_factory, *, store_name="NabiCode",
         profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None, parent=None,
@@ -104,10 +136,13 @@ class NabiCodeShellWindow(QMainWindow):
         self._modules = {m.module_id: m for m in self.modules if m.module_id}
         self._open_dialogs = {}
         self._module_pages = {}
+        self._wide_windows = {}
         self._pdv_window = None
         self._shortcuts = []
         self._summary_generation = 0
         self._summary_workers = []
+        self._logo_clicks = 0
+        self._last_logo_click = 0.0
         self.worker_pool = QThreadPool(self)
         self.worker_pool.setMaxThreadCount(2)
         self._active_module = "dashboard"
@@ -130,22 +165,25 @@ class NabiCodeShellWindow(QMainWindow):
     def _build_side_menu(self):
         frame = QFrame(objectName="sideMenu"); frame.setFixedWidth(300)
         root = QVBoxLayout(frame); root.setContentsMargins(14, 20, 14, 16); root.setSpacing(10)
-        logo = QLabel("NABICODE"); logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;padding:10px;letter-spacing:1px")
-        root.addWidget(logo); self.summary_labels = {}
+        self.logo = QLabel("NABICODE"); self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.logo.setAccessibleName("NabiCode")
+        self.logo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.logo.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;padding:10px;letter-spacing:1px")
+        self.logo.installEventFilter(self)
+        root.addWidget(self.logo); self.summary_labels = {}
         for key, text, accent, color in (
             ("total", "Fichas: —", "#8b949e", "#ffffff"),
             ("current", "Em Dia: —", "#2ea043", "#5df2a1"),
             ("owing", "Devendo: —", "#bf8700", "#ffd866"),
             ("alert", "Alerta (>60d): —", "#da3633", "#ff8582"),
         ):
-            label = QLabel(text)
-            label.setMinimumHeight(42)
-            label.setStyleSheet(
-                "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                "stop:0 #303a46,stop:0.18 #202833,stop:1 #11161d);"
-                f"color:{color};border:1px solid #3b4654;border-left:5px solid {accent};"
-                "border-radius:8px;padding:10px;font-size:13px;font-weight:800"
+            label = QPushButton(text, objectName="summaryCard")
+            label.setAccessibleName(text)
+            label.setProperty("summaryAccent", accent)
+            label.setStyleSheet(f"QPushButton{{color:{color};border-left:5px solid {accent}}}")
+            label.installEventFilter(self)
+            label.clicked.connect(
+                lambda _checked=False, selected=key: self.open_customer_segment(selected)
             )
             root.addWidget(label); self.summary_labels[key] = label
         shortcuts = QLabel("ATALHOS RÁPIDOS\n\n[F1]  Início\n[F2]  Vendas\n[F3]  Clientes\n[F4]  Produtos\n[F5]  Configs\n[Ctrl+Shift+P]  Pânico")
@@ -167,11 +205,11 @@ class NabiCodeShellWindow(QMainWindow):
             root.addWidget(button)
             self.favorite_buttons[module.module_id] = button
         root.addStretch()
-        self.help_button = QPushButton("Central de Ajuda"); self.help_button.setStyleSheet("background:#1f6feb")
+        self.help_button = QPushButton("Central de Ajuda"); self.help_button.setProperty("shellFooterAction", True)
         self.help_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.help_button)
-        self.support_button = QPushButton("Ajuda / suporte"); self.support_button.setStyleSheet("background:#2ea043")
+        self.support_button = QPushButton("Ajuda / suporte"); self.support_button.setProperty("shellFooterAction", True)
         self.support_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.support_button)
-        self.panic_button = QPushButton("Pânico  [Ctrl+Shift+P]"); self.panic_button.setStyleSheet("background:#b62324")
+        self.panic_button = QPushButton("Pânico  [Ctrl+Shift+P]", objectName="panicAction"); self.panic_button.setProperty("shellFooterAction", True)
         self.panic_button.clicked.connect(self.close); root.addWidget(self.panic_button)
         footer = QLabel("NabiCode"); footer.setAlignment(Qt.AlignmentFlag.AlignCenter)
         footer.setStyleSheet("color:#8b949e;font-size:10px"); root.addWidget(footer)
@@ -226,6 +264,11 @@ class NabiCodeShellWindow(QMainWindow):
         self.menu_toggle.setText("Menu  ✕" if visible else "Menu  ➜")
 
     def _authorized(self, module):
+        self._authorize_permission(
+            module.permission_module, module.permission_action, module.label
+        )
+
+    def _authorize_permission(self, permission_module, permission_action, label):
         session = getattr(self.security, "session", None)
         if session is None or self.security.is_expired():
             if self.reauthenticate is None or self._reauthenticating:
@@ -238,8 +281,8 @@ class NabiCodeShellWindow(QMainWindow):
             session = getattr(self.security, "session", None)
             if not authenticated or session is None or self.security.is_expired():
                 raise PermissionError("Autenticação cancelada. A ação permanece bloqueada.")
-        if not self.security.require(module.permission_module, module.permission_action):
-            raise PermissionError(f"Seu perfil não possui permissão para abrir {module.label}.")
+        if not self.security.require(permission_module, permission_action):
+            raise PermissionError(f"Seu perfil não possui permissão para abrir {label}.")
         self.security.touch()
 
     def _mark_active(self, module_id):
@@ -304,6 +347,8 @@ class NabiCodeShellWindow(QMainWindow):
             return False
         try:
             self._authorized(module)
+            if module_id in self.WIDE_PRIMARY_MODULES:
+                return self._show_wide_module(module_id, module.factory)
             page = self._module_pages.get(module_id)
             if page is None:
                 page = module.factory(self.pages)
@@ -323,6 +368,93 @@ class NabiCodeShellWindow(QMainWindow):
         except Exception as error:
             QMessageBox.warning(self, module.label, str(error))
             return False
+
+    def _show_wide_module(self, module_id, factory, *, segment=""):
+        current = self._wide_windows.get(module_id)
+        if current is not None and current.isVisible():
+            if str(current.property("customerSegment") or "") == segment:
+                current.showMaximized(); current.raise_(); current.activateWindow()
+                self._mark_active(module_id)
+                return True
+            current.close()
+        dialog = factory(self)
+        if not isinstance(dialog, QDialog):
+            raise TypeError("O módulo deve fornecer uma janela Qt.")
+        dialog.setModal(False)
+        dialog.setProperty("customerSegment", segment)
+        self._wide_windows[module_id] = dialog
+        dialog.finished.connect(
+            lambda _result, selected=module_id, opened=dialog:
+            self._wide_module_closed(selected, opened)
+        )
+        dialog.showMaximized(); dialog.raise_(); dialog.activateWindow()
+        self._mark_active(module_id)
+        return True
+
+    def _wide_module_closed(self, module_id, dialog):
+        if self._wide_windows.get(module_id) is dialog:
+            self._wide_windows.pop(module_id, None)
+        if self._active_module == module_id:
+            self.show_module("dashboard")
+
+    def open_customer_segment(self, summary_key):
+        module = self._modules.get("clientes")
+        segment_data = self.CUSTOMER_SEGMENTS.get(str(summary_key))
+        if module is None or module.filtered_factory is None or segment_data is None:
+            return False
+        segment, title = segment_data
+        try:
+            self._authorized(module)
+            return self._show_wide_module(
+                "clientes",
+                lambda parent: module.filtered_factory(parent, segment, title),
+                segment=segment,
+            )
+        except Exception as error:
+            QMessageBox.warning(self, module.label, str(error))
+            return False
+
+    def _logo_clicked(self):
+        now = time.monotonic()
+        if now - self._last_logo_click > 5.0:
+            self._logo_clicks = 0
+        self._last_logo_click = now
+        self._logo_clicks += 1
+        if self._logo_clicks < 10:
+            return False
+        self._logo_clicks = 0
+        return self.open_restricted_menu()
+
+    def open_restricted_menu(self):
+        try:
+            self._authorize_permission("technical", "view", "Menu Técnico")
+        except Exception as error:
+            QMessageBox.warning(self, "Acesso negado", str(error))
+            return False
+        password, accepted = QInputDialog.getText(
+            self, "Acesso ao Menu Técnico", "Digite a senha administrativa:",
+            QLineEdit.EchoMode.Password,
+        )
+        if not accepted:
+            return False
+        confirm = getattr(self.security, "confirm_manager_password", None)
+        if not callable(confirm) or not confirm(password):
+            QMessageBox.warning(self, "Acesso negado", "Senha administrativa incorreta.")
+            return False
+        technical_modules = tuple(
+            module for module in self.modules if module.permission_module == "technical"
+        )
+        if not technical_modules:
+            QMessageBox.information(
+                self, "Menu Técnico", "Nenhum módulo técnico está disponível nesta edição."
+            )
+            return False
+        hub = _create_administrative_hub(
+            self.security, technical_modules, self,
+            window_title="Menu Técnico NabiCode", heading="MENU TÉCNICO NABICODE",
+        )
+        hub.exec()
+        return True
 
     def _primary_page_closed(self, module_id):
         if self._active_module == module_id:
@@ -394,11 +526,58 @@ class NabiCodeShellWindow(QMainWindow):
         self.summary_labels["alert"].setText(f"Alerta (>60d): {value}")
 
     def eventFilter(self, watched, event):
-        if watched in self.navigation_buttons.values() and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+        if watched is getattr(self, "logo", None) and event.type() == QEvent.Type.MouseButtonRelease:
+            if event.button() == Qt.MouseButton.LeftButton:
+                event.accept(); self._logo_clicked(); return True
+        navigation_buttons = getattr(self, "navigation_buttons", {})
+        summary_buttons = tuple(getattr(self, "summary_labels", {}).values())
+        if watched in summary_buttons and event.type() == QEvent.Type.KeyPress and event.key() in {
+            Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Up, Qt.Key.Key_Down,
+        }:
             event.accept()
             if event.isAutoRepeat(): return True
-            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier: watched.focusPreviousChild()
-            else: watched.click()
+            index = summary_buttons.index(watched)
+            if event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter} and not (
+                event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ):
+                watched.click()
+            else:
+                delta = -1 if event.key() in {
+                    Qt.Key.Key_Up, Qt.Key.Key_Return, Qt.Key.Key_Enter,
+                } else 1
+                target = max(0, min(len(summary_buttons) - 1, index + delta))
+                summary_buttons[target].setFocus(Qt.FocusReason.OtherFocusReason)
+            return True
+        if watched in navigation_buttons.values() and event.type() == QEvent.Type.KeyPress and event.key() in {
+            Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Left,
+            Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down,
+        }:
+            event.accept()
+            if event.isAutoRepeat(): return True
+            key = event.key()
+            if key in {Qt.Key.Key_Return, Qt.Key.Key_Enter} and not (
+                event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ):
+                watched.click()
+            else:
+                ordered = tuple(navigation_buttons.values())
+                if key in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+                    enabled = tuple(button for button in ordered if button.isEnabled())
+                    index = enabled.index(watched)
+                    enabled[max(0, index - 1)].setFocus(Qt.FocusReason.OtherFocusReason)
+                else:
+                    index = ordered.index(watched)
+                    row, column = divmod(index, 3)
+                    row_step, column_step = {
+                        Qt.Key.Key_Left: (0, -1), Qt.Key.Key_Right: (0, 1),
+                        Qt.Key.Key_Up: (-1, 0), Qt.Key.Key_Down: (1, 0),
+                    }[key]
+                    while True:
+                        row += row_step; column += column_step
+                        if not (0 <= row < 3 and 0 <= column < 3): break
+                        candidate = ordered[row * 3 + column]
+                        if candidate.isEnabled():
+                            candidate.setFocus(Qt.FocusReason.OtherFocusReason); break
             return True
         return super().eventFilter(watched, event)
 
@@ -406,6 +585,7 @@ class NabiCodeShellWindow(QMainWindow):
         self._summary_generation += 1
         if self._pdv_window is not None: self._pdv_window.close()
         for dialog in tuple(self._open_dialogs.values()): dialog.close()
+        for dialog in tuple(self._wide_windows.values()): dialog.close()
         for page in tuple(self._module_pages.values()): page.close()
         self.worker_pool.clear()
         self.worker_pool.waitForDone(3000)
