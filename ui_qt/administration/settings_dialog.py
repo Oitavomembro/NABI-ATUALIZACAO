@@ -43,6 +43,8 @@ class SettingsDialog(QDialog):
     def __init__(self, service, parent=None, *, company_profile_service=None):
         super().__init__(parent)
         self.service = service
+        self._visual_dirty = False
+        self._original_visual = None
         self.company_profile_service = company_profile_service
         self.setWindowTitle("Configurações do NabiCode")
         self.resize(780, 600)
@@ -226,6 +228,7 @@ class SettingsDialog(QDialog):
             self.reject(); return
         self.identity.setText(f"Preferências do usuário: {snapshot.username}")
         values = snapshot.preferences
+        self._original_visual = dict(values)
         self.mode.setCurrentText(values["mode"])
         self.workspace.setCurrentText(values["workspace"])
         self.density.setCurrentText(values["density"])
@@ -327,6 +330,9 @@ class SettingsDialog(QDialog):
                 "background_image": self.background_image.text(),
             })
             self.service.save_preferences(current)
+            self._visual_dirty = False
+            self._original_visual = dict(current)
+            self._apply_visual_to_shell(current)
             QMessageBox.information(self, "Configurações", "Preferências salvas para este usuário.")
         except Exception as error:
             QMessageBox.warning(self, "Configurações", str(error))
@@ -371,6 +377,19 @@ class SettingsDialog(QDialog):
             f"QLabel{{color:{safe['text_color']};font-weight:800}}"
             f"QPushButton{{background:{safe['common_button_background']};color:{safe['text_color']};border:2px solid {safe['focus_color']};border-radius:7px}}"
         )
+        self._apply_visual_to_shell(safe)
+        self._visual_dirty = True
+
+    def _apply_visual_to_shell(self, values) -> None:
+        window = self.parent().window() if self.parent() is not None else None
+        apply = getattr(window, "apply_visual_preferences", None)
+        if callable(apply):
+            apply(values)
+
+    def reject(self) -> None:
+        if self._visual_dirty and self._original_visual is not None:
+            self._apply_visual_to_shell(self._original_visual)
+        super().reject()
 
     def _choose_directory(self, target: QLineEdit) -> None:
         selected = QFileDialog.getExistingDirectory(self, "Escolher pasta de backup", target.text())

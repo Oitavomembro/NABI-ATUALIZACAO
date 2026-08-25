@@ -435,6 +435,20 @@ def main(argv=None) -> int:
 
         license_timer.timeout.connect(monitor_license)
         license_timer.start()
+        from core.config_manager import ConfigManager
+        from services.ui_preferences import UIPreferencesService
+        visual_config = ConfigManager(
+            profile.paths.config / "sistema.json",
+            {"interface": UIPreferencesService.DEFAULTS, "interface_usuarios": {}},
+        )
+        visual_users = visual_config.get("interface_usuarios", {})
+        visual_key = UIPreferencesService.user_key(module_security.session.user.username)
+        visual_values = (
+            visual_users.get(visual_key)
+            if isinstance(visual_users, dict) else None
+        )
+        if not isinstance(visual_values, dict):
+            visual_values = visual_config.get("interface", {})
         return run_shell(
             container.application,
             module_security,
@@ -455,6 +469,7 @@ def main(argv=None) -> int:
                 == QDialog.DialogCode.Accepted
             ),
             daily_backup_service=daily_backup,
+            visual_preferences=UIPreferencesService.normalize(visual_values),
         )
     except Exception as error:
         splash.close()

@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import time
+from pathlib import Path
 
-from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QObject, QRunnable, QSize, QThreadPool, Qt, Signal, Slot
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPixmap, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
@@ -115,6 +116,43 @@ class _SummaryWorker(QRunnable):
         self.signals.completed.emit(self.generation, result, error)
 
 
+class VisualShellRoot(QWidget):
+    """Fundo visual; não interfere em cores semânticas dos módulos."""
+
+    def __init__(self, parent=None):
+        super().__init__(parent); self.setObjectName("shellRoot")
+        self._visual = {}; self._pixmap = QPixmap()
+
+    def apply_visual(self, values):
+        self._visual = dict(values or {})
+        path = Path(str(self._visual.get("background_image") or ""))
+        self._pixmap = QPixmap(str(path)) if path.is_file() else QPixmap()
+        self.update()
+
+    def paintEvent(self, event):
+        super().paintEvent(event)
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor(self._visual.get("window_background", "#0d1117")))
+        if self._visual.get("background_enabled") and not self._pixmap.isNull():
+            painter.save(); painter.setOpacity(float(self._visual.get("background_opacity", 0.10)))
+            mode = self._visual.get("background_scale", "automática")
+            if mode == "pequena":
+                target_size = QSize(max(1, int(self.width() * 0.35)), max(1, int(self.height() * 0.35)))
+                target = self._pixmap.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            elif mode == "média":
+                target_size = QSize(max(1, int(self.width() * 0.65)), max(1, int(self.height() * 0.65)))
+                target = self._pixmap.scaled(target_size, Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            elif mode == "grande":
+                target = self._pixmap.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatio, Qt.TransformationMode.SmoothTransformation)
+            else:
+                target = self._pixmap.scaled(self.size(), Qt.AspectRatioMode.KeepAspectRatioByExpanding, Qt.TransformationMode.SmoothTransformation)
+            x = (self.width() - target.width()) // 2
+            position = self._visual.get("background_position", "centro")
+            y = 0 if position == "superior" else self.height() - target.height() if position == "inferior" else (self.height() - target.height()) // 2
+            painter.drawPixmap(x, y, target); painter.restore()
+        painter.end()
+
+
 class NabiCodeShellWindow(QMainWindow):
     """Janela principal com a mesma hierarquia operacional do NabiCode Legacy."""
 
@@ -128,7 +166,8 @@ class NabiCodeShellWindow(QMainWindow):
 
     def __init__(
         self, security, modules, pdv_factory, *, store_name="NabiCode",
-        profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None, parent=None,
+        profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None,
+        visual_preferences=None, parent=None,
     ) -> None:
         super().__init__(parent)
         self.security = security
@@ -154,7 +193,8 @@ class NabiCodeShellWindow(QMainWindow):
         self.resize(1360, 820)
         self.setMinimumSize(1024, 680)
         self.setStyleSheet(SHELL_STYLE)
-        root = QWidget(objectName="shellRoot")
+        root = VisualShellRoot()
+        self.shell_root = root
         self.setCentralWidget(root)
         layout = QHBoxLayout(root); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(0)
         self.side_menu = self._build_side_menu(); layout.addWidget(self.side_menu)
@@ -164,7 +204,21 @@ class NabiCodeShellWindow(QMainWindow):
         body_layout.addLayout(self._build_navigation())
         self.pages = QStackedWidget(objectName="shellPages"); body_layout.addWidget(self.pages, 1)
         layout.addWidget(body, 1)
-        self._install_shortcuts(); self.show_module("dashboard")
+        self._install_shortcuts(); self.apply_visual_preferences(visual_preferences or {})
+        self.show_module("dashboard")
+
+    def apply_visual_preferences(self, values) -> None:
+        from services.ui_preferences import UIPreferencesService
+        safe = UIPreferencesService.validate_visual(values)
+        self.shell_root.apply_visual(safe)
+        self.setStyleSheet(SHELL_STYLE + f"""
+            QWidget#shellRoot {{ background:transparent; color:{safe['text_color']}; }}
+            QFrame#sideMenu, QScrollArea#sideMenuScroll {{ background:{safe['window_background']}; }}
+            QPushButton[shellFooterAction="true"] {{
+                color:{safe['text_color']}; background:{safe['common_button_background']};
+            }}
+            QPushButton[shellFooterAction="true"]:focus {{ border:3px solid {safe['focus_color']}; }}
+        """)
 
     def _build_side_menu(self):
         frame = QFrame(objectName="sideMenu")
