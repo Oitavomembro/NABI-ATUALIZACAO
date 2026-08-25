@@ -2929,3 +2929,45 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   FICHÁRIO, alterar serviços ou misturar a modernização com Fiscal/SEFAZ/IA;
 - a composição global e os módulos fora desta branch precisam ser coordenados
   com a conversa integradora para evitar colisão de arquivos.
+
+### Shell metálico com esqueleto Legacy
+
+- branch/worktree: `codex/shell-metalico-esqueleto-legacy`, derivada exatamente
+  de `b3bfba8b87f5dc3dddd8aed96a355a365a92ab69`;
+- implementação: `7ff54f3` — `style: restaura shell metalico em cinco colunas`;
+- a navegação voltou ao esqueleto comprovado do Legacy, com cinco colunas
+  responsivas: Início, Vendas, Clientes, Produtos, Financeiro / Caixa, Central
+  Fiscal, Relatórios e Configs;
+- ordem, atalhos, disponibilidade, permissões, sidebar, resumo, favoritos,
+  Menu, Histórico, Ajuda, suporte e Pânico foram preservados; Central Fiscal
+  continua desabilitada no Qt e orienta para o Legacy oficial;
+- a paleta Tron multicolorida deixou de ser renderizada nos cartões principais;
+  aço/grafite/prata são uniformes, ciano marca discretamente foco/seleção e
+  vermelho permanece somente em Pânico e alerta;
+- validação focada: `18 passed`; regressão ampliada de shell, composição,
+  startup e Nabi: `37 passed`; `compileall` e `git diff --check` aprovados;
+- Vendas/PDV e os módulos internos não foram alterados; homologação visual em
+  escalas diferentes do Windows permanece obrigatória antes de integrar.
+
+#### Personalização visual futura autorizada
+
+- Configurações deverá oferecer temas predefinidos por usuário, inicialmente
+  Metálico, Escuro clássico, Claro e Alto contraste, com opção de lembrar a
+  escolha; posição, hierarquia, atalhos e cores semânticas de risco não mudam;
+- após licença válida e autenticação/primeiro acesso, uma escolha inicial poderá
+  mostrar somente modos permitidos pela licença e oferecer `Lembrar minha
+  escolha`; a mesma seleção deve permanecer acessível em Configurações;
+- fluxo detalhado solicitado: licença válida → escolher criar login ou operar
+  sem login somente quando a edição/política assinada permitir → escolher modo
+  licenciado → executar configuração inicial guiada;
+- no modo Comercial/não fiscal, a configuração inicial deve reunir nome da
+  loja, CNPJ opcional, pasta/política de backup e preferências necessárias; no
+  modo Fiscal, deve abrir exclusivamente as configurações fiscais oficiais já
+  existentes, sem transmitir nem declarar homologação durante o assistente;
+- todas as escolhas permanecem revisáveis depois em Configurações. Operação sem
+  login nunca libera Fiscal, administração ou função restrita; modo Fiscal exige
+  capacidade fiscal assinada, usuário autenticado e configuração obrigatória;
+- a seleção de tema ou modo nunca pode revelar módulo restrito, ampliar
+  capacidade assinada, contornar permissão ou alterar Fiscal/SEFAZ;
+- implementar em checkpoint coordenado de Configurações/startup, não neste
+  shell isolado.
