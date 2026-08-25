@@ -2881,3 +2881,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Caixa assistido pela Nabi — mutações seguras
+
+- branch/worktree isolados: `codex/nabi-caixa-assistido` em
+  `NabiCode-QT-NabiCaixa-codex`, derivada da consolidada `1cfdfa4`;
+- implementação: `c00b850` — `feat: cria caixa assistido seguro para Nabi`;
+- a Nabi ganhou ferramentas exclusivamente de rascunho para abertura, sangria,
+  suprimento e fechamento. Rascunhar não grava e o modelo não recebe acesso ao
+  banco, GUI livre ou autoria fornecida por texto;
+- a ativação transporta a sessão realmente autenticada até a composição. As
+  operações exigem `financeiro/pay`, operador ativo, revisão e confirmação
+  reforçada vinculada ao fingerprint do conteúdo;
+- abertura, sangria e suprimento usam o serviço oficial do Caixa com transação
+  `BEGIN IMMEDIATE`, auditoria e `assistant_operation_journal` confirmados na
+  mesma transação. Repetição da mesma chave retorna o resultado gravado;
+  divergência de conteúdo ou tipo falha fechada e não duplica efeitos;
+- o painel somente informa sucesso depois do retorno do serviço oficial. A
+  autorização é consumida uma vez e a troca da sessão de caixa invalida o
+  rascunho;
+- fechamento assistido permanece explicitamente **bloqueado**: o resumo e o
+  fechamento existentes ainda não compartilham a mesma transação com o diário
+  idempotente. Nenhum improviso ou falsa confirmação foi criado; o fechamento
+  manual oficial continua intacto;
+- regressão ampliada de Nabi, Caixa, ativação, shell e composição: `227 passed`,
+  `38 subtests passed`; `compileall` e `git diff --check` aprovados;
+- Fiscal/SEFAZ, licenciamento, banco real e rede não foram usados ou alterados.
+  Não houve push;
+- próximo passo seguro: integrar por merge normal na consolidada e, em checkpoint
+  posterior, refatorar o fechamento oficial para cálculo + gravação + auditoria
+  + journal na mesma transação antes de liberar o fechamento para a Nabi.
