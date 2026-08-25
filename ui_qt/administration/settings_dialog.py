@@ -100,6 +100,12 @@ class SettingsDialog(QDialog):
         layout.addWidget(QLabel(
             "Backup do banco e dos documentos fiscais. Certificados, senhas e e-mails não são incluídos."
         ))
+        privacy = QLabel(
+            "Atenção: o backup contém dados pessoais e não é criptografado pelo NabiCode. "
+            "Use uma pasta protegida e com acesso restrito."
+        )
+        privacy.setWordWrap(True); privacy.setStyleSheet("color:#d29922;font-weight:700")
+        layout.addWidget(privacy)
         self.local_backup = QLineEdit()
         self.cloud_backup = QLineEdit()
         for title, field in (
@@ -286,10 +292,14 @@ class SettingsDialog(QDialog):
     def _create_backup(self) -> None:
         try:
             result = self.service.create_backup()
-            QMessageBox.information(
-                self, "Backup concluído",
-                "Arquivos criados:\n" + "\n".join(result.created),
-            )
+            created = "Arquivos criados:\n" + "\n".join(result.created)
+            if getattr(result, "errors", ()):
+                QMessageBox.warning(
+                    self, "Backup parcial",
+                    created + "\n\nDestinos com falha:\n" + "\n".join(result.errors),
+                )
+            else:
+                QMessageBox.information(self, "Backup concluído", created)
         except Exception as error:
             QMessageBox.warning(self, "Backup", str(error))
         self.backup_now.setFocus(Qt.FocusReason.OtherFocusReason)

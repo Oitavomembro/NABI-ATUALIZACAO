@@ -45,6 +45,7 @@ from services.admin_audit_service import AdminAuditService
 from services.security_service import SecurityService
 from services.report_service import ReportService
 from services.cash_service import CashService
+from services.backup_service import BackupService
 from services.assisted_product_stock_service import AssistedProductStockService
 from repositories.system_repository import SystemRepository
 from repositories.fornecedor_repository import FornecedorRepository
@@ -339,6 +340,13 @@ def main(argv=None) -> int:
             app_version=load_app_version("2.5.1", source_file=__file__),
             schema_version=SCHEMA_VERSION,
         )
+        daily_backup = BackupService(
+            database_path=database.database_path,
+            default_directory=profile.paths.backups,
+            get_config=system.get_config,
+            set_config=system.set_config,
+            fiscal_directory=profile.paths.fiscal,
+        )
         assistant_service, assistant_activation, nfe_entry_service = (
             _create_licensed_assistant(
                 database, profile, container, license_gate,
@@ -399,6 +407,7 @@ def main(argv=None) -> int:
                 ApplicationLoginDialog(module_security, parent).exec()
                 == QDialog.DialogCode.Accepted
             ),
+            daily_backup_service=daily_backup,
         )
     except Exception as error:
         splash.close()
