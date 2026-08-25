@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
@@ -20,6 +21,7 @@ class Package:
     def __init__(self):self.calls=[]
     def export(self,**kwargs):
         self.calls.append(kwargs)
+        Path(kwargs["output_path"]).write_bytes(b"pacote-contabil")
         return SimpleNamespace(path=kwargs["output_path"],cnpj=kwargs["cnpj"],competence=kwargs["competence"],profile=kwargs["profile"],status="PENDENTE",files=20,movements=7,pendencies=3)
     def normalize_request(self,**kwargs):return AccountantMonthlyPackageService.normalize_request(**kwargs)
 

@@ -6,6 +6,9 @@ from administration.audit_application_service import AuditApplicationService
 from administration.user_application_service import UserAdministrationService
 from commercial.application.cash_application_service import CashApplicationService
 from commercial.application.report_application_service import ReportApplicationService
+from commercial.application.accountant_center_service import AccountantCenterApplicationService
+from commercial.application.accountant_delivery_service import AccountantDeliveryApplicationService
+from commercial.infrastructure.accountant_delivery_gateway import LocalFolderAccountantDeliveryGateway
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
 from repositories.dashboard_repository import DashboardRepository
 from repositories.fornecedor_repository import FornecedorRepository
@@ -14,6 +17,7 @@ from services.backup_service import BackupService
 from services.admin_audit_service import AdminAuditService
 from services.cash_service import CashService
 from services.report_service import ReportService
+from services.accountant_monthly_package_service import AccountantMonthlyPackageService
 from services.system_diagnostics import SystemDiagnostics
 from services.printing_service import PrintingService
 from ui_qt.commercial.cash_dialog import CashDialog
@@ -22,6 +26,7 @@ from ui_qt.commercial.financial_dialog import FinancialDialog
 from ui_qt.commercial.product_management_dialog import ProductManagementDialog
 from ui_qt.commercial.purchase_dialog import PurchaseDialog
 from ui_qt.commercial.report_dialog import ReportDialog
+from ui_qt.commercial.accountant_center_dialog import AccountantCenterDialog
 from .dashboard_dialog import DashboardDialog
 from .module_hub import AdministrativeModule
 from .users_dialog import UsersDialog
@@ -61,6 +66,27 @@ def build_administrative_modules(
     if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p),"financeiro"))
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
     modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","","relatorios","view",lambda p:ReportDialog(reports,_username(security),p),"relatorios"))
+    accountant_center = AccountantCenterApplicationService(
+        AccountantMonthlyPackageService(database.connect, fiscal_service=None), security,
+    )
+    delivery_gateway = LocalFolderAccountantDeliveryGateway(
+        outbox_path=profile.paths.config / "entrega_contabil" / "outbox.sqlite3",
+        spool_dir=profile.paths.config / "entrega_contabil" / "pacotes_imutaveis",
+    )
+    accountant_delivery = AccountantDeliveryApplicationService(delivery_gateway, security)
+    modules.append(AdministrativeModule(
+        "Central do Contador",
+        "Gerar e entregar pacote mensal por ação humana",
+        "",
+        "relatorios",
+        "generate",
+        lambda p: AccountantCenterDialog(
+            accountant_center, p,
+            worker_pool=getattr(p.window(), "worker_pool", None) if p else None,
+            delivery_application=accountant_delivery,
+        ),
+        "contador",
+    ))
     users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p),"usuarios"))
     system = SystemRepository(database.connect)
     backups = BackupService(

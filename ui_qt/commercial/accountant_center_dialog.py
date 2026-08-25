@@ -40,9 +40,9 @@ class AccountantPackageWorker(QRunnable):
 class AccountantCenterDialog(QDialog):
     """Preparação/exportação mensal; não cria lançamentos nem apura tributos."""
 
-    def __init__(self, application, parent=None, *, worker_pool=None) -> None:
-        super().__init__(parent); self.application=application; self.pool=worker_pool or QThreadPool.globalInstance()
-        self._generation=0; self._busy=False; self._workers=[]; self._plan=None
+    def __init__(self, application, parent=None, *, worker_pool=None, delivery_application=None) -> None:
+        super().__init__(parent); self.application=application; self.delivery_application=delivery_application; self.pool=worker_pool or QThreadPool.globalInstance()
+        self._generation=0; self._busy=False; self._workers=[]; self._plan=None; self._outcome=None; self._delivery_dialog=None
         self.setWindowTitle("Central do Contador"); self.resize(980,720); self.setMinimumSize(820,620); self.setStyleSheet(STYLE)
         root=QVBoxLayout(self); title=QLabel("CENTRAL DO CONTADOR"); title.setStyleSheet("font-size:27px;font-weight:900;color:#d7e0e8")
         subtitle=QLabel("Prepare fontes do mês sem esconder movimentos, inventar lançamentos ou apurar tributos."); subtitle.setWordWrap(True)
@@ -55,11 +55,11 @@ class AccountantCenterDialog(QDialog):
         profiles=QHBoxLayout(); self.essential=self._profile_button("PACOTE ESSENCIAL","Entrega curta com resumo, fontes e intercâmbio universal.","ESSENCIAL"); self.complete=self._profile_button("PACOTE COMPLETO","Acrescenta JSON/XLSX auxiliares sem alterar totais.","COMPLETO"); profiles.addWidget(self.essential); profiles.addWidget(self.complete); root.addLayout(profiles)
         self.advanced=QCheckBox("Mostrar opção avançada de Auditoria"); self.audit=self._profile_button("PACOTE DE AUDITORIA","Acrescenta a trilha existente para conferência técnica.","AUDITORIA"); self.audit.setVisible(False); self.advanced.toggled.connect(self.audit.setVisible); root.addWidget(self.advanced); root.addWidget(self.audit)
         self.explanation=QLabel("Essencial e Completo preservam todos os totais e movimentos. Auditoria apenas acrescenta evidências.\nPendências externas como bancos, cartões, folha e contratos permanecem declaradas."); self.explanation.setWordWrap(True); self.explanation.setStyleSheet("background:#171d24;border:1px solid #4b5662;border-radius:8px;padding:12px;color:#c8d1da"); root.addWidget(self.explanation)
-        self.review=QPushButton("REVISAR PACOTE"); self.generate_button=QPushButton("GERAR PACOTE REVISADO"); self.generate_button.setObjectName("primary"); self.generate_button.setEnabled(False); root.addWidget(self.review); root.addWidget(self.generate_button)
+        self.review=QPushButton("REVISAR PACOTE"); self.generate_button=QPushButton("GERAR PACOTE REVISADO"); self.generate_button.setObjectName("primary"); self.generate_button.setEnabled(False); self.delivery_button=QPushButton("ENTREGAR AO CONTADOR…"); self.delivery_button.setEnabled(False); root.addWidget(self.review); root.addWidget(self.generate_button); root.addWidget(self.delivery_button)
         self.semaphore=QLabel("PENDENTE — revise os dados antes de gerar"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#d6b95f"); self.details=QLabel("Nenhum arquivo foi gerado."); self.details.setWordWrap(True); root.addWidget(self.semaphore); root.addWidget(self.details)
         footer=QHBoxLayout(); footer.addStretch(); close=QPushButton("Fechar [Esc]"); close.clicked.connect(self.reject); footer.addWidget(close); root.addLayout(footer)
-        self.review.clicked.connect(self._review); self.generate_button.clicked.connect(self._generate)
-        self._fields=(self.competence,self.cnpj,self.cnpj_confirmed,self.output,self.choose,self.essential,self.complete,self.advanced,self.audit,self.review,self.generate_button)
+        self.review.clicked.connect(self._review); self.generate_button.clicked.connect(self._generate); self.delivery_button.clicked.connect(self._open_delivery)
+        self._fields=(self.competence,self.cnpj,self.cnpj_confirmed,self.output,self.choose,self.essential,self.complete,self.advanced,self.audit,self.review,self.generate_button,self.delivery_button)
         for field in self._fields: field.installEventFilter(self)
         for field in (self.competence,self.cnpj,self.cnpj_confirmed,self.output):
             signal=getattr(field,"textChanged",None) or getattr(field,"dateChanged",None) or getattr(field,"toggled",None)
@@ -83,7 +83,7 @@ class AccountantCenterDialog(QDialog):
         if path:self.output.setText(str(Path(path).with_suffix(".zip")))
 
     def _invalidate_review(self,*_):
-        self._plan=None; self.generate_button.setEnabled(False); self.semaphore.setText("PENDENTE — revise os dados antes de gerar"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#d6b95f")
+        self._plan=None; self._outcome=None; self.generate_button.setEnabled(False); self.delivery_button.setEnabled(False); self.semaphore.setText("PENDENTE — revise os dados antes de gerar"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#d6b95f")
 
     def _review(self):
         if self._busy:return
@@ -101,9 +101,19 @@ class AccountantCenterDialog(QDialog):
         if generation!=self._generation:return
         self._busy=False
         if error is not None:
-            self.semaphore.setText("DIVERGENTE — pacote não gerado"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#ef6b73"); self.details.setText(str(error)); self.generate_button.setEnabled(self._plan is not None); return
+            self._outcome=None; self.delivery_button.setEnabled(False); self.semaphore.setText("DIVERGENTE — pacote não gerado"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#ef6b73"); self.details.setText(str(error)); self.generate_button.setEnabled(self._plan is not None); return
+        self._outcome=result
         color={"CONCILIADO":"#62d394","PENDENTE":"#d6b95f","DIVERGENTE":"#ef6b73"}.get(result.status,"#d6b95f")
         self.semaphore.setText(f"{result.status} — pacote gerado e validado"); self.semaphore.setStyleSheet(f"font-size:18px;font-weight:900;color:{color}"); self.details.setText(f"Arquivo: {result.path}\nPerfil: {result.profile} • Movimentos: {result.movements} • Arquivos: {result.files} • Pendências: {result.pendencies}\nO semáforo não substitui a revisão do contador nem representa apuração tributária.")
+        self.delivery_button.setEnabled(self.delivery_application is not None and bool(getattr(result,"package_sha256","")))
+
+    def _open_delivery(self):
+        if self._busy or self.delivery_application is None or self._outcome is None:
+            return
+        from .accountant_delivery_dialog import AccountantDeliveryDialog
+        dialog=AccountantDeliveryDialog(self.delivery_application,self._outcome,self,worker_pool=self.pool)
+        self._delivery_dialog=dialog
+        dialog.exec()
 
     def eventFilter(self,watched,event):
         if event.type()==QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return,Qt.Key.Key_Enter} and watched in self._fields:

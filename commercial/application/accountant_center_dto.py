@@ -37,4 +37,5 @@ class AccountantPackageOutcome:
     files: int
     movements: int
     pendencies: int
+    package_sha256: str = ""
 

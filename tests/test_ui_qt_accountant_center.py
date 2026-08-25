@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock, patch
 
 os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
 import pytest
@@ -24,7 +25,7 @@ class Application:
         return AccountantPackagePlan.create(cnpj="12345678000195",competence="2026-08",profile=kwargs["profile"],output_path=kwargs["output_path"],reviewed_by="operador")
     def generate(self,plan):
         self.generations+=1
-        return SimpleNamespace(path=plan.output_path,profile=plan.profile,status=self.status,movements=12,files=30,pendencies=4)
+        return SimpleNamespace(path=plan.output_path,cnpj=plan.cnpj,competence=plan.competence,profile=plan.profile,status=self.status,movements=12,files=30,pendencies=4,package_sha256="a"*64)
 
 
 class Pool:
@@ -75,6 +76,24 @@ def test_bloqueio_reentrada_resposta_atrasada_e_fechamento(tmp_path):
 
 def test_status_divergente_e_erro_sao_honestos(tmp_path):
     application=Application();application.status="DIVERGENTE";dialog=AccountantCenterDialog(application,worker_pool=Pool());ready(dialog,tmp_path);dialog._generate();assert dialog.semaphore.text().startswith("DIVERGENTE");dialog.close()
+
+
+def test_entrega_so_abre_por_clique_depois_de_geracao_bem_sucedida(tmp_path):
+    delivery = Mock()
+    dialog = AccountantCenterDialog(
+        Application(), worker_pool=Pool(), delivery_application=delivery
+    )
+    assert not dialog.delivery_button.isEnabled()
+    ready(dialog, tmp_path)
+    assert not dialog.delivery_button.isEnabled()
+    dialog._generate()
+    assert dialog.delivery_button.isEnabled()
+    with patch("ui_qt.commercial.accountant_delivery_dialog.AccountantDeliveryDialog") as dialog_type:
+        dialog._open_delivery()
+    dialog_type.assert_called_once()
+    dialog_type.return_value.exec.assert_called_once_with()
+    delivery.assert_not_called()
+    dialog.close()
 
 
 def test_gui_nao_importa_banco_fiscal_ia_shell_ou_main():
