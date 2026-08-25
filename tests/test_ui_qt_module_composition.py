@@ -147,6 +147,44 @@ def test_composicao_de_clientes_liga_segmento_do_dashboard_ao_filtro_da_janela()
     repository_type.return_value.client_segment_ids.assert_called_once_with("owing","ana",limit=25)
     customer_application.list_customers_by_ids.assert_called_once_with((7,9))
 
+def test_composicao_revalida_sessao_e_permissoes_de_caixa_e_financeiro():
+    container=SimpleNamespace(
+        customer_application=None,product_application=None,stock_actions=None,
+        purchase_service=None,financial_query=object(),financial_actions=object(),
+    )
+    database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"))
+    profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(
+        pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),
+        rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),
+        config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal"),
+    ))
+    security=Mock()
+    security.session=SimpleNamespace(user=SimpleNamespace(username="maria"))
+    security.is_expired.return_value=False
+    security.require.return_value=True
+    cash_application=object()
+    with (
+        patch("ui_qt.administration.composition.CashService"),
+        patch("ui_qt.administration.composition.CashApplicationService",return_value=cash_application) as cash_type,
+        patch("ui_qt.administration.composition.CashDialog",return_value=QDialog()),
+        patch("ui_qt.administration.composition.FinancialDialog",return_value=QDialog()) as financial_type,
+        patch("ui_qt.administration.composition.ReportService"),
+        patch("ui_qt.administration.composition.SettingsApplicationService"),
+        patch("ui_qt.administration.composition.BackupService"),
+    ):
+        modules=build_administrative_modules(container,database,profile,security)
+        next(module for module in modules if module.module_id=="caixa").factory(None)
+        next(module for module in modules if module.module_id=="financeiro").factory(None)
+    actor_provider=cash_type.call_args.kwargs["actor_provider"]
+    assert actor_provider("view")=="maria"
+    assert actor_provider("reconcile")=="maria"
+    access_guard=financial_type.call_args.kwargs["access_guard"]
+    assert access_guard("pay")=="maria"
+    checked_permissions=[call.args for call in security.require.call_args_list]
+    assert ("financeiro","view") in checked_permissions
+    assert ("financeiro","reconcile") in checked_permissions
+    assert ("financeiro","pay") in checked_permissions
+
 def test_fabricas_de_produtos_e_compras_preservam_seus_servicos_isolados():
     product_management = object()
     purchase_management = object()

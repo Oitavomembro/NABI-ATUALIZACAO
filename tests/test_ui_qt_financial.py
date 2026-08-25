@@ -7,7 +7,7 @@ from PySide6.QtCore import QEvent,Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication,QDialog,QMessageBox
 from commercial.application.financial_dto import FinancialSummary,ReceivableSummary,PayableSummary
-from ui_qt.commercial.financial_dialog import FinancialDialog,TitleEditorDialog
+from ui_qt.commercial.financial_dialog import FinancialDialog,SettlementDialog,TitleEditorDialog
 
 def rec():return ReceivableSummary(7,3,"CLIENTE","MANUAL","","DOC","TESTE",Decimal("100"),Decimal("0"),Decimal("100"),date.today(),date.today(),"ABERTO",False)
 def pay():return PayableSummary(8,None,"FORNECEDOR","MANUAL","","NF","CONTA",Decimal("50"),Decimal("0"),Decimal("50"),date.today(),date.today(),"ABERTO",False)
@@ -33,3 +33,31 @@ def test_gui_sem_banco_fiscal_ia():
  from pathlib import Path
  source=(Path(__file__).parents[1]/"ui_qt/commercial/financial_dialog.py").read_text().lower()
  for forbidden in ("sqlite3","database","repositories","fiscal","sefaz","assistant_nabi"):assert forbidden not in source
+
+def test_janela_principal_tem_controles_windows_e_dialogos_permanecem_modais(app):
+ d=FinancialDialog(Query(),Actions(),user="ANA")
+ flags=d.windowFlags()
+ assert flags & Qt.WindowType.WindowMinimizeButtonHint
+ assert flags & Qt.WindowType.WindowMaximizeButtonHint
+ assert flags & Qt.WindowType.WindowCloseButtonHint
+ editor=TitleEditorDialog("RECEBER",lambda _command:None)
+ settlement=SettlementDialog(rec(),"RECEBER",lambda _command:None)
+ for modal in (editor,settlement):
+  assert modal.isModal() is True
+  assert not modal.windowFlags() & Qt.WindowType.WindowMinimizeButtonHint
+  assert not modal.windowFlags() & Qt.WindowType.WindowMaximizeButtonHint
+  modal.close()
+ d.close()
+
+def test_financeiro_revalida_permissao_e_ator_por_acao(app):
+ calls=[]
+ actor=["ANA"]
+ def guard(action):calls.append(action);return actor[-1]
+ d=FinancialDialog(Query(),Actions(),user="INICIAL",access_guard=guard)
+ assert calls[0]=="view"
+ actor.append("BIA")
+ context=d._context("pay")
+ assert context.requested_by=="BIA" and calls[-1]=="pay"
+ d.access_guard=lambda _action:(_ for _ in ()).throw(PermissionError("negado"))
+ with pytest.raises(PermissionError):d._context("create")
+ d.close()
