@@ -30,9 +30,11 @@ class ProdutoService:
         self.auxiliares = auxiliares
         self.auditoria = auditoria
 
-    def listar(self, termo: str = "", tipo: str = "TODOS") -> list[dict[str, Any]]:
+    def listar(
+        self, termo: str = "", tipo: str = "TODOS", *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         tipo_normalizado = ProductValidator.normalize_filter_type(tipo)
-        return self.produtos.listar(termo.strip(), tipo_normalizado)
+        return self.produtos.listar(termo.strip(), tipo_normalizado, limit=limit)
 
     def listar_categorias_ativas(self) -> list[dict]:
         return self.categorias.listar_ativas()

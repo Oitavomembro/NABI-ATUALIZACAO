@@ -124,6 +124,34 @@ class ClienteRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repo.search_sales_suggestions(""), [])
         self.assertEqual(len(self.repo.search_sales_suggestions("maria", limit=1)), 1)
 
+    def test_sugestao_exata_nao_e_perdida_apos_centenas_de_parciais(self) -> None:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.executemany(
+                """INSERT INTO clientes
+                   (numero_ficha,codigo,nome,saldo_devedor,limite,telefone,cpf,rg,endereco,observacoes,favorito)
+                   VALUES(?,?,?,?,?,?,?,?,?,?,?)""",
+                ((1000 + index, f"P123-{index:03d}", f"PARCIAL 123 {index:03d}", 0, 0,
+                  "", "", "", "", "", 0) for index in range(250)),
+            )
+            conn.execute(
+                """INSERT INTO clientes
+                   (numero_ficha,codigo,nome,saldo_devedor,limite,telefone,cpf,rg,endereco,observacoes,favorito)
+                   VALUES(123,'EXATO','NOME REPETIDO',0,0,'','','','','',0)"""
+            )
+            conn.execute(
+                """INSERT INTO clientes
+                   (numero_ficha,codigo,nome,saldo_devedor,limite,telefone,cpf,rg,endereco,observacoes,favorito)
+                   VALUES(9999,'DUP','NOME REPETIDO',0,0,'','','','','',0)"""
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        suggestions = self.repo.search_sales_suggestions("123", limit=30)
+        self.assertEqual(suggestions[0].numero_ficha, 123)
+        self.assertLessEqual(len(suggestions), 30)
+        self.assertEqual(len({item.id for item in suggestions}), len(suggestions))
+
     def test_resolve_referencia_de_venda_com_travessao(self) -> None:
         cliente = self.repo.resolve_sales_reference("20 — MARIA SILVA")
         self.assertIsNotNone(cliente)

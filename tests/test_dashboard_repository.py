@@ -98,6 +98,22 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertEqual(self.repo.client_segment_ids("debt", "fut", now=reference), (4,))
         self.assertEqual(self.repo.client_segment_ids("current", "alerta", now=reference), ())
 
+    def test_segment_page_preserves_full_total_and_deterministic_pages(self) -> None:
+        reference = datetime(2026, 8, 2)
+        first = self.repo.client_segment_page("debt", limit=2, offset=0, now=reference)
+        second = self.repo.client_segment_page("debt", limit=2, offset=2, now=reference)
+        self.assertEqual(first.ids, (2, 3))
+        self.assertEqual(second.ids, (4,))
+        self.assertEqual(first.total_records, 3)
+        self.assertEqual(second.total_records, 3)
+
+    def test_segment_page_with_search_counts_only_matching_rows(self) -> None:
+        page = self.repo.client_segment_page(
+            "debt", "103", limit=1, offset=0, now=datetime(2026, 8, 2)
+        )
+        self.assertEqual(page.ids, (3,))
+        self.assertEqual(page.total_records, 1)
+
     def test_invalid_card_segment_is_rejected(self) -> None:
         with self.assertRaises(ValueError):
             self.repo.client_segment_ids("inventado")

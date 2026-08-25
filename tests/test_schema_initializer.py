@@ -180,8 +180,23 @@ class SchemaInitializerTests(unittest.TestCase):
             )
             indexes = {row[1] for row in connection.execute("PRAGMA index_list(produtos)")}
             self.assertIn("idx_produtos_nome", indexes)
+            self.assertIn("idx_produtos_ativo_nome", indexes)
         finally:
             connection.close()
+
+    def test_query_scale_indexes_are_created_idempotently(self):
+        self.initialize()
+        self.initialize()
+        connection = sqlite3.connect(self.db_path)
+        try:
+            product_indexes = {row[1] for row in connection.execute("PRAGMA index_list(produtos)")}
+            customer_indexes = {row[1] for row in connection.execute("PRAGMA index_list(clientes)")}
+            movement_indexes = {row[1] for row in connection.execute("PRAGMA index_list(movimentacoes)")}
+        finally:
+            connection.close()
+        self.assertIn("idx_produtos_ativo_nome", product_indexes)
+        self.assertIn("idx_clientes_ficha_ordem", customer_indexes)
+        self.assertIn("idx_mov_pendente_cliente_vencimento", movement_indexes)
 
     def test_upgrade_requests_backup_and_records_migration(self):
         self.initialize(version=31)

@@ -4,9 +4,6 @@ from datetime import datetime
 from typing import Any
 
 from database import DatabaseManager
-from services.critical_audit_policy import record_in_transaction
-
-
 class EstoqueRepository:
     """Persistência de saldos e movimentações de estoque."""
 
@@ -66,6 +63,11 @@ class EstoqueRepository:
     def registrar_auditoria_critica(
         *, connection, action: str, produto_id: int, usuario: str, detalhes: str
     ) -> None:
+        # Importação local deliberada: o pacote ``services`` reexporta o
+        # EstoqueService, que por sua vez depende deste repositório. Importar a
+        # política no topo tornava ``import repositories`` dependente da ordem.
+        from services.critical_audit_policy import record_in_transaction
+
         record_in_transaction(
             connection,
             "ESTOQUE",

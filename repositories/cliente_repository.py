@@ -62,6 +62,7 @@ class ClienteRepository:
             return []
         limit = max(1, min(int(limit), 200))
         search = f"%{clean_term}%"
+        numeric_term = "".join(character for character in clean_term if character.isdigit())
         rows = self.database.fetch_all(
             """
             SELECT id, codigo, nome, numero_ficha, cpf, telefone
@@ -71,11 +72,29 @@ class ClienteRepository:
                OR CAST(numero_ficha AS TEXT) LIKE ?
                OR cpf LIKE ?
                OR telefone LIKE ?
-            LIMIT 200
+            ORDER BY
+                CASE
+                    WHEN CAST(COALESCE(numero_ficha, '') AS TEXT) = ? THEN 0
+                    WHEN codigo = ? COLLATE NOCASE THEN 1
+                    WHEN nome = ? COLLATE NOCASE THEN 2
+                    WHEN nome LIKE ? COLLATE NOCASE THEN 3
+                    WHEN INSTR(' ' || LOWER(TRIM(COALESCE(nome, ''))),
+                               ' ' || LOWER(?)) > 0 THEN 4
+                    WHEN INSTR(LOWER(COALESCE(nome, '')), LOWER(?)) > 0 THEN 5
+                    ELSE 6
+                END,
+                nome COLLATE NOCASE,
+                CASE WHEN numero_ficha IS NULL THEN 1 ELSE 0 END,
+                numero_ficha,
+                id
+            LIMIT ?
             """,
-            (search, search, search, search, search),
+            (
+                search, search, search, search, search,
+                numeric_term or "__NO_NUMERIC_MATCH__", clean_term, clean_term,
+                f"{clean_term}%", clean_term, clean_term, limit,
+            ),
         )
-        ordered = self.sort_sales_rows(rows, clean_term)[:limit]
         return [
             ClienteSuggestion(
                 id=int(row[0]),
@@ -85,7 +104,7 @@ class ClienteRepository:
                 cpf=str(row[4] or ""),
                 telefone=str(row[5] or ""),
             )
-            for row in ordered
+            for row in rows
         ]
 
     def resolve_sales_reference(self, reference: str) -> ClienteSuggestion | None:
@@ -190,8 +209,8 @@ class ClienteRepository:
             )
         else:
             sql += (
-                " ORDER BY CASE WHEN numero_ficha IS NULL THEN 1 ELSE 0 END ASC, "
-                "numero_ficha ASC, nome COLLATE NOCASE ASC"
+                " ORDER BY (numero_ficha IS NULL) ASC, numero_ficha ASC, "
+                "nome COLLATE NOCASE ASC, id ASC"
             )
         with self.database.session() as connection:
             # Snapshot curto e sempre novo: evita qualquer estado em memória e garante

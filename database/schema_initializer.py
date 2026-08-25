@@ -386,11 +386,14 @@ def initialize_database(
     cursor.execute("UPDATE produtos SET unidade_compra_id=unidade_id WHERE unidade_compra_id IS NULL")
     cursor.execute("UPDATE produtos SET fator_conversao=1 WHERE fator_conversao IS NULL OR fator_conversao<=0")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_nome ON produtos(nome COLLATE NOCASE)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_ativo_nome ON produtos(ativo DESC, nome COLLATE NOCASE, id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_categoria ON produtos(categoria_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_marca ON produtos(marca_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_fornecedor ON produtos(fornecedor_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_unidade ON produtos(unidade_id)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_produtos_unidade_compra ON produtos(unidade_compra_id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_clientes_ficha_ordem ON clientes((numero_ficha IS NULL), numero_ficha, nome COLLATE NOCASE, id)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_mov_pendente_cliente_vencimento ON movimentacoes(status_pagamento, cliente_id, vencimento)")
     from database.product_schema_migration import ProductSchemaMigration
     ProductSchemaMigration.migrate_connection(conn)
     cursor.execute("""

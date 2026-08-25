@@ -3632,3 +3632,41 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão consolidada depois dos merges: `2355 passed`, `1 skipped`,
   `460 subtests passed`, zero falhas e dois avisos externos conhecidos;
   ensaio de primeiro uso completo também aprovado, sem rede Fiscal/SEFAZ.
+## Consultas comerciais sob carga — checkpoint isolado
+
+- branch/worktree: `codex/stress-consultas-servicos` em
+  `NabiCode-QT-StressConsultas-codex`, derivados de
+  `origin/codex/homologacao-primeiro-uso@80a70f4`;
+- implementação: `c22ec0f` e normalização de teste `28a2dbe`;
+- o gargalo comprovado da pesquisa de produtos materializava todo o catálogo e
+  só depois aplicava o limite no gateway. Com 20.000 produtos, consumia cerca de
+  2.091 ms e 49,4 MB para exibir 30 linhas; após paginação/limite no SQL, mediu
+  cerca de 7,7 ms e 81 KB. Em 100.000 produtos, manteve 30 linhas, cerca de
+  8,9 ms e 81 KB;
+- busca de produto por nome, código e barras agora é limitada na origem; o
+  fallback sem acentos percorre o cursor em lotes e para ao completar a página;
+  catálogo vazio e detecção de código de barras duplicado preservam os contratos;
+- sugestão de cliente deixou de cortar 200 linhas antes da ordenação: ficha
+  exata, código/nome exatos, início/parte do nome e desempates por nome, ficha e
+  ID são resolvidos deterministicamente. A ficha exata inserida após centenas
+  de parciais permaneceu na primeira posição;
+- segmentos Em dia, Devendo, Atrasados e Dívida possuem página limitada e total
+  completo no mesmo snapshot de leitura. Índices idempotentes foram adicionados
+  para ordenação de clientes, catálogo ativo e pendências por cliente/vencimento;
+- com 100.000 registros: página de 50 clientes mediu cerca de 20,5 ms/22 KB,
+  sugestão limitada a 30 cerca de 65,9 ms/17 KB e resumo completo cerca de
+  251,8 ms/3 KB. Os planos SQL confirmaram uso dos três índices novos;
+- o ciclo de imports `repositories → estoque_repository → services →
+  estoque_service → repositories` foi reproduzido em intérprete novo e removido
+  por import local estrito da política de auditoria. As ordens `repositories →
+  services` e `services → repositories` passam isoladamente;
+- concorrência já oficial de criação de clientes e vendas comerciais foi
+  revalidada em banco TEMP: uma criação vence/uma duplicada é recusada e vendas
+  concorrentes respeitam limite/transação, sem banco real, rede ou SEFAZ;
+- validação ampliada: `131 passed`, `5 subtests passed`; regressão específica
+  final: `3 passed`; `compileall` e `git diff --check` aprovados;
+- risco residual honesto: pesquisa textual por substring continua linear no
+  SQLite (sem FTS) e o resumo completo cresce com o número de pendências. Aos
+  100.000 registros permaneceu abaixo de 300 ms no ensaio local; somente migrar
+  para FTS/cache se telemetria real futura comprovar necessidade, preservando a
+  busca oficial e sem materializar o catálogo.

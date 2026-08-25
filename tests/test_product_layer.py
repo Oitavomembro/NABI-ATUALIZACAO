@@ -248,7 +248,9 @@ class ProductLayerTests(unittest.TestCase):
             self.assertIn("LIKE", calls[0][0])
             calls.clear()
             self.assertEqual(len(self.service.listar("cafe", "TODOS")), 1)
-            self.assertEqual(len(calls), 2)
+            # O fallback sem acento percorre o cursor em lotes, sem carregar o
+            # catálogo inteiro por uma segunda chamada a fetch_all.
+            self.assertEqual(len(calls), 1)
         finally:
             database.fetch_all = original
 

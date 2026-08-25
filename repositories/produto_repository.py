@@ -46,7 +46,10 @@ class ProdutoRepository:
         texto = unicodedata.normalize("NFKD", str(valor or ""))
         return "".join(ch for ch in texto if not unicodedata.combining(ch)).casefold()
 
-    def listar(self, termo: str = "", tipo: str = "TODOS") -> list[dict[str, Any]]:
+    def listar(
+        self, termo: str = "", tipo: str = "TODOS", *, limit: int | None = None
+    ) -> list[dict[str, Any]]:
+        safe_limit = None if limit is None else max(1, min(int(limit), 2000))
         base_sql = """SELECT p.id, p.codigo, p.nome, p.preco_venda_decimal AS preco_venda_canonico, p.preco_venda AS preco_venda_legado,
                         COALESCE(c.nome, 'Sem categoria') AS categoria,
                         COALESCE(m.nome, 'Sem marca') AS marca,
@@ -72,9 +75,14 @@ class ProdutoRepository:
             params.append(tipo)
 
         termo_limpo = str(termo or "").strip()
-        order_sql = " ORDER BY p.ativo DESC, p.nome COLLATE NOCASE"
+        order_sql = " ORDER BY p.ativo DESC, p.nome COLLATE NOCASE, p.id"
         if not termo_limpo:
-            return [self._decimalizar_produto(dict(row)) for row in self.database.fetch_all(base_sql + order_sql, params)]
+            sql = base_sql + order_sql
+            query_params = list(params)
+            if safe_limit is not None:
+                sql += " LIMIT ?"
+                query_params.append(safe_limit)
+            return [self._decimalizar_produto(dict(row)) for row in self.database.fetch_all(sql, query_params)]
 
         # Caminho rápido para as pesquisas comuns. Evita carregar todo o catálogo
         # em memória a cada tecla digitada no PDV e no cadastro de produtos.
@@ -88,19 +96,35 @@ class ProdutoRepository:
             f.nome_fantasia LIKE ? COLLATE NOCASE
         )"""
         fast_params = params + [like] * 6
-        rows = [self._decimalizar_produto(dict(row)) for row in self.database.fetch_all(searchable_sql + order_sql, fast_params)]
+        sql = searchable_sql + order_sql
+        if safe_limit is not None:
+            sql += " LIMIT ?"
+            fast_params.append(safe_limit)
+        rows = [self._decimalizar_produto(dict(row)) for row in self.database.fetch_all(sql, fast_params)]
         if rows:
             return rows
 
         # SQLite NOCASE não remove acentos. O fallback preserva a pesquisa por
         # "cafe" encontrando "CAFÉ", mas só é executado quando o SQL não acha nada.
-        all_rows = [self._decimalizar_produto(dict(row)) for row in self.database.fetch_all(base_sql + order_sql, params)]
         termo_normalizado = self._normalizar_busca(termo_limpo)
         campos = ("codigo", "nome", "codigo_barras", "categoria", "marca", "fornecedor")
-        return [
-            row for row in all_rows
-            if any(termo_normalizado in self._normalizar_busca(row.get(campo)) for campo in campos)
-        ]
+        matches: list[dict[str, Any]] = []
+        with self.database.session() as connection:
+            cursor = connection.execute(base_sql + order_sql, tuple(params))
+            while True:
+                batch = cursor.fetchmany(500)
+                if not batch:
+                    break
+                for raw in batch:
+                    row = self._decimalizar_produto(dict(raw))
+                    if any(
+                        termo_normalizado in self._normalizar_busca(row.get(campo))
+                        for campo in campos
+                    ):
+                        matches.append(row)
+                        if safe_limit is not None and len(matches) >= safe_limit:
+                            return matches
+        return matches
 
     def buscar_por_id(self, produto_id: int, connection=None) -> dict[str, Any] | None:
         sql = """SELECT *,
