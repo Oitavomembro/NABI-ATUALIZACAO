@@ -2971,3 +2971,21 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   capacidade assinada, contornar permissão ou alterar Fiscal/SEFAZ;
 - implementar em checkpoint coordenado de Configurações/startup, não neste
   shell isolado.
+
+#### Nabi flutuante no assistente de configuração
+
+- a Nabi poderá acompanhar opcionalmente a primeira configuração como ajuda
+  contextual flutuante, reconhecendo a etapa e a pergunta atualmente visível;
+- para cada campo, deve explicar finalidade, formato esperado, onde localizar a
+  informação e quais consequências existem ao deixar vazio ou escolher uma
+  opção, sempre por conteúdo versionado e ferramentas oficiais de leitura;
+- quando houver dado já cadastrado e permissão real, poderá ajudar a localizá-lo
+  e apresentar uma sugestão revisável; nunca preencher ou confirmar sozinha;
+- nunca inventar CNPJ, IE, regime, CSC, certificado, senha, caminho, credencial,
+  situação cadastral ou resposta SEFAZ, nem enviar segredo ao modelo;
+- a Nabi não decide modo, licença, permissão ou configuração fiscal e não pode
+  avançar etapas, gravar preferências ou transmitir sem ação humana explícita;
+- indisponibilidade, erro ou botão `Parar Nabi` não bloqueiam o assistente; toda
+  orientação essencial permanece disponível em texto determinístico sem IA;
+- implementação pertence a checkpoint coordenado da IA Nabi + Configurações e
+  startup, com testes de privacidade, permissão, prompt injection e fallback.
