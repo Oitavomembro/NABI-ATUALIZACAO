@@ -1,7 +1,9 @@
 # Matriz do Menu Técnico — Legacy → Qt
 
-Data da auditoria: 25/08/2026  
-Referência Legacy: `nabicode_legacy.py`, catálogo `admin_sections`  
+Data da auditoria: 25/08/2026
+
+Referência Legacy: `nabicode_legacy.py`, catálogo `admin_sections`
+
 Referência Qt: composição administrativa e shell da base `52ae726`
 
 O Qt não recria operações administrativas só para preencher o menu. O gatilho
