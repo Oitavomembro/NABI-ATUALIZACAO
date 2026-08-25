@@ -2929,3 +2929,22 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   FICHÁRIO, alterar serviços ou misturar a modernização com Fiscal/SEFAZ/IA;
 - a composição global e os módulos fora desta branch precisam ser coordenados
   com a conversa integradora para evitar colisão de arquivos.
+
+### Harmonização visual isolada — Financeiro e Caixa Qt
+
+- branch/worktree: `codex/financeiro-caixa-qt-visual`, derivada exatamente de
+  `b3bfba8b87f5dc3dddd8aed96a355a365a92ab69`;
+- implementação: `de28f73` — `style: aplica acabamento metalico ao Financeiro
+  e Caixa`;
+- Financeiro preserva abas, campos, resumo, tabelas, IDs reais, revisão, baixa,
+  serviços, atalhos e ordem do Legacy; somente cores, contraste, foco, abas e
+  superfícies receberam aço/grafite/prata com filete ciano discreto;
+- Caixa preserva abertura, abertura sem valor, suprimento, sangria, fechamento,
+  cartões, movimentos e teclado; Sangria e Fechar caixa usam vermelho apenas
+  por serem ações críticas, sem mudança de comportamento;
+- menus e ações restritos não foram revelados nem receberam novo acesso;
+- validação direta: `8 passed`; regressão ampliada de Financeiro/Caixa:
+  `81 passed`; `compileall` e `git diff --check` aprovados;
+- Vendas/PDV, shell, Clientes, Produtos, IA Nabi, Fiscal/SEFAZ, FICHÁRIO,
+  licenciamento, banco e regras não foram alterados;
+- homologação visual/manual no Windows permanece necessária antes de integrar.
