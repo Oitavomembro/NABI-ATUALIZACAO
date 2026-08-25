@@ -787,6 +787,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         self.fiscal_service.tax_rule_service = self.fiscal_tax_rule_service
         self.fiscal_sale_service = FiscalSaleService(self.fiscal_service)
         self.fiscal_catalog_readiness_service = FiscalCatalogReadinessService(conectar_banco)
+        self.fiscal_service.bind_readiness_catalog(
+            self.fiscal_catalog_readiness_service
+        )
         self.fiscal_preflight_service = FiscalPreflightService(
             self.fiscal_service, self.fiscal_catalog_readiness_service
         )
@@ -11518,6 +11521,29 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
     def abrir_central_fiscal(self):
         if not self._autorizar("fiscal", "view"):
+            return
+        config = self.fiscal_service.load_config()
+        model = str(config.get("default_model") or "65")
+        base_problems = self.fiscal_service.validate_ready(
+            operation="autorizacao", model=model
+        )
+        series = int(
+            config.get("sale_series_65" if model == "65" else "sale_series_55") or 1
+        )
+        if not self.fiscal_service.numbering_scope(
+            model=model, series=series, environment=config.get("environment")
+        ).get("initialized"):
+            base_problems.append(
+                "A numeração fiscal ainda não foi inicializada para o modelo e a série ativos."
+            )
+        if base_problems:
+            messagebox.showwarning(
+                "Central Fiscal — configuração obrigatória",
+                "Antes de operar o Fiscal/SEFAZ, conclua a configuração:\n\n"
+                + "\n".join(f"• {problem}" for problem in base_problems),
+                parent=self,
+            )
+            self.abrir_configuracao_fiscal(force_open=True)
             return
         current_window = getattr(self, "fiscal_center_window", None)
         try:

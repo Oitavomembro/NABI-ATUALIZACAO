@@ -65,6 +65,20 @@ class FiscalSaleService:
         )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
+        readiness = getattr(self.fiscal_service, "require_operational_readiness", None)
+        if readiness is not None:
+            password_provider = getattr(
+                self.fiscal_service, "session_certificate_password", lambda: None
+            )
+            readiness_password = (
+                str(certificate_password or "").strip()
+                or str(password_provider() or "").strip()
+            )
+            readiness(
+                operation="autorizacao", model=model, password=readiness_password,
+                permission="transmit", series=series,
+                require_catalog=True, require_numbering=True,
+            )
         reservation = self.fiscal_service.reserve_number(
             model=model, series=series, environment=environment
         )

@@ -19,6 +19,7 @@ from urllib.parse import urlsplit
 
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
 from services.fiscal_outbox_service import FiscalOutboxService
+from services.fiscal_readiness_gate import FiscalReadinessGate
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
@@ -188,9 +189,38 @@ class FiscalService:
         self.secret_protector = secret_protector or WindowsDataProtector()
         self._actor_provider = actor_provider
         self._authorization_provider = authorization_provider
+        self._readiness_gate: FiscalReadinessGate | None = None
+        self._readiness_enforced = False
         self._managed_certificate_dir = self.storage_dir / "certificate"
         self._managed_certificate_path = self._managed_certificate_dir / "active.pfx"
         self._managed_secret_path = self._managed_certificate_dir / "active.secret"
+
+    def bind_readiness_catalog(self, catalog_service: Any) -> None:
+        """Liga o auditor oficial do catálogo ao mesmo portão fiscal."""
+        self._readiness_gate = FiscalReadinessGate(self, catalog_service)
+        self._readiness_enforced = True
+
+    def require_operational_readiness(
+        self, *, operation: str, model: str, password: str,
+        permission: str, series: int | None = None,
+        require_catalog: bool = False, require_numbering: bool = False,
+        check_revocation: bool = True,
+    ) -> str:
+        if not self._readiness_enforced or self._readiness_gate is None:
+            raise PermissionError(
+                "O portão de prontidão fiscal não foi configurado e validado; "
+                "nenhuma operação Fiscal/SEFAZ pode ser iniciada."
+            )
+        actor = self._authenticated_fiscal_actor(
+            permission, operation=f"executar {operation} fiscal"
+        )
+        self._readiness_gate.require(
+            operation=operation, model=model, password=password,
+            series=series, require_catalog=require_catalog,
+            require_numbering=require_numbering,
+            check_revocation=check_revocation,
+        )
+        return actor
 
     def validate_certificate_trust(
         self, pfx_path: str | Path, password: str
@@ -1146,6 +1176,10 @@ class FiscalService:
         self._require_dependency("lxml")
         config = self.load_config()
         model = str(model)
+        self.require_operational_readiness(
+            operation="status", model=model, password=password,
+            permission="view",
+        )
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
         if model not in {str(item) for item in config.get("enabled_models", ())}:
@@ -3802,16 +3836,15 @@ class FiscalService:
         model: str = "55",
         reservation_id: str = "",
     ) -> tuple[FiscalResponse, dict[str, Any]]:
-        actor = self._authenticated_fiscal_actor(
-            "transmit", operation="autorizar um documento fiscal"
-        )
-        problems = self.validate_ready(operation="autorizacao", model=model)
-        if problems:
-            raise ValueError("; ".join(problems))
-        config = self.load_config()
         key = self._normalize_access_key(access_key)
         if len(key) != 44:
             raise ValueError("Chave de acesso inválida para autorização.")
+        actor = self.require_operational_readiness(
+            operation="autorizacao", model=model, password=password,
+            permission="transmit", series=int(key[22:25]),
+            require_catalog=True, require_numbering=True,
+        )
+        config = self.load_config()
 
         xml_key = self._extract_access_key_from_xml(xml)
         if xml_key and xml_key != key:
@@ -3861,23 +3894,22 @@ class FiscalService:
     def consult_document(self, *, access_key: str, password: str) -> FiscalResponse:
         key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
-        problems = self.validate_ready(operation="consulta", model=model)
-        if problems:
-            raise ValueError("; ".join(problems))
+        self.require_operational_readiness(
+            operation="consulta", model=model, password=password,
+            permission="view",
+        )
         config = self.load_config()
         xml = self.build_query_xml(access_key=access_key, environment=config["environment"])
         self.validate_official_xml(xml, document_type="consulta")
         return self.transmit(operation="consulta", model=model, xml=xml, pfx_path=config["certificate_path"], password=password)
 
     def send_event(self, *, event_type: str, access_key: str, sequence: int, password: str, protocol: str = "", justification: str = "", correction: str = "") -> tuple[FiscalResponse, dict[str, Any]]:
-        actor = self._authenticated_fiscal_actor(
-            "transmit", operation="transmitir um evento fiscal"
-        )
         key = self._normalize_access_key(access_key)
         model = key[20:22] if len(key) == 44 else str(self.load_config().get("default_model") or "65")
-        problems = self.validate_ready(operation="evento", model=model)
-        if problems:
-            raise ValueError("; ".join(problems))
+        actor = self.require_operational_readiness(
+            operation="evento", model=model, password=password,
+            permission="transmit",
+        )
         config = self.load_config()
         self.validate_event_eligibility(
             access_key=access_key, event_type=event_type, sequence=sequence, protocol=protocol
@@ -3891,12 +3923,10 @@ class FiscalService:
         return response, record
 
     def inutilize_numbers(self, *, year: int, model: str, series: int, start_number: int, end_number: int, justification: str, password: str) -> tuple[FiscalResponse, dict[str, Any]]:
-        actor = self._authenticated_fiscal_actor(
-            "transmit", operation="inutilizar a numeração fiscal"
+        actor = self.require_operational_readiness(
+            operation="inutilizacao", model=model, password=password,
+            permission="transmit", series=series, require_numbering=True,
         )
-        problems = self.validate_ready(operation="inutilizacao", model=model)
-        if problems:
-            raise ValueError("; ".join(problems))
         config = self.load_config()
         state_code = self.STATE_CODES.get(str(config.get("state", "")).upper())
         if not state_code:

@@ -3282,3 +3282,50 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo seguro: revisão independente e integração normal na consolidada,
   seguida de expansão gradual somente nos emissores periféricos comprovadamente
   necessários, sem reescrever regras de negócio.
+### Portão obrigatório de prontidão Fiscal/SEFAZ
+
+- implementação isolada: `cbc1e3d` — `fix: exige prontidao antes de operar fiscal`;
+- o runtime Legacy liga um único `FiscalReadinessGate` ao serviço fiscal e ao
+  auditor oficial do catálogo; instâncias auxiliares sem essa composição não
+  representam uma entrada operacional do produto;
+- antes de rede ou mutação, o portão exige sessão/permissão oficial, módulo e
+  modelo habilitados, homologação, CNPJ, UF/perfil estadual, regime, endpoint,
+  A1 válido e correspondente ao emitente, cadeia ICP-Brasil e situação de
+  revogação confirmadas pelos mecanismos já existentes;
+- autorização e preparação da venda também exigem catálogo sem pendências e
+  numeração explicitamente inicializada para ambiente/modelo/série antes de
+  qualquer reserva; produção continua bloqueada;
+- distribuição DF-e, manifestação, consulta de status, consulta de documento,
+  eventos e inutilização passam pelo mesmo portão antes de abrir rede;
+- quando faltam requisitos básicos, a Central Fiscal não apresenta operações:
+  informa as pendências e abre somente a configuração/diagnóstico;
+- testes negativos comprovam que recusa do portão não reserva número e não
+  inicia rede DF-e; regressão ampliada: `279 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhum certificado, XML, banco real ou endpoint real foi usado; nenhuma
+  chamada à SEFAZ foi executada e nenhum push foi realizado;
+- pendências continuam físicas/documentais: homologação oficial acompanhada,
+  evidências com certificado e empresa de homologação, revisão jurídica e
+  autorização expressa antes de qualquer futura liberação de produção.
+
+### Correção fail-closed do portão de prontidão Fiscal/SEFAZ
+
+- branch isolada `codex/fiscal-readiness-fail-closed`, derivada exatamente de
+  `codex/fiscal-readiness-gate` em `76fc54c`;
+- removido o fallback de `_readiness_enforced == False` que autorizava leitura,
+  ator coordenado sintético ou autenticação sem executar o portão;
+- `FiscalService` nasce sem gate operacional; ausência de composição, flag
+  desligada ou tentativa de ligar apenas a flag falha com `PermissionError`
+  antes de autenticação, reserva, arquivo, assinatura ou rede;
+- o gate composto continua revalidando configuração, CNPJ, certificado,
+  confiança/revogação, catálogo e numeração conforme a operação; nenhuma regra
+  tributária, XML, endpoint ou modo de produção foi alterado;
+- testes novos cobrem inicialização limpa, configuração/CNPJ/A1 ausentes e
+  tentativa de bypass; testes DFe comprovam bloqueio antes de rede/reserva;
+- regressão focada de prontidão/DFe/Central/venda: `52 passed`; `compileall` e
+  `git diff --check` aprovados. A regressão fiscal ampliada foi iniciada, mas
+  excedeu a janela curta desta execução e deve ser repetida antes da integração;
+- nenhum certificado real, banco real ou chamada SEFAZ foi usado. Comercial e
+  módulos não fiscais não passam por esta API e permanecem operacionais;
+- próximo passo: revisão independente, regressão fiscal integral e integração
+  normal na consolidada; produção fiscal continua bloqueada.
