@@ -2881,3 +2881,32 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### P0 — sessão e autoria revalidadas por mutação de Clientes e Financeiro
+
+- branch/worktree isolados: `codex/sessao-mutacoes-clientes-financeiro` em
+  `NabiCode-QT-SessaoPorAcao-codex`, derivados exatamente de `1cfdfa4`;
+- implementação funcional: `4a22dff` —
+  `fix: revalida sessao nas mutacoes comerciais`;
+- `SecurityService.require_actor()` tornou-se a porta oficial que relê usuário,
+  atividade, perfil e permissões persistidos e somente então devolve o ator da
+  sessão. Não aceita nome vindo de formulário, contexto antigo ou fallback;
+- as fachadas de Clientes e Financeiro são ligadas a essa porta pela composição
+  Qt. Cada cadastro, edição, exclusão segura, título, baixa, cancelamento,
+  estorno ou conciliação revalida a sessão no instante da ação; o contexto
+  financeiro guardado pela janela não define mais a autoria persistida;
+- no Legacy, os formulários de Clientes e o controlador Financeiro repetem a
+  autorização imediatamente antes da escrita. Expiração, desativação, troca de
+  perfil/usuário ou retirada de permissão durante um diálogo falham fechadas;
+- recusas não chamam gateway, não gravam mutação e não publicam evento/auditoria
+  de sucesso. Operações aceitas transportam exclusivamente o usuário obtido da
+  sessão corrente; confirmação humana continua obrigatória onde já existia;
+- testes focados: `72 passed`, `5 subtests passed`; regressão ampliada de
+  Clientes/Financeiro/Segurança/Commercial/Qt: `523 passed`, `372 subtests
+  passed`; `compileall` e `git diff --check` aprovados;
+- não foram alterados Caixa, Nabi, Fiscal/SEFAZ, pacote contábil, backup,
+  licenciamento, PDV, banco real ou regras comerciais. Nenhum segredo ou dado
+  operacional foi incluído;
+- próximo passo: integrar somente por merge normal após revisão cruzada e
+  repetir a suíte consolidada. Homologação manual deve confirmar uma janela
+  aberta durante expiração/troca de usuário nos cadastros e nas baixas.
