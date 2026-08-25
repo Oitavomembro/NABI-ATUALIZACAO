@@ -5,7 +5,10 @@ from .maintenance import DatabaseCheckReport, DatabaseMaintenanceService, Migrat
 
 __all__ = ["DatabaseManager", "DatabaseCheckReport", "DatabaseMaintenanceService", "Migration"]
 
-from .sqlite_connection import backup_database, connection_session, open_connection
+from .sqlite_connection import (
+    SQLitePragmaPolicyError, backup_database, connection_session,
+    effective_pragmas, open_connection,
+)
 
 from .schema_initializer import initialize_database
 
