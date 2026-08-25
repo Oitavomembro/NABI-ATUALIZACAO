@@ -3772,3 +3772,45 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   checkpoint coordenado posterior, composição explícita das quatro portas e da
   auditoria oficial; não promover texto da Nabi a comando nem ampliar o catálogo
   sem novo desenho, testes e autorização.
+
+### Integração isolada da Central de Socorro e do catálogo VERDE
+
+- branch/worktree: `codex/integracao-socorro-verde-homologacao` em
+  `NabiCode-QT-IntegracaoSocorroVerde-codex`, derivados exatamente de
+  `origin/codex/homologacao-primeiro-uso@a179e79`; a branch estável não recebeu
+  merge nem alteração;
+- a ancestralidade foi conferida antes da integração. `5a70477` e `7cde9f7`
+  são trilhas irmãs e não ancestrais entre si; seus merge-bases com a base
+  estável são, respectivamente, `739ad558` e `d7769b0`, e o merge-base entre
+  as duas trilhas é `ea1ffd3`;
+- os históricos publicados foram preservados por merges normais, na ordem da
+  dependência: `fc1626f` integra a Central Qt e `2926083` integra o catálogo
+  VERDE. Os conflitos limitaram-se ao mapa e foram resolvidos aditivamente,
+  mantendo as evidências das duas origens e da base estável;
+- `afa925e` conecta a tela ao catálogo fechado e imutável, exibindo exatamente
+  as quatro operações tipadas publicadas. Diagnóstico nunca dispara reparo,
+  não existe campo de comando/texto livre, toda execução exige confirmação
+  explícita e auto-repeat não produz nova ação;
+- a composição dispõe hoje de porta segura real apenas para preferências
+  visuais: snapshot integral sem normalização silenciosa, normalização tipada,
+  pós-checagem e restauração exata. A ação exige `configs/edit` e auditoria
+  estrita antes da mutação; falha de auditoria bloqueia ou reverte a mudança;
+- limpeza de cache/temporário registrado, reinício local da Nabi e regeneração
+  do cache de relatórios permanecem visíveis no catálogo publicado, mas retornam
+  `INCONCLUSIVO` porque a base estável não oferece portas seguras correspondentes.
+  Nenhuma pasta, processo, PID, comando, operação em andamento ou gerador de
+  cache foi inventado para simular suporte;
+- os únicos resultados aceitos continuam sendo `PROVADO`, `FALHOU`, `REVERTIDO`
+  e `INCONCLUSIVO`; o diálogo valida o catálogo e o resultado retornado antes de
+  exibi-lo e mantém chaves opacas por execução;
+- `8ae2cdf` torna determinística a prova de nova coleta diagnóstica: o teste
+  verifica que o resultado não foi reutilizado sem comparar literalmente o
+  espaço livre em disco, valor ambiental que oscila durante a suíte;
+- validação focada final: `91 passed`; a prova de repetição passou cinco vezes
+  consecutivas. Regressão integral final: `2397 passed`, `1 skipped`, `460
+  subtests passed`, zero falhas e somente os dois avisos externos já conhecidos;
+  `compileall`, `git diff --check` e conferência de escopo aprovados;
+- não houve acesso a banco real nem alteração de Fiscal/SEFAZ, IA operacional,
+  licença, `main_qt.py`, regras de negócio ou reparos amarelos/vermelhos. O
+  próximo passo é homologação visual do fluxo explícito de preferências e dos
+  três retornos inconclusivos, ainda sem promover esta branch na estável.
