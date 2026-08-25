@@ -982,6 +982,36 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 - o simulador local continua descartável e sem acesso ao banco; nenhum push foi
   realizado.
 
+### Distribuição DF-e — origem oficial e recepção endurecida
+
+- a consulta automática usa somente os endpoints oficiais fechados definidos
+  pelo ambiente `HOMOLOGACAO` ou `PRODUCAO`; ambiente, origem ou `tpAmb`
+  divergentes falham fechados;
+- antes do transporte, o CNPJ configurado deve ser válido e corresponder
+  exatamente ao documento do certificado; prontidão, confiança ICP-Brasil e
+  revogação continuam obrigatórias;
+- respostas rejeitam raiz/versão/schema incompatíveis, NSU regressivo,
+  duplicado, acima do último NSU ou conteúdo divergente para o mesmo NSU;
+- recepções registram SHA-256, origem, ambiente, operador e horário; repetição
+  idêntica é idempotente;
+- validação sem rede ou certificado real: `25 passed`, `compileall` e
+  `git diff --check`;
+- pendências deliberadamente bloqueadas: confirmar em documentação vigente o
+  intervalo de consultas/status 656 e regras após manifestação; adicionar
+  validação XSD completa e journal/outbox para atomicidade forte entre arquivo e
+  estado antes de homologação real.
+
+### Certificado A1 no Windows — decisão arquitetural
+
+- o fluxo atual copia o A1 para a área persistente gerenciada e protege a senha
+  com DPAPI vinculada ao usuário do Windows, validando CNPJ e validade;
+- usar diretamente `CurrentUser\\My` não pode ser apresentado como simples
+  seleção por thumbprint: assinatura XML, QR Code e TLS ainda dependem do
+  PKCS#12; suporte verdadeiro exige abstrações próprias CAPI/CNG para assinatura
+  e transporte;
+- não foi criada uma opção visual enganosa. Nenhum certificado real, repositório
+  do Windows ou rede foi acessado nesta auditoria.
+
 ### Checkpoint IA Nabi — integração Qt opcional e inerte
 
 - commit: `cfd994b` — `feat: integra painel Nabi opcional ao Qt`;
