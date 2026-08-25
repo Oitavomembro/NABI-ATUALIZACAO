@@ -76,23 +76,32 @@ def test_shell_starts_on_dashboard_without_creating_pdv(qt_application):
         shell.close()
 
 
-def test_navigation_cards_are_large_descriptive_and_arranged_in_three_columns(qt_application):
+def test_navigation_cards_follow_legacy_order_in_five_responsive_columns(qt_application):
     shell = NabiCodeShellWindow(Security(), (dashboard_module(),), Mock())
     try:
         vendas = shell.navigation_buttons["vendas"]
         fiscal = shell.navigation_buttons["fiscal"]
-        assert vendas.sizeHint().height() >= 70
+        assert vendas.minimumHeight() >= 60
         assert "qlineargradient" in vendas.styleSheet()
-        assert "border-bottom:6px" in vendas.styleSheet()
+        assert "#626970" in vendas.styleSheet()
+        assert "border-bottom:3px" in vendas.styleSheet()
+        assert "#1f6feb" not in vendas.styleSheet()
         assert "PDV, pagamentos e comprovantes" in vendas.text()
         assert "Documentos e comunicação fiscal" in fiscal.text()
         positions = {
-            shell.navigation_buttons[item.module_id]: (index // 3, index % 3)
+            shell.navigation_buttons[item.module_id]: (index // 5, index % 5)
             for index, item in enumerate(LEGACY_NAVIGATION)
         }
         assert positions[shell.navigation_buttons["dashboard"]] == (0, 0)
-        assert positions[shell.navigation_buttons["financeiro"]] == (1, 1)
-        assert positions[shell.navigation_buttons["configs"]] == (2, 2)
+        assert positions[shell.navigation_buttons["financeiro"]] == (0, 4)
+        assert positions[shell.navigation_buttons["caixa"]] == (1, 0)
+        assert positions[shell.navigation_buttons["configs"]] == (1, 3)
+        legacy_colors = {item.color for item in LEGACY_NAVIGATION}
+        for button in shell.navigation_buttons.values():
+            style = button.styleSheet()
+            assert "#626970" in style
+            assert all(color not in style for color in legacy_colors)
+        assert "#a13b42" in shell.panic_button.styleSheet()
     finally:
         shell.close()
 
@@ -183,7 +192,7 @@ def test_primary_module_is_embedded_and_reused_in_shell(qt_application):
         assert created[0].isWindow() is False
         assert shell.show_module("clientes") is True
         assert len(created) == 1
-        assert "border:3px solid #ffffff" in shell.navigation_buttons["clientes"].styleSheet()
+        assert "border:2px solid #dce2e7" in shell.navigation_buttons["clientes"].styleSheet()
         created[0].reject(); qt_application.processEvents()
         assert shell._active_module == "dashboard"
     finally:

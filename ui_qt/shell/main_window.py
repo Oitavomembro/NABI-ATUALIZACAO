@@ -37,13 +37,13 @@ LEGACY_NAVIGATION = (
 
 
 SHELL_STYLE = """
-QMainWindow, QWidget#shellRoot { background:#0d1117; color:#f0f6fc; }
-QFrame#sideMenu { background:#161b22; border:0; }
-QLabel { color:#f0f6fc; }
-QPushButton { color:#f0f6fc; border:0; border-radius:12px; min-height:44px;
+QMainWindow, QWidget#shellRoot { background:#111316; color:#e5e9ed; }
+QFrame#sideMenu { background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #292e33,stop:1 #171a1e); border:0; border-right:1px solid #555c63; }
+QLabel { color:#e5e9ed; }
+QPushButton { color:#f4f6f8; border:0; border-radius:8px; min-height:44px;
  font-size:14px; font-weight:800; padding:0 12px; }
-QPushButton:focus { border:3px solid #ffffff; }
-QPushButton:disabled { color:#8b949e; background:#21262d; }
+QPushButton:focus { border:2px solid #dce2e7; }
+QPushButton:disabled { color:#858c92; background:#282c30; }
 """
 
 
@@ -159,27 +159,27 @@ class NabiCodeShellWindow(QMainWindow):
         frame = QFrame(objectName="sideMenu"); frame.setFixedWidth(300)
         root = QVBoxLayout(frame); root.setContentsMargins(14, 20, 14, 16); root.setSpacing(10)
         logo = QLabel("NABICODE"); logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        logo.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;padding:10px;letter-spacing:1px")
+        logo.setStyleSheet("color:#d9dee3;font-size:25px;font-weight:900;padding:10px;letter-spacing:1px;border-bottom:2px solid #73c7dc")
         root.addWidget(logo); self.summary_labels = {}
         for key, text, accent, color in (
-            ("total", "Fichas: —", "#8b949e", "#ffffff"),
-            ("current", "Em Dia: —", "#2ea043", "#5df2a1"),
-            ("owing", "Devendo: —", "#bf8700", "#ffd866"),
+            ("total", "Fichas: —", "#73c7dc", "#f1f3f5"),
+            ("current", "Em Dia: —", "#73c7dc", "#f1f3f5"),
+            ("owing", "Devendo: —", "#73c7dc", "#f1f3f5"),
             ("alert", "Alerta (>60d): —", "#da3633", "#ff8582"),
         ):
             label = QLabel(text)
             label.setMinimumHeight(42)
             label.setStyleSheet(
                 "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-                "stop:0 #303a46,stop:0.18 #202833,stop:1 #11161d);"
-                f"color:{color};border:1px solid #3b4654;border-left:5px solid {accent};"
+                "stop:0 #4a5158,stop:0.18 #30363c,stop:1 #1b1f23);"
+                f"color:{color};border:1px solid #666e75;border-left:4px solid {accent};"
                 "border-radius:8px;padding:10px;font-size:13px;font-weight:800"
             )
             root.addWidget(label); self.summary_labels[key] = label
         shortcuts = QLabel("ATALHOS RÁPIDOS\n\n[F1]  Início\n[F2]  Vendas\n[F3]  Clientes\n[F4]  Produtos\n[F5]  Configs\n[Ctrl+Shift+P]  Pânico")
-        shortcuts.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:12px;font-size:13px;font-weight:700;color:#c9d1d9")
+        shortcuts.setStyleSheet("background:#202429;border:1px solid #555c63;border-radius:8px;padding:12px;font-size:13px;font-weight:700;color:#d4d9de")
         root.addWidget(shortcuts)
-        favorites = QLabel("FAVORITOS"); favorites.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:11px;font-size:14px;font-weight:800")
+        favorites = QLabel("FAVORITOS"); favorites.setStyleSheet("background:#202429;border:1px solid #555c63;border-left:4px solid #73c7dc;border-radius:8px;padding:11px;font-size:14px;font-weight:800")
         root.addWidget(favorites)
         self.favorite_buttons = {}
         canonical = {item.module_id for item in LEGACY_NAVIGATION}
@@ -210,7 +210,7 @@ class NabiCodeShellWindow(QMainWindow):
         self.menu_toggle.setStyleSheet(METALLIC_AUX_BUTTON_STYLE); self.menu_toggle.clicked.connect(self.toggle_side_menu)
         row.addWidget(self.menu_toggle)
         title = QLabel(str(store_name).upper()); title.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        title.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;letter-spacing:1px"); row.addWidget(title, 1)
+        title.setStyleSheet("color:#d9dee3;font-size:25px;font-weight:900;letter-spacing:1px;border-bottom:2px solid #73c7dc;padding-bottom:5px"); row.addWidget(title, 1)
         profile = QLabel(profile_label); profile.setStyleSheet("color:#8b949e;font-size:12px;font-weight:700"); row.addWidget(profile)
         self.history_button = QPushButton("Histórico"); self.history_button.setStyleSheet(METALLIC_AUX_BUTTON_STYLE)
         self.history_button.clicked.connect(lambda: self.open_module("auditoria")); row.addWidget(self.history_button)
@@ -224,13 +224,15 @@ class NabiCodeShellWindow(QMainWindow):
             shortcut = f" [{item.shortcut}]" if item.shortcut else ""
             subtitle = NAVIGATION_SUBTITLES[item.module_id]
             button = QPushButton(f"{item.label}{shortcut}\n{subtitle}")
-            button.setFixedHeight(82)
+            button.setMinimumHeight(64)
             button.setObjectName(f"navigation_{item.module_id}"); button.setAccessibleName(item.label)
             button.setProperty("legacyOrder", index)
             self._style_navigation_button(button, item, active=False)
             button.clicked.connect(lambda _checked=False, selected=item.module_id: self.show_module(selected))
-            button.installEventFilter(self); grid.addWidget(button, index // 3, index % 3)
+            button.installEventFilter(self); grid.addWidget(button, index // 5, index % 5)
             self.navigation_buttons[item.module_id] = button
+        for column in range(5):
+            grid.setColumnStretch(column, 1)
         available = {"dashboard", "vendas"}.union(self._modules)
         for module_id, button in self.navigation_buttons.items():
             button.setEnabled(module_id in available)
@@ -281,28 +283,27 @@ class NabiCodeShellWindow(QMainWindow):
 
     @staticmethod
     def _style_navigation_button(button, item, *, active):
-        accent, shadow = NEON_ACCENTS[item.module_id]
-        border = "3px solid #ffffff" if active else "1px solid rgba(255,255,255,35)"
+        border = "2px solid #dce2e7" if active else "1px solid #747c84"
+        accent = "#9bd5e3" if active else "#73c7dc"
         button.setStyleSheet(
             "QPushButton{"
             "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-            f"stop:0 {accent},stop:0.045 #30404d,stop:0.13 #1b2632,"
-            "stop:0.62 #111923,stop:1 #080d14);"
-            f"border:{border};border-left:6px solid {accent};"
-            f"border-bottom:6px solid {shadow};border-radius:14px;"
-            "font-size:15px;font-weight:900;text-align:left;padding:8px 16px 12px 16px}"
+            "stop:0 #626970,stop:0.42 #42484e,stop:1 #272c31);"
+            f"border:{border};border-left:4px solid {accent};"
+            "border-bottom:3px solid #1c2024;border-radius:8px;"
+            "font-size:13px;font-weight:900;text-align:left;padding:7px 10px 9px 10px}"
             "QPushButton:hover{"
-            "background:qlineargradient(x1:0,y1:0,x2:1,y2:1,"
-            f"stop:0 {accent},stop:0.08 #435464,stop:0.45 #1c2a38,stop:1 #0b131d);"
-            f"border-top:3px solid {accent}}}"
+            "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+            "stop:0 #737b83,stop:0.48 #4b5258,stop:1 #30353a);"
+            "border-color:#9bd5e3}"
             "QPushButton:pressed{"
-            "background:#09111a;"
-            f"border-left:6px solid {accent};border-bottom:2px solid {shadow};"
-            "padding-top:12px;padding-bottom:8px}"
-            f"QPushButton:focus{{border:3px solid #ffffff;border-left:6px solid {accent};"
-            f"border-bottom:6px solid {shadow}}}"
-            "QPushButton:disabled{background:#21262d;color:#8b949e;"
-            "border:1px solid #30363d;border-bottom:5px solid #161b22}"
+            "background:#292e33;"
+            f"border-left:4px solid {accent};border-bottom:1px solid #1c2024;"
+            "padding-top:9px;padding-bottom:7px}"
+            f"QPushButton:focus{{border:2px solid #dce2e7;border-left:4px solid {accent};"
+            "border-bottom:3px solid #1c2024}"
+            "QPushButton:disabled{background:#282c30;color:#858c92;"
+            "border:1px solid #464c52;border-bottom:3px solid #1c2024}"
         )
 
     def show_module(self, module_id):
