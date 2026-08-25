@@ -2881,3 +2881,34 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Cadeia de fornecimento Windows fechada V2
+
+- branch/worktree isolados: `codex/supply-chain-fechada-v2` em
+  `NabiCode-QT-SupplyChainV2-codex`, derivados exatamente de `1cfdfa4`;
+- implementação: `0c2b4a2` — `build: fecha cadeia de dependencias Windows`;
+- cerimônia autorizada em 24/08/2026 preservou as 18 versões diretas já
+  homologadas e fixou `cyclonedx-bom==7.3.1`; uma resolução única em TEMP para
+  Python 3.14.7/Windows x64 produziu baseline transitiva de 68 wheels;
+- cada entrada do lock registra versão exata, único nome de artefato aprovado e
+  SHA-256 previamente capturado; atualizações futuras exigem novo checkpoint;
+- download e instalação usam `--no-deps`, `--require-hashes` e
+  `--only-binary=:all:`; o build permanece `--no-index` e offline;
+- validador fail-closed rejeita lock incompleto/duplicado, wheel ausente, extra,
+  duplicado, renomeado ou adulterado antes da criação do ambiente de build;
+- revisão de licenças cobre exatamente o lock e gera o inventário versionado em
+  `THIRD_PARTY_NOTICES.md`; pacote sem decisão de licença, ausente ou divergente
+  reprova, sem inferência automática;
+- `cyclonedx-bom` gera e valida SBOM CycloneDX 1.6 reproduzível; simulação real
+  produziu 68 componentes e passou na validação do schema;
+- testes focados finais: `33 passed`; instalação integral do lock em ambiente
+  temporário com hashes/no-deps aprovada; `compileall` e `git diff --check`
+  aprovados;
+- não houve alteração de runtime, Fiscal/SEFAZ, Nabi, Qt, banco ou instalador
+  final real; nenhuma versão direta foi atualizada incidentalmente e nenhum
+  segredo foi lido ou incluído;
+- o wheelhouse e o SBOM continuam artefatos gerados fora do Git. Build físico do
+  onedir/instalador não foi executado neste checkpoint e permanece sujeito ao
+  roteiro Windows já documentado;
+- próximo passo seguro: revisão independente e integração normal na consolidada,
+  seguida de novo build físico offline. Não integrar automaticamente.
