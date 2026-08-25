@@ -3725,3 +3725,136 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - próximo passo: revisão dos commits e integração por merge normal. Homologação
   física, credenciamento, A1/CSC, impressão e SEFAZ permanecem pendentes e fora
   deste checkpoint.
+### Central de Socorro — diagnóstico somente leitura
+
+- branch isolada `codex/central-socorro-diagnostico`, base `d7769b0`;
+- catálogo fechado por enums, `HelpEntry` e `DiagnosticResult` imutáveis, estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`;
+- checks iniciais: disco, diretórios persistentes sem escrita, banco por porta
+  read-only, backup diário, impressora e runtime Nabi opcional;
+- serviço não contém SQL, shell, credencial ou autorreparo; portas ausentes e
+  exceções viram resultado seguro sem impedir os demais checks;
+- auditoria recebe apenas estados sanitizados; XML/PII/segredos não são emitidos;
+- testes focados: `6 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma UI, Fiscal/SEFAZ, Caixa, estoque, venda, Qt, licença ou banco real foi alterado.
+
+### Central de Socorro — interface Qt somente diagnóstica
+
+- branch/worktree isolados: `codex/central-socorro-qt` em
+  `NabiCode-QT-CentralSocorroQt-codex`, derivados exatamente de `4a84d90`;
+- implementação: `f4ddd94` — `feat: cria Central de Socorro Qt somente diagnostica`;
+- a janela apresenta os seis checks do catálogo fechado em cartões com estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`; detalhes e identificadores
+  técnicos são sanitizados novamente antes da exibição;
+- execução ocorre em `QThreadPool`, fora da thread gráfica. Reentrada é bloqueada,
+  respostas de geração anterior são descartadas e os workers permanecem vivos
+  até a conclusão;
+- a tela explica separadamente o que foi protegido/testado e o que permanece
+  inconclusivo ou dependente de homologação física. Nenhum estado é apresentado
+  como reparo, autorização ou prova fiscal;
+- o relatório JSON `nabicode.help-center-report.v1` cobre exatamente um resultado
+  por check, repete os limites do diagnóstico, sanitiza todo texto e é gravado por
+  arquivo temporário + `fsync` + substituição atômica. Falha preserva o destino
+  anterior e remove o temporário;
+- Enter avança ou executa uma única ação, Shift+Enter retorna, Esc fecha e invalida
+  resultado tardio, e auto-repeat é consumido sem ação;
+- testes focados finais: `12 passed`; regressão administrativa/Qt e redação:
+  `51 passed`; `compileall` e `git diff --check` aprovados;
+- não há autorreparo, SQL, shell, credencial, gravação operacional ou conexão a
+  `main_qt.py`/shell. Fiscal/SEFAZ, Caixa, estoque, vendas, licença e banco real
+  permaneceram intocados; conexão ao shell exige checkpoint posterior separado.
+### Conexão mínima da Central de Socorro ao hub
+
+- a Central de Socorro diagnóstica passou a aparecer no hub administrativo sob `configs/view`, sem criar atalho oculto ou contornar sessão/permissões;
+- banco usa `quick_check` em conexão SQLite `mode=ro` e `query_only`; pastas e backups são apenas inspecionados; impressoras são consultadas e a Nabi ausente permanece inconclusiva;
+- nenhum diretório, backup, banco ou configuração é criado/alterado pelo novo módulo;
+- validação focada de composição, serviço e Qt: `25 passed`; `compileall` e `git diff --check` aprovados.
+
+### Central de Socorro — catálogo de autorreparo VERDE
+
+- branch/worktree isolados: `codex/central-socorro-autorreparo-verde` em
+  `NabiCode-QT-SocorroAutorreparoVerde-codex`, derivados exatamente de
+  `ea1ffd3`;
+- implementação: `3bd4b46` — `feat: adiciona autorreparo verde tipado ao
+  socorro`;
+- catálogo fechado e imutável aceita somente quatro operações VERDE:
+  normalizar preferências visuais inválidas, limpar cache/temporário registrado,
+  reiniciar o runtime local da Nabi e regenerar cache de relatórios;
+- `RepairRequest` exige enum e chave opaca; texto livre, nome de ferramenta ou
+  comando produzido pela IA não atravessa a fronteira. Repetição da mesma chave
+  devolve o mesmo resultado e colisão com outro reparo falha fechada;
+- resultados tipados são exclusivamente `PROVADO`, `FALHOU`, `REVERTIDO` ou
+  `INCONCLUSIVO`, com precheck, postcheck, snapshot e rollback verificável;
+- preferências visuais preservam cópia integral em memória, aplicam somente a
+  normalização fornecida pela porta e restauram exatamente o snapshot quando a
+  pós-checagem ou a auditoria estrita falha;
+- limpeza aceita apenas tupla registrada de raiz absoluta explícita + caminho
+  relativo. Raiz de volume, escape `..`, ADS, alvo duplicado/sobreposto,
+  symlink, junction/reparse point e tipo especial são recusados antes da
+  alteração; alvos passam por quarentena confinada e o rollback compara SHA-256
+  de nomes/conteúdo sem registrar os dados;
+- reinício da Nabi usa exclusivamente callbacks tipados de snapshot, restart e
+  rollback; não recebe PID, processo, operação em andamento, shell ou comando;
+- cache de relatórios é regenerado exclusivamente por porta tipada, com geração
+  anterior, validade posterior e restauração da geração original quando não há
+  prova de sucesso;
+- toda mutação exige auditoria estrita antes de começar. A auditoria recebe
+  apenas enum, fase, resultado, indicador de mudança, ID técnico fechado e hash
+  da chave; falha de persistência bloqueia a ação ou força a restauração;
+- 13 testes adversariais novos cobrem catálogo fechado, imutabilidade, replay,
+  colisão de escopo, normalização, rollback, containment, raiz ampla, ADS,
+  duplicidade, sobreposição, reparse, quarentena, callbacks e falha da auditoria;
+- regressão relacionada final: `73 passed`; suíte integral anterior ao último
+  endurecimento de caminho: `2208 passed`, `1 skipped`, `444 subtests passed`,
+  com somente a depreciação externa já conhecida do `BrazilFiscalReport`;
+  `compileall` completo e `git diff --check` aprovados após o endurecimento;
+- não houve ligação à interface/composição e `main_qt.py` permaneceu intocado.
+  Banco, backup/restauração, atualização, licença, usuários, vendas, Caixa,
+  estoque, Financeiro, Fiscal/SEFAZ e reparos de sistema operacional ficaram
+  fora do catálogo e não foram acessados ou alterados;
+- próximo passo seguro: revisão independente do contrato e, somente em
+  checkpoint coordenado posterior, composição explícita das quatro portas e da
+  auditoria oficial; não promover texto da Nabi a comando nem ampliar o catálogo
+  sem novo desenho, testes e autorização.
+
+### Integração isolada da Central de Socorro e do catálogo VERDE
+
+- branch/worktree: `codex/integracao-socorro-verde-homologacao` em
+  `NabiCode-QT-IntegracaoSocorroVerde-codex`, derivados exatamente de
+  `origin/codex/homologacao-primeiro-uso@a179e79`; a branch estável não recebeu
+  merge nem alteração;
+- a ancestralidade foi conferida antes da integração. `5a70477` e `7cde9f7`
+  são trilhas irmãs e não ancestrais entre si; seus merge-bases com a base
+  estável são, respectivamente, `739ad558` e `d7769b0`, e o merge-base entre
+  as duas trilhas é `ea1ffd3`;
+- os históricos publicados foram preservados por merges normais, na ordem da
+  dependência: `fc1626f` integra a Central Qt e `2926083` integra o catálogo
+  VERDE. Os conflitos limitaram-se ao mapa e foram resolvidos aditivamente,
+  mantendo as evidências das duas origens e da base estável;
+- `afa925e` conecta a tela ao catálogo fechado e imutável, exibindo exatamente
+  as quatro operações tipadas publicadas. Diagnóstico nunca dispara reparo,
+  não existe campo de comando/texto livre, toda execução exige confirmação
+  explícita e auto-repeat não produz nova ação;
+- a composição dispõe hoje de porta segura real apenas para preferências
+  visuais: snapshot integral sem normalização silenciosa, normalização tipada,
+  pós-checagem e restauração exata. A ação exige `configs/edit` e auditoria
+  estrita antes da mutação; falha de auditoria bloqueia ou reverte a mudança;
+- limpeza de cache/temporário registrado, reinício local da Nabi e regeneração
+  do cache de relatórios permanecem visíveis no catálogo publicado, mas retornam
+  `INCONCLUSIVO` porque a base estável não oferece portas seguras correspondentes.
+  Nenhuma pasta, processo, PID, comando, operação em andamento ou gerador de
+  cache foi inventado para simular suporte;
+- os únicos resultados aceitos continuam sendo `PROVADO`, `FALHOU`, `REVERTIDO`
+  e `INCONCLUSIVO`; o diálogo valida o catálogo e o resultado retornado antes de
+  exibi-lo e mantém chaves opacas por execução;
+- `8ae2cdf` torna determinística a prova de nova coleta diagnóstica: o teste
+  verifica que o resultado não foi reutilizado sem comparar literalmente o
+  espaço livre em disco, valor ambiental que oscila durante a suíte;
+- validação focada final: `91 passed`; a prova de repetição passou cinco vezes
+  consecutivas. Regressão integral final: `2397 passed`, `1 skipped`, `460
+  subtests passed`, zero falhas e somente os dois avisos externos já conhecidos;
+  `compileall`, `git diff --check` e conferência de escopo aprovados;
+- não houve acesso a banco real nem alteração de Fiscal/SEFAZ, IA operacional,
+  licença, `main_qt.py`, regras de negócio ou reparos amarelos/vermelhos. O
+  próximo passo é homologação visual do fluxo explícito de preferências e dos
+  três retornos inconclusivos, ainda sem promover esta branch na estável.

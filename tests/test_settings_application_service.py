@@ -75,6 +75,27 @@ def test_preferencias_sao_normalizadas_e_isoladas_por_usuario(tmp_path):
     assert application.load().preferences["mode"] == "Simples"
 
 
+def test_porta_de_reparo_captura_e_restaura_snapshot_sem_normalizar(tmp_path):
+    application, _security, _system, _backup, _diagnostics = service(tmp_path)
+    invalid = {"mode": "INVÁLIDO", "theme": "desconhecido"}
+    application.config.set("interface_usuarios", {"maria": invalid})
+
+    snapshot = application.snapshot_preferences_for_repair()
+    assert snapshot == invalid
+    normalized = {**invalid, "mode": "Intermediário", "theme": "Azul Profissional"}
+    application.replace_preferences_for_repair(normalized)
+    assert application.snapshot_preferences_for_repair() == normalized
+    application.replace_preferences_for_repair(snapshot)
+    assert application.snapshot_preferences_for_repair() == invalid
+
+
+def test_porta_de_reparo_visual_exige_permissao_de_edicao(tmp_path):
+    application, _security, *_ = service(tmp_path, ("view",))
+    assert isinstance(application.snapshot_preferences_for_repair(), dict)
+    with pytest.raises(PermissionError):
+        application.replace_preferences_for_repair({"mode": "Intermediário"})
+
+
 def test_perfil_somente_leitura_nao_altera_preferencias_ou_backup(tmp_path):
     application, _security, _system, backup, _diagnostics = service(tmp_path, ("view",))
     assert application.load().username == "maria"
