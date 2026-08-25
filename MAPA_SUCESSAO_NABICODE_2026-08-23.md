@@ -2881,3 +2881,32 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+## Radar regulatório — MEI e Simples Nacional em 2027 (pesquisa de 24/08/2026)
+
+Registro preventivo; não representa homologação fiscal nem autorização para alterar leiautes sem nova auditoria.
+
+- fonte oficial: Ministério da Fazenda, notícia de 11/08/2026 sobre as Resoluções CGSN nº 190 e nº 191/2026;
+- regra divulgada: as alterações da Resolução CGSN nº 190 produzem efeitos, em regra, a partir de 01/01/2027 e ampliam a emissão de documento fiscal pelo MEI para vendas de mercadorias e prestações de serviços;
+- serviços: permanece prevista a NFS-e de padrão nacional, gratuita;
+- mercadorias e determinadas prestações de transporte: a regulamentação prevê uso preferencial e gratuito da Nota Fiscal Fácil (NFF);
+- Simples Nacional: documentos fiscais passam a observar também as regras de CBS/IBS aplicáveis a partir de 01/01/2027, conforme hipóteses e leiautes oficiais;
+- cronograma oficial dos documentos fiscais da Reforma Tributária indica 01/01/2027 para documentos de contribuintes do Simples Nacional, com leiautes previstos para publicação/adequação anterior;
+- não existe, nas fontes consultadas, obrigação de o MEI comprar ou usar um programa privado específico. O NabiCode pode integrar os emissores/APIs oficiais quando houver contrato técnico publicado, mas não pode substituir, contornar ou presumir autorização governamental;
+- a regra atual anterior à vigência de 2027 não deve ser apagada: a dispensa e as hipóteses de emissão do MEI continuam dependentes da data, operação, destinatário, atividade e ente federado.
+
+Fontes oficiais registradas:
+
+- `https://www.gov.br/fazenda/pt-br/assuntos/noticias/2026/agosto/cgsn-atualiza-regras-do-simples-nacional-para-adequacao-a-reforma-tributaria-do-consumo`;
+- `https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/julho/receita-federal-e-comite-gestor-do-ibs-publicam-o-cronograma-de-implementacao-dos-documentos-fiscais-eletronicos-da-reforma-tributaria-do-consumo`;
+- `https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/agosto/simples-nacional-nfs-e-nacional-sera-obrigatoria-para-me-e-epp-a-partir-de-1o-de-novembro-de-2026`;
+- `https://normas.receita.fazenda.gov.br/sijut2consulta/link.action?idAto=92278` (Resolução CGSN nº 140/2018 consolidada; conferir novamente antes da implementação).
+
+Checkpoint futuro obrigatório antes de release fiscal 2027:
+
+1. reler Resoluções CGSN nº 190/191 e atos posteriores na fonte normativa consolidada;
+2. identificar o enquadramento real do contribuinte (MEI, ME/EPP, atividade, UF e município);
+3. homologar leiautes 2027 de NF-e/NFC-e/NFS-e/NFF e campos CBS/IBS sem inventar regra;
+4. implementar por adaptadores versionados, mantendo Comercial/NÃO FISCAL isolado;
+5. testar nos ambientes oficiais de homologação e preservar evidências físicas;
+6. somente então liberar qualquer operação fiscal correspondente.
