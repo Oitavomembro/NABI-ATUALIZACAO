@@ -118,3 +118,27 @@ def test_gui_nao_importa_banco_repositorios_fiscal_ou_legacy():
         elif isinstance(node, ast.ImportFrom): modules.append(str(node.module or "").lower())
     for forbidden in ("sqlite3", "database", "repositories", "fiscal", "sefaz", "nabicode_legacy"):
         assert not any(forbidden in module for module in modules)
+
+
+def test_backup_distingue_diario_legado_da_opcao_protegida():
+    dialog = SettingsDialog(Application())
+    texts = [label.text() for label in dialog.findChildren(__import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel)]
+    assert any("dados pessoais" in text and "não é criptografado" in text for text in texts)
+    assert dialog.protected_backup.text().startswith("Backup protegido")
+    dialog.close()
+
+
+def test_backup_manual_parcial_exibe_destino_com_falha_sem_alegar_sucesso():
+    application = Application()
+    application.create_backup = lambda: SimpleNamespace(
+        created=("C:\\Teste\\principal.db",),
+        errors=("C:\\OneDrive: indisponível",),
+    )
+    dialog = SettingsDialog(application)
+    with patch("ui_qt.administration.settings_dialog.QMessageBox.warning") as warning, patch(
+        "ui_qt.administration.settings_dialog.QMessageBox.information"
+    ) as information:
+        dialog._create_backup()
+    assert "indisponível" in warning.call_args.args[2]
+    information.assert_not_called()
+    dialog.close()

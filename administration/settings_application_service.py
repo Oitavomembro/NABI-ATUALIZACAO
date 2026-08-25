@@ -32,6 +32,16 @@ class StoreIdentitySnapshot:
     receipt_footer: str
 
 
+@dataclass(frozen=True, slots=True)
+class BackupPackageResult:
+    path: str
+    filename: str
+    backup_format: str
+    encrypted: bool
+    sha256: str
+    schema_version: int
+
+
 class SettingsApplicationService:
     """Porta autenticada para as configurações não fiscais do Qt."""
 
@@ -130,6 +140,49 @@ class SettingsApplicationService:
             detail = "; ".join(result.errors) or "Nenhum destino de backup disponível."
             raise RuntimeError(detail)
         return result
+
+    def create_backup_package(
+        self, *, directory: str | Path, encrypted: bool, password: str = ""
+    ) -> BackupPackageResult:
+        self._require("backup")
+        destination = self._validated_directory(str(directory), required=True)
+        created = ""
+        try:
+            if encrypted:
+                created = self.backup_service.create_encrypted(
+                    destination, password, "backup_manual_protegido"
+                )
+                verification = self.backup_service.verify_restore_in_temporary(
+                    created, password
+                )
+            else:
+                created = self.backup_service.create(destination, "backup_manual_legado")
+                verification = self.backup_service.verify_restore_in_temporary(created)
+        except Exception:
+            if created:
+                Path(created).unlink(missing_ok=True)
+            raise
+        return BackupPackageResult(
+            path=str(created),
+            filename=Path(created).name,
+            backup_format=str(verification.backup_format),
+            encrypted=bool(verification.encrypted),
+            sha256=str(verification.sha256),
+            schema_version=int(verification.schema_version),
+        )
+
+    def verify_backup_package(
+        self, *, backup_path: str | Path, password: str = ""
+    ):
+        self._require("backup")
+        return self.backup_service.verify_restore_in_temporary(
+            backup_path, password or None
+        )
+
+    def verify_backup_restore(self, backup_path: str | Path):
+        """Verifica restauração em TEMP; não oferece mutação do banco ativo."""
+        self._require("backup")
+        return self.backup_service.verify_restore_in_temporary(backup_path)
 
     def run_diagnostics(self) -> tuple[dict, str]:
         self._require("diagnose")

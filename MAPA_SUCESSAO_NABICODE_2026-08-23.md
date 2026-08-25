@@ -2944,3 +2944,96 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   que chamadas futuras pela fachada sejam silenciosas, mas a atomicidade desses
   fluxos externos exige checkpoint próprio, pois não pode ser simulada dentro
   de uma transação SQLite.
+
+### Backup diário Qt confiável e restauração comprovável
+
+- branch isolada `codex/backup-diario-qt-confiavel`, derivada de `1cfdfa4`;
+- núcleo `2bce948` — `fix: torna backup diario confiavel por destino`;
+- startup/UI `f019630` — `feat: executa backup diario no startup Qt`;
+- o backup configurado inicia em worker somente depois de licença, perfil,
+  banco, migração/primeiro acesso e login estarem prontos e depois de o shell
+  ser exibido; a interface não espera a cópia SQLite;
+- principal e pasta sincronizada possuem estado diário independente por caminho
+  normalizado. Sucesso local não marca o secundário com falha; nova tentativa no
+  mesmo dia executa somente destinos pendentes;
+- o lock único do serviço e a marca por destino impedem duplicação concorrente.
+  SQLite Backup API, nomes exclusivos, `integrity_check`, `foreign_key_check`,
+  documentos fiscais permitidos e retenção existente foram preservados;
+- resultado visível distingue concluído, parcial, falha, desativado e já
+  concluído. Backup manual parcial também deixou de alegar sucesso integral;
+- a verificação operacional restaura exclusivamente para diretório TEMP,
+  revalida integridade/FK e compara schema com o banco ativo sem modificá-lo.
+  A restauração real continua manual, reforçada e com snapshot de segurança no
+  serviço oficial de manutenção; nenhum botão perigoso foi criado;
+- corrigido o mojibake `Backup invÃ¡lido`; Configurações avisa que os backups
+  contêm dados pessoais e não recebem criptografia neste checkpoint;
+- validação final relacionada: `99 passed`, `3 subtests passed`; bloco focado:
+  `38 passed`; `compileall` completo e `git diff --check` aprovados;
+- não houve alteração em Fiscal/SEFAZ, Nabi, PDV, Caixa, licenciamento,
+  usuários, banco real, instalador, retenção ou regras de negócio;
+- próximo passo: revisão independente e integração normal na consolidada. O
+  pacote mensal do contador permanece fora deste checkpoint até contrato
+  oficial delimitado pela trilha arquiteta.
+
+### Backup criptografado autenticado opcional
+
+- branch isolada `codex/backup-criptografado-v2`, derivada de
+  `codex/backup-diario-qt-confiavel@ac9b69f`;
+- implementação `8a5cb8a` — `feat: adiciona backup criptografado autenticado`;
+- novo envelope `.nabibackup` versão 1 usa AES-256-GCM em fluxo por blocos e
+  scrypt com parâmetros fixos da implementação; a dependência `cryptography`
+  permanece na versão `46.0.0` já bloqueada pelo build oficial;
+- cabeçalho canônico, versão, cifra, KDF, salt, nonce e tamanho declarado são
+  validados antes da derivação/descriptografia e autenticados como AAD;
+- senha possui mínimo de 12 caracteres, nunca é persistida ou registrada e não
+  existe senha mestra nem recuperação. Perder a senha torna o envelope
+  irrecuperável;
+- criação usa cópia SQLite consistente em TEMP, `integrity_check`,
+  `foreign_key_check`, arquivo temporário exclusivo, validação completa e troca
+  atômica. Falha remove envelope parcial e texto temporário;
+- verificação/restauração de prova autentica e descriptografa somente em TEMP,
+  valida integridade/FK/schema e nunca toca no banco ativo. A restauração real
+  permanece no fluxo oficial reforçado;
+- backups `.db` existentes continuam aceitos e são identificados explicitamente
+  como `SQLITE_LEGACY_UNENCRYPTED`; não há renomeação, conversão ou criptografia
+  silenciosa;
+- o envelope protege somente o banco operacional. O ZIP fiscal separado não foi
+  alterado neste checkpoint e segue sua política própria;
+- testes cobrem roundtrip, senha errada, adulteração, truncamento, cabeçalho
+  malicioso, tamanho declarado abusivo, colisão, atomicidade, limpeza e
+  compatibilidade legado. Regressão Backup/Configurações/Fichário: `74 passed`;
+  supply chain/empacotamento/backup: `34 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum Fiscal/SEFAZ, Nabi, Qt visual, licenciamento, banco real ou instalador
+  foi alterado. Próximo passo: integrar por merge normal e expor a opção de
+  senha somente em fluxo humano explícito, sem persistência.
+
+### Configuração Qt do backup criptografado
+
+- branch isolada `codex/backup-criptografado-qt`, derivada do checkpoint V2
+  `4630832`; implementação `5ce1362` — `feat: adiciona backup criptografado ao Qt`;
+- a aba Backup mantém o diário legado compatível e oferece uma entrada separada
+  `Backup protegido`; o diálogo novo seleciona destino e apresenta o envelope
+  criptografado como opção recomendada;
+- escolher `.db` legado exige opção explícita visualmente marcada como insegura
+  e sem criptografia. Nenhum backup existente é convertido ou renomeado;
+- senha e confirmação usam campos protegidos, nunca entram em configuração ou
+  log e são limpas antes de iniciar o worker, ao concluir, falhar ou cancelar;
+- geração e restauração de prova rodam em `QThreadPool`; reentrada fica
+  bloqueada e o diálogo não fecha fingindo cancelamento enquanto a operação
+  atômica está em andamento;
+- sucesso mostra somente nome do arquivo, proteção real, schema e SHA-256.
+  Falha não exibe senha, caminho interno nem texto livre da exceção;
+- Enter avança uma etapa, Shift+Enter retorna, Esc fecha quando seguro e
+  auto-repeat é consumido. A GUI usa apenas a porta
+  `SettingsApplicationService`, sem banco, Fiscal, IA ou licenciamento;
+- `create_backup_package` exige permissão real `configs/backup`, gera pelo
+  `BackupService`, verifica em TEMP e remove o novo arquivo se a prova final
+  falhar. `verify_backup_package` apenas prepara futura seleção de arquivo e
+  também nunca restaura o banco ativo;
+- validação focada UI/serviço/criptografia: `51 passed`; regressão ampliada de
+  Backup, Configurações e Fichário: `84 passed`; `compileall` e
+  `git diff --check` aprovados;
+- `main_qt.py`, shell, Fiscal/SEFAZ, Nabi, licenciamento, banco real e instalador
+  não foram alterados. Integração e homologação visual no Windows permanecem
+  checkpoints separados.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import struct
 import tempfile
 import threading
 import unittest
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from services.backup_service import BackupService
+from services.backup_envelope import MAGIC, MAX_HEADER_SIZE
 
 
 class BackupServiceTests(unittest.TestCase):
@@ -82,7 +84,43 @@ class BackupServiceTests(unittest.TestCase):
         first = self.service.run_daily()
         second = self.service.run_daily()
         self.assertEqual(2, len(first.created))
+        self.assertEqual("SUCESSO", first.status)
         self.assertTrue(second.skipped)
+        self.assertEqual("JA_CONCLUIDO", second.status)
+        self.assertEqual("2026-08-02", self.config["ultimo_backup_diario"])
+
+    def test_run_daily_desativado_nao_cria_arquivo_nem_estado(self):
+        self.config["backup_diario_ativo"] = "0"
+        result = self.service.run_daily()
+        self.assertTrue(result.skipped)
+        self.assertEqual("DESATIVADO", result.status)
+        self.assertEqual([], list((self.root / "local").glob("*.db")))
+        self.assertNotIn("ultimo_backup_diario", self.config)
+
+    def test_falha_secundaria_nao_esconde_parcial_e_retry_repete_so_destino_falho(self):
+        original_create = self.service.create
+        cloud = str((self.root / "cloud").resolve())
+        failed = {"value": False}
+
+        def create(directory, prefix="backup_diario"):
+            if str(Path(directory).resolve()) == cloud and not failed["value"]:
+                failed["value"] = True
+                raise OSError("sincronização indisponível")
+            return original_create(directory, prefix)
+
+        self.service.create = create  # type: ignore[method-assign]
+        first = self.service.run_daily()
+        self.assertEqual("PARCIAL", first.status)
+        self.assertEqual(1, len(first.created))
+        self.assertEqual(1, len(first.errors))
+        self.assertNotIn("ultimo_backup_diario", self.config)
+        second = self.service.run_daily()
+        self.assertEqual("SUCESSO", second.status)
+        self.assertEqual(1, len(second.created))
+        self.assertTrue(second.destinations[0].skipped)
+        self.assertFalse(second.destinations[1].skipped)
+        self.assertEqual(1, len(list((self.root / "local").glob("*.db"))))
+        self.assertEqual(1, len(list((self.root / "cloud").glob("*.db"))))
         self.assertEqual("2026-08-02", self.config["ultimo_backup_diario"])
 
     def test_run_daily_concorrente_cria_apenas_um_conjunto(self) -> None:
@@ -184,6 +222,111 @@ class BackupServiceTests(unittest.TestCase):
         empty.touch()
         with self.assertRaisesRegex(RuntimeError, "ausente ou vazio"):
             self.service._validate(empty)
+
+    def test_verificacao_de_restauracao_usa_copia_temporaria_sem_tocar_ativo(self):
+        backup = self.service.create(self.root / "restore", "teste_restore")
+        connection = sqlite3.connect(self.db)
+        connection.execute("UPDATE dados SET nome='ATIVO ALTERADO'")
+        connection.commit(); connection.close()
+        report = self.service.verify_restore_in_temporary(backup)
+        self.assertEqual("ok", report.integrity)
+        self.assertEqual((), report.foreign_key_errors)
+        self.assertEqual(64, len(report.sha256))
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("ATIVO ALTERADO", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
+
+    def test_verificacao_rejeita_schema_incompativel_sem_tocar_ativo(self):
+        incompatible = self.root / "incompatible.db"
+        connection = sqlite3.connect(incompatible)
+        connection.execute("CREATE TABLE configuracoes(chave TEXT PRIMARY KEY,valor TEXT)")
+        connection.execute("INSERT INTO configuracoes VALUES('db_schema_version','999')")
+        connection.commit(); connection.close()
+        with self.assertRaisesRegex(RuntimeError, "incompatível"):
+            self.service.verify_restore_in_temporary(incompatible)
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("NabiCode", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
+
+    def test_backup_criptografado_roundtrip_e_formato_explicito(self):
+        password = "senha forte de homologacao"
+        backup = Path(self.service.create_encrypted(self.root / "secure", password))
+        self.assertEqual(".nabibackup", backup.suffix)
+        info = self.service.inspect_backup(backup)
+        self.assertTrue(info.encrypted)
+        self.assertEqual("NABICODE_ENCRYPTED_V1", info.format)
+        report = self.service.verify_restore_in_temporary(backup, password)
+        self.assertTrue(report.encrypted)
+        self.assertEqual("NABICODE_ENCRYPTED_V1", report.backup_format)
+        self.assertNotIn(password.encode(), backup.read_bytes())
+
+    def test_backup_legado_permanece_detectavel_sem_conversao(self):
+        legacy = Path(self.service.create(self.root / "legacy", "manual"))
+        before = legacy.read_bytes()
+        info = self.service.inspect_backup(legacy)
+        report = self.service.verify_restore_in_temporary(legacy)
+        self.assertFalse(info.encrypted)
+        self.assertEqual("SQLITE_LEGACY_UNENCRYPTED", report.backup_format)
+        self.assertEqual(before, legacy.read_bytes())
+
+    def test_senha_errada_nao_toca_banco_ativo(self):
+        backup = self.service.create_encrypted(
+            self.root / "secure", "senha correta com doze"
+        )
+        with self.assertRaisesRegex(ValueError, "Senha incorreta|adulterado"):
+            self.service.verify_restore_in_temporary(backup, "senha errada com doze")
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("NabiCode", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
+
+    def test_adulteracao_e_truncamento_sao_rejeitados(self):
+        backup = Path(self.service.create_encrypted(
+            self.root / "secure", "senha correta com doze"
+        ))
+        tampered = self.root / "tampered.nabibackup"
+        content = bytearray(backup.read_bytes())
+        content[-1] ^= 1
+        tampered.write_bytes(content)
+        with self.assertRaisesRegex(ValueError, "Senha incorreta|adulterado"):
+            self.service.verify_restore_in_temporary(tampered, "senha correta com doze")
+        truncated = self.root / "truncated.nabibackup"
+        truncated.write_bytes(backup.read_bytes()[:-1])
+        with self.assertRaisesRegex(ValueError, "Tamanho.*divergente"):
+            self.service.verify_restore_in_temporary(truncated, "senha correta com doze")
+
+    def test_cabecalho_malicioso_e_tamanho_gigante_sao_rejeitados(self):
+        oversized = self.root / "oversized.nabibackup"
+        oversized.write_bytes(MAGIC + struct.pack(">I", MAX_HEADER_SIZE + 1))
+        with self.assertRaisesRegex(ValueError, "cabeçalho.*inválido"):
+            self.service.inspect_backup(oversized)
+        giant = self.root / "giant.nabibackup"
+        header = (
+            b'{"cipher":"AES-256-GCM","kdf":{"n":32768,"name":"scrypt",'
+            b'"p":1,"r":8},"nonce":"AAAAAAAAAAAAAAAA","plaintext_size":'
+            b'2147483649,"salt":"AAAAAAAAAAAAAAAAAAAAAA==","version":1}'
+        )
+        giant.write_bytes(MAGIC + struct.pack(">I", len(header)) + header)
+        with self.assertRaisesRegex(ValueError, "Tamanho declarado"):
+            self.service.inspect_backup(giant)
+
+    def test_falha_na_validacao_remove_envelope_parcial(self):
+        with patch.object(
+            self.service, "_verify_encrypted_to_temporary",
+            side_effect=RuntimeError("falha simulada"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "falha simulada"):
+                self.service.create_encrypted(
+                    self.root / "atomic", "senha correta com doze"
+                )
+        self.assertEqual([], list((self.root / "atomic").iterdir()))
+
+    def test_backup_criptografado_com_instante_identico_nao_sobrescreve(self):
+        password = "senha correta com doze"
+        first = Path(self.service.create_encrypted(self.root / "collision", password))
+        first_bytes = first.read_bytes()
+        second = Path(self.service.create_encrypted(self.root / "collision", password))
+        self.assertNotEqual(first, second)
+        self.assertEqual(first_bytes, first.read_bytes())
 
 
 if __name__ == "__main__":

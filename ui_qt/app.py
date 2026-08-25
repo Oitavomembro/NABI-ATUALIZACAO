@@ -12,6 +12,7 @@ from .commercial.pdv_view_model import PDVViewModel
 from .commercial.pdv_window import PDVWindow
 from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant
 from .shell import NabiCodeShellWindow
+from .backup_startup import DailyBackupController
 
 
 def create_application(
@@ -126,6 +127,7 @@ def create_shell_application(
     nfe_entry_service=None,
     assistant_panel_factory=None,
     reauthenticate=None,
+    daily_backup_service=None,
 ):
     """Cria o shell Legacy; o PDV só nasce quando Vendas/F2 for acionado."""
 
@@ -183,6 +185,10 @@ def create_shell_application(
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating
+    if daily_backup_service is not None:
+        window.daily_backup_controller = DailyBackupController(
+            daily_backup_service, window
+        )
     return qt_application, window
 
 
@@ -191,4 +197,7 @@ def run_shell(application, security, modules, argv=None, **kwargs) -> int:
         application, security, modules, argv, **kwargs
     )
     window.showMaximized()
+    controller = getattr(window, "daily_backup_controller", None)
+    if controller is not None:
+        controller.start()
     return qt_application.exec()
