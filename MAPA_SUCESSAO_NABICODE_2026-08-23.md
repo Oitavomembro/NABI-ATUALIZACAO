@@ -2944,3 +2944,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - nenhum Fiscal/SEFAZ, Nabi, Qt visual, licenciamento, banco real ou instalador
   foi alterado. Próximo passo: integrar por merge normal e expor a opção de
   senha somente em fluxo humano explícito, sem persistência.
+
+### Configuração Qt do backup criptografado
+
+- branch isolada `codex/backup-criptografado-qt`, derivada do checkpoint V2
+  `4630832`; implementação `5ce1362` — `feat: adiciona backup criptografado ao Qt`;
+- a aba Backup mantém o diário legado compatível e oferece uma entrada separada
+  `Backup protegido`; o diálogo novo seleciona destino e apresenta o envelope
+  criptografado como opção recomendada;
+- escolher `.db` legado exige opção explícita visualmente marcada como insegura
+  e sem criptografia. Nenhum backup existente é convertido ou renomeado;
+- senha e confirmação usam campos protegidos, nunca entram em configuração ou
+  log e são limpas antes de iniciar o worker, ao concluir, falhar ou cancelar;
+- geração e restauração de prova rodam em `QThreadPool`; reentrada fica
+  bloqueada e o diálogo não fecha fingindo cancelamento enquanto a operação
+  atômica está em andamento;
+- sucesso mostra somente nome do arquivo, proteção real, schema e SHA-256.
+  Falha não exibe senha, caminho interno nem texto livre da exceção;
+- Enter avança uma etapa, Shift+Enter retorna, Esc fecha quando seguro e
+  auto-repeat é consumido. A GUI usa apenas a porta
+  `SettingsApplicationService`, sem banco, Fiscal, IA ou licenciamento;
+- `create_backup_package` exige permissão real `configs/backup`, gera pelo
+  `BackupService`, verifica em TEMP e remove o novo arquivo se a prova final
+  falhar. `verify_backup_package` apenas prepara futura seleção de arquivo e
+  também nunca restaura o banco ativo;
+- validação focada UI/serviço/criptografia: `51 passed`; regressão ampliada de
+  Backup, Configurações e Fichário: `84 passed`; `compileall` e
+  `git diff --check` aprovados;
+- `main_qt.py`, shell, Fiscal/SEFAZ, Nabi, licenciamento, banco real e instalador
+  não foram alterados. Integração e homologação visual no Windows permanecem
+  checkpoints separados.
