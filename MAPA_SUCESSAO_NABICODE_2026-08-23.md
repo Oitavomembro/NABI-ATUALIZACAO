@@ -3681,3 +3681,47 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   100.000 registros permaneceu abaixo de 300 ms no ensaio local; somente migrar
   para FTS/cache se telemetria real futura comprovar necessidade, preservando a
   busca oficial e sem materializar o catálogo.
+
+## Regressão fiscal e dossiê OFFLINE — 25/08/2026
+
+- branch/worktree isolados: `codex/fiscal-regressao-offline` em
+  `NabiCode-QT-FiscalRegressaoOffline-codex`, derivados exatamente de
+  `origin/codex/homologacao-primeiro-uso@a179e791a82bc0a58c4ccccc1bccf357b6008fa8`;
+- as duas falhas herdadas do dossiê em
+  `FiscalAuthorizationNumberingIntegrationTests` foram reproduzidas na história
+  e auditadas. Na base integrada já estavam corrigidas por `65f0500` e os dois
+  testes passam sem alteração; a causa era fixture anterior que não compunha o
+  portão de prontidão fail-closed;
+- a fixture foi reforçada para verificar os parâmetros reais do portão:
+  autorização, modelo 55, série 1, catálogo, numeração e revogação. A auditoria
+  então revelou a lacuna funcional residual: `authorize_document` aceitava
+  resposta síncrona de sucesso sem uma reserva de numeração correspondente;
+- `8fbe536` exige reserva `RESERVADO` no mesmo ambiente, modelo, série e número
+  antes de ler XML, assinar ou transmitir. Gate ausente/recusado continua
+  bloqueando primeiro; rejeição preserva a reserva e somente sucesso sintético
+  confirma o número uma única vez. A matriz adversarial bloqueia socket e cobre
+  ausência de gate/reserva, recusa de numeração e reservas terminais ou
+  divergentes;
+- `342879c` e `eaf10cc` trazem o dossiê determinístico OFFLINE preservado, com
+  hashes estáveis entre finais de linha. `852a1b1` eleva o harness a `1.1.0` e
+  acrescenta `PRONTIDAO-NUMERACAO-AUSENTE`, que prova bloqueio antes até do
+  transporte fake e store em memória;
+- dossiê final: `17/17` cenários aprovados; JSON SHA-256
+  `578f61213164a998c9879bd92b514213c0c28ad215a42aad951e8af07dc28af3` e
+  resumo humano SHA-256
+  `40d3c4c5c79f882983944af5f35b1fe91909ae3b8130ab202e337360305311c0`;
+- regressão fiscal ampliada sobre 26 módulos: `421 passed`, `10 subtests passed`,
+  sem falhas e com um único aviso externo conhecido do
+  `brazilfiscalreport`; matriz focada final: `23 passed`; `compileall` de
+  `services`/`tests` e `git diff --check` aprovados;
+- os adapters e dados são integralmente fake/sintéticos. Guards de runtime
+  provaram `0` tentativas/chamadas de rede, `0` conexões de banco e `0` leituras
+  de certificado/chave; nenhum XML, certificado, senha, banco, socket, endpoint
+  ou SEFAZ real foi usado;
+- não foram alterados UI, IA/Nabi, licenciamento, `main_qt.py`, PDV, regra
+  tributária, endpoint ou schema. Isto é somente TESTE OFFLINE: não é
+  homologação física/real, não comprova autorização SEFAZ e mantém PRODUÇÃO
+  fiscal bloqueada;
+- próximo passo: revisão dos commits e integração por merge normal. Homologação
+  física, credenciamento, A1/CSC, impressão e SEFAZ permanecem pendentes e fora
+  deste checkpoint.

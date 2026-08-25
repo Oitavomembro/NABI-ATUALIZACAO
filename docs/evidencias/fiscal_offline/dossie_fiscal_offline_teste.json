@@ -1,0 +1,305 @@
+{
+  "ambiente": "SIMULADO_OFFLINE",
+  "cenarios": [
+    {
+      "categoria": "prontidao",
+      "comportamento_esperado": "Aceitar apenas a matriz simbólica e isolada de TESTE.",
+      "evidencia": {
+        "adapter": "FAKE_READINESS_DETERMINISTICO",
+        "certificate_source": "SIMBOLO_FAKE_EM_MEMORIA",
+        "real_certificate_reads": 0
+      },
+      "evidencia_sha256": "5e974f2e01a988e6320afe4ec98042cf1e7c22d22fdc2eb8278761cafad9ace6",
+      "id": "PRONTIDAO-TESTE-FAKE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "APTO_SOMENTE_PARA_TESTE_AUTOMATIZADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "prontidao",
+      "comportamento_esperado": "Bloquear antes de qualquer transporte quando a pré-condição A1 fake falta.",
+      "evidencia": {
+        "blocked_before_fake_transport": true,
+        "fake_transport_calls_added": 0
+      },
+      "evidencia_sha256": "48663ffc7dffdeb035ee94a8e8faceaf56ef073c7794cf2edb58ba4ebefda9c3",
+      "id": "PRONTIDAO-A1-AUSENTE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "prontidao",
+      "comportamento_esperado": "Bloquear antes de transporte e persistência quando a numeração fake não foi inicializada.",
+      "evidencia": {
+        "blocked_before_fake_transport": true,
+        "fake_transport_calls_added": 0,
+        "in_memory_writes_added": 0
+      },
+      "evidencia_sha256": "a898a0a6389b254381de894b636cd81aa18320ccb30d489411625752a9f05799",
+      "id": "PRONTIDAO-NUMERACAO-AUSENTE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "autorizacao",
+      "comportamento_esperado": "Registrar somente autorização simulada, sempre marcada como sem SEFAZ.",
+      "evidencia": {
+        "cstat_fake": "100",
+        "protocol_kind": "SINTETICO_TESTE",
+        "stored_status": "AUTORIZADO_SIMULADO"
+      },
+      "evidencia_sha256": "0ce6fd64295c4a3f488def0c616462545b87ad15753468059fffdad6996ad612",
+      "id": "AUTORIZACAO-SIMULADA",
+      "modelo": "65",
+      "resultado_fiscal_simulado": "AUTORIZADO_SIMULADO_SEM_SEFAZ",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "rejeicao",
+      "comportamento_esperado": "Preservar rejeição fake sem protocolo ou sucesso fabricado.",
+      "evidencia": {
+        "cstat_fake": "302",
+        "protocol_present": false,
+        "stored_status": "REJEITADO_SIMULADO"
+      },
+      "evidencia_sha256": "1194e1e5b478e16caf6571e3e5854db67c73fa922dad186ad7d22999a4e9fa4d",
+      "id": "REJEICAO-SIMULADA",
+      "modelo": "55",
+      "resultado_fiscal_simulado": "REJEITADO_SIMULADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "timeout",
+      "comportamento_esperado": "Não declarar resultado fiscal quando o timeout fake ocorre antes do despacho.",
+      "evidencia": {
+        "authorization_claimed": false,
+        "dispatched": false,
+        "record_persisted": false
+      },
+      "evidencia_sha256": "044b063cfaddc43e63cdc262ab8cf2bd154af4caf4b37f000bc498efdd5e424f",
+      "id": "TIMEOUT-ANTES-DESPACHO",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "NAO_ENVIADO_SIMULADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "resposta_desconhecida",
+      "comportamento_esperado": "Manter resposta desconhecida e impedir retransmissão cega.",
+      "evidencia": {
+        "blind_retry_allowed": false,
+        "dispatched": true,
+        "stored_status": "RESPOSTA_DESCONHECIDA"
+      },
+      "evidencia_sha256": "41e7219adc0b5f25c303b811399d3778580da5ef3f1b0846c4a06a42a7eb23ab",
+      "id": "TIMEOUT-APOS-DESPACHO",
+      "modelo": "65",
+      "resultado_fiscal_simulado": "RESPOSTA_DESCONHECIDA_SIMULADA",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "resposta_desconhecida",
+      "comportamento_esperado": "Não promover payload fake inconclusivo a autorizado ou rejeitado.",
+      "evidencia": {
+        "fake_status_code_present": false,
+        "protocol_present": false,
+        "stored_status": "RESPOSTA_DESCONHECIDA"
+      },
+      "evidencia_sha256": "e411bbaafe931b6ff799258cc9ac60356f54170c32070d46ded674e52c6f7cd9",
+      "id": "RESPOSTA-NAO-CLASSIFICAVEL",
+      "modelo": "55",
+      "resultado_fiscal_simulado": "RESPOSTA_DESCONHECIDA_SIMULADA",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "consulta_reconciliacao",
+      "comportamento_esperado": "Consultar o estado fake sem repetir a autorização desconhecida.",
+      "evidencia": {
+        "authorization_calls_added": 0,
+        "protocol_kind": "SINTETICO_TESTE",
+        "query_calls": 1,
+        "stored_status": "AUTORIZADO_SIMULADO_RECONCILIADO"
+      },
+      "evidencia_sha256": "a89472a8ffceb9b2927cb960e536b109bab2a141f5be4e01b10c500ac1776b13",
+      "id": "CONSULTA-RECONCILIACAO",
+      "modelo": "65",
+      "resultado_fiscal_simulado": "AUTORIZADO_SIMULADO_APOS_CONSULTA",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "cancelamento",
+      "comportamento_esperado": "Cancelar somente o documento fake reconciliado como autorizado.",
+      "evidencia": {
+        "cstat_fake": "135",
+        "previous_status": "AUTORIZADO_SIMULADO_RECONCILIADO",
+        "protocol_kind": "SINTETICO_TESTE",
+        "stored_status": "CANCELADO_SIMULADO"
+      },
+      "evidencia_sha256": "d0c2c992634f856d31bf600b9fd7151ef76279845895d3370b21c67f44514b88",
+      "id": "CANCELAMENTO-SIMULADO",
+      "modelo": "65",
+      "resultado_fiscal_simulado": "CANCELADO_SIMULADO_SEM_SEFAZ",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "bloqueio",
+      "comportamento_esperado": "Bloquear cancelamento enquanto a resposta fake permanecer desconhecida.",
+      "evidencia": {
+        "blocked": true,
+        "event_calls_added": 0,
+        "source_status": "RESPOSTA_DESCONHECIDA"
+      },
+      "evidencia_sha256": "d6d7a0348e7998ac4caaf7cce712b112edbbc78759ed83c0c807b03e5a55d8dc",
+      "id": "CANCELAMENTO-BLOQUEADO-INCERTO",
+      "modelo": "55",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "inutilizacao",
+      "comportamento_esperado": "Registrar apenas inutilização fake, sem afetar numeração real.",
+      "evidencia": {
+        "cstat_fake": "102",
+        "range_kind": "FAIXA_SINTETICA_TESTE",
+        "real_numbering_touched": false,
+        "stored_status": "INUTILIZADA_SIMULADA"
+      },
+      "evidencia_sha256": "bc971efecba79556858ff3a085c3306c976d28a188dd6cca298ac6eb1192307d",
+      "id": "INUTILIZACAO-SIMULADA",
+      "modelo": "55",
+      "resultado_fiscal_simulado": "INUTILIZADA_SIMULADA_SEM_SEFAZ",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "contingencia",
+      "comportamento_esperado": "Manter emissão fake offline pendente; não transmitir nem alegar autorização.",
+      "evidencia": {
+        "authorization_claimed": false,
+        "fake_transport_calls_added": 0,
+        "legal_deadline_validated": false,
+        "stored_status": "CONTINGENCIA_SIMULADA_PENDENTE_RECONCILIACAO"
+      },
+      "evidencia_sha256": "4619d0af6ce76dfc7912c644688eb3089e26a3cfe275ff811d4c35a2818dde29",
+      "id": "CONTINGENCIA-OFFLINE-65",
+      "modelo": "65",
+      "resultado_fiscal_simulado": "CONTINGENCIA_SIMULADA_PENDENTE",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "bloqueio",
+      "comportamento_esperado": "Recusar perfil/ambiente de produção antes de qualquer operação.",
+      "evidencia": {
+        "blocked": true,
+        "fake_transport_calls_added": 0
+      },
+      "evidencia_sha256": "07351d29d8baea7876a5d9fc97a8e44dee16d6f1c7156480dd78d04b8920049e",
+      "id": "BLOQUEIO-PRODUCAO",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "bloqueio",
+      "comportamento_esperado": "Recusar operação quando o portão fake não está composto.",
+      "evidencia": {
+        "blocked": true,
+        "fake_transport_calls_added": 0
+      },
+      "evidencia_sha256": "07351d29d8baea7876a5d9fc97a8e44dee16d6f1c7156480dd78d04b8920049e",
+      "id": "BLOQUEIO-PORTAO-AUSENTE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "bloqueio",
+      "comportamento_esperado": "Recusar operação sem sessão/permissão fiscal fake.",
+      "evidencia": {
+        "blocked": true,
+        "fake_transport_calls_added": 0
+      },
+      "evidencia_sha256": "07351d29d8baea7876a5d9fc97a8e44dee16d6f1c7156480dd78d04b8920049e",
+      "id": "BLOQUEIO-PERMISSAO-AUSENTE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
+      "categoria": "bloqueio",
+      "comportamento_esperado": "Não reutilizar o roteiro offline do modelo 65 para NF-e 55.",
+      "evidencia": {
+        "allowed_fake_offline_model": "65",
+        "blocked": true,
+        "fake_transport_calls_added": 0,
+        "in_memory_writes_added": 0,
+        "requested_model": "55"
+      },
+      "evidencia_sha256": "b31dbf810035646e720ba3925fa4bd98c5efa393050898e7916a2f02f744ec2e",
+      "id": "BLOQUEIO-CONTINGENCIA-55",
+      "modelo": "55",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    }
+  ],
+  "classificacao": "TESTE_AUTOMATIZADO_OFFLINE_COM_FAKES",
+  "dossie_id": "NABICODE-FISCAL-OFFLINE-TESTE-001",
+  "gerado_em_deterministico": "2026-08-25T12:00:00-03:00",
+  "harness_source_sha256": "c46ebfe3b66bf52c673e82982b373c3128090851be2697fefe1cd72df06e5993",
+  "limitacoes": [
+    "Os resultados aprovam apenas as asserções do harness determinístico.",
+    "Nenhum certificado A1, CSC, chave privada, senha ou arquivo fiscal real foi usado.",
+    "Nenhum socket, HTTP, TLS, endpoint SEFAZ ou outra rede foi usado.",
+    "Nenhum SQLite, banco de cliente, XML real, DANFE ou numeração real foi usado.",
+    "cStat, mensagens e protocolos deste relatório são dados sintéticos de TESTE.",
+    "Autorização, cancelamento e inutilização simulados não provam aceitação pela SEFAZ.",
+    "Contingência foi exercitada apenas como estado seguro; prazo legal e calendário permanecem pendentes.",
+    "Homologação física acompanhada, credenciamento, certificado, impressão, DANFE/QR e pacote contábil continuam pendentes.",
+    "Produção fiscal continua bloqueada e exige evidência externa e autorização próprias."
+  ],
+  "nao_e_homologacao_fisica": true,
+  "nao_houve_sucesso_sefaz": true,
+  "payload_sha256": "3c3375cfda2007298856ed08a105c500ab566e67df1b4bcfe106b9ea9540c206",
+  "perfil": "TESTE",
+  "prova_de_isolamento": {
+    "adapters": [
+      "FAKE_READINESS_DETERMINISTICO",
+      "FAKE_TRANSPORT_ROTEIRIZADO",
+      "FAKE_STORE_EM_MEMORIA"
+    ],
+    "fake_transport_calls": 8,
+    "in_memory_writes": 8,
+    "real_certificate_attempts": 0,
+    "real_certificate_reads_by_adapters": 0,
+    "real_database_attempts": 0,
+    "real_database_connections_by_adapter": 0,
+    "real_network_attempts": 0,
+    "real_network_calls_by_adapter": 0,
+    "runtime_guards": [
+      "socket.socket",
+      "socket.SocketType",
+      "socket.create_connection",
+      "socket.socketpair/fromfd/fromshare",
+      "socket DNS resolution",
+      "_socket.socket",
+      "urllib.request.urlopen",
+      "http.client.HTTPConnection.connect",
+      "sqlite3.connect",
+      "sqlite3.dbapi2/_sqlite3 connect/Connection",
+      "builtins/io/_io/os.open(certificados/chaves)"
+    ]
+  },
+  "resumo": {
+    "aprovados": 17,
+    "cenarios": 17,
+    "homologacao_fiscal_real": "NAO_EXECUTADA",
+    "homologacao_fisica": "PENDENTE",
+    "producao_fiscal": "BLOQUEADA",
+    "reprovados": 0
+  },
+  "revisao_aplicacao": "21",
+  "revisao_fonte": "base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+codex/fiscal-regressao-offline",
+  "schema_version": "1.0",
+  "versao_aplicacao": "2.5.1",
+  "versao_harness": "1.1.0"
+}
