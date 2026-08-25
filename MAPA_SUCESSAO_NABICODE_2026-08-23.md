@@ -2881,3 +2881,41 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Perfil empresarial unificado — serviço versionado
+
+- branch isolada: `codex/perfil-empresarial-unificado`, derivada exatamente de
+  `1cfdfa4`, sem UI e sem integração com a principal;
+- implementação: `2b21aa7` — `feat: versiona perfil empresarial confirmado`;
+- `CompanyProfileService` e seus DTOs imutáveis registram CNPJ validado, razão
+  social, regime (`MEI`, Simples, Presumido, Real ou Outro), enquadramento
+  (`MEI`, `ME`, `EPP` ou Outro), CNAEs/atividades, UF, município, IE/IM, tipos
+  declarados de operação/documento, fonte, data da fonte, ator, confirmação e
+  vigência;
+- licença, perfil empresarial e permissões são fronteiras independentes. A
+  leitura exige sessão oficial com `configs/view`; confirmação e rollback
+  exigem `configs/edit`. Permissão `fiscal/configure` não concede alteração do
+  perfil, e nenhuma chave/licença participa da autorização;
+- toda alteração cria nova versão e auditoria na mesma transação. Vigências são
+  fechadas sem apagar versões; mudança MEI→ME/EPP e rollback preservam a linha
+  histórica. Concorrência otimista impede sobrescrita de revisão antiga;
+- versões formam cadeia SHA-256 de conteúdo para detectar adulteração
+  estrutural. Essa cadeia não é assinatura/não-repúdio e não substitui o log de
+  auditoria; ausência ou falha da auditoria reverte toda alteração;
+- `prepare_legacy_migration` transforma configuração fiscal/básica antiga em
+  rascunho não confirmado e não persistido. CNAEs, operações ou obrigações
+  ausentes nunca são inferidos;
+- readiness é determinístico e exclusivamente informativo: distingue
+  `INCOMPLETO`, `AGENDADO` e `PRONTO_INFORMATIVO`, lista campos ausentes e
+  mantém `enables_fiscal=false`. Vigência futura não ativa antecipadamente;
+- o serviço não consulta internet, não decide obrigação pelo CNPJ, não habilita
+  Fiscal/SEFAZ e não altera regras tributárias ou endpoints;
+- testes focados: `17 passed`; regressão de Segurança, onboarding/configuração
+  fiscal e FiscalService: `195 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- testes cobrem sessão ausente, permissão insuficiente, confirmação explícita,
+  CNPJ/CNAE inválidos, fonte futura, campos ausentes, vigência futura, mudança
+  MEI→EPP, concorrência, rollback, auditoria ausente, JSON corrompido, cadeia
+  adulterada, migração legada sem persistência e separação de licença/Fiscal;
+- nenhum schema, UI, banco real, certificado, segredo, transmissão, outbox,
+  regra Fiscal/SEFAZ, licença ou permissão persistida foi alterado.
