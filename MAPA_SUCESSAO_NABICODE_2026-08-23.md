@@ -2988,6 +2988,9 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   calendário normativo de contingência, pacote contábil, revisão jurídica e
   autorização expressa continuam pendentes; produção fiscal permanece
   bloqueada;
+- push expressamente autorizado nesta missão e executado para
+  `origin/codex/dossie-homologacao-fiscal`; a branch remota foi criada sem merge,
+  tag, release ou alteração da candidata consolidada;
 - próximo passo seguro: revisão independente do commit funcional e deste mapa,
   integração normal na candidata consolidada e correção separada das duas
   fixtures de regressão sem reintroduzir bypass de prontidão. O dossiê offline
