@@ -3877,6 +3877,40 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
 
+### Importação local de dados empresariais por XML — checkpoint isolado
+
+- branch/worktree: `codex/empresa-importar-xml` em
+  `.worktrees/NabiCode-QT-EmpresaImportarXML-codex`, derivados exatamente de
+  `codex/integracao-fiscal-dashboard-final@4bf9ed3`;
+- a configuração inicial exibe `Importar dados de XML`; após o primeiro uso,
+  Configurações abre o perfil empresarial, que oferece o mesmo botão;
+- o importador aceita somente arquivo local XML de NF-e/NFC-e processada,
+  modelos 55/65, protocolo literal `cStat=100` e chave de 44 dígitos. DTD,
+  entidades, XML inválido/adulterado, modelo diferente e ausência de protocolo
+  falham fechados, sem download ou consulta SEFAZ;
+- emitente e destinatário são exibidos separadamente. Documento já afirmado no
+  cadastro/perfil/configuração fiscal seleciona somente uma correspondência;
+  caso contrário o operador precisa escolher. CNPJ/CPF incompatível com os
+  documentos já configurados é recusado;
+- a prévia mostra campo atual, valor comprovado, origem e ação
+  manter/preencher/substituir. Somente após `Aplicar` os dados entram no
+  rascunho; cancelamento não altera campos e nenhuma importação persiste o
+  perfil sem a revisão e confirmação oficiais já existentes;
+- razão social, fantasia, CNPJ/CPF, IE, endereço, município/código IBGE, UF,
+  CEP, telefone e e-mail são copiados somente quando presentes. CRT/regime,
+  enquadramento, CSC, certificado/senha, séries, numeração e credenciamento não
+  são inferidos nem alterados;
+- o modelo empresarial versionado passou a preservar os novos campos de forma
+  retrocompatível; o arquivo original permanece intacto e nenhum XML real foi
+  adicionado ao repositório;
+- testes sintéticos cobrem XML válido, empresa emitente/destinatária,
+  participante ambíguo, ausências, adulteração, confirmação de sobrescrita,
+  cancelamento, incompatibilidade e preservação do original. Validação focada:
+  `63 passed`; `compileall` e `git diff --check` aprovados;
+- nenhum dado real, senha, certificado, banco real, endpoint, socket, Fiscal
+  operacional, emissão, catálogo, Nabi ou SEFAZ foi acessado ou alterado.
+  Homologação visual do seletor e da prévia no Windows permanece pendente.
+
 ## Caixa e Financeiro — janelas amplas e detalhamento reconciliável
 
 - branch/worktree isolados: `codex/caixa-financeiro-janelas-detalhes` em
