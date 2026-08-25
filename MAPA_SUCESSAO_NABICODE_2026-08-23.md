@@ -2948,3 +2948,60 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - nenhuma tabela contábil, lançamento, DRE oficial, EFD/SPED ou regra de negócio
   foi criada. Fiscal operacional, transmissão, Qt, Nabi, backup, despesas de
   Caixa, licenciamento e banco real permaneceram intocados.
+
+### Pacote do contador — checkpoint 3 em camadas
+
+- branch isolada: `codex/pacote-contador-em-camadas`, derivada de `2076a49`,
+  sem integração com a principal;
+- implementação: `7dd382d` — `feat: exporta pacote mensal para contador`;
+- endurecimento de escala/identidade: `dc11995` — `fix: filtra fontes
+  contabeis na competencia`;
+- `AccountantMonthlyPackageService` exporta por CNPJ e competência, em modo
+  SQLite `query_only`, as camadas `00` a `11` e `99`: resumo/pendências,
+  empresa, vendas/recebimentos, XMLs de saída/entrada, caixa, contas,
+  compras/fornecedores, estoque/inventário, limitações tributárias, externos,
+  intercâmbio universal e evidências;
+- perfis `ESSENCIAL`, `COMPLETO` e `AUDITORIA` preservam os mesmos totais e toda
+  movimentação real no resumo, manifesto e CSVs canônicos. O Completo adiciona
+  JSON/XLSX auxiliares; Auditoria adiciona a trilha existente; Essencial mantém
+  a entrega curta;
+- `LEIA-ME_CONTADOR.txt` na raiz orienta início, semáforo, perfis, CNPJ,
+  competência, totais e pendências externas. Toda seção sem registro recebe
+  declaração explícita; isso nunca é apresentado como prova automática de
+  ausência econômica;
+- cadastro da empresa exporta apenas campos contábeis/fiscais permitidos e
+  transforma ausência de razão/nome, CNPJ, IE, IM, UF/município/endereço,
+  regime/CRT ou CNAE em pendência. Certificado, senha, endpoints e demais
+  segredos não entram no pacote;
+- XMLs originais vêm exclusivamente do pacote fiscal V2 validado. Saídas,
+  entradas e eventos ficam separados, e o manifesto fiscal preserva a marcação
+  `RESUMO` versus `XML_COMPLETO`;
+- a pasta `11_INTERCAMBIO_UNIVERSAL` contém CSV UTF-8-BOM, `layout.json`
+  versionado e, nos perfis completos, XLSX de conveniência. Lote e linhas têm
+  identidades SHA-256 separadas: `source_key` permanece estável por
+  CNPJ/fonte/ID; `row_hash` detecta mudança de conteúdo; `row_id` identifica a
+  versão exata para evitar reimportação duplicada. Não são gerados
+  débito, crédito, plano de contas, centro de custo ou lançamento inferido;
+- o pacote externo possui ZIP determinístico, catálogo individual de tamanho e
+  SHA-256 e validador estrito contra adulteração, arquivo extra, duplicidade,
+  caminho inseguro e manifesto inconsistente. Hash não é assinatura e
+  `non_repudiation=false` permanece explícito;
+- bancos, adquirentes/cartões, folha, contratos e despesas estruturadas sem
+  fonte canônica são pendências externas ou
+  `CAPACIDADE_PENDENTE_INTEGRACAO`, com impacto, responsável e prazo quando
+  disponível. Competência e caixa permanecem separados;
+- CNPJ é validado com dígitos verificadores pelo utilitário fiscal existente.
+  Fontes periódicas usam consultas SQL parametrizadas: datas ISO seguem ramo
+  apto a índice e datas DD/MM/AAAA usam compatibilidade separada, sem carregar
+  todo o histórico em memória;
+- testes focados pacote/reconciliação: `21 passed`; regressão combinada de
+  pacote V2, Report, Financeiro, PDV, Compras e Fiscal: `379 passed`, `13
+  subtests passed`; `compileall` e `git diff --check` aprovados;
+- testes cobrem todos os perfis, CNPJ/competência, pacote vazio, cadastro
+  ausente, divergência, 1.002 movimentações sem truncamento, determinismo byte a
+  byte, privacidade, intercâmbio idempotente, XML original e rejeição de
+  adulteração/arquivo extra. Teste adicional com 5.000 linhas fora da
+  competência comprova, pelo SQL observado, que o histórico não é materializado;
+- o material é chamado de pacote de fontes, nunca de EFD, PGDAS, SPED ou DRE
+  contábil, e não apura imposto. Nenhum schema, regra de negócio, Fiscal
+  operacional/SEFAZ, Qt, Nabi, backup, Caixa, licença ou banco real foi alterado.
