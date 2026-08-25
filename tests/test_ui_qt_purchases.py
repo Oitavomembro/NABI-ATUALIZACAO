@@ -7,7 +7,7 @@ os.environ.setdefault("QT_QPA_PLATFORM","offscreen")
 from PySide6.QtCore import QEvent,Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication,QMessageBox
-from ui_qt.commercial.purchase_dialog import PurchaseDialog,NewOrderDialog,ReceiveOrderDialog,SupplierDialog
+from ui_qt.commercial.purchase_dialog import STYLE,PurchaseDialog,NewOrderDialog,ReceiveOrderDialog,SupplierDialog
 
 class App:
     def __init__(self):self.created=[];self.received=[];self.suppliers=[]
@@ -58,3 +58,9 @@ def test_auto_repeat_na_confirmacao_nao_recebe():
 
 def test_fornecedor_valida_e_salva_pela_fachada():
     app=App();d=SupplierDialog(app);d.name.setText("Fornecedor A");d._save();assert app.suppliers[0][0]=="Fornecedor A";d.close()
+
+def test_acabamento_metalico_preserva_destaque_sem_verde_operacional():
+    assert "qlineargradient" in STYLE
+    assert "#73c7dc" in STYLE
+    assert "#238636" not in STYLE
+    d=NewOrderDialog(App());assert d.save.objectName()=="primary";d.close()

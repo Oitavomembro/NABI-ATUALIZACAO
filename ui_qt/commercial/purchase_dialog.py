@@ -11,7 +11,26 @@ from PySide6.QtWidgets import (
 )
 
 
-STYLE="""QDialog{background:#0d1117;color:#f0f6fc;font-size:14px} QLabel{color:#f0f6fc} QLineEdit,QComboBox,QDateEdit,QTableWidget{background:#161b22;color:#f0f6fc;border:1px solid #30363d;border-radius:6px;min-height:38px} QPushButton{background:#30363d;color:#f0f6fc;border:0;border-radius:6px;min-height:40px;padding:0 13px;font-weight:800} QPushButton#primary{background:#238636} QHeaderView::section{background:#21262d;color:#f0f6fc;padding:9px;border:0;border-right:1px solid #30363d;font-weight:800}"""
+STYLE="""
+QDialog{background:#111418;color:#edf0f2;font-size:14px}
+QLabel,QCheckBox{color:#e8ebee}
+QLineEdit,QComboBox,QDateEdit,QTableWidget{
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #292e33,stop:1 #171a1e);
+ color:#f4f6f7;border:1px solid #555d65;border-radius:7px;min-height:38px;
+ selection-background-color:#386b7b;selection-color:#fff}
+QLineEdit:focus,QComboBox:focus,QDateEdit:focus,QTableWidget:focus{border:1px solid #73c7dc}
+QPushButton{
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #626a72,stop:.45 #41474d,stop:1 #272c31);
+ color:#f6f7f8;border:1px solid #7a838b;border-radius:7px;min-height:40px;padding:0 13px;font-weight:800}
+QPushButton:hover{border-color:#a8b0b7;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #737c84,stop:1 #343a40)}
+QPushButton:focus{border:2px solid #73c7dc}
+QPushButton:disabled{color:#7f878e;background:#25292d;border-color:#3c4248}
+QPushButton#primary{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #567984,stop:1 #294852);border-color:#73c7dc}
+QHeaderView::section{
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #555d65,stop:1 #292e33);
+ color:#fff;padding:9px;border:0;border-right:1px solid #687078;border-bottom:1px solid #73c7dc;font-weight:800}
+QTableWidget{gridline-color:#3e454c;alternate-background-color:#20252a}
+"""
 
 
 def _decimal(text, field):
@@ -122,7 +141,7 @@ class ReceiveOrderDialog(QDialog):
 
 class PurchaseDialog(QDialog):
     def __init__(self,app,parent=None):
-        super().__init__(parent);self.app=app;self.setWindowTitle("Compras");self.resize(1150,720);self.setStyleSheet(STYLE);root=QVBoxLayout(self);title=QLabel("COMPRAS");title.setStyleSheet("font-size:25px;font-weight:900");root.addWidget(title)
+        super().__init__(parent);self.app=app;self.setWindowTitle("Compras");self.resize(1150,720);self.setStyleSheet(STYLE);root=QVBoxLayout(self);title=QLabel("COMPRAS");title.setStyleSheet("font-size:25px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc");root.addWidget(title)
         row=QHBoxLayout();self.status=QComboBox();self.status.addItems(("TODOS","ABERTO","PARCIAL","RECEBIDO"));refresh=QPushButton("Atualizar [F5]");refresh.clicked.connect(self.reload);row.addWidget(QLabel("Status"));row.addWidget(self.status);row.addWidget(refresh);row.addStretch();root.addLayout(row)
         self.table=QTableWidget(0,7);self.table.setHorizontalHeaderLabels(("ID","Status","Fornecedor","Criado em","Valor","Qtd. pendente","Usuário"));self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.Stretch);self.table.installEventFilter(self);root.addWidget(self.table,1)
         buttons=QHBoxLayout();new=QPushButton("Novo pedido [F3]");supplier=QPushButton("Fornecedores [F4]");receive=QPushButton("Receber [F6]");details=QPushButton("Detalhes [Enter]");close=QPushButton("Fechar [Esc]");new.clicked.connect(self.new_order);supplier.clicked.connect(self.new_supplier);receive.clicked.connect(self.receive);details.clicked.connect(self.details);close.clicked.connect(self.reject)

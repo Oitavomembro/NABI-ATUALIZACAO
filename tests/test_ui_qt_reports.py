@@ -13,7 +13,7 @@ from PySide6.QtWidgets import QApplication
 from commercial.application.report_dto import (
     ReportDocument, ReportIndicators, ReportOption, ReportSummary,
 )
-from ui_qt.commercial.report_dialog import ReportDialog
+from ui_qt.commercial.report_dialog import STYLE, ReportDialog
 
 
 APP = QApplication.instance() or QApplication([])
@@ -86,3 +86,13 @@ def test_gui_nao_importa_banco_fiscal_sefaz_ou_legacy():
             imported.append(str(node.module or "").lower())
     for forbidden in ("sqlite3", "database", "repositories", "fiscal", "sefaz", "nabicode_legacy"):
         assert not any(forbidden in module for module in imported)
+
+
+def test_acabamento_metalico_preserva_cards_e_acao_primaria():
+    assert "qlineargradient" in STYLE
+    assert "#73c7dc" in STYLE
+    assert "#238636" not in STYLE
+    dialog = ReportDialog(Application(), "operador")
+    assert dialog.generate_button.objectName() == "primary"
+    assert "border-left:3px solid #73c7dc" in dialog.total.styleSheet()
+    dialog.close()

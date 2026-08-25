@@ -14,15 +14,26 @@ from commercial.application.report_dto import ReportQuery
 
 
 STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; font-size:14px; }
-QLabel { color:#f0f6fc; }
-QLineEdit,QComboBox,QDateEdit,QTableWidget { background:#161b22; color:#f0f6fc;
- border:1px solid #30363d; border-radius:6px; min-height:38px; }
-QPushButton { background:#30363d; color:#f0f6fc; border:0; border-radius:6px;
+QDialog { background:#111418; color:#edf0f2; font-size:14px; }
+QLabel { color:#e8ebee; }
+QLineEdit,QComboBox,QDateEdit,QTableWidget {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #292e33,stop:1 #171a1e);
+ color:#f4f6f7; border:1px solid #555d65; border-radius:7px; min-height:38px;
+ selection-background-color:#386b7b; selection-color:#fff; }
+QLineEdit:focus,QComboBox:focus,QDateEdit:focus,QTableWidget:focus { border:1px solid #73c7dc; }
+QPushButton {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #626a72,stop:.45 #41474d,stop:1 #272c31);
+ color:#f6f7f8; border:1px solid #7a838b; border-radius:7px;
  min-height:40px; padding:0 14px; font-weight:700; }
-QPushButton#primary { background:#238636; }
-QHeaderView::section { background:#21262d; color:#f0f6fc; padding:9px;
- border:0; border-right:1px solid #30363d; font-weight:800; }
+QPushButton:hover { border-color:#a8b0b7; background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #737c84,stop:1 #343a40); }
+QPushButton:focus { border:2px solid #73c7dc; }
+QPushButton:disabled { color:#7f878e; background:#25292d; border-color:#3c4248; }
+QPushButton#primary { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #567984,stop:1 #294852); border-color:#73c7dc; }
+QHeaderView::section {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #555d65,stop:1 #292e33);
+ color:#fff; padding:9px; border:0; border-right:1px solid #687078;
+ border-bottom:1px solid #73c7dc; font-weight:800; }
+QTableWidget { gridline-color:#3e454c; alternate-background-color:#20252a; }
 """
 
 
@@ -42,7 +53,7 @@ class ReportDialog(QDialog):
         self.resize(1180, 760); self.setMinimumSize(900, 600); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel("RELATÓRIOS E INDICADORES")
-        title.setStyleSheet("font-size:24px;font-weight:900;color:#58a6ff")
+        title.setStyleSheet("font-size:24px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
 
         filters = QGridLayout()
@@ -74,7 +85,8 @@ class ReportDialog(QDialog):
         self.indicators = QLabel("Vendas R$ 0,00  •  A receber R$ 0,00  •  Estoque baixo 0")
         for card in (self.quantity, self.total, self.indicators):
             card.setStyleSheet(
-                "background:#161b22;border:1px solid #30363d;border-radius:8px;"
+                "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #454b51,stop:1 #20252a);"
+                "border:1px solid #687078;border-left:3px solid #73c7dc;border-radius:8px;"
                 "padding:12px;font-size:16px;font-weight:800"
             )
             cards.addWidget(card, 1)
