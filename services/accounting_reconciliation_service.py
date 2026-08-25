@@ -5,7 +5,7 @@ import json
 import re
 import sqlite3
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from typing import Any, Callable, Iterable
@@ -214,12 +214,9 @@ class AccountingReconciliationService:
                                            self._iso_date(row.get("created_at")), "", 0, 0, "Documento fiscal aponta para venda inexistente."))
 
     def _purchase_entries(self, connection, start: date, end: date, entries: list[ReconciliationEntry]) -> None:
-        receipts_by_order: dict[str, list[dict[str, Any]]] = {}
-        for receipt in self._all(connection, "recebimentos_compra"):
-            receipts_by_order.setdefault(str(receipt.get("pedido_id") or ""), []).append(receipt)
         for order in self._period_rows(connection, "pedidos_compra", ("criado_em", "atualizado_em"), start, end):
             order_id = str(order.get("id") or "")
-            receipts = receipts_by_order.get(order_id, [])
+            receipts = self._where(connection, "recebimentos_compra", "pedido_id", order_id)
             canceled = str(order.get("status") or "").upper() == "CANCELADO"
             classification = "NAO_APLICAVEL" if canceled else (
                 "CONCILIADO" if receipts else "PENDENTE_DADO_EXTERNO"
@@ -234,8 +231,12 @@ class AccountingReconciliationService:
             receipt_id, order_id = str(receipt.get("id") or ""), str(receipt.get("pedido_id") or "")
             order_exists = self._exists(connection, "pedidos_compra", "id", order_id)
             items = self._where(connection, "recebimento_compra_itens", "recebimento_id", receipt_id)
-            stock = [row for row in self._all(connection, "estoque_movimentacoes")
-                     if str(row.get("origem") or "").upper() == "COMPRA" and str(row.get("origem_id") or "").startswith(f"{order_id}:")]
+            stock = []
+            if self._table(connection, "estoque_movimentacoes"):
+                stock = [dict(row) for row in connection.execute(
+                    "SELECT * FROM estoque_movimentacoes WHERE UPPER(COALESCE(origem,''))='COMPRA' "
+                    "AND origem_id LIKE ?", (f"{order_id}:%",),
+                ).fetchall()]
             item_products = {str(row.get("produto_id") or "") for row in items}
             stock_products = {str(row.get("produto_id") or "") for row in stock}
             status = "CONCILIADO" if order_exists and items and item_products <= stock_products else "DIVERGENTE"
@@ -347,14 +348,37 @@ class AccountingReconciliationService:
 
     @classmethod
     def _period_rows(cls, connection: sqlite3.Connection, table: str, date_columns: Iterable[str], start: date, end: date) -> list[dict[str, Any]]:
-        rows = cls._all(connection, table)
-        result = []
-        for row in rows:
-            raw = next((row.get(column) for column in date_columns if row.get(column)), "")
-            parsed = cls._try_date(raw)
-            if parsed is not None and start <= parsed <= end:
-                result.append(row)
-        return result
+        if not cls._table(connection, table):
+            return []
+        columns = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
+        usable = [column for column in date_columns if column in columns]
+        if not usable:
+            return []
+        found: dict[str, dict[str, Any]] = {}
+        end_exclusive = end + timedelta(days=1)
+        for column in usable:
+            if not re.fullmatch(r"[a-z_]+", column):
+                raise ValueError("Coluna de reconciliação inválida.")
+            queries = (
+                (
+                    f"SELECT * FROM {table} WHERE instr(COALESCE({column},''),'/')=0 "
+                    f"AND {column}>=? AND {column}<?",
+                    (start.isoformat(), end_exclusive.isoformat()),
+                ),
+                (
+                    f"SELECT * FROM {table} WHERE instr(COALESCE({column},''),'/')=3 "
+                    f"AND (substr({column},7,4)||'-'||substr({column},4,2)||'-'||substr({column},1,2)) BETWEEN ? AND ?",
+                    (start.isoformat(), end.isoformat()),
+                ),
+            )
+            for sql, params in queries:
+                for row in connection.execute(sql, params).fetchall():
+                    data = dict(row)
+                    identity = str(data.get("id") or json.dumps(data, sort_keys=True, default=str))
+                    found[identity] = data
+        def order_key(value: str) -> tuple[int, Any]:
+            return (0, int(value)) if value.isdigit() else (1, value)
+        return [found[key] for key in sorted(found, key=order_key)]
 
     @classmethod
     def _configuration(cls, connection: sqlite3.Connection, key: str) -> Any:

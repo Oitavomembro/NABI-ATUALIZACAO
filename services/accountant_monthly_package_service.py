@@ -9,7 +9,7 @@ import sqlite3
 import tempfile
 import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping, Sequence
@@ -54,8 +54,9 @@ class AccountantMonthlyPackageService:
 
     def export(self, *, cnpj: str, competence: str, profile: str, output_path: str | Path) -> AccountantPackageResult:
         document = re.sub(r"\D", "", str(cnpj or ""))
-        if len(document) != 14:
-            raise ValueError("Informe um CNPJ com 14 dígitos para identificar o pacote.")
+        from services.fiscal_service import FiscalService
+        if not FiscalService._is_valid_cnpj(document):
+            raise ValueError("Informe um CNPJ válido para identificar o pacote.")
         period_start, period_end = self._competence(competence)
         normalized_profile = str(profile or "").strip().upper()
         if normalized_profile not in self.PROFILES:
@@ -167,9 +168,12 @@ class AccountantMonthlyPackageService:
         self._put_json(files, "11_INTERCAMBIO_UNIVERSAL/layout.json", {
             "layout": "nabicode.accounting-exchange.v1", "batch_id": batch_id,
             "cnpj": document, "competence": competence, "encoding": "UTF-8-BOM",
-            "delimiter": ";", "idempotency": "row_id SHA-256 estável por fonte/registro/lote",
+            "delimiter": ";",
+            "idempotency": "source_key identifica a fonte; row_hash detecta conteúdo; row_id identifica esta versão.",
             "columns": {
-                "row_id": "Identificador idempotente; não é lançamento contábil.",
+                "source_key": "Identidade estável SHA-256 por CNPJ/fonte/source_id.",
+                "row_hash": "SHA-256 do conteúdo canônico; muda quando o registro muda.",
+                "row_id": "Identidade SHA-256 da versão (source_key + row_hash + layout); não é lançamento contábil.",
                 "source/source_id": "Origem canônica e ID no NabiCode.",
                 "event_date": "Data original do fato disponível.",
                 "competence_amount/cash_amount": "Valores separados, sem conta débito/crédito inferida.",
@@ -269,7 +273,8 @@ class AccountantMonthlyPackageService:
                 manifest = json.loads(archive.read("manifesto.json"))
                 if manifest.get("layout") != cls.LAYOUT or manifest.get("version") != 1:
                     raise ValueError("Layout do pacote do contador incompatível.")
-                if not re.fullmatch(r"\d{14}", str(manifest.get("cnpj") or "")):
+                from services.fiscal_service import FiscalService
+                if not FiscalService._is_valid_cnpj(str(manifest.get("cnpj") or "")):
                     raise ValueError("CNPJ do manifesto é inválido.")
                 cls._competence(str(manifest.get("competence") or ""))
                 if manifest.get("profile") not in cls.PROFILES:
@@ -340,9 +345,7 @@ class AccountantMonthlyPackageService:
         }
         result: dict[str, list[dict[str, Any]]] = {}
         for table, dates in period_tables.items():
-            rows = self._rows(connection, table)
-            if dates:
-                rows = [row for row in rows if self._row_in_period(row, dates, start, end)]
+            rows = self._period_rows_sql(connection, table, dates, start, end) if dates else self._rows(connection, table)
             result[table] = rows
         result["fornecedores"] = self._rows(connection, "fornecedores")
         result["produtos"] = self._rows(connection, "produtos")
@@ -410,9 +413,14 @@ class AccountantMonthlyPackageService:
                 event_date = str(row.get(date_field) or "")
                 amount = cls._money(row.get(canonical) if canonical and row.get(canonical) not in (None, "") else row.get(legacy)) if canonical or legacy else Decimal("0")
                 stable = json.dumps(cls._json_safe(dict(row)), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
-                row_id = hashlib.sha256(f"{cnpj}|{competence}|{source}|{source_id}|{stable}".encode()).hexdigest()
+                source_key = hashlib.sha256(f"{cnpj}|{source}|{source_id}".encode()).hexdigest()
+                row_hash = hashlib.sha256(stable.encode()).hexdigest()
+                row_id = hashlib.sha256(
+                    f"{source_key}|{row_hash}|nabicode.accounting-exchange.v1".encode()
+                ).hexdigest()
                 output.append({
-                    "row_id": row_id, "source": source, "source_id": source_id,
+                    "source_key": source_key, "row_hash": row_hash, "row_id": row_id,
+                    "source": source, "source_id": source_id,
                     "event_date": event_date,
                     "competence_amount": format(amount if basis == "COMPETENCIA" else Decimal("0"), ".2f"),
                     "cash_amount": format(amount if basis == "CAIXA" else Decimal("0"), ".2f"),
@@ -467,6 +475,50 @@ class AccountantMonthlyPackageService:
             raise ValueError("Fonte inválida.")
         exists = connection.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()
         return [dict(row) for row in connection.execute(f"SELECT * FROM {table}").fetchall()] if exists else []
+
+    @classmethod
+    def _period_rows_sql(
+        cls, connection: sqlite3.Connection, table: str, fields: Iterable[str],
+        start: date, end: date,
+    ) -> list[dict[str, Any]]:
+        if not re.fullmatch(r"[a-z_]+", table):
+            raise ValueError("Fonte inválida.")
+        exists = connection.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+        ).fetchone()
+        if not exists:
+            return []
+        columns = {str(row[1]) for row in connection.execute(f"PRAGMA table_info({table})")}
+        usable = [field for field in fields if field in columns]
+        if not usable:
+            return []
+        end_exclusive = end + timedelta(days=1)
+        found: dict[str, dict[str, Any]] = {}
+        for field in usable:
+            if not re.fullmatch(r"[a-z_]+", field):
+                raise ValueError("Coluna de competência inválida.")
+            # Datas ISO usam o caminho indexável. Datas DD/MM/AAAA são uma
+            # consulta legada separada, ainda sem materializar todo o histórico.
+            queries = (
+                (
+                    f"SELECT * FROM {table} WHERE instr(COALESCE({field},''),'/')=0 "
+                    f"AND {field}>=? AND {field}<?",
+                    (start.isoformat(), end_exclusive.isoformat()),
+                ),
+                (
+                    f"SELECT * FROM {table} WHERE instr(COALESCE({field},''),'/')=3 "
+                    f"AND (substr({field},7,4)||'-'||substr({field},4,2)||'-'||substr({field},1,2)) BETWEEN ? AND ?",
+                    (start.isoformat(), end.isoformat()),
+                ),
+            )
+            for sql, params in queries:
+                for row in connection.execute(sql, params).fetchall():
+                    data = dict(row)
+                    identity = str(data.get("id") or json.dumps(cls._json_safe(data), sort_keys=True))
+                    found[identity] = data
+        def order_key(value: str) -> tuple[int, Any]:
+            return (0, int(value)) if value.isdigit() else (1, value)
+        return [found[key] for key in sorted(found, key=order_key)]
 
     @classmethod
     def _row_in_period(cls, row: Mapping[str, Any], fields: Iterable[str], start: date, end: date) -> bool:

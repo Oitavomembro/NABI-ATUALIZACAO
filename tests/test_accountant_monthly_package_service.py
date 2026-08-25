@@ -195,8 +195,10 @@ def test_sem_movimento_e_dados_ausentes_sao_declarados(tmp_path):
 def test_cnpj_divergente_e_competencia_invalida(package_service, tmp_path):
     _, service = package_service
     output = tmp_path / "wrong.zip"
-    result = service.export(cnpj="99999999000199", competence="2026-08", profile="ESSENCIAL", output_path=output)
+    result = service.export(cnpj="11222333000181", competence="2026-08", profile="ESSENCIAL", output_path=output)
     assert result.status == "DIVERGENTE"
+    with pytest.raises(ValueError, match="CNPJ válido"):
+        service.export(cnpj="99999999000199", competence="2026-08", profile="ESSENCIAL", output_path=output)
     with pytest.raises(ValueError, match="Competência"):
         service.export(cnpj="12345678000195", competence="08/2026", profile="ESSENCIAL", output_path=output)
 
@@ -235,3 +237,46 @@ def test_mais_de_mil_registros_sem_truncamento(package_service, tmp_path):
     manifest, _ = _manifest(output)
     assert manifest["sections"]["02_VENDAS_RECEBIMENTOS"]["records"] == 1002
     assert manifest["sections"]["02_VENDAS_RECEBIMENTOS"]["competence_total"] == "1101.00"
+
+
+def test_source_key_estavel_e_row_hash_detecta_alteracao(package_service, tmp_path):
+    database, service = package_service
+    first, second = tmp_path / "before.zip", tmp_path / "after.zip"
+    service.export(cnpj="12345678000195", competence="2026-08", profile="ESSENCIAL", output_path=first)
+    connection = sqlite3.connect(database)
+    connection.execute("UPDATE movimentacoes SET descricao='Venda corrigida' WHERE id=1")
+    connection.commit(); connection.close()
+    service.export(cnpj="12345678000195", competence="2026-08", profile="ESSENCIAL", output_path=second)
+    def movement(path):
+        with zipfile.ZipFile(path) as archive:
+            rows = list(csv.DictReader(io.StringIO(archive.read("11_INTERCAMBIO_UNIVERSAL/movimentos.csv").decode("utf-8-sig")), delimiter=";"))
+        return next(row for row in rows if row["source"] == "movimentacoes" and row["source_id"] == "1")
+    before, after = movement(first), movement(second)
+    assert before["source_key"] == after["source_key"]
+    assert before["row_hash"] != after["row_hash"]
+    assert before["row_id"] != after["row_id"]
+
+
+def test_filtro_sql_nao_materializa_historico_fora_da_competencia(tmp_path):
+    database = tmp_path / "scale.db"
+    connection = sqlite3.connect(database)
+    connection.executescript(SCHEMA)
+    connection.executemany(
+        "INSERT INTO movimentacoes(id,tipo,valor,data,status_pagamento) VALUES(?,'VENDA',1,'2020-01-10','PAGO')",
+        ((number,) for number in range(1, 5001)),
+    )
+    connection.execute("INSERT INTO movimentacoes(id,tipo,valor,data,status_pagamento) VALUES(6000,'VENDA',2,'2026-08-10','PAGO')")
+    connection.commit(); connection.close()
+    traces = []
+    def connect():
+        conn = sqlite3.connect(database)
+        conn.set_trace_callback(traces.append)
+        return conn
+    service = AccountantMonthlyPackageService(connect)
+    output = tmp_path / "scale.zip"
+    service.export(cnpj="12345678000195", competence="2026-08", profile="ESSENCIAL", output_path=output)
+    manifest, _ = _manifest(output)
+    assert manifest["sections"]["02_VENDAS_RECEBIMENTOS"]["records"] == 1
+    movement_selects = [sql.upper() for sql in traces if "SELECT * FROM MOVIMENTACOES" in sql.upper()]
+    assert movement_selects
+    assert all(" WHERE " in sql for sql in movement_selects)
