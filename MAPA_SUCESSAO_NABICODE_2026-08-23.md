@@ -2910,3 +2910,14 @@ Checkpoint futuro obrigatório antes de release fiscal 2027:
 4. implementar por adaptadores versionados, mantendo Comercial/NÃO FISCAL isolado;
 5. testar nos ambientes oficiais de homologação e preservar evidências físicas;
 6. somente então liberar qualquer operação fiscal correspondente.
+
+Estratégia de produto para aproveitar a transição sem reduzir conformidade:
+
+- oferecer entrada simples para MEI, sem exigir conhecimento contábil: cadastro guiado, importação de clientes/produtos, vendas, recebimentos, despesas documentadas e pacote mensal Essencial;
+- permitir evolução para o pacote Completo/Auditoria e para contador sem nova digitação ou troca de banco;
+- usar a Nabi como orientadora e preparadora de rascunhos, nunca como autoridade fiscal ou fonte de regra;
+- manter conectores independentes e versionados para NFS-e Nacional, NFF, NF-e/NFC-e e futuros campos CBS/IBS, ativados somente conforme atividade e enquadramento;
+- criar um assistente de prontidão 2027 que mostre cadastro incompleto, documentos necessários, ambiente de homologação, data de vigência e evidências pendentes;
+- manter o produto utilizável em Comercial/NÃO FISCAL enquanto a configuração fiscal não estiver aprovada, sem permitir emissão fiscal por fallback;
+- planejar migração e onboarding rápidos para escritórios contábeis e carteiras de MEIs, com pacotes Essencial/Completo padronizados e sem dependência de fornecedor contábil específico;
+- não anunciar “conforme 2027” antes da auditoria jurídica, técnica e de homologação real de cada documento aplicável.
