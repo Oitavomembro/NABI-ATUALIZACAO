@@ -4,7 +4,7 @@ import json
 import hashlib
 import re
 import sqlite3
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from datetime import date, datetime, timedelta
 from typing import Any, Callable, Mapping, Sequence
 
@@ -161,6 +161,12 @@ class CompanyProfileService:
             raise
         finally:
             connection.close()
+
+    def prepare_review(self, draft: CompanyProfileDraft) -> CompanyProfileDraft:
+        """Valida e normaliza um rascunho sem confirmá-lo ou persistir dados."""
+        self._require("view")
+        normalized = self._validate_draft(replace(draft, confirmed=True))
+        return replace(normalized, confirmed=False)
 
     def rollback_to(
         self, version: int, *, effective_from: str, reason: str,

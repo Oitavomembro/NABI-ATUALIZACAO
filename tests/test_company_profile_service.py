@@ -229,3 +229,15 @@ def test_migracao_legada_e_apenas_rascunho_sem_persistencia(environment):
     connection = sqlite3.connect(database)
     assert connection.execute("SELECT 1 FROM configuracoes WHERE chave=?", (service.CONFIG_KEY,)).fetchone() is None
     connection.close()
+
+
+def test_prepara_revisao_normaliza_sem_confirmar_ou_persistir(environment):
+    database, _, _, service = environment
+    reviewed = service.prepare_review(draft(confirmed=False, cnpj="12.345.678/0001-95"))
+    assert reviewed.cnpj == "12345678000195"
+    assert reviewed.confirmed is False
+    connection = sqlite3.connect(database)
+    assert connection.execute(
+        "SELECT 1 FROM configuracoes WHERE chave=?", (service.CONFIG_KEY,)
+    ).fetchone() is None
+    connection.close()
