@@ -1155,6 +1155,10 @@ class FiscalServiceTests(unittest.TestCase):
             self.assertTrue(any(name.endswith("_CCE_envio.xml") for name in names))
             manifest = json.loads(archive.read("manifesto.json"))
         self.assertEqual(manifest["documents"][0]["access_key"], key)
+        self.assertEqual(manifest["version"], 2)
+        self.assertEqual(manifest["layout"], "nabicode.accounting-package.v2")
+        for event_file in manifest["events"][0]["files"]:
+            self.assertRegex(event_file["sha256"], r"^[0-9a-f]{64}$")
         self.assertFalse(manifest["includes_homologation"])
 
     def test_exportacao_contabil_exclui_homologacao_por_padrao(self):
@@ -1230,7 +1234,9 @@ class FiscalServiceTests(unittest.TestCase):
 
         validation = self.service.validate_accounting_package(output)
         self.assertTrue(validation["valid"])
-        self.assertEqual(validation["files_checked"], 2)
+        self.assertEqual(validation["files_checked"], 3)
+        self.assertEqual(validation["layout"], "V2")
+        self.assertFalse(validation["non_repudiation"])
 
     def test_validacao_do_pacote_contabil_rejeita_xml_alterado(self):
         package = Path(self.tmp.name) / "alterado.zip"
@@ -1243,7 +1249,7 @@ class FiscalServiceTests(unittest.TestCase):
         with zipfile.ZipFile(package, "w") as archive:
             archive.writestr("producao/NFe/nota.xml", b"<xml/>")
             archive.writestr("manifesto.json", json.dumps(manifest))
-        with self.assertRaisesRegex(ValueError, "alterado ou corrompido"):
+        with self.assertRaisesRegex(ValueError, "LEGADO"):
             self.service.validate_accounting_package(package)
 
     def test_relatorio_fiscal_csv_deriva_valores_do_xml_e_inutilizacoes(self):
