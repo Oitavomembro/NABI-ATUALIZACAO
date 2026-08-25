@@ -2937,6 +2937,10 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   `db28b2648cf885e5bdc298f6c59efc485ad47bb6`;
 - implementação e evidências: `43294aa2bad45e907425dd96391c95232994c7bb` —
   `test: adiciona dossie fiscal offline deterministico`;
+- estabilidade dos hashes no checkout Windows:
+  `09fb0625a80e6bbe586b385ad8ce61f1a1192337` — normaliza o hash do fonte
+  para LF canônico e fixa `eol=lf` exclusivamente nos arquivos do dossiê,
+  preservando reprodutibilidade entre worktrees com ou sem conversão CRLF;
 - o harness usa exclusivamente adapters fake roteirizados e store em memória;
   não importa nem compõe serviço fiscal operacional, repositório, banco, UI,
   certificado ou endpoint;
@@ -2955,16 +2959,17 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   SEFAZ;
 - JSON determinístico:
   `docs/evidencias/fiscal_offline/dossie_fiscal_offline_teste.json`, SHA-256
-  `c3a7898ab6ebcb35e437dbbc66651dd0e99e7bf27c62d9cc3686f64539f93d86`;
+  `5c3555317ed51a26a17a6a3a481139f94430aa058ef2ab57a9fc72828746cd64`;
 - resumo humano sanitizado:
   `docs/evidencias/fiscal_offline/dossie_fiscal_offline_teste.md`, SHA-256
-  `5d4f21fbeed97a63b6f59d9cceb2d7d6ba33058c0ee76b3af874ef313296049e`;
+  `30e3edd2069f8b0d31075abf6bbffe8de3066b9598399d606064bed202842b46`;
   payload canônico SHA-256
-  `c7ff3ec923a69103627b358aea48c605202fa14a5b9573759c292b7eaf71600a`
+  `76658e732a8766e9f75672fb2c545f5eec3325d56d674f3bfd7e92b013d613e1`
   e fonte do harness SHA-256
-  `f7f466b526de00c2086435f904416f06ee65585b86218f08bc181c932c847f31`;
-- validação própria/adversarial: `11 passed`; conjunto próprio + portão de
-  prontidão: `17 passed`; geração repetida produziu hashes idênticos,
+  `1c69e238b10f229d7e8bc753f4dc9c79a6d102ec3c6fde6b462710dad19a7cd6`;
+- validação própria/adversarial: `12 passed`; conjunto próprio + portão de
+  prontidão: `18 passed`; geração repetida produziu hashes idênticos e o teste
+  adicional comprovou o mesmo hash do harness para conteúdo LF ou CRLF;
   `compileall`, JSON parseável e `git diff --check` aprovados;
 - regressão fiscal ampliada executada: `264 passed`, `2 failed`, `10 subtests
   passed` e uma depreciação externa conhecida do `BrazilFiscalReport`; as duas
