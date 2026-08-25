@@ -5,7 +5,7 @@ import pytest
 pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent,Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication,QDialog,QMessageBox
+from PySide6.QtWidgets import QApplication,QDialog,QMessageBox,QHeaderView
 from commercial.application.financial_dto import FinancialSummary,ReceivableSummary,PayableSummary
 from ui_qt.commercial.financial_dialog import FinancialDialog,TitleEditorDialog
 
@@ -24,7 +24,7 @@ class Actions:
 @pytest.fixture(scope="module")
 def app():return QApplication.instance() or QApplication([])
 def test_lista_ids_reais_resumo_e_separacao(app):
- d=FinancialDialog(Query(),Actions(),user="ANA");assert d.receivable_table.item(0,0).data(Qt.ItemDataRole.UserRole)==7;assert "R$ 100,00" in d.summary.text();d.tabs.setCurrentIndex(1);assert d._selected().title_id==8;d.close()
+ d=FinancialDialog(Query(),Actions(),user="ANA");assert d.receivable_table.item(0,0).data(Qt.ItemDataRole.UserRole)==7;assert "R$ 100,00" in d.summary.text();assert d.summary.objectName()=="financialSummary";assert "qlineargradient" in d.styleSheet();assert "#73c7dc" in d.summary.styleSheet();assert d.receivable_table.alternatingRowColors();assert d.receivable_table.horizontalHeader().sectionResizeMode(3)==QHeaderView.ResizeMode.Stretch;d.tabs.setCurrentIndex(1);assert d._selected().title_id==8;d.close()
 def test_enter_auto_repeat_nao_baixa_e_enter_simples_uma_vez(app,monkeypatch):
  d=FinancialDialog(Query(),Actions(),user="ANA");calls=[];monkeypatch.setattr(d,"settle",lambda:calls.append(1));d.show();app.processEvents();QApplication.sendEvent(d.receivable_table,QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier,"",True,1));assert calls==[];QApplication.sendEvent(d.receivable_table,QKeyEvent(QEvent.Type.KeyPress,Qt.Key.Key_Return,Qt.KeyboardModifier.NoModifier));assert calls==[1];d.close()
 def test_criacao_so_executa_apos_confirmacao_explicita(app,monkeypatch):

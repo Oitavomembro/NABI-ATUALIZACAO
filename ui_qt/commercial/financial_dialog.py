@@ -15,10 +15,18 @@ from commercial.application.financial_dto import CreateFinancialTitleCommand, Se
 from .widgets.money_edit import MoneyEdit
 
 
-STYLE = """QDialog{background:#0d1117;color:#f0f6fc} QLabel{color:#f0f6fc}
-QLineEdit,QDateEdit,QComboBox,QTableWidget{background:#161b22;color:#f0f6fc;border:1px solid #30363d;border-radius:6px}
-QLineEdit,QDateEdit,QComboBox{min-height:38px;padding:0 8px} QPushButton{background:#30363d;color:#f0f6fc;border:0;border-radius:6px;min-height:38px;padding:0 13px;font-weight:700}
-QPushButton#primary{background:#1f6feb} QHeaderView::section{background:#21262d;color:#f0f6fc;padding:8px;border:0;border-right:1px solid #30363d;font-weight:700}"""
+STYLE = """QDialog{background:#111316;color:#e5e9ed} QLabel{color:#e5e9ed}
+QLineEdit,QDateEdit,QComboBox,QTableWidget{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #24282d,stop:1 #171a1e);color:#f1f3f5;border:1px solid #555c63;border-radius:6px;selection-background-color:#3d778d}
+QLineEdit,QDateEdit,QComboBox{min-height:38px;padding:0 8px}
+QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #596068,stop:0.45 #3a4046,stop:1 #272c31);color:#f4f6f8;border:1px solid #747c84;border-radius:6px;min-height:38px;padding:0 13px;font-weight:700}
+QPushButton:hover{border-color:#86c7d8}
+QPushButton:focus,QLineEdit:focus,QDateEdit:focus,QComboBox:focus,QTableWidget:focus{border:1px solid #73c7dc}
+QPushButton#primary{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #4f7784,stop:1 #294852);border-color:#73c7dc}
+QHeaderView::section{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #50575e,stop:1 #292e33);color:#f2f4f6;padding:8px;border:0;border-right:1px solid #686f76;border-bottom:1px solid #73c7dc;font-weight:700}
+QTableWidget{gridline-color:#41474d;alternate-background-color:#1d2024}
+QTabWidget::pane{border:1px solid #555c63;border-radius:6px;background:#171a1e}
+QTabBar::tab{background:#2b3035;color:#cbd1d6;border:1px solid #555c63;padding:9px 18px}
+QTabBar::tab:selected{background:#4a5158;color:#ffffff;border-bottom:2px solid #73c7dc}"""
 
 
 def money(value):
@@ -79,8 +87,8 @@ class FinancialDialog(QDialog):
     def __init__(self,query,actions,*,user,parent=None):
         super().__init__(parent); self.query=query; self.actions=actions; self.context=ActionContext(user,ActionOrigin.UI)
         self.setWindowTitle("Financeiro"); self.resize(1150,720); self.setMinimumSize(880,580); self.setStyleSheet(STYLE)
-        layout=QVBoxLayout(self); title=QLabel("FINANCEIRO"); title.setStyleSheet("font-size:24px;font-weight:800;color:#00d084"); layout.addWidget(title)
-        self.summary=QLabel(); self.summary.setStyleSheet("background:#161b22;padding:12px;font-size:14px;font-weight:700"); layout.addWidget(self.summary)
+        layout=QVBoxLayout(self); title=QLabel("FINANCEIRO"); title.setStyleSheet("font-size:24px;font-weight:900;color:#d9dee3;border-bottom:2px solid #73c7dc;padding-bottom:8px"); layout.addWidget(title)
+        self.summary=QLabel(); self.summary.setObjectName("financialSummary"); self.summary.setStyleSheet("background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #3f464d,stop:1 #1d2125);border:1px solid #666e75;border-left:4px solid #73c7dc;border-radius:6px;padding:13px;color:#f1f3f5;font-size:14px;font-weight:800"); layout.addWidget(self.summary)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs,1); self.receivable_table=self._table(); self.payable_table=self._table()
         for name,table in (("Contas a receber",self.receivable_table),("Contas a pagar",self.payable_table)):
             page=QWidget(); box=QVBoxLayout(page); box.addWidget(table); self.tabs.addTab(page,name)
@@ -96,7 +104,7 @@ class FinancialDialog(QDialog):
 
     @staticmethod
     def _table():
-        table=QTableWidget(0,7); table.setHorizontalHeaderLabels(["ID","Pessoa","Documento","Descrição","Vencimento","Em aberto","Situação"]); table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(3,QHeaderView.ResizeMode.Stretch); return table
+        table=QTableWidget(0,7); table.setAlternatingRowColors(True); table.setHorizontalHeaderLabels(["ID","Pessoa","Documento","Descrição","Vencimento","Em aberto","Situação"]); table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); table.verticalHeader().setVisible(False); table.horizontalHeader().setSectionResizeMode(3,QHeaderView.ResizeMode.Stretch); return table
 
     def eventFilter(self,watched,event):
         if watched in (self.receivable_table,self.payable_table) and event.type()==QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return,Qt.Key.Key_Enter}:

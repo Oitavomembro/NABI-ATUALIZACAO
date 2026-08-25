@@ -14,15 +14,19 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog { background:#0d1117;color:#f0f6fc; } QLabel { color:#f0f6fc; }
-QLineEdit,QTableWidget { background:#161b22;color:#f0f6fc;border:1px solid #30363d;
- border-radius:6px;selection-background-color:#1f6feb; }
+QDialog { background:#111316;color:#e5e9ed; } QLabel { color:#e5e9ed; }
+QLineEdit,QTableWidget { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #24282d,stop:1 #171a1e);color:#f1f3f5;border:1px solid #555c63;
+ border-radius:6px;selection-background-color:#3d778d; }
 QLineEdit { min-height:38px;padding:0 9px; }
-QPushButton { background:#30363d;color:#f0f6fc;border:0;border-radius:6px;
+QPushButton { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #596068,stop:0.45 #3a4046,stop:1 #272c31);color:#f4f6f8;border:1px solid #747c84;border-radius:6px;
  min-height:40px;padding:0 14px;font-weight:700; }
-QPushButton#primary { background:#1f6feb; } QPushButton#success { background:#2ea043; }
-QHeaderView::section { background:#21262d;color:#f0f6fc;padding:9px;border:0;
- border-right:1px solid #30363d;font-weight:700; }
+QPushButton:hover { border-color:#86c7d8; }
+QPushButton:focus,QLineEdit:focus,QTableWidget:focus { border:1px solid #73c7dc; }
+QPushButton#primary,QPushButton#success { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #4f7784,stop:1 #294852);border-color:#73c7dc; }
+QPushButton#destructive { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #a13b42,stop:0.5 #7a252b,stop:1 #4f171c);border-color:#d65b63; }
+QHeaderView::section { background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #50575e,stop:1 #292e33);color:#f2f4f6;padding:9px;border:0;
+ border-right:1px solid #686f76;border-bottom:1px solid #73c7dc;font-weight:700; }
+QTableWidget { gridline-color:#41474d;alternate-background-color:#1d2024; }
 """
 
 
@@ -38,7 +42,7 @@ class CashValueDialog(QDialog):
         self.completed = False
         self.setWindowTitle(title); self.setMinimumWidth(480); self.setStyleSheet(STYLE)
         layout = QVBoxLayout(self)
-        heading = QLabel(title.upper()); heading.setStyleSheet("font-size:20px;font-weight:800;color:#00d084")
+        heading = QLabel(title.upper()); heading.setStyleSheet("font-size:20px;font-weight:900;color:#d9dee3;border-bottom:2px solid #73c7dc;padding-bottom:7px")
         layout.addWidget(heading)
         self.amount = MoneyEdit(); self.amount.setAccessibleName("Valor")
         self.note = QLineEdit(); self.note.setPlaceholderText("Observação / motivo")
@@ -85,7 +89,7 @@ class CashDialog(QDialog):
         self.setStyleSheet(STYLE)
         layout = QVBoxLayout(self)
         header = QHBoxLayout()
-        title = QLabel("CAIXA"); title.setStyleSheet("font-size:24px;font-weight:800;color:#00d084")
+        title = QLabel("CAIXA"); title.setStyleSheet("font-size:24px;font-weight:900;color:#d9dee3")
         self.status = QLabel(); self.status.setStyleSheet("font-size:16px;font-weight:800")
         header.addWidget(title); header.addStretch(); header.addWidget(self.status)
         layout.addLayout(header)
@@ -97,10 +101,11 @@ class CashDialog(QDialog):
         )
         for index, (key, text) in enumerate(labels):
             label = QLabel(); label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;font-weight:700")
+            label.setStyleSheet("background:qlineargradient(x1:0,y1:0,x2:1,y2:0,stop:0 #454c53,stop:1 #202429);border:1px solid #666e75;border-left:4px solid #73c7dc;border-radius:7px;padding:12px;color:#f1f3f5;font-weight:800")
             self.cards[key] = (text, label); cards.addWidget(label, index // 3, index % 3)
         layout.addLayout(cards)
         self.table = QTableWidget(0, 5)
+        self.table.setAlternatingRowColors(True)
         self.table.setHorizontalHeaderLabels(["Data", "Tipo", "Valor", "Responsável", "Observação"])
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.Stretch)
@@ -113,6 +118,8 @@ class CashDialog(QDialog):
         self.close_button = QPushButton("Fechar caixa")
         close_window = QPushButton("Fechar janela  [Esc]")
         self.open_button.setObjectName("success"); self.close_button.setObjectName("primary")
+        self.withdraw_button.setObjectName("destructive")
+        self.close_button.setObjectName("destructive")
         self.open_button.clicked.connect(self.open_cash)
         self.open_zero_button.clicked.connect(self.open_without_value)
         self.supply_button.clicked.connect(lambda: self.movement("SUPRIMENTO"))

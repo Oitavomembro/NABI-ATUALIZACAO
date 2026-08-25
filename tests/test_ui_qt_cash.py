@@ -51,6 +51,11 @@ def test_porta_fixa_terminal_usuario_e_retorna_resumo_tipado():
 def test_dialog_reflete_estado_e_nao_persiste_diretamente(app):
     backend=Backend(); service=CashApplicationService(backend,terminal="PC1",user="ANA")
     dialog=CashDialog(service); assert dialog.status.text()=="CAIXA FECHADO"
+    assert "qlineargradient" in dialog.styleSheet() and "#73c7dc" in dialog.styleSheet()
+    assert dialog.table.alternatingRowColors()
+    assert dialog.withdraw_button.objectName()=="destructive"
+    assert dialog.close_button.objectName()=="destructive"
+    assert all("qlineargradient" in label.styleSheet() for _,label in dialog.cards.values())
     dialog.open_without_value(); assert dialog.status.text()=="CAIXA ABERTO"
     assert not dialog.open_button.isEnabled() and dialog.close_button.isEnabled(); dialog.close()
 
