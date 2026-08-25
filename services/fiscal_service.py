@@ -3846,28 +3846,29 @@ class FiscalService:
         )
         config = self.load_config()
 
+        reservation_id = str(reservation_id or "").strip()
+        if not reservation_id:
+            raise ValueError("Uma reserva de numeração é obrigatória para autorizar o documento.")
+        reservation = next(
+            (item for item in self.numbering_status() if item.get("id") == reservation_id),
+            None,
+        )
+        if not reservation:
+            raise ValueError("Reserva de numeração não encontrada.")
+        if reservation.get("status") != "RESERVADO":
+            raise ValueError("A numeração não está reservada para autorização.")
+        if str(reservation.get("environment", "")).upper() != str(config["environment"]).upper():
+            raise ValueError("A reserva pertence a outro ambiente fiscal.")
+        if str(reservation.get("model")) != str(model):
+            raise ValueError("A reserva pertence a outro modelo fiscal.")
+        expected_series = int(key[22:25])
+        expected_number = int(key[25:34])
+        if expected_series != int(reservation.get("series", -1)) or expected_number != int(reservation.get("number", -1)):
+            raise ValueError("A chave de acesso não corresponde à numeração reservada.")
+
         xml_key = self._extract_access_key_from_xml(xml)
         if xml_key and xml_key != key:
             raise ValueError("A chave informada não corresponde ao XML fiscal.")
-
-        reservation = None
-        if reservation_id:
-            reservation = next(
-                (item for item in self.numbering_status() if item.get("id") == str(reservation_id)),
-                None,
-            )
-            if not reservation:
-                raise ValueError("Reserva de numeração não encontrada.")
-            if reservation.get("status") != "RESERVADO":
-                raise ValueError("A numeração não está reservada para autorização.")
-            if str(reservation.get("environment", "")).upper() != str(config["environment"]).upper():
-                raise ValueError("A reserva pertence a outro ambiente fiscal.")
-            if str(reservation.get("model")) != str(model):
-                raise ValueError("A reserva pertence a outro modelo fiscal.")
-            expected_series = int(key[22:25])
-            expected_number = int(key[25:34])
-            if expected_series != int(reservation.get("series", -1)) or expected_number != int(reservation.get("number", -1)):
-                raise ValueError("A chave de acesso não corresponde à numeração reservada.")
 
         if str(model) == "65":
             xml = self.add_nfce_qr_code_v3(
@@ -3885,7 +3886,7 @@ class FiscalService:
             response=response,
             actor=actor,
         )
-        if reservation_id and response.success:
+        if response.success:
             numbering = self.confirm_number(reservation_id, access_key=key)
             record = dict(record)
             record["numbering"] = numbering

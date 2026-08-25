@@ -1449,11 +1449,13 @@ class FiscalServiceTests(unittest.TestCase):
                 "evento": "https://sefaz.invalid/eve", "inutilizacao": "https://sefaz.invalid/inu",
             }},
         })
+        self.service.initialize_numbering(model="55", series=1, next_number=1)
+        reservation = self.service.reserve_number(model="55", series=1)
         xml, key = self.service.build_document_xml(
             issuer={"cnpj":"12345678000195","name":"EMPRESA","city_code":"2925105","city":"SALVADOR","state":"BA","street":"RUA","number":"1","district":"CENTRO","zip_code":"40000000","state_registration":"123","tax_regime_code":1},
             recipient={"document":"12345678901","name":"CLIENTE"},
             items=[{"code":"P1","description":"PRODUTO","quantity":1,"unit_price":10,"ncm":"94036000","cfop":"5102","unit":"UN"}],
-            document={"model":"55","series":1,"number":1,"state_code":"29","environment":"HOMOLOGACAO","numeric_code":"87654321"},
+            document={"model":"55","series":1,"number":reservation["number"],"state_code":"29","environment":"HOMOLOGACAO","numeric_code":"87654321"},
         )
         original_transmit = self.service.transmit
         calls = []
@@ -1467,7 +1469,10 @@ class FiscalServiceTests(unittest.TestCase):
             return FiscalResponse(True, "135", "Evento registrado", "EV123", raw_xml="<ret><cStat>135</cStat><nProt>EV123</nProt></ret>")
         self.service.transmit = fake_transmit
         try:
-            response, record = self.service.authorize_document(xml=xml, access_key=key, password=self.password)
+            response, record = self.service.authorize_document(
+                xml=xml, access_key=key, password=self.password,
+                reservation_id=reservation["id"],
+            )
             self.assertTrue(response.success)
             self.assertTrue(Path(record["processed_path"]).is_file())
             self.assertTrue(self.service.consult_document(access_key=key, password=self.password).success)
@@ -2681,13 +2686,25 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
         # operacional ter aprovado a transmissão. O comportamento fail-closed
         # do portão é exercitado separadamente em test_fiscal_readiness_gate.
         self.service._readiness_enforced = True
+        self.readiness_calls = []
         self.service._readiness_gate = Mock()
+        self.service._readiness_gate.require.side_effect = self._approve_authorization_gate
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         FiscalServiceTests._create_pfx(self.pfx_path, self.password)
 
     def tearDown(self):
         self.tmp.cleanup()
+
+    def _approve_authorization_gate(self, **kwargs):
+        self.assertEqual(kwargs["operation"], "autorizacao")
+        self.assertEqual(kwargs["model"], "55")
+        self.assertEqual(kwargs["password"], self.password)
+        self.assertEqual(kwargs["series"], 1)
+        self.assertTrue(kwargs["require_catalog"])
+        self.assertTrue(kwargs["require_numbering"])
+        self.assertTrue(kwargs["check_revocation"])
+        self.readiness_calls.append(dict(kwargs))
 
     def _configure(self):
         self.service.save_config({
@@ -2731,6 +2748,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
         finally:
             self.service.transmit = original
         self.assertEqual(record["numbering"]["status"], "CONFIRMADO")
+        self.assertEqual(len(self.readiness_calls), 1)
         status = self.service.numbering_status(model="55", series=1)
         self.assertEqual(status[0]["access_key"], key)
 
@@ -2757,6 +2775,7 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
         finally:
             self.service.transmit = original
         self.assertFalse(response.success)
+        self.assertEqual(len(self.readiness_calls), 1)
         status = self.service.numbering_status(model="55", series=1)
         self.assertEqual(status[0]["status"], "RESERVADO")
         self.assertEqual(status[0]["access_key"], "")
