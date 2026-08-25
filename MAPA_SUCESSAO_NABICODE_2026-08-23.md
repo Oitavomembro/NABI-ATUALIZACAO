@@ -3876,3 +3876,36 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   login, shell e Vendas, sem comunicação Fiscal/SEFAZ;
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
+
+## Correção isolada — shell e Menu Técnico completos no Qt
+
+- branch/worktree: `codex/ux-shell-menu-tecnico-completo` em
+  `NabiCode-QT-UXShellTecnico-codex`, derivados exatamente de
+  `origin/codex/integracao-primeiro-uso-completa@52ae726`;
+- auditoria do Legacy confirmou doze áreas no painel administrativo. A matriz
+  `docs/MATRIZ_MENU_TECNICO_LEGACY_QT.md` separa os equivalentes Qt existentes
+  das operações que continuam exclusivas do Legacy e não podem ser inventadas;
+- implementação `abfa2e5` restaura no menu restrito todos os equivalentes já
+  implementados: Usuários, Configurações, Ajuda, Central de Socorro e Auditoria;
+- a dupla barreira permanece inalterada: dez cliques em até cinco segundos,
+  `technical/view` antes da senha e `confirm_manager_password`. Cada módulo
+  continua revalidando sua permissão original (`technical/users`,
+  `configs/view`, `dashboard/view`, `configs/view`, `technical/audit`);
+- Usuários e Auditoria não aparecem mais como favoritos comuns. O botão genérico
+  `Histórico`, que abria Auditoria fora do menu restrito e não correspondia ao
+  histórico operacional do Legacy, foi removido;
+- a sidebar ganhou rolagem vertical sob demanda, largura elástica entre 250 e
+  320 px, nomes completos/acessíveis e rodapé alcançável em 1024 × 680;
+- nomes e mensagens visíveis deixaram de expor termos internos como migração Qt,
+  Legacy e tipo de widget; `Configurações` passou a ser escrito por extenso;
+- shell e hubs principais compartilham um padrão único de flags nativas para
+  minimizar, maximizar/restaurar e fechar. Senha, confirmações e avisos modais
+  não usam esse padrão;
+- validação focada: `53 passed`; regressão Qt/Legacy/Segurança relacionada:
+  `115 passed`; `compileall` completo e `git diff --check` aprovados;
+- não houve alteração em `main_qt.py`, licensing, Caixa, Financeiro, Produtos,
+  XML, Fiscal/SEFAZ, IA ou banco real. Nenhuma função operacional, atalho,
+  permissão ou operação administrativa foi criada;
+- próximo passo: executar validação final, commitar este registro
+  documentalmente, publicar somente a branch isolada e homologar visualmente a
+  rolagem/sidebar e os controles nativos no Windows.
