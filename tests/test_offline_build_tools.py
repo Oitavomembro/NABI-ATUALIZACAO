@@ -31,7 +31,9 @@ def test_source_audit_accepts_checkpoint_tree() -> None:
 
 def test_wheelhouse_catalog_never_hashes_its_own_output_file():
     script = (ROOT / "build_tools" / "prepare_wheelhouse.ps1").read_text(encoding="utf-8")
-    assert "Get-ChildItem $Wheelhouse -Filter '*.whl' -File" in script
+    assert "--no-deps --require-hashes" in script
+    assert "build_tools.supply_chain $Lock $Download" in script
+    assert "Get-FileHash" not in script
 
 
 def test_installer_removes_only_the_known_legacy_r6_identity():
@@ -435,9 +437,10 @@ def test_inno_installer_is_offline_and_preserves_appdata() -> None:
 
 def test_offline_pipeline_validates_every_wheel_hash_and_recreates_build_venv() -> None:
     script = (ROOT / "build_tools" / "build_offline_windows.ps1").read_text(encoding="utf-8-sig")
-    assert "Get-FileHash -LiteralPath $WheelPath -Algorithm SHA256" in script
-    assert "Wheel sem hash registrado em SHA256SUMS.txt" in script
-    assert "Caminho inseguro em wheelhouse\\SHA256SUMS.txt" in script
+    assert "build_tools.supply_chain $Lock $Wheelhouse" in script
+    assert "--only-binary=:all: --no-deps --require-hashes" in script
+    assert "cyclonedx-py.exe" in script
+    assert "--validate" in script
     assert "Remove-Item -LiteralPath $BuildVenv -Recurse -Force" in script
     assert 'Remove-Item -LiteralPath $Wheelhouse' not in script
-    assert script.index("Get-FileHash") < script.index("python -m venv $BuildVenv")
+    assert script.index("build_tools.supply_chain") < script.index("python -m venv $BuildVenv")

@@ -55,16 +55,32 @@ O lock de build usa Python 3.14.x e fixa as dependências diretas, inclusive:
 
 ## Wheelhouse e build sem rede
 
-Em uma máquina de preparação conectada, `prepare_wheelhouse.ps1` baixa wheels binárias e gera `SHA256SUMS.txt`. O wheelhouse pode ser levado à máquina de build.
+O lock transitivo foi resolvido uma única vez em 24/08/2026 para Python 3.14.7,
+Windows x64, preservando as 18 versões diretas homologadas e fixando
+`cyclonedx-bom==7.3.1`. Cada entrada contém versão exata, nome do único wheel
+aprovado e seu SHA-256. Uma atualização futura exige novo checkpoint, nova
+resolução em área temporária, revisão dos artefatos/licenças e novo commit; nunca
+se recalcula hash depois de aceitar silenciosamente uma versão nova.
+
+Em uma máquina de preparação conectada, `prepare_wheelhouse.ps1` baixa somente
+os wheels já aprovados, usando `--no-deps --require-hashes --only-binary=:all:`.
+O validador rejeita wheel ausente, extra, duplicado, renomeado ou adulterado antes
+de substituir o wheelhouse anterior. O wheelhouse pode então ser levado à
+máquina de build.
 
 Em uma máquina de build Windows desconectada, `build_offline_windows.ps1`:
 
-1. exige wheelhouse com hashes;
+1. exige correspondência exata entre wheelhouse e lock transitivo aprovado;
 2. cria ambiente temporário somente de build;
-3. instala com `--no-index --find-links`;
+3. instala com `--no-index --find-links --no-deps --require-hashes --only-binary=:all:`;
 4. executa a suíte;
 5. executa o build onedir;
-6. não distribui o ambiente de build.
+6. gera e valida `build_output/SBOM.cyclonedx.json` com CycloneDX BOM 7.3.1;
+7. não distribui o ambiente de build.
+
+`THIRD_PARTY_NOTICES.md` continua sendo documento versionado e sujeito a revisão
+jurídica. Metadado de licença ausente, contraditório ou não comprovado deve
+reprovar a atualização; a automação não pode inferir nem inventar uma licença.
 
 O uso de pip ocorre somente na máquina de build. O cliente não executa pip.
 

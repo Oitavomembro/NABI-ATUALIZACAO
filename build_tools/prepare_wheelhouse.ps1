@@ -7,13 +7,14 @@ if ((python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.m
     throw "Python 3.14.x é obrigatório na máquina de build."
 }
 
-New-Item -ItemType Directory -Force -Path $Wheelhouse | Out-Null
-python -m pip download --only-binary=:all: --dest $Wheelhouse --requirement $Lock
+$Download = Join-Path $Root "build_output\wheelhouse-download"
+if (Test-Path -LiteralPath $Download) { Remove-Item -LiteralPath $Download -Recurse -Force }
+New-Item -ItemType Directory -Force -Path $Download | Out-Null
+python -m pip download --only-binary=:all: --no-deps --require-hashes --dest $Download --requirement $Lock
 if ($LASTEXITCODE -ne 0) { throw "Falha ao preparar wheelhouse." }
-
-Get-ChildItem $Wheelhouse -Filter '*.whl' -File | Sort-Object Name | ForEach-Object {
-    $Hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
-    "$Hash  $($_.Name)"
-} | Set-Content -Encoding ascii (Join-Path $Wheelhouse "SHA256SUMS.txt")
+python -m build_tools.supply_chain $Lock $Download
+if ($LASTEXITCODE -ne 0) { throw "Download não corresponde exatamente ao lock aprovado." }
+if (Test-Path -LiteralPath $Wheelhouse) { Remove-Item -LiteralPath $Wheelhouse -Recurse -Force }
+Move-Item -LiteralPath $Download -Destination $Wheelhouse
 
 Write-Host "Wheelhouse criado. Copie-o com o projeto para a máquina de build offline."
