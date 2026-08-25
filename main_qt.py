@@ -46,6 +46,8 @@ from services.security_service import SecurityService
 from services.report_service import ReportService
 from services.cash_service import CashService
 from services.backup_service import BackupService
+from services.fiscal_service import FiscalService
+from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.assisted_product_stock_service import AssistedProductStockService
 from repositories.system_repository import SystemRepository
 from repositories.fornecedor_repository import FornecedorRepository
@@ -341,11 +343,29 @@ def main(argv=None) -> int:
                     return 5
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
+        fiscal_service = None
+        if license_gate.allows(Capability.FISCAL_WRITE):
+            fiscal_service = FiscalService(
+                database.connect,
+                storage_dir=profile.paths.fiscal,
+                actor_provider=lambda: (
+                    module_security.session.user.username
+                    if module_security.session is not None
+                    and not module_security.is_expired()
+                    and module_security.session.user.active
+                    else None
+                ),
+                authorization_provider=lambda action: module_security.require("fiscal", action),
+            )
+            fiscal_service.bind_readiness_catalog(
+                FiscalCatalogReadinessService(database.connect)
+            )
         module_actions = build_administrative_modules(
             container, database, profile, module_security,
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
             app_version=load_app_version("2.5.1", source_file=__file__),
             schema_version=SCHEMA_VERSION,
+            fiscal_service=fiscal_service,
         )
         daily_backup = BackupService(
             database_path=database.database_path,
@@ -406,7 +426,11 @@ def main(argv=None) -> int:
             argv,
             store_name=str(system.get_config("nome_loja") or "NabiCode"),
             cash_label="Caixa ativo",
-            profile_label=f"{profile.label} • COMERCIAL / NÃO FISCAL",
+            profile_label=(
+                f"{profile.label} • COMERCIAL / FISCAL"
+                if license_gate.allows(Capability.FISCAL_WRITE)
+                else f"{profile.label} • COMERCIAL / NÃO FISCAL"
+            ),
             assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,

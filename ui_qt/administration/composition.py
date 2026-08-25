@@ -8,6 +8,7 @@ from administration.purchase_management_service import PurchaseManagementService
 from administration.settings_application_service import SettingsApplicationService
 from administration.audit_application_service import AuditApplicationService
 from administration.user_application_service import UserAdministrationService
+from administration.fiscal_readiness_application_service import FiscalReadinessApplicationService
 from commercial.application.cash_application_service import CashApplicationService
 from commercial.application.report_application_service import ReportApplicationService
 from commercial.application.accountant_center_service import AccountantCenterApplicationService
@@ -43,6 +44,7 @@ from .settings_dialog import SettingsDialog
 from .help_dialog import HelpDialog
 from .help_center_dialog import HelpCenterDialog
 from .audit_dialog import AuditDialog
+from .fiscal_readiness_dialog import FiscalReadinessDialog
 
 def _username(security):
     if security.session is None or security.is_expired():raise PermissionError("Sessão expirada. Entre novamente.")
@@ -118,7 +120,7 @@ def _repair_audit(audit_service, security, event):
 
 def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
-    app_version="2.5.1", schema_version=21,
+    app_version="2.5.1", schema_version=21, fiscal_service=None,
 ):
     modules=[];dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
@@ -144,6 +146,14 @@ def build_administrative_modules(
     if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p),"financeiro"))
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
     modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","","relatorios","view",lambda p:ReportDialog(reports,_username(security),p),"relatorios"))
+    if fiscal_service is not None:
+        fiscal_readiness = FiscalReadinessApplicationService(fiscal_service, security)
+        modules.append(AdministrativeModule(
+            "Central Fiscal", "Configuração e prontidão local segura", "",
+            "fiscal", "view",
+            lambda p, service=fiscal_readiness: FiscalReadinessDialog(service, p),
+            "fiscal",
+        ))
     accountant_center = AccountantCenterApplicationService(
         AccountantMonthlyPackageService(database.connect, fiscal_service=None), security,
     )
