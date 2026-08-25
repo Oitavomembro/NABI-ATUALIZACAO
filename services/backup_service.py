@@ -13,6 +13,13 @@ from pathlib import Path
 from typing import Callable
 
 from database.sqlite_connection import backup_database, open_connection
+from services.backup_envelope import (
+    BackupEnvelopeInfo,
+    decrypt_database,
+    encrypt_database,
+    file_sha256,
+    inspect_envelope,
+)
 
 
 @dataclass(frozen=True)
@@ -51,6 +58,8 @@ class RestoreVerificationResult:
     integrity: str
     foreign_key_errors: tuple[tuple, ...]
     schema_version: int
+    backup_format: str = "SQLITE_LEGACY_UNENCRYPTED"
+    encrypted: bool = False
 
 
 class BackupService:
@@ -116,6 +125,50 @@ class BackupService:
             target.unlink(missing_ok=True)
             raise
         return str(target)
+
+    def create_encrypted(
+        self,
+        directory: str | os.PathLike[str],
+        password: str,
+        prefix: str = "backup_manual",
+    ) -> str:
+        """Cria envelope autenticado sem persistir a senha ou alterar o formato legado."""
+
+        target_dir = Path(directory).expanduser().resolve()
+        target_dir.mkdir(parents=True, exist_ok=True)
+        stem = f"{self._safe_prefix(prefix)}_{self.now():%Y%m%d_%H%M%S_%f}"
+        sequence = 0
+        while True:
+            suffix = "" if sequence == 0 else f"_{sequence}"
+            target = target_dir / f"{stem}{suffix}.nabibackup"
+            try:
+                descriptor = os.open(target, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+            except FileExistsError:
+                sequence += 1
+                continue
+            os.close(descriptor)
+            break
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        with tempfile.TemporaryDirectory(prefix="nabicode_backup_encrypt_") as temp_dir:
+            plain = Path(temp_dir) / "database.db"
+            try:
+                backup_database(self.database_path, plain)
+                self._validate(plain)
+                encrypt_database(plain, temporary, password)
+                self._verify_encrypted_to_temporary(temporary, password)
+                temporary.replace(target)
+            except Exception:
+                temporary.unlink(missing_ok=True)
+                target.unlink(missing_ok=True)
+                raise
+        return str(target)
+
+    @staticmethod
+    def inspect_backup(backup_path: str | os.PathLike[str]) -> BackupEnvelopeInfo:
+        source = Path(backup_path).expanduser().resolve()
+        if not source.is_file():
+            raise FileNotFoundError("Backup não encontrado.")
+        return inspect_envelope(source)
 
     def create_all(self, prefix: str) -> BackupResult:
         created: list[str] = []
@@ -300,14 +353,22 @@ class BackupService:
         digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
         return f"ultimo_backup_diario_destino_{digest}"
 
-    def verify_restore_in_temporary(self, backup_path: str | os.PathLike[str]) -> RestoreVerificationResult:
+    def verify_restore_in_temporary(
+        self, backup_path: str | os.PathLike[str], password: str | None = None
+    ) -> RestoreVerificationResult:
         """Prova a restauração numa base descartável; nunca toca no banco ativo."""
 
         source = Path(backup_path).expanduser().resolve()
-        self._validate(source)
+        info = inspect_envelope(source)
         with tempfile.TemporaryDirectory(prefix="nabicode_restore_check_") as temporary:
             restored = Path(temporary) / "restored.db"
-            backup_database(source, restored)
+            if info.encrypted:
+                if password is None:
+                    raise ValueError("Informe a senha do backup criptografado.")
+                decrypt_database(source, restored, password)
+            else:
+                self._validate(source)
+                backup_database(source, restored)
             self._validate(restored)
             connection = open_connection(restored, apply_journal=False)
             try:
@@ -347,9 +408,15 @@ class BackupService:
                     f"backup={schema_version}; atual={active_schema}."
                 )
         return RestoreVerificationResult(
-            str(source), hashlib.sha256(source.read_bytes()).hexdigest(),
-            integrity, foreign_keys, schema_version,
+            str(source), file_sha256(source), integrity, foreign_keys, schema_version,
+            info.format, info.encrypted,
         )
+
+    def _verify_encrypted_to_temporary(self, source: Path, password: str) -> None:
+        with tempfile.TemporaryDirectory(prefix="nabicode_backup_verify_") as temporary:
+            restored = Path(temporary) / "restored.db"
+            decrypt_database(source, restored, password)
+            self._validate(restored)
 
     @staticmethod
     def _safe_prefix(prefix: str) -> str:

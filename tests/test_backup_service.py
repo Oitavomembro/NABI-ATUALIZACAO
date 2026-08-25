@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import struct
 import tempfile
 import threading
 import unittest
@@ -9,6 +10,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from services.backup_service import BackupService
+from services.backup_envelope import MAGIC, MAX_HEADER_SIZE
 
 
 class BackupServiceTests(unittest.TestCase):
@@ -245,6 +247,86 @@ class BackupServiceTests(unittest.TestCase):
         connection = sqlite3.connect(self.db)
         self.assertEqual("NabiCode", connection.execute("SELECT nome FROM dados").fetchone()[0])
         connection.close()
+
+    def test_backup_criptografado_roundtrip_e_formato_explicito(self):
+        password = "senha forte de homologacao"
+        backup = Path(self.service.create_encrypted(self.root / "secure", password))
+        self.assertEqual(".nabibackup", backup.suffix)
+        info = self.service.inspect_backup(backup)
+        self.assertTrue(info.encrypted)
+        self.assertEqual("NABICODE_ENCRYPTED_V1", info.format)
+        report = self.service.verify_restore_in_temporary(backup, password)
+        self.assertTrue(report.encrypted)
+        self.assertEqual("NABICODE_ENCRYPTED_V1", report.backup_format)
+        self.assertNotIn(password.encode(), backup.read_bytes())
+
+    def test_backup_legado_permanece_detectavel_sem_conversao(self):
+        legacy = Path(self.service.create(self.root / "legacy", "manual"))
+        before = legacy.read_bytes()
+        info = self.service.inspect_backup(legacy)
+        report = self.service.verify_restore_in_temporary(legacy)
+        self.assertFalse(info.encrypted)
+        self.assertEqual("SQLITE_LEGACY_UNENCRYPTED", report.backup_format)
+        self.assertEqual(before, legacy.read_bytes())
+
+    def test_senha_errada_nao_toca_banco_ativo(self):
+        backup = self.service.create_encrypted(
+            self.root / "secure", "senha correta com doze"
+        )
+        with self.assertRaisesRegex(ValueError, "Senha incorreta|adulterado"):
+            self.service.verify_restore_in_temporary(backup, "senha errada com doze")
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("NabiCode", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
+
+    def test_adulteracao_e_truncamento_sao_rejeitados(self):
+        backup = Path(self.service.create_encrypted(
+            self.root / "secure", "senha correta com doze"
+        ))
+        tampered = self.root / "tampered.nabibackup"
+        content = bytearray(backup.read_bytes())
+        content[-1] ^= 1
+        tampered.write_bytes(content)
+        with self.assertRaisesRegex(ValueError, "Senha incorreta|adulterado"):
+            self.service.verify_restore_in_temporary(tampered, "senha correta com doze")
+        truncated = self.root / "truncated.nabibackup"
+        truncated.write_bytes(backup.read_bytes()[:-1])
+        with self.assertRaisesRegex(ValueError, "Tamanho.*divergente"):
+            self.service.verify_restore_in_temporary(truncated, "senha correta com doze")
+
+    def test_cabecalho_malicioso_e_tamanho_gigante_sao_rejeitados(self):
+        oversized = self.root / "oversized.nabibackup"
+        oversized.write_bytes(MAGIC + struct.pack(">I", MAX_HEADER_SIZE + 1))
+        with self.assertRaisesRegex(ValueError, "cabeçalho.*inválido"):
+            self.service.inspect_backup(oversized)
+        giant = self.root / "giant.nabibackup"
+        header = (
+            b'{"cipher":"AES-256-GCM","kdf":{"n":32768,"name":"scrypt",'
+            b'"p":1,"r":8},"nonce":"AAAAAAAAAAAAAAAA","plaintext_size":'
+            b'2147483649,"salt":"AAAAAAAAAAAAAAAAAAAAAA==","version":1}'
+        )
+        giant.write_bytes(MAGIC + struct.pack(">I", len(header)) + header)
+        with self.assertRaisesRegex(ValueError, "Tamanho declarado"):
+            self.service.inspect_backup(giant)
+
+    def test_falha_na_validacao_remove_envelope_parcial(self):
+        with patch.object(
+            self.service, "_verify_encrypted_to_temporary",
+            side_effect=RuntimeError("falha simulada"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "falha simulada"):
+                self.service.create_encrypted(
+                    self.root / "atomic", "senha correta com doze"
+                )
+        self.assertEqual([], list((self.root / "atomic").iterdir()))
+
+    def test_backup_criptografado_com_instante_identico_nao_sobrescreve(self):
+        password = "senha correta com doze"
+        first = Path(self.service.create_encrypted(self.root / "collision", password))
+        first_bytes = first.read_bytes()
+        second = Path(self.service.create_encrypted(self.root / "collision", password))
+        self.assertNotEqual(first, second)
+        self.assertEqual(first_bytes, first.read_bytes())
 
 
 if __name__ == "__main__":
