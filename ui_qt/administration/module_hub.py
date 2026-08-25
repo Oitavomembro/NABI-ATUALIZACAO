@@ -8,6 +8,7 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QGridLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
+from ui_qt.windowing import enable_primary_window_controls
 
 
 STYLE = """
@@ -35,6 +36,7 @@ class AdministrativeModule:
     embedded_factory: Callable[[QWidget], QWidget] | None = None
     summary_loader: Callable[[], object] | None = None
     filtered_factory: Callable[[QWidget, str, str], QDialog] | None = None
+    restricted_menu: bool = False
 
 
 class AdministrativeModuleHub(QDialog):
@@ -47,6 +49,7 @@ class AdministrativeModuleHub(QDialog):
         super().__init__(parent)
         self.security = security
         self.modules = tuple(modules)
+        enable_primary_window_controls(self)
         self.setWindowTitle(window_title)
         self.resize(840, 520)
         self.setMinimumSize(680, 430)
@@ -66,8 +69,9 @@ class AdministrativeModuleHub(QDialog):
         self._module_by_button: dict[QPushButton, AdministrativeModule] = {}
         self._shortcuts: list[QShortcut] = []
         for index, module in enumerate(self.modules):
+            shortcut = f"  [{module.shortcut}]" if module.shortcut else ""
             button = QPushButton(
-                f"{module.label}  [{module.shortcut}]\n{module.description}"
+                f"{module.label}{shortcut}\n{module.description}"
             )
             button.setAccessibleName(module.label)
             button.installEventFilter(self)
@@ -77,12 +81,13 @@ class AdministrativeModuleHub(QDialog):
             grid.addWidget(button, index // 2, index % 2)
             self.buttons.append(button)
             self._module_by_button[button] = module
-            shortcut = QShortcut(QKeySequence(module.shortcut), self)
-            shortcut.setAutoRepeat(False)
-            shortcut.activated.connect(
-                lambda selected=module: self.open_module(selected)
-            )
-            self._shortcuts.append(shortcut)
+            if module.shortcut:
+                key_shortcut = QShortcut(QKeySequence(module.shortcut), self)
+                key_shortcut.setAutoRepeat(False)
+                key_shortcut.activated.connect(
+                    lambda selected=module: self.open_module(selected)
+                )
+                self._shortcuts.append(key_shortcut)
         root.addLayout(grid, 1)
         self._escape = QShortcut(QKeySequence("Esc"), self)
         self._escape.setAutoRepeat(False)
@@ -117,7 +122,7 @@ class AdministrativeModuleHub(QDialog):
             self._authorized(module)
             dialog = module.factory(self)
             if not isinstance(dialog, QDialog):
-                raise TypeError("O módulo deve abrir uma janela Qt.")
+                raise TypeError("O módulo não pôde abrir sua janela.")
             dialog.exec()
         except PermissionError as error:
             QMessageBox.warning(self, "Acesso negado", str(error))

@@ -165,7 +165,7 @@ def build_administrative_modules(
         ),
         "contador",
     ))
-    users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p),"usuarios"))
+    users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p),"usuarios",restricted_menu=True))
     system = SystemRepository(database.connect)
     backups = BackupService(
         database_path=database.database_path,
@@ -195,10 +195,12 @@ def build_administrative_modules(
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",
         "configs", "view", lambda p: SettingsDialog(settings, p), "configs",
+        restricted_menu=True,
     ))
     modules.append(AdministrativeModule(
         "Ajuda", "Atalhos e orientação dos módulos", "Ctrl+H",
         "dashboard", "view", lambda p: HelpDialog(parent=p), "ajuda",
+        restricted_menu=True,
     ))
     audit_service = AdminAuditService(database.connect)
     printing = PrintingService(system.get_config)
@@ -220,11 +222,12 @@ def build_administrative_modules(
         "Central de Socorro", "Diagnóstico seguro e relatório para suporte", "Ctrl+F1",
         "configs", "view",
         lambda p: HelpCenterDialog(socorro, p, repair_service=green_repairs),
-        "socorro",
+        "socorro", restricted_menu=True,
     ))
     audit = AuditApplicationService(audit_service, security)
     modules.append(AdministrativeModule(
         "Auditoria", "Histórico de login e segurança", "Ctrl+L",
         "technical", "audit", lambda p: AuditDialog(audit, p), "auditoria",
+        restricted_menu=True,
     ))
     return tuple(modules)
