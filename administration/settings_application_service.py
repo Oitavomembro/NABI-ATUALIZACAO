@@ -120,6 +120,29 @@ class SettingsApplicationService:
         self.config.set("interface_usuarios", users)
         return self.load()
 
+    def snapshot_preferences_for_repair(self) -> Mapping[str, Any]:
+        """Captura as preferências efetivas sem normalizar para o reparo VERDE."""
+
+        username = self._require("view")
+        key = UIPreferencesService.user_key(username)
+        users = self.config.get("interface_usuarios", {})
+        values = users.get(key) if isinstance(users, Mapping) else None
+        if not isinstance(values, Mapping):
+            values = self.config.get("interface", {})
+        return deepcopy(dict(values)) if isinstance(values, Mapping) else {}
+
+    def replace_preferences_for_repair(self, values: Mapping[str, Any]) -> None:
+        """Substitui o snapshot integral; normalização pertence ao executor tipado."""
+
+        username = self._require("edit")
+        if not isinstance(values, Mapping):
+            raise TypeError("O snapshot de preferências deve ser um mapeamento.")
+        key = UIPreferencesService.user_key(username)
+        users = self.config.get("interface_usuarios", {})
+        users = deepcopy(users) if isinstance(users, dict) else {}
+        users[key] = deepcopy(dict(values))
+        self.config.set("interface_usuarios", users)
+
     def configure_backup(
         self, *, local_directory: str, cloud_directory: str = "", daily: bool
     ) -> SettingsSnapshot:

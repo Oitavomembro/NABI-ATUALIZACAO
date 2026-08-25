@@ -21,6 +21,10 @@ from services.report_service import ReportService
 from services.system_diagnostics import SystemDiagnostics
 from services.printing_service import PrintingService
 from services.help_center_service import HelpCenterDiagnosticService
+from services.help_center_repair_service import (
+    GreenRepairService, VisualPreferencesCallbacks,
+)
+from services.ui_preferences import UIPreferencesService
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
 from ui_qt.commercial.financial_dialog import FinancialDialog
@@ -80,6 +84,32 @@ def _printer_probe(printing):
         "state": "SAUDAVEL" if available else "ALERTA",
         "message": "Impressora detectada" if available else "Somente impressora padrão/virtual disponível",
     }
+
+def _visual_preferences_port(settings):
+    return VisualPreferencesCallbacks(
+        snapshot=lambda: dict(settings.snapshot_preferences_for_repair()),
+        is_valid=lambda values: dict(values) == UIPreferencesService.normalize(values),
+        normalize=UIPreferencesService.normalize,
+        replace=lambda values: settings.replace_preferences_for_repair(dict(values)),
+    )
+
+def _repair_audit(audit_service, security, event):
+    username = _username(security)
+    if not security.require("configs", "edit"):
+        raise PermissionError("Seu perfil não pode executar autorreparos VERDES.")
+    security.touch()
+    audit_service.record_event_strict(
+        "SOCORRO",
+        "AUTORREPARO_VERDE",
+        object_id=event.operation_fingerprint,
+        details=(
+            f"repair={event.repair.value};phase={event.phase.value};"
+            f"outcome={event.outcome.value};changed={int(event.changed)};"
+            f"technical_id={event.technical_id}"
+        ),
+        result=event.outcome.value,
+        user=username,
+    )
 
 def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
@@ -156,9 +186,15 @@ def build_administrative_modules(
             module, action, object_id=object_id, details=details, result=result, user=user,
         ),
     )
+    green_repairs = GreenRepairService(
+        audit=lambda event: _repair_audit(audit_service, security, event),
+        visual_preferences=_visual_preferences_port(settings),
+    )
     modules.append(AdministrativeModule(
         "Central de Socorro", "Diagnóstico seguro e relatório para suporte", "Ctrl+F1",
-        "configs", "view", lambda p: HelpCenterDialog(socorro, p), "socorro",
+        "configs", "view",
+        lambda p: HelpCenterDialog(socorro, p, repair_service=green_repairs),
+        "socorro",
     ))
     audit = AuditApplicationService(audit_service, security)
     modules.append(AdministrativeModule(

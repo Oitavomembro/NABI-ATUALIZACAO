@@ -7,10 +7,14 @@ from PySide6.QtWidgets import QApplication,QDialog,QMainWindow
 from PySide6.QtCore import QEvent,Qt
 from PySide6.QtGui import QKeyEvent
 from ui_qt import app as qt_app
-from ui_qt.administration.composition import build_administrative_modules
+from ui_qt.administration.composition import _repair_audit, build_administrative_modules
 from ui_qt.administration.login_dialog import ApplicationLoginDialog
 from ui_qt.administration.initial_setup_dialog import InitialSetupDialog
 from ui_qt.administration.legacy_security_migration_dialog import LegacySecurityMigrationDialog
+from services.help_center_repair_service import (
+    GreenRepair, RepairAuditEvent, RepairOutcome, RepairPhase,
+    VisualPreferencesCallbacks,
+)
 import main_qt
 
 class Window(QMainWindow):
@@ -76,6 +80,55 @@ def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios
         modules=build_administrative_modules(container,database,profile,security)
     assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários","Configurações","Ajuda","Central de Socorro","Auditoria")
     assert backup.call_args.kwargs["fiscal_directory"] == Path("C:/Teste/fiscal")
+
+def test_composicao_socorro_liga_somente_preferencias_por_porta_verde_tipificada():
+    container=SimpleNamespace(customer_application=None,product_application=None,stock_actions=None,purchase_service=None,financial_query=None,financial_actions=None)
+    database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"));profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal")));security=Mock()
+    state={"preferences":{"mode":"inválido"}}
+    settings=Mock()
+    settings.snapshot_preferences_for_repair.side_effect=lambda: dict(state["preferences"])
+    settings.replace_preferences_for_repair.side_effect=lambda values: state.__setitem__("preferences",dict(values))
+    repair_executor=object()
+    with (
+        patch("ui_qt.administration.composition.CashService"),
+        patch("ui_qt.administration.composition.ReportService"),
+        patch("ui_qt.administration.composition.SettingsApplicationService",return_value=settings),
+        patch("ui_qt.administration.composition.BackupService"),
+        patch("ui_qt.administration.composition.GreenRepairService",return_value=repair_executor) as repair_type,
+        patch("ui_qt.administration.composition.HelpCenterDialog",return_value=QDialog()) as dialog_type,
+    ):
+        modules=build_administrative_modules(container,database,profile,security)
+        next(module for module in modules if module.module_id=="socorro").factory(None)
+    kwargs=repair_type.call_args.kwargs
+    assert set(kwargs)=={"audit","visual_preferences"}
+    port=kwargs["visual_preferences"]
+    assert type(port) is VisualPreferencesCallbacks
+    assert port.snapshot()=={"mode":"inválido"}
+    normalized=port.normalize(port.snapshot());port.replace(normalized)
+    assert port.is_valid(port.snapshot()) is True
+    assert dialog_type.call_args.kwargs["repair_service"] is repair_executor
+
+def test_auditoria_do_reparo_verde_e_estrita_e_exige_edicao():
+    audit=Mock();security=Mock()
+    security.session=SimpleNamespace(user=SimpleNamespace(username="maria"))
+    security.is_expired.return_value=False;security.require.return_value=True
+    event=RepairAuditEvent(
+        "f"*20,GreenRepair.VISUAL_PREFERENCES,RepairPhase.PRECHECK,
+        RepairOutcome.INCONCLUSIVO,False,"visual:typed",
+    )
+    _repair_audit(audit,security,event)
+    audit.record_event_strict.assert_called_once()
+    args=audit.record_event_strict.call_args
+    assert args.args==("SOCORRO","AUTORREPARO_VERDE")
+    assert args.kwargs["object_id"]=="f"*20
+    assert args.kwargs["user"]=="maria"
+
+    denied=Mock();denied.session=security.session
+    denied.is_expired.return_value=False;denied.require.return_value=False
+    try:_repair_audit(audit,denied,event)
+    except PermissionError:pass
+    else:raise AssertionError("autorreparo deveria exigir configs/edit")
+    assert audit.record_event_strict.call_count==1
 
 def test_composicao_de_clientes_liga_segmento_do_dashboard_ao_filtro_da_janela():
     customer_application=Mock();customer_application.list_customers_by_ids.return_value=("cliente",)

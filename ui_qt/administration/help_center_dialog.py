@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from pathlib import Path
 from typing import Callable
 
@@ -10,6 +11,9 @@ from PySide6.QtWidgets import (
 )
 
 from core.sensitive_data import sanitize_text
+from services.help_center_repair_service import (
+    GREEN_REPAIR_CATALOG, GreenRepairEntry, RepairRequest, RepairResult,
+)
 from services.help_center_service import DiagnosticResult, DiagnosticState
 
 
@@ -46,20 +50,38 @@ class DiagnosticWorker(QRunnable):
         self.signals.completed.emit(self.generation, results, error)
 
 
+class RepairWorker(QRunnable):
+    def __init__(self, generation: int, service, request: RepairRequest) -> None:
+        super().__init__(); self.generation = generation; self.service = service
+        self.request = request; self.signals = _DiagnosticSignals()
+
+    @Slot()
+    def run(self) -> None:
+        try: result, error = self.service.execute(self.request), None
+        except Exception as caught: result, error = None, caught
+        self.signals.completed.emit(self.generation, result, error)
+
+
 class HelpCenterDialog(QDialog):
-    """Central de Socorro somente diagnóstica; não oferece reparo ou mutação."""
+    """Diagnóstico e catálogo fechado de autorreparos exclusivamente VERDES."""
 
     def __init__(
-        self, service, parent=None, *, worker_pool=None,
+        self, service, parent=None, *, repair_service=None, worker_pool=None,
         notifier: Callable[[str, str], None] | None = None,
+        confirm_repair: Callable[[GreenRepairEntry], bool] | None = None,
     ) -> None:
         super().__init__(parent)
         self.service = service
+        self.repair_service = repair_service
         self.pool = worker_pool or QThreadPool.globalInstance()
         self._notifier = notifier or self._show_message
+        self._confirm_repair = confirm_repair or self._confirm_green_repair
         self._generation = 0; self._running = False; self._workers = []
+        self._repair_generation = 0; self._repair_running = False
+        self._repair_workers = []
         self._navigation = ()
         self.results: tuple[DiagnosticResult, ...] = ()
+        self.repair_result: RepairResult | None = None
         self.setWindowTitle("Central de Socorro NabiCode")
         self.resize(980, 720); self.setMinimumSize(760, 580); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
@@ -92,6 +114,32 @@ class HelpCenterDialog(QDialog):
         self.details = QPlainTextEdit(); self.details.setReadOnly(True)
         self.details.setPlainText("Execute o diagnóstico para ver detalhes seguros.")
         self.details.installEventFilter(self); root.addWidget(self.details, 1)
+        repair_title = QLabel("AUTORREPAROS VERDES — CATÁLOGO FECHADO")
+        repair_title.setStyleSheet("font-size:17px;font-weight:900;color:#2ea043")
+        root.addWidget(repair_title)
+        repair_notice = QLabel(
+            "Nenhum diagnóstico inicia reparo. Cada ação exige confirmação e aceita "
+            "somente RepairRequest tipado; portas indisponíveis ficam INCONCLUSIVAS."
+        )
+        repair_notice.setWordWrap(True); repair_notice.setStyleSheet("color:#8b949e")
+        root.addWidget(repair_notice)
+        repair_grid = QGridLayout(); self.repair_buttons = []
+        self._repair_by_button: dict[QPushButton, GreenRepairEntry] = {}
+        entries = tuple(repair_service.catalog()) if repair_service is not None else ()
+        if entries and entries != GREEN_REPAIR_CATALOG:
+            raise TypeError("A interface aceita somente o catálogo VERDE publicado.")
+        for index, entry in enumerate(entries):
+            if type(entry) is not GreenRepairEntry or entry.risk.value != "VERDE":
+                raise TypeError("A interface aceita somente o catálogo tipado VERDE.")
+            button = QPushButton(f"VERDE — {entry.title}")
+            button.setAccessibleName(f"Autorreparo verde: {entry.title}")
+            button.clicked.connect(
+                lambda _checked=False, selected=entry: self.run_repair(selected)
+            )
+            button.installEventFilter(self)
+            repair_grid.addWidget(button, index // 2, index % 2)
+            self.repair_buttons.append(button); self._repair_by_button[button] = entry
+        root.addLayout(repair_grid)
         protected = QLabel(
             "PROTEGIDO E TESTADO: leitura isolada por portas; continuidade entre checks; "
             "redação de dados sensíveis; descarte de resposta atrasada; relatório atômico.\n"
@@ -109,13 +157,94 @@ class HelpCenterDialog(QDialog):
         self.close_button.clicked.connect(self.reject)
         footer.addWidget(self.run_button); footer.addWidget(self.report_button)
         footer.addStretch(); footer.addWidget(self.close_button); root.addLayout(footer)
-        self._navigation = tuple(self.cards) + (self.details, self.run_button, self.report_button, self.close_button)
+        self._navigation = (
+            tuple(self.cards) + (self.details,) + tuple(self.repair_buttons)
+            + (self.run_button, self.report_button, self.close_button)
+        )
         for widget in (self.run_button, self.report_button, self.close_button): widget.installEventFilter(self)
         self.run_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _show_message(self, kind: str, message: str) -> None:
         method = QMessageBox.information if kind == "info" else QMessageBox.warning
         method(self, "Central de Socorro", message)
+
+    def _confirm_green_repair(self, entry: GreenRepairEntry) -> bool:
+        answer = QMessageBox.question(
+            self,
+            "Confirmar autorreparo VERDE",
+            f"Executar “{entry.title}”?\n\n"
+            "A ação usa somente a porta tipada publicada, com precheck, postcheck, "
+            "auditoria estrita e rollback quando aplicável. Nenhum reparo AMARELO "
+            "ou VERMELHO será executado.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        return answer == QMessageBox.StandardButton.Yes
+
+    def run_repair(self, entry: GreenRepairEntry) -> bool:
+        if self.repair_service is None or self._repair_running:
+            return False
+        registered = next(
+            (
+                candidate for candidate in self._repair_by_button.values()
+                if candidate is entry and candidate.risk.value == "VERDE"
+            ),
+            None,
+        )
+        if registered is None or not self._confirm_repair(registered):
+            return False
+        self._repair_generation += 1; generation = self._repair_generation
+        self._repair_running = True; self.repair_result = None
+        for button in self.repair_buttons: button.setEnabled(False)
+        self.progress.setText("Executando autorreparo VERDE...")
+        request = RepairRequest(registered.repair, f"qt-{uuid.uuid4().hex}")
+        worker = RepairWorker(generation, self.repair_service, request)
+        worker.signals.completed.connect(self._repair_loaded)
+        self._repair_workers.append(worker); self.pool.start(worker)
+        return True
+
+    def _repair_loaded(self, generation: int, result, error) -> None:
+        self._repair_workers = [
+            worker for worker in self._repair_workers
+            if worker.generation != generation
+        ]
+        if generation != self._repair_generation:
+            return
+        self._repair_running = False
+        for button in self.repair_buttons: button.setEnabled(True)
+        if error is not None:
+            self.progress.setText("Autorreparo bloqueado")
+            self._notifier(
+                "error", sanitize_text(f"Falha segura: {type(error).__name__}")
+            )
+            return
+        if type(result) is not RepairResult or result.entry not in GREEN_REPAIR_CATALOG:
+            self.progress.setText("Autorreparo inconclusivo")
+            self._notifier("error", "A porta retornou um resultado não tipado.")
+            return
+        self.repair_result = result
+        self.progress.setText(f"Autorreparo {result.outcome.value}")
+        rollback = result.rollback.value if result.rollback is not None else "NÃO APLICÁVEL"
+        self.details.setPlainText(
+            f"{sanitize_text(result.entry.title)}\n"
+            f"Risco: {result.entry.risk.value}\n"
+            f"Resultado: {result.outcome.value}\n"
+            f"Precheck: {result.precheck.value}\n"
+            f"Postcheck: {result.postcheck.value}\n"
+            f"Rollback: {rollback}\n"
+            f"Alteração comprovada: {'sim' if result.changed else 'não'}\n"
+            f"Identificador: {sanitize_text(result.operation_fingerprint)}\n\n"
+            f"{sanitize_text(result.message)}"
+        )
+        button = next(
+            (
+                item for item, candidate in self._repair_by_button.items()
+                if candidate.repair is result.entry.repair
+            ),
+            None,
+        )
+        if button is not None:
+            button.setText(f"{result.outcome.value} — {result.entry.title}")
 
     def reload(self) -> bool:
         if self._running:
@@ -200,6 +329,8 @@ class HelpCenterDialog(QDialog):
             elif watched in self.cards:
                 self.show_detail(self.cards.index(watched))
                 flow[min(index + 1, len(flow) - 1)].setFocus(Qt.FocusReason.TabFocusReason)
+            elif watched in self._repair_by_button:
+                self.run_repair(self._repair_by_button[watched])
             elif watched is self.run_button: self.reload()
             elif watched is self.report_button: self.export_report()
             elif watched is self.close_button:
@@ -211,4 +342,5 @@ class HelpCenterDialog(QDialog):
 
     def reject(self) -> None:
         self._generation += 1
+        self._repair_generation += 1
         super().reject()
