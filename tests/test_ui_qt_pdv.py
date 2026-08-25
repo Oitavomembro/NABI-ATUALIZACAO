@@ -613,6 +613,24 @@ class CheckoutDialogTests(unittest.TestCase):
         preview = self.view_model.preview_checkout(self.dialog._candidate_input())
         self.assertEqual(preview[-1], Decimal("99.00"))
 
+    def test_desconto_em_valor_e_percentual_sao_distintos_e_rotulados(self):
+        self.dialog.discount.set_value("10")
+        value_preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(value_preview[3], Decimal("10.00"))
+        self.assertEqual(value_preview[-1], Decimal("90.00"))
+        self.assertIn("R$", self.dialog.discount_label.text())
+
+        self.dialog.discount_type.setCurrentIndex(1)
+        percent_preview = self.view_model.preview_checkout(self.dialog._candidate_input())
+        self.assertEqual(percent_preview[3], Decimal("10.00"))
+        self.assertEqual(percent_preview[-1], Decimal("90.00"))
+        self.assertIn("%", self.dialog.discount_label.text())
+
+    def test_dialogo_organiza_pagamentos_ajustes_e_crediario_em_secoes(self):
+        self.assertEqual(self.dialog.payments_group.title(), "1. Formas de pagamento")
+        self.assertEqual(self.dialog.adjustments_group.title(), "2. Ajustes da venda")
+        self.assertEqual(self.dialog.credit_group.title(), "3. Condições do crediário")
+
     def test_crediario_sem_entrada_e_com_entrada(self):
         due = date(2026, 9, 22)
         no_entry = CheckoutInput(
@@ -1529,6 +1547,54 @@ class PDVQtTests(unittest.TestCase):
             QTest.keyClick(widget, Qt.Key.Key_Return)
             QApplication.processEvents()
         self.assertEqual(calls, [])
+
+    def test_seta_para_baixo_com_busca_vazia_abre_catalogo_rapido(self):
+        self.window.product_search.clear()
+        self.window.product_search.setFocus()
+        with patch.object(
+            self.view_model, "search_products", return_value=(FakeProducts.record,)
+        ) as search:
+            QTest.keyClick(self.window.product_search, Qt.Key.Key_Down)
+        search.assert_called_once_with("")
+        self.assertEqual(self.window.product_results.count(), 1)
+        self.assertTrue(self.window.product_results.hasFocus())
+
+    def test_seta_para_baixo_informa_catalogo_vazio(self):
+        self.window.product_search.clear()
+        self.window.product_search.setFocus()
+        with patch.object(self.view_model, "search_products", return_value=()):
+            QTest.keyClick(self.window.product_search, Qt.Key.Key_Down)
+        self.assertIn("catálogo", self.window.statusBar().currentMessage().casefold())
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_seta_para_baixo_auto_repeat_nao_consulta_catalogo(self):
+        self.window.product_search.clear()
+        self.window.product_search.setFocus()
+        event = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Down,
+            Qt.KeyboardModifier.NoModifier, "", True, 2,
+        )
+        with patch.object(self.view_model, "search_products") as search:
+            QApplication.sendEvent(self.window.product_search, event)
+        search.assert_not_called()
+        self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_erro_no_checkout_retorna_ao_pdv_com_venda_integra(self):
+        self._cart_with_customer()
+        self.gateway.error = ValueError("Limite insuficiente")
+        original_items = self.view_model.session.cart.items
+        original_total = self.view_model.total
+        with (
+            patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeAcceptedCheckoutDialog),
+            patch.object(QMessageBox, "warning") as warning,
+        ):
+            self.window._checkout()
+        self.assertEqual(self.view_model.session.cart.items, original_items)
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.total, original_total)
+        self.assertTrue(self.window.checkout_button.hasFocus())
+        self.assertEqual(len(self.gateway.commands), 1)
+        self.assertIn("Limite insuficiente", warning.call_args.args[2])
 
     def test_registered_product_and_quantity(self):
         self.window.product_search.setText("P9")
