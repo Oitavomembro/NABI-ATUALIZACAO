@@ -4072,6 +4072,23 @@ class FiscalService:
 
     @staticmethod
     def _document_from_certificate(cert: x509.Certificate) -> str:
+        # No padrão ICP-Brasil, o CNPJ empresarial possui OID próprio no
+        # SubjectAlternativeName. Ele precisa ter precedência sobre o CN, que
+        # pode conter também CPF do responsável ou outros números.
+        try:
+            alternative_names = cert.extensions.get_extension_for_class(
+                x509.SubjectAlternativeName
+            ).value
+            for other_name in alternative_names.get_values_for_type(x509.OtherName):
+                if other_name.type_id.dotted_string != "2.16.76.1.3.3":
+                    continue
+                candidates = re.findall(rb"[0-9]{14}", bytes(other_name.value))
+                for candidate in candidates:
+                    document = candidate.decode("ascii")
+                    if FiscalService._is_valid_cnpj(document):
+                        return document
+        except x509.ExtensionNotFound:
+            pass
         for attribute in cert.subject:
             value = str(attribute.value)
             for token in re.findall(r"(?<![A-Z0-9])[A-Z0-9][A-Z0-9./-]{12,20}(?![A-Z0-9])", value.upper()):

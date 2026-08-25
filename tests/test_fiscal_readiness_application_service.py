@@ -1,10 +1,15 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
+from unittest.mock import Mock
 
 import pytest
+from cryptography import x509
+from cryptography.x509.oid import ObjectIdentifier
 
 from administration.fiscal_readiness_application_service import (
     FiscalReadinessApplicationService,
 )
+from services.fiscal_service import FiscalService
 
 
 @dataclass
@@ -77,3 +82,18 @@ def test_configuracao_exige_permissao_real():
     with pytest.raises(PermissionError):
         service.configure_homologation(values(), password="segredo")
     assert fiscal.saved is None
+
+
+def test_leitor_prioriza_cnpj_oficial_icp_brasil_sobre_numeros_do_responsavel():
+    certificate = SimpleNamespace(
+        extensions=Mock(),
+        subject=[SimpleNamespace(value="RESPONSAVEL:12345678901234")],
+    )
+    san = x509.SubjectAlternativeName([
+        x509.OtherName(
+            ObjectIdentifier("2.16.76.1.3.3"),
+            b"\x0c\x0e47584215000160",
+        )
+    ])
+    certificate.extensions.get_extension_for_class.return_value.value = san
+    assert FiscalService._document_from_certificate(certificate) == "47584215000160"

@@ -77,7 +77,10 @@ class FiscalReadinessApplicationService:
         if certificate.expired:
             raise ValueError("O certificado A1 está expirado ou ainda não é válido.")
         if certificate.document and certificate.document != cnpj:
-            raise ValueError("O CNPJ do certificado não corresponde ao emitente informado.")
+            raise ValueError(
+                "O CNPJ do certificado não corresponde ao emitente informado. "
+                f"Informado: {cnpj}; certificado: {certificate.document}."
+            )
         models = [model for model in ("55", "65") if values.get(f"model_{model}")]
         saved = self._fiscal.save_config({
             "enabled": True,
