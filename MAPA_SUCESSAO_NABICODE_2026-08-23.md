@@ -3616,3 +3616,19 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - próximo passo: homologar visualmente no Windows a abertura de Produtos com
   Compras habilitado, catálogo por seta para baixo, seções de Pagamentos e retorno
   após uma recusa comercial controlada.
+
+### Sessão operacional durante o expediente e integração visual
+
+- `f402220` remove a expiração automática padrão por inatividade: a sessão
+  autenticada permanece válida até logout/troca de usuário, fechamento do
+  processo, revogação da conta ou licença. Confirmações próprias de operações
+  sensíveis permanecem obrigatórias;
+- o timeout continua disponível para contextos que o instanciem explicitamente,
+  com regressão própria; o padrão comercial não interrompe vendas ou cadastros;
+- `073da8b` integra por merge normal a UX global (cards filtráveis, janelas
+  amplas, teclado, tema inferior e menu técnico com dupla barreira);
+- `a10919f` integra por merge normal Produtos/catálogo/Pagamentos e preserva os
+  testes das duas trilhas durante a resolução exclusivamente aditiva;
+- regressão consolidada depois dos merges: `2355 passed`, `1 skipped`,
+  `460 subtests passed`, zero falhas e dois avisos externos conhecidos;
+  ensaio de primeiro uso completo também aprovado, sem rede Fiscal/SEFAZ.
