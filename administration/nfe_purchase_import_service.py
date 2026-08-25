@@ -8,6 +8,7 @@ import json
 from pathlib import Path
 import re
 import unicodedata
+from datetime import datetime
 
 from assistant_nabi import NFeEntryDraftService
 
@@ -81,6 +82,99 @@ class NFePurchaseImportManagementService:
         self.security = security
         self.drafts = NFeEntryDraftService(imports)
         self.company_document_provider = company_document_provider
+        self.database = imports.repository.database
+        self._ensure_draft_schema()
+
+    def _ensure_draft_schema(self):
+        with self.database.session(write=True) as connection:
+            connection.executescript("""
+            CREATE TABLE IF NOT EXISTS nfe_importacao_rascunhos(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,usuario TEXT NOT NULL,empresa_documento TEXT NOT NULL,
+              chave TEXT NOT NULL,xml_sha256 TEXT NOT NULL,arquivo_origem TEXT NOT NULL,numero TEXT NOT NULL DEFAULT '',
+              fornecedor_nome TEXT NOT NULL DEFAULT '',fornecedor_documento TEXT NOT NULL DEFAULT '',pagina_atual INTEGER NOT NULL DEFAULT 0,
+              estado_json TEXT NOT NULL,estado_sha256 TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'PENDENTE',
+              criado_em TEXT NOT NULL,atualizado_em TEXT NOT NULL,concluido_em TEXT,descartado_em TEXT,
+              UNIQUE(usuario,empresa_documento,chave,xml_sha256));
+            CREATE INDEX IF NOT EXISTS idx_nfe_rascunhos_pendentes ON nfe_importacao_rascunhos(usuario,empresa_documento,status,atualizado_em);
+            CREATE TABLE IF NOT EXISTS nfe_importacao_rascunho_auditoria(
+              id INTEGER PRIMARY KEY AUTOINCREMENT,rascunho_id INTEGER NOT NULL,usuario TEXT NOT NULL,
+              evento TEXT NOT NULL,detalhe TEXT NOT NULL DEFAULT '',criado_em TEXT NOT NULL,
+              FOREIGN KEY(rascunho_id) REFERENCES nfe_importacao_rascunhos(id));
+            """)
+
+    def _identity(self, permission=("produtos", "view")):
+        actor = self._require(*permission)
+        company = self._digits(self.company_document_provider() if self.company_document_provider else "")
+        if not company:
+            raise ValueError("A empresa precisa possuir CNPJ configurado para guardar rascunhos de NF-e.")
+        return actor, company
+
+    @staticmethod
+    def _state_payload(rows, page):
+        allowed = ("acao", "produto_id", "codigo", "descricao", "codigo_barras", "tipo_fator", "fator", "unidade", "margem", "preco", "raw_margin", "raw_price", "status")
+        return {"version": 1, "page": int(page), "rows": [{key: (format(value, "f") if isinstance(value, Decimal) else value) for key, value in row.items() if key in allowed} for row in rows]}
+
+    def save_draft(self, draft, rows, *, page=0):
+        actor, company = self._identity()
+        payload = json.dumps(self._state_payload(rows, page), ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+        digest = hashlib.sha256(payload.encode("utf-8")).hexdigest(); now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.database.session(write=True) as connection:
+            previous = connection.execute(
+                "SELECT id,estado_json,estado_sha256 FROM nfe_importacao_rascunhos WHERE usuario=? AND empresa_documento=? AND chave=? AND xml_sha256=?",
+                (actor, company, draft.access_key, draft.source_sha256),
+            ).fetchone()
+            previous_content_hash = hashlib.sha256(
+                str(previous["estado_json"]).encode("utf-8")
+            ).hexdigest() if previous else ""
+            if (
+                previous
+                and str(previous["estado_sha256"]) == digest
+                and previous_content_hash == digest
+            ):
+                return int(previous["id"])
+            connection.execute("""INSERT INTO nfe_importacao_rascunhos
+              (usuario,empresa_documento,chave,xml_sha256,arquivo_origem,numero,fornecedor_nome,fornecedor_documento,pagina_atual,estado_json,estado_sha256,status,criado_em,atualizado_em)
+              VALUES(?,?,?,?,?,?,?,?,?,?,?,'PENDENTE',?,?)
+              ON CONFLICT(usuario,empresa_documento,chave,xml_sha256) DO UPDATE SET
+              arquivo_origem=excluded.arquivo_origem,numero=excluded.numero,fornecedor_nome=excluded.fornecedor_nome,
+              fornecedor_documento=excluded.fornecedor_documento,pagina_atual=excluded.pagina_atual,estado_json=excluded.estado_json,
+              estado_sha256=excluded.estado_sha256,status='PENDENTE',atualizado_em=excluded.atualizado_em,concluido_em=NULL,descartado_em=NULL""",
+              (actor,company,draft.access_key,draft.source_sha256,draft.source_path,draft.number,draft.supplier_name,draft.supplier_document,int(page),payload,digest,now,now))
+            row = connection.execute("SELECT id FROM nfe_importacao_rascunhos WHERE usuario=? AND empresa_documento=? AND chave=? AND xml_sha256=?",(actor,company,draft.access_key,draft.source_sha256)).fetchone()
+            if previous is None:
+                connection.execute("INSERT INTO nfe_importacao_rascunho_auditoria(rascunho_id,usuario,evento,detalhe,criado_em) VALUES(?,?, 'CRIADO','rascunho automático iniciado',?)",(int(row['id']),actor,now))
+            return int(row["id"])
+
+    def pending_drafts(self):
+        actor, company = self._identity()
+        return tuple(dict(row) for row in self.database.fetch_all("""SELECT id,numero,fornecedor_nome,fornecedor_documento,chave,xml_sha256,arquivo_origem,pagina_atual,atualizado_em
+          FROM nfe_importacao_rascunhos WHERE usuario=? AND empresa_documento=? AND status='PENDENTE' ORDER BY atualizado_em DESC,id DESC""",(actor,company)))
+
+    def resume_draft(self, draft_id):
+        actor, company = self._identity()
+        row = self.database.fetch_one("SELECT * FROM nfe_importacao_rascunhos WHERE id=? AND usuario=? AND empresa_documento=? AND status='PENDENTE'",(int(draft_id),actor,company))
+        if not row: raise PermissionError("Rascunho não localizado para este usuário e esta empresa.")
+        raw = str(row["estado_json"]); digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()
+        if digest != row["estado_sha256"]: raise ValueError("O rascunho está corrompido e não pode ser retomado.")
+        source = Path(row["arquivo_origem"])
+        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != row["xml_sha256"]:
+            raise ValueError("O XML original não existe mais ou foi alterado; o rascunho foi preservado.")
+        draft = self.prepare(source)
+        if draft.access_key != row["chave"] or draft.source_sha256 != row["xml_sha256"]:
+            raise ValueError("A chave ou o conteúdo do XML não corresponde ao rascunho.")
+        state = json.loads(raw)
+        if state.get("version") != 1 or len(state.get("rows", ())) != len(draft.items): raise ValueError("O rascunho possui estrutura incompatível.")
+        return draft, state
+
+    def discard_draft(self, draft_id, *, confirmed=False):
+        actor, company = self._identity()
+        if not confirmed: raise PermissionError("Confirmação explícita obrigatória para descartar o rascunho.")
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.database.session(write=True) as connection:
+            row=connection.execute("SELECT id FROM nfe_importacao_rascunhos WHERE id=? AND usuario=? AND empresa_documento=? AND status='PENDENTE'",(int(draft_id),actor,company)).fetchone()
+            if not row: raise PermissionError("Rascunho não localizado para este usuário e esta empresa.")
+            connection.execute("UPDATE nfe_importacao_rascunhos SET status='DESCARTADO',descartado_em=?,atualizado_em=? WHERE id=?",(now,now,int(draft_id)))
+            connection.execute("INSERT INTO nfe_importacao_rascunho_auditoria(rascunho_id,usuario,evento,detalhe,criado_em) VALUES(?,?,'DESCARTADO','confirmação explícita',?)",(int(draft_id),actor,now))
 
     def _require(self, module: str, action: str) -> str:
         session = self.security.session
@@ -216,8 +310,15 @@ class NFePurchaseImportManagementService:
             ensure_ascii=False, sort_keys=True, separators=(",", ":"),
         ).encode("utf-8")).hexdigest()
         key = f"nfe-ui:{draft.access_key or draft.source_sha256}"
-        return self.imports.importar_atomicamente(
+        result = self.imports.importar_atomicamente(
             document, arquivo_origem=draft.source_path, itens=prepared,
             expected_actor=actor, idempotency_key=key,
             operation_fingerprint=fingerprint,
         )
+        actor, company = self._identity(("compras", "receive")); now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with self.database.session(write=True) as connection:
+            matches=connection.execute("SELECT id FROM nfe_importacao_rascunhos WHERE usuario=? AND empresa_documento=? AND chave=? AND xml_sha256=? AND status='PENDENTE'",(actor,company,draft.access_key,draft.source_sha256)).fetchall()
+            for saved in matches:
+                connection.execute("UPDATE nfe_importacao_rascunhos SET status='CONCLUIDO',concluido_em=?,atualizado_em=? WHERE id=?",(now,now,int(saved['id'])))
+                connection.execute("INSERT INTO nfe_importacao_rascunho_auditoria(rascunho_id,usuario,evento,detalhe,criado_em) VALUES(?,?,'CONCLUIDO','importação atômica concluída',?)",(int(saved['id']),actor,now))
+        return result

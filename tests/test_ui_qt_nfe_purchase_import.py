@@ -210,3 +210,26 @@ def test_nabi_nao_inventa_fator_sem_evidencia(monkeypatch):
     assert dialog.factor.text() == "20"
     assert shown and "não encontrei" in shown[0].lower()
     dialog.close()
+
+
+def test_autosave_exibe_sucesso_sem_alegar_gravacao_operacional():
+    class DurableApplication(Application):
+        def save_draft(self, _draft, _rows, *, page):
+            assert page == 0
+            return 7
+
+    dialog = NFePurchaseImportDialog(DurableApplication(), draft())
+    assert dialog.checkpoint_status.text() == "Rascunho salvo automaticamente"
+    dialog.close()
+
+
+def test_falha_do_autosave_fica_visivel_e_preserva_dialogo():
+    class FailingApplication(Application):
+        def save_draft(self, _draft, _rows, *, page):
+            raise RuntimeError("disco indisponível")
+
+    dialog = NFePurchaseImportDialog(FailingApplication(), draft())
+    assert "NÃO salvo" in dialog.checkpoint_status.text()
+    assert "disco indisponível" in dialog.checkpoint_status.text()
+    assert dialog.isEnabled()
+    dialog.close()

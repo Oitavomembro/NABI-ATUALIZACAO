@@ -436,6 +436,41 @@ def initialize_database(
         cursor.execute("ALTER TABLE nfe_importacoes ADD COLUMN valor_total TEXT NOT NULL DEFAULT '0'")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nfe_importacoes_numero ON nfe_importacoes(numero)")
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_nfe_importacoes_cnpj ON nfe_importacoes(fornecedor_cnpj)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nfe_importacao_rascunhos (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            usuario TEXT NOT NULL,
+            empresa_documento TEXT NOT NULL,
+            chave TEXT NOT NULL,
+            xml_sha256 TEXT NOT NULL,
+            arquivo_origem TEXT NOT NULL,
+            numero TEXT NOT NULL DEFAULT '',
+            fornecedor_nome TEXT NOT NULL DEFAULT '',
+            fornecedor_documento TEXT NOT NULL DEFAULT '',
+            pagina_atual INTEGER NOT NULL DEFAULT 0,
+            estado_json TEXT NOT NULL,
+            estado_sha256 TEXT NOT NULL,
+            status TEXT NOT NULL DEFAULT 'PENDENTE'
+                CHECK(status IN ('PENDENTE','CONCLUIDO','DESCARTADO')),
+            criado_em TEXT NOT NULL,
+            atualizado_em TEXT NOT NULL,
+            concluido_em TEXT,
+            descartado_em TEXT,
+            UNIQUE(usuario,empresa_documento,chave,xml_sha256)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_nfe_rascunhos_pendentes ON nfe_importacao_rascunhos(usuario,empresa_documento,status,atualizado_em)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS nfe_importacao_rascunho_auditoria (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            rascunho_id INTEGER NOT NULL,
+            usuario TEXT NOT NULL,
+            evento TEXT NOT NULL,
+            detalhe TEXT NOT NULL DEFAULT '',
+            criado_em TEXT NOT NULL,
+            FOREIGN KEY(rascunho_id) REFERENCES nfe_importacao_rascunhos(id)
+        )
+    """)
 
     # Pedidos e recebimentos de compra (schema 12).
     cursor.execute("""

@@ -437,12 +437,14 @@ class ProductManagementDialog(QDialog):
         root.addWidget(self.table, 1)
         buttons = QHBoxLayout(); self.new = QPushButton("Novo  [F3]"); self.edit = QPushButton("Editar  [F4]")
         self.xml_import = QPushButton("Preparar por XML  [F8]")
+        self.pending_xml = QPushButton("Notas pendentes")
         self.move = QPushButton("Movimentar estoque  [F6]"); self.history = QPushButton("Histórico  [F7]")
         close = QPushButton("Fechar  [Esc]"); self.new.setObjectName("primary"); self.move.setObjectName("warning")
         self.new.clicked.connect(self.new_product); self.edit.clicked.connect(self.edit_product)
         self.xml_import.clicked.connect(self.open_xml_import)
+        self.pending_xml.clicked.connect(self.open_pending_xml)
         self.move.clicked.connect(self.move_stock); self.history.clicked.connect(self.show_history); close.clicked.connect(self.reject)
-        for button in (self.new, self.edit, self.xml_import, self.move, self.history): buttons.addWidget(button)
+        for button in (self.new, self.edit, self.xml_import, self.pending_xml, self.move, self.history): buttons.addWidget(button)
         buttons.addStretch(); buttons.addWidget(close); root.addLayout(buttons)
         self._shortcuts = []
         for key, callback in (("F3", self.new_product), ("F4", self.edit_product), ("F5", self.reload),
@@ -543,3 +545,40 @@ class ProductManagementDialog(QDialog):
                 + (", ".join(map(str, dialog.result_data.created_product_ids)) or "nenhum"),
             )
             self.reload()
+
+    def open_pending_xml(self) -> None:
+        service = getattr(self.application, "nfe_purchase_import", None)
+        if service is None:
+            QMessageBox.information(self, "Notas pendentes", "A entrada completa por NF-e não está disponível nesta edição.")
+            return
+        try: pending = tuple(service.pending_drafts())
+        except Exception as error: QMessageBox.warning(self, "Notas pendentes", str(error)); return
+        if not pending:
+            QMessageBox.information(self, "Notas pendentes", "Não há notas aguardando finalização para este usuário e esta empresa.")
+            return
+        chooser = QDialog(self); chooser.setWindowTitle("Notas que precisam ser finalizadas"); chooser.resize(900, 480); chooser.setStyleSheet(STYLE)
+        layout = QVBoxLayout(chooser); table = QTableWidget(len(pending), 5)
+        table.setHorizontalHeaderLabels(("NF-e", "Fornecedor", "CNPJ", "Última edição", "Arquivo")); table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection); table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        for index, item in enumerate(pending):
+            for column, value in enumerate((item["numero"], item["fornecedor_nome"], item["fornecedor_documento"], item["atualizado_em"], item["arquivo_origem"])):
+                cell=QTableWidgetItem(str(value)); cell.setToolTip(str(value)); table.setItem(index,column,cell)
+        table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.Stretch); table.selectRow(0); layout.addWidget(table)
+        actions=QHBoxLayout(); discard=QPushButton("Descartar selecionada"); resume=QPushButton("Continuar selecionada"); resume.setObjectName("primary"); actions.addWidget(discard); actions.addStretch(); actions.addWidget(resume); layout.addLayout(actions)
+        def selected():
+            row=table.currentRow(); return pending[row] if 0 <= row < len(pending) else None
+        def do_discard():
+            item=selected()
+            if not item: return
+            answer=QMessageBox.question(chooser,"Descartar rascunho",f"Descartar definitivamente as edições da NF-e {item['numero']}?",QMessageBox.StandardButton.Yes|QMessageBox.StandardButton.No,QMessageBox.StandardButton.No)
+            if answer != QMessageBox.StandardButton.Yes: return
+            try: service.discard_draft(item["id"],confirmed=True)
+            except Exception as error: QMessageBox.warning(chooser,"Rascunho preservado",str(error)); return
+            chooser.reject()
+        def do_resume():
+            item=selected()
+            if not item: return
+            try: draft,state=service.resume_draft(item["id"])
+            except Exception as error: QMessageBox.warning(chooser,"Não foi possível retomar",str(error)); return
+            chooser.accept(); dialog=NFePurchaseImportDialog(service,draft,self,restored_state=state)
+            if dialog.exec() == QDialog.DialogCode.Accepted: self.reload()
+        discard.clicked.connect(do_discard); resume.clicked.connect(do_resume); table.doubleClicked.connect(lambda _index: do_resume()); chooser.exec()
