@@ -211,6 +211,10 @@ class FiscalDFeService:
     def fetch_next(self, *, password: str) -> DFeDistributionResult:
         config = self.fiscal_service.load_config()
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
+        self.fiscal_service.require_operational_readiness(
+            operation="consulta", model="55", password=password,
+            permission="configure",
+        )
         cnpj = str(config.get("cnpj") or "")
         state = str(config.get("state") or "").upper()
         state_code = self.fiscal_service.STATE_CODES.get(state, "")
@@ -310,6 +314,10 @@ class FiscalDFeService:
         justification: str = "",
     ) -> tuple[Any, dict[str, Any]]:
         actor = self._authenticated_actor("transmit")
+        self.fiscal_service.require_operational_readiness(
+            operation="evento", model="55", password=password,
+            permission="transmit",
+        )
         key = self.fiscal_service._normalize_access_key(access_key)
         if not any(row.get("access_key") == key for row in self.list_documents()):
             raise ValueError("A NF-e recebida não foi localizada na distribuição DF-e.")
