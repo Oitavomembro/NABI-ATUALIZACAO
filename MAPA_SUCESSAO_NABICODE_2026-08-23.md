@@ -2881,3 +2881,24 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Harmonização visual isolada — Dashboard/Início Qt consolidado
+
+- branch/worktree: `codex/dashboard-qt-visual-atual` em
+  `NabiCode-QT-DashboardVisualAtual-codex`, derivada exatamente de `1cfdfa4`;
+- implementação: `ca2dbdd` — `style: harmoniza dashboard Qt em acabamento metalico`;
+- cartões, tabela, paginação e estados de carregamento receberam somente
+  acabamento em aço/grafite/prata. O ciano ficou restrito ao foco e o vermelho
+  ao filete de `Cobranças vencidas`, que é um alerta operacional real;
+- a paleta multicolorida anterior foi removida sem mudar rótulos, valores,
+  hierarquia, dimensões, acessibilidade ou organização da tela;
+- paginação `LIMIT/OFFSET`, tamanho máximo da página, totais completos,
+  `QThreadPool`, geração monotônica e descarte de respostas atrasadas foram
+  preservados. A tela continua somente leitura e sem acesso direto ao banco;
+- F5, PgUp, PgDown, Esc, Enter consumido na tabela, permissões, composição e
+  ausência de escrita permaneceram inalterados;
+- validação focada e relacionada: `40 passed`, cobrindo interface, aplicação,
+  repositório, paginação, worker, resposta atrasada, recebimentos e shell;
+  `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual no Windows para cartões, alerta vencido,
+  tabela, foco, paginação, carregamento, erro e diferentes escalas/DPI.
