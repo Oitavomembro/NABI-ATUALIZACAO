@@ -2929,3 +2929,62 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   módulos não fiscais não passam por esta API e permanecem operacionais;
 - próximo passo: revisão independente, regressão fiscal integral e integração
   normal na consolidada; produção fiscal continua bloqueada.
+
+### Dossiê fiscal automatizado estritamente OFFLINE/TESTE
+
+- branch/worktree: `codex/dossie-homologacao-fiscal` em
+  `NabiCode-QT-DossieFiscalOffline-codex`, derivada exatamente de
+  `db28b2648cf885e5bdc298f6c59efc485ad47bb6`;
+- implementação e evidências: `43294aa2bad45e907425dd96391c95232994c7bb` —
+  `test: adiciona dossie fiscal offline deterministico`;
+- o harness usa exclusivamente adapters fake roteirizados e store em memória;
+  não importa nem compõe serviço fiscal operacional, repositório, banco, UI,
+  certificado ou endpoint;
+- a matriz determinística cobre prontidão, autorização, rejeição, timeout antes
+  e depois do despacho, resposta não classificável, consulta/reconciliação sem
+  reenvio, cancelamento autorizado, bloqueio de cancelamento incerto,
+  inutilização, contingência NFC-e pendente e bloqueios de produção, portão,
+  permissão e uso indevido da contingência no modelo 55;
+- guards adversariais permanecem ativos durante todos os cenários e bloqueiam
+  construtores/aliases de socket, resolução DNS, HTTP, SQLite e abertura de
+  `.pfx`, `.p12`, `.pem` ou `.key` por `open`, `pathlib`/`io`, `_io` e
+  `os.open`; os testes exercitam tentativas hostis por rotas alternativas;
+- resultado do artefato: `16/16` cenários automatizados aprovados e zero
+  reprovações; rede real `0`, banco real `0` e certificado/chave real `0`;
+  essas contagens significam somente isolamento do harness, nunca resposta da
+  SEFAZ;
+- JSON determinístico:
+  `docs/evidencias/fiscal_offline/dossie_fiscal_offline_teste.json`, SHA-256
+  `c3a7898ab6ebcb35e437dbbc66651dd0e99e7bf27c62d9cc3686f64539f93d86`;
+- resumo humano sanitizado:
+  `docs/evidencias/fiscal_offline/dossie_fiscal_offline_teste.md`, SHA-256
+  `5d4f21fbeed97a63b6f59d9cceb2d7d6ba33058c0ee76b3af874ef313296049e`;
+  payload canônico SHA-256
+  `c7ff3ec923a69103627b358aea48c605202fa14a5b9573759c292b7eaf71600a`
+  e fonte do harness SHA-256
+  `f7f466b526de00c2086435f904416f06ee65585b86218f08bc181c932c847f31`;
+- validação própria/adversarial: `11 passed`; conjunto próprio + portão de
+  prontidão: `17 passed`; geração repetida produziu hashes idênticos,
+  `compileall`, JSON parseável e `git diff --check` aprovados;
+- regressão fiscal ampliada executada: `264 passed`, `2 failed`, `10 subtests
+  passed` e uma depreciação externa conhecida do `BrazilFiscalReport`; as duas
+  falhas são exclusivamente as fixtures herdadas
+  `FiscalAuthorizationNumberingIntegrationTests::test_autorizacao_confirma_reserva_somente_com_sucesso`
+  e `::test_rejeicao_nao_confirma_reserva`, que ainda chamam
+  `authorize_document` sem compor o novo portão fail-closed. O bloqueio ocorre
+  antes da transmissão, como desenhado na base, e não foi enfraquecido ou
+  alterado nesta missão;
+- nenhuma regra fiscal, XML, numeração, serviço operacional, UI ou perfil real
+  foi alterado. Não houve socket, certificado, banco real, endpoint ou chamada
+  SEFAZ; códigos, mensagens e protocolos do dossiê são sintéticos;
+- este checkpoint não declara homologação real, credenciamento, conformidade
+  fiscal geral ou aptidão de produção. Homologação física acompanhada, empresa
+  e certificado autorizados, endpoints vigentes, DANFE/QR, impressão, eventos,
+  calendário normativo de contingência, pacote contábil, revisão jurídica e
+  autorização expressa continuam pendentes; produção fiscal permanece
+  bloqueada;
+- próximo passo seguro: revisão independente do commit funcional e deste mapa,
+  integração normal na candidata consolidada e correção separada das duas
+  fixtures de regressão sem reintroduzir bypass de prontidão. O dossiê offline
+  pode acompanhar a homologação futura apenas como evidência automatizada
+  complementar, nunca como substituto da prova externa.
