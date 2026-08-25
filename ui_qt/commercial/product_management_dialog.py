@@ -6,7 +6,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout,
-    QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
+    QFileDialog, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
     QTableWidgetItem, QVBoxLayout,
 )
 
@@ -14,6 +14,7 @@ from commercial.application.product_dto import (
     ProductCreateCommand, ProductUpdateCommand, StockAdjustmentCommand,
     StockMovementCommand,
 )
+from administration.product_xml_import_service import ProductXMLDecision
 from .widgets.money_edit import MoneyEdit
 
 
@@ -209,9 +210,210 @@ class StockHistoryDialog(QDialog):
         root.addWidget(close); QShortcut(QKeySequence("Esc"), self, activated=self.reject).setAutoRepeat(False)
 
 
+class ProductXMLReviewDialog(QDialog):
+    """Área de trabalho para revisão; nunca interpreta protocolo como autorização."""
+
+    COLUMNS = (
+        "Decisão", "Item", "Código", "Descrição", "Código de barras",
+        "NCM", "CEST", "Un.", "Custo do XML", "Preço de venda", "Fonte / alertas",
+    )
+
+    def __init__(self, application, draft, parent=None) -> None:
+        super().__init__(parent)
+        self.application = application
+        self.draft = draft
+        self.result_data = None
+        self._submitting = False
+        self._decision_boxes: list[QComboBox] = []
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
+        self.setWindowTitle("Preparar cadastros por XML")
+        self.resize(1380, 780)
+        self.setMinimumSize(1040, 620)
+        self.setStyleSheet(STYLE)
+        root = QVBoxLayout(self)
+        title = QLabel("REVISAR PRODUTOS DO XML LOCAL")
+        title.setStyleSheet("font-size:24px;font-weight:900;color:#58a6ff")
+        root.addWidget(title)
+        source = QLabel(
+            f"Fonte local: {draft.source_name}  •  SHA-256: {draft.source_sha256}"
+        )
+        source.setTextFormat(Qt.TextFormat.PlainText)
+        source.setWordWrap(True)
+        root.addWidget(source)
+        limits = QLabel("\n".join(f"• {warning}" for warning in draft.warnings))
+        limits.setTextFormat(Qt.TextFormat.PlainText)
+        limits.setWordWrap(True)
+        limits.setStyleSheet(
+            "background:#161b22;border-left:5px solid #d29922;padding:10px;font-weight:700"
+        )
+        root.addWidget(limits)
+        self.table = QTableWidget(len(draft.items), len(self.COLUMNS))
+        self.table.setHorizontalHeaderLabels(self.COLUMNS)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.verticalHeader().setDefaultSectionSize(54)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(10, QHeaderView.ResizeMode.Stretch)
+        for row, item in enumerate(draft.items):
+            decision = QComboBox()
+            if item.state == "NOVO":
+                decision.addItem("Cadastrar após confirmar", ("CREATE", None))
+                decision.addItem("Não cadastrar", ("SKIP", None))
+            elif item.state == "JA_CADASTRADO":
+                match = item.matches[0]
+                decision.addItem(
+                    f"Usar cadastro ID {match.product_id}",
+                    ("USE_EXISTING", match.product_id),
+                )
+            elif item.state == "AMBIGUO":
+                decision.addItem("Escolha o cadastro correto…", ("", None))
+                for match in item.matches:
+                    decision.addItem(
+                        f"ID {match.product_id} — {match.description}",
+                        ("USE_EXISTING", match.product_id),
+                    )
+            else:
+                decision.addItem(
+                    f"Ignorar repetição do item {item.duplicate_of_item}",
+                    ("SKIP", None),
+                )
+            self._decision_boxes.append(decision)
+            self.table.setCellWidget(row, 0, decision)
+            values = (
+                str(item.source_item), item.code, item.description, item.barcode,
+                item.ncm, item.cest, item.unit,
+                format(item.cost_price, ".2f").replace(".", ","), "0,00",
+                f"Item {item.source_item} do XML local. " + " ".join(item.warnings),
+            )
+            editable = item.state == "NOVO"
+            for offset, value in enumerate(values, start=1):
+                cell = QTableWidgetItem(value)
+                if offset in {1, 10} or not editable:
+                    cell.setFlags(cell.flags() & ~Qt.ItemFlag.ItemIsEditable)
+                cell.setToolTip(value)
+                self.table.setItem(row, offset, cell)
+        root.addWidget(self.table, 1)
+        buttons = QHBoxLayout()
+        buttons.addStretch()
+        self.cancel = QPushButton("Cancelar  [Esc]")
+        self.confirm = QPushButton("Confirmar cadastros  [Enter]")
+        self.confirm.setObjectName("primary")
+        self.cancel.clicked.connect(self.reject)
+        self.confirm.clicked.connect(self._commit)
+        buttons.addWidget(self.cancel)
+        buttons.addWidget(self.confirm)
+        root.addLayout(buttons)
+        self._navigation = (self.table, self.confirm, self.cancel)
+        for widget in self._navigation:
+            widget.installEventFilter(self)
+        self._escape = QShortcut(QKeySequence("Esc"), self)
+        self._escape.setAutoRepeat(False)
+        self._escape.activated.connect(self.reject)
+        if self.table.rowCount():
+            self.table.selectRow(0)
+        self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    @staticmethod
+    def _table_decimal(text: str, field: str) -> Decimal:
+        return _decimal(text, field)
+
+    def decisions(self) -> tuple[ProductXMLDecision, ...]:
+        decisions = []
+        for row, item in enumerate(self.draft.items):
+            action, existing_id = self._decision_boxes[row].currentData()
+            decisions.append(ProductXMLDecision(
+                source_item=item.source_item,
+                action=action,
+                existing_product_id=existing_id,
+                code=self.table.item(row, 2).text().strip(),
+                description=self.table.item(row, 3).text().strip(),
+                barcode=self.table.item(row, 4).text().strip(),
+                ncm=self.table.item(row, 5).text().strip(),
+                cest=self.table.item(row, 6).text().strip(),
+                unit=self.table.item(row, 7).text().strip(),
+                cost_price=self._table_decimal(self.table.item(row, 8).text(), "Custo"),
+                sale_price=self._table_decimal(
+                    self.table.item(row, 9).text(), "Preço de venda"
+                ),
+            ))
+        return tuple(decisions)
+
+    def _commit(self) -> None:
+        if self._submitting:
+            return
+        try:
+            decisions = self.decisions()
+        except Exception as error:
+            QMessageBox.warning(self, "Revisar produtos", str(error))
+            self.table.setFocus()
+            return
+        creates = sum(decision.action == "CREATE" for decision in decisions)
+        existing = sum(decision.action == "USE_EXISTING" for decision in decisions)
+        answer = QMessageBox.question(
+            self,
+            "Confirmar cadastros",
+            f"Criar {creates} cadastro(s) e reconhecer {existing} existente(s)?\n\n"
+            "Estoque inicial será zero. Nenhuma compra, financeiro, autorização fiscal "
+            "ou comunicação SEFAZ será criada.",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer is not QMessageBox.StandardButton.Yes:
+            self.confirm.setFocus()
+            return
+        self._submitting = True
+        self.confirm.setEnabled(False)
+        try:
+            self.result_data = self.application.commit_xml(
+                self.draft, decisions, confirmed=True,
+            )
+        except Exception as error:
+            self._submitting = False
+            self.confirm.setEnabled(True)
+            QMessageBox.warning(self, "Cadastros não realizados", str(error))
+            self.table.setFocus()
+            return
+        self.accept()
+
+    def eventFilter(self, watched, event) -> bool:
+        if watched in self._navigation and event.type() == QEvent.Type.KeyPress:
+            if event.key() not in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+                return super().eventFilter(watched, event)
+            event.accept()
+            if event.isAutoRepeat():
+                return True
+            index = self._navigation.index(watched)
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                self._navigation[max(0, index - 1)].setFocus(
+                    Qt.FocusReason.BacktabFocusReason
+                )
+            elif watched is self.confirm:
+                self._commit()
+            elif watched is self.cancel:
+                self.reject()
+            else:
+                self._navigation[min(index + 1, len(self._navigation) - 1)].setFocus(
+                    Qt.FocusReason.TabFocusReason
+                )
+            return True
+        return super().eventFilter(watched, event)
+
+
 class ProductManagementDialog(QDialog):
     def __init__(self, application, parent=None) -> None:
         super().__init__(parent); self.application = application; self._products = ()
+        self.setWindowFlags(
+            Qt.WindowType.Window
+            | Qt.WindowType.WindowMinimizeButtonHint
+            | Qt.WindowType.WindowMaximizeButtonHint
+            | Qt.WindowType.WindowCloseButtonHint
+        )
         self.setWindowTitle("Produtos e estoque"); self.resize(1220, 760); self.setMinimumSize(940, 620)
         self.setStyleSheet(STYLE); root = QVBoxLayout(self)
         title = QLabel("PRODUTOS E ESTOQUE")
@@ -233,15 +435,18 @@ class ProductManagementDialog(QDialog):
         self.table.installEventFilter(self); self.table.doubleClicked.connect(self.edit_product)
         root.addWidget(self.table, 1)
         buttons = QHBoxLayout(); self.new = QPushButton("Novo  [F3]"); self.edit = QPushButton("Editar  [F4]")
+        self.xml_import = QPushButton("Preparar por XML  [F8]")
         self.move = QPushButton("Movimentar estoque  [F6]"); self.history = QPushButton("Histórico  [F7]")
         close = QPushButton("Fechar  [Esc]"); self.new.setObjectName("primary"); self.move.setObjectName("warning")
         self.new.clicked.connect(self.new_product); self.edit.clicked.connect(self.edit_product)
+        self.xml_import.clicked.connect(self.open_xml_import)
         self.move.clicked.connect(self.move_stock); self.history.clicked.connect(self.show_history); close.clicked.connect(self.reject)
-        for button in (self.new, self.edit, self.move, self.history): buttons.addWidget(button)
+        for button in (self.new, self.edit, self.xml_import, self.move, self.history): buttons.addWidget(button)
         buttons.addStretch(); buttons.addWidget(close); root.addLayout(buttons)
         self._shortcuts = []
         for key, callback in (("F3", self.new_product), ("F4", self.edit_product), ("F5", self.reload),
-                              ("F6", self.move_stock), ("F7", self.show_history), ("Esc", self.reject)):
+                              ("F6", self.move_stock), ("F7", self.show_history),
+                              ("F8", self.open_xml_import), ("Esc", self.reject)):
             shortcut = QShortcut(QKeySequence(key), self); shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback); self._shortcuts.append(shortcut)
         self.search.installEventFilter(self); self.search.setFocus(Qt.FocusReason.OtherFocusReason); self.reload()
@@ -308,3 +513,24 @@ class ProductManagementDialog(QDialog):
         try: movements = self.application.movements(product.product_id)
         except Exception as error: QMessageBox.warning(self, "Estoque", str(error)); return
         StockHistoryDialog(product, movements, self).exec()
+
+    def open_xml_import(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Selecionar XML local para preparar produtos", "", "XML (*.xml)",
+        )
+        if not path:
+            return
+        try:
+            draft = self.application.prepare_xml(path)
+        except Exception as error:
+            QMessageBox.warning(self, "XML não preparado", str(error))
+            return
+        dialog = ProductXMLReviewDialog(self.application, draft, self)
+        if dialog.exec() == QDialog.DialogCode.Accepted:
+            created = len(dialog.result_data.created_product_ids)
+            QMessageBox.information(
+                self, "Cadastros concluídos",
+                f"{created} produto(s) cadastrado(s) com estoque zero. IDs reais: "
+                + (", ".join(map(str, dialog.result_data.created_product_ids)) or "nenhum"),
+            )
+            self.reload()

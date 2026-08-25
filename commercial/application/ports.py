@@ -214,6 +214,16 @@ class FinancialEventPort(Protocol):
 @runtime_checkable
 class ProductCatalogPort(Protocol):
     def create(self, command: ProductCreateCommand) -> ProductDetails: ...
+    def create_products_from_xml(
+        self,
+        commands: tuple[ProductCreateCommand, ...],
+        *,
+        actor: str,
+        source_sha256: str,
+        draft_fingerprint: str,
+        resolved_existing_ids: tuple[int, ...] = (),
+        skipped_source_items: tuple[int, ...] = (),
+    ) -> tuple[ProductDetails, ...]: ...
     def update(self, command: ProductUpdateCommand) -> ProductDetails: ...
     def get_details(self, product_id: int) -> ProductDetails | None: ...
     def search_details(self, term: str, *, limit: int = 30) -> tuple[ProductDetails, ...]: ...

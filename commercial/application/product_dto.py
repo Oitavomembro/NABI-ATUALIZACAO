@@ -36,6 +36,9 @@ class ProductCreateCommand:
     minimum_stock: Decimal = Decimal("0.0000")
     allow_negative_stock: bool = False
     category_id: int | None = None
+    ncm: str = ""
+    cest: str = ""
+    unit_code: str = ""
 
     def __post_init__(self) -> None:
         if not str(self.description or "").strip():

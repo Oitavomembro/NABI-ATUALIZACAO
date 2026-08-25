@@ -16,6 +16,13 @@ class ProductApplicationService:
     def update_product(self, command):
         return self._catalog.update(command)
 
+    def create_products_from_xml(self, commands, **context):
+        """Cria somente cadastros; a infraestrutura mantém lote e auditoria atômicos."""
+        operation = getattr(self._catalog, "create_products_from_xml", None)
+        if operation is None:
+            raise RuntimeError("Importação cadastral por XML não está disponível.")
+        return operation(tuple(commands), **context)
+
     def get_product(self, product_id: int):
         product = self._catalog.get_details(product_id)
         if product is None:

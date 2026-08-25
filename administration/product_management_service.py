@@ -1,18 +1,23 @@
 from __future__ import annotations
 
 from commercial.application.action_dto import ActionContext, ActionOrigin
+from administration.product_xml_import_service import ProductXMLCatalogImportService
 
 
 class ProductManagementService:
     """Porta administrativa: sessão, permissão e ator ficam fora da GUI."""
 
-    def __init__(self, products, stock_actions, security, assisted_actions=None) -> None:
+    def __init__(
+        self, products, stock_actions, security, assisted_actions=None,
+        xml_catalog_import=None,
+    ) -> None:
         if products is None or stock_actions is None or security is None:
             raise ValueError("Produtos, estoque e segurança são obrigatórios.")
         self.products = products
         self.stock_actions = stock_actions
         self.security = security
         self.assisted_actions = assisted_actions
+        self.xml_catalog_import = xml_catalog_import or ProductXMLCatalogImportService(products)
 
     def _require(self, action: str) -> str:
         session = self.security.session
@@ -38,6 +43,16 @@ class ProductManagementService:
     def update(self, command):
         self._require("edit")
         return self.products.update_product(command)
+
+    def prepare_xml(self, path):
+        actor = self._require("create")
+        return self.xml_catalog_import.prepare(path, actor=actor)
+
+    def commit_xml(self, draft, decisions, *, confirmed: bool):
+        actor = self._require("create")
+        return self.xml_catalog_import.commit(
+            draft, tuple(decisions), actor=actor, confirmed=bool(confirmed),
+        )
 
     def stock(self, product_id: int):
         self._require("view")
