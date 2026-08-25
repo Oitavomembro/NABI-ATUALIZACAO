@@ -2911,3 +2911,40 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: ampliar conteúdo contábil somente em checkpoint separado,
   preservando este contrato V2 e sem confundir integridade por hash com
   assinatura ou prova de autoria.
+
+### Pacote contábil — checkpoint 2 de fontes e reconciliação
+
+- branch isolada: `codex/contabil-fontes-reconciliacao`, derivada de
+  `9af32ef`, sem integração com a principal;
+- correção de fonte: `7db7d8e` — `fix: usa titulos financeiros nos relatorios`;
+  `ReportService` passou a consultar exclusivamente a tabela canônica
+  `titulos_financeiros` em indicadores e relatório. Não existe fallback
+  silencioso para a tabela antiga `financeiro_titulos`; 25 testes de relatório
+  provam títulos reais a pagar/receber e preservam precisão decimal;
+- implementação: `3519be6` — `feat: cria reconciliacao contabil somente leitura`;
+- `AccountingReconciliationService` abre a conexão em modo `query_only`, não
+  cria tabela ou lançamento e produz DTO imutável e CSV versionado
+  `nabicode.accounting-reconciliation.v1`, com resumo por classificação e
+  totais separados por relação para não somar o mesmo fato repetidamente;
+- relações diagnosticadas por IDs/chaves/origens existentes: venda↔documento
+  fiscal, venda↔JSON de pagamentos, venda↔título/parcelas,
+  compra↔recebimento parcial↔estoque↔título, pagamentos↔títulos, documento
+  fiscal órfão, origem financeira/estoque inválida, cancelamento↔estorno e
+  DF-e↔compra;
+- classificações: `CONCILIADO`, `PENDENTE_DADO_EXTERNO`, `DIVERGENTE`,
+  `LEGADO_NAO_PROVAVEL` e `NAO_APLICAVEL`. Correspondência textual ambígua não
+  é criada;
+- competência e caixa permanecem explicitamente separados. O relatório avisa
+  que pagamento de venda está em JSON, vendas/recebimentos não possuem
+  `cash_session_id`, itens antigos podem ser somente texto e NF-e importada não
+  possui vínculo inequívoco com pedido/recebimento;
+- testes focados de reconciliação/relatório: `33 passed`; regressão combinada de
+  Report, Financeiro, PDV, Compras e Fiscal: `366 passed`, `13 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- teste de 1.001 vendas prova ausência de truncamento silencioso. Casos
+  adversariais cobrem JSON inválido, duplicidade, origem inválida, venda fiscal
+  sem documento, documento sem venda, crediário, compra parcial, pagamento
+  órfão, cancelamento, competência/caixa e DF-e sem vínculo canônico;
+- nenhuma tabela contábil, lançamento, DRE oficial, EFD/SPED ou regra de negócio
+  foi criada. Fiscal operacional, transmissão, Qt, Nabi, backup, despesas de
+  Caixa, licenciamento e banco real permaneceram intocados.
