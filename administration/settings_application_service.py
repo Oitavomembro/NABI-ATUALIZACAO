@@ -131,6 +131,11 @@ class SettingsApplicationService:
             raise RuntimeError(detail)
         return result
 
+    def verify_backup_restore(self, backup_path: str | Path):
+        """Verifica restauração em TEMP; não oferece mutação do banco ativo."""
+        self._require("backup")
+        return self.backup_service.verify_restore_in_temporary(backup_path)
+
     def run_diagnostics(self) -> tuple[dict, str]:
         self._require("diagnose")
         result = self.diagnostics.run(save_report=True)

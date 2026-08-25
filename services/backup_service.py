@@ -4,6 +4,7 @@ import os
 import hashlib
 import json
 import threading
+import tempfile
 import uuid
 import zipfile
 from dataclasses import dataclass
@@ -20,6 +21,36 @@ class BackupResult:
     errors: tuple[str, ...]
     skipped: bool = False
     fiscal_archives: tuple[str, ...] = ()
+    destinations: tuple["BackupDestinationResult", ...] = ()
+
+    @property
+    def status(self) -> str:
+        if self.skipped:
+            return "DESATIVADO" if not self.destinations else "JA_CONCLUIDO"
+        succeeded = sum(item.succeeded for item in self.destinations)
+        failed = sum(not item.succeeded for item in self.destinations)
+        if succeeded and failed:
+            return "PARCIAL"
+        return "SUCESSO" if succeeded else "FALHA"
+
+
+@dataclass(frozen=True)
+class BackupDestinationResult:
+    directory: str
+    succeeded: bool
+    skipped: bool = False
+    database_backup: str = ""
+    fiscal_archive: str = ""
+    error: str = ""
+
+
+@dataclass(frozen=True)
+class RestoreVerificationResult:
+    source: str
+    sha256: str
+    integrity: str
+    foreign_key_errors: tuple[tuple, ...]
+    schema_version: int
 
 
 class BackupService:
@@ -90,6 +121,7 @@ class BackupService:
         created: list[str] = []
         fiscal_archives: list[str] = []
         errors: list[str] = []
+        destinations: list[BackupDestinationResult] = []
         for directory in self.configured_directories():
             try:
                 database_backup = self.create(directory, prefix)
@@ -99,9 +131,19 @@ class BackupService:
                 )
                 if archive:
                     fiscal_archives.append(archive)
+                destinations.append(BackupDestinationResult(
+                    directory, True, database_backup=database_backup,
+                    fiscal_archive=archive,
+                ))
             except Exception as exc:  # erro por destino deve ser reportado sem abortar os demais
                 errors.append(f"{directory}: {exc}")
-        return BackupResult(tuple(created), tuple(errors), fiscal_archives=tuple(fiscal_archives))
+                destinations.append(
+                    BackupDestinationResult(directory, False, error=str(exc))
+                )
+        return BackupResult(
+            tuple(created), tuple(errors), fiscal_archives=tuple(fiscal_archives),
+            destinations=tuple(destinations),
+        )
 
     def create_fiscal_archive(
         self, directory: str | os.PathLike[str], *, prefix: str
@@ -212,12 +254,102 @@ class BackupService:
             if self.get_config("backup_diario_ativo") != "1":
                 return BackupResult((), (), skipped=True)
             today = self.now().strftime("%Y-%m-%d")
-            if self.get_config("ultimo_backup_diario") == today:
-                return BackupResult((), (), skipped=True)
-            result = self.create_all("backup_diario")
-            if result.created:
+            directories = self.configured_directories()
+            destination_results: list[BackupDestinationResult] = []
+            created: list[str] = []
+            fiscal_archives: list[str] = []
+            errors: list[str] = []
+            for directory in directories:
+                state_key = self._daily_destination_key(directory)
+                if self.get_config(state_key) == today:
+                    destination_results.append(
+                        BackupDestinationResult(directory, True, skipped=True)
+                    )
+                    continue
+                try:
+                    database_backup = self.create(directory, "backup_diario")
+                    archive = self.create_fiscal_archive(
+                        directory, prefix=Path(database_backup).stem
+                    )
+                    self.set_config(state_key, today)
+                    created.append(database_backup)
+                    if archive:
+                        fiscal_archives.append(archive)
+                    destination_results.append(BackupDestinationResult(
+                        directory, True, database_backup=database_backup,
+                        fiscal_archive=archive,
+                    ))
+                except Exception as exc:
+                    message = f"{directory}: {exc}"
+                    errors.append(message)
+                    destination_results.append(
+                        BackupDestinationResult(directory, False, error=str(exc))
+                    )
+            if directories and not errors and all(item.succeeded for item in destination_results):
                 self.set_config("ultimo_backup_diario", today)
-            return result
+            skipped = bool(destination_results) and all(item.skipped for item in destination_results)
+            return BackupResult(
+                tuple(created), tuple(errors), skipped=skipped,
+                fiscal_archives=tuple(fiscal_archives),
+                destinations=tuple(destination_results),
+            )
+
+    @staticmethod
+    def _daily_destination_key(directory: str) -> str:
+        normalized = os.path.normcase(str(Path(directory).expanduser().resolve()))
+        digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:24]
+        return f"ultimo_backup_diario_destino_{digest}"
+
+    def verify_restore_in_temporary(self, backup_path: str | os.PathLike[str]) -> RestoreVerificationResult:
+        """Prova a restauração numa base descartável; nunca toca no banco ativo."""
+
+        source = Path(backup_path).expanduser().resolve()
+        self._validate(source)
+        with tempfile.TemporaryDirectory(prefix="nabicode_restore_check_") as temporary:
+            restored = Path(temporary) / "restored.db"
+            backup_database(source, restored)
+            self._validate(restored)
+            connection = open_connection(restored, apply_journal=False)
+            try:
+                integrity = str(connection.execute("PRAGMA integrity_check").fetchone()[0])
+                foreign_keys = tuple(
+                    tuple(row) for row in connection.execute("PRAGMA foreign_key_check").fetchall()
+                )
+                table = connection.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='configuracoes'"
+                ).fetchone()
+                version_row = connection.execute(
+                    "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
+                ).fetchone() if table else None
+                try:
+                    schema_version = int(version_row[0]) if version_row else 0
+                except (TypeError, ValueError):
+                    schema_version = 0
+            finally:
+                connection.close()
+            active = open_connection(self.database_path, apply_journal=False)
+            try:
+                active_table = active.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name='configuracoes'"
+                ).fetchone()
+                active_row = active.execute(
+                    "SELECT valor FROM configuracoes WHERE chave='db_schema_version'"
+                ).fetchone() if active_table else None
+                try:
+                    active_schema = int(active_row[0]) if active_row else 0
+                except (TypeError, ValueError):
+                    active_schema = 0
+            finally:
+                active.close()
+            if schema_version != active_schema:
+                raise RuntimeError(
+                    "Backup incompatível com a versão atual do banco: "
+                    f"backup={schema_version}; atual={active_schema}."
+                )
+        return RestoreVerificationResult(
+            str(source), hashlib.sha256(source.read_bytes()).hexdigest(),
+            integrity, foreign_keys, schema_version,
+        )
 
     @staticmethod
     def _safe_prefix(prefix: str) -> str:
@@ -227,7 +359,7 @@ class BackupService:
     @staticmethod
     def _validate(path: Path) -> None:
         if not path.is_file() or path.stat().st_size <= 0:
-            raise RuntimeError("Backup invÃ¡lido: arquivo ausente ou vazio")
+            raise RuntimeError("Backup inválido: arquivo ausente ou vazio")
         conn = open_connection(path, apply_journal=False)
         try:
             integrity = conn.execute("PRAGMA integrity_check").fetchone()

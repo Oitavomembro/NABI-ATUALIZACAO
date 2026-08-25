@@ -35,6 +35,9 @@ class Backup:
     def create_all(self, prefix):
         self.calls += 1
         return SimpleNamespace(created=(f"{self.directory}/{prefix}.db",), errors=())
+    def verify_restore_in_temporary(self, path):
+        self.calls += 1
+        return SimpleNamespace(source=str(path), integrity="ok")
 
 
 class Diagnostics:
@@ -88,6 +91,15 @@ def test_backup_exige_caminho_absoluto_e_executa_uma_vez(tmp_path):
     assert system.values["pasta_backup_nuvem"].endswith("nuvem")
     result = application.create_backup()
     assert len(result.created) == 1 and backup.calls == 1
+
+
+def test_verificacao_de_restore_exige_permissao_e_delega_somente_ao_temp(tmp_path):
+    application, _security, _system, backup, _diagnostics = service(tmp_path)
+    result = application.verify_backup_restore(tmp_path / "backup.db")
+    assert result.integrity == "ok" and backup.calls == 1
+    blocked, *_ = service(tmp_path / "blocked", ("view",))
+    with pytest.raises(PermissionError):
+        blocked.verify_backup_restore(tmp_path / "backup.db")
 
 
 def test_diagnostico_e_somente_leitura_para_dados_de_negocio(tmp_path):

@@ -82,7 +82,43 @@ class BackupServiceTests(unittest.TestCase):
         first = self.service.run_daily()
         second = self.service.run_daily()
         self.assertEqual(2, len(first.created))
+        self.assertEqual("SUCESSO", first.status)
         self.assertTrue(second.skipped)
+        self.assertEqual("JA_CONCLUIDO", second.status)
+        self.assertEqual("2026-08-02", self.config["ultimo_backup_diario"])
+
+    def test_run_daily_desativado_nao_cria_arquivo_nem_estado(self):
+        self.config["backup_diario_ativo"] = "0"
+        result = self.service.run_daily()
+        self.assertTrue(result.skipped)
+        self.assertEqual("DESATIVADO", result.status)
+        self.assertEqual([], list((self.root / "local").glob("*.db")))
+        self.assertNotIn("ultimo_backup_diario", self.config)
+
+    def test_falha_secundaria_nao_esconde_parcial_e_retry_repete_so_destino_falho(self):
+        original_create = self.service.create
+        cloud = str((self.root / "cloud").resolve())
+        failed = {"value": False}
+
+        def create(directory, prefix="backup_diario"):
+            if str(Path(directory).resolve()) == cloud and not failed["value"]:
+                failed["value"] = True
+                raise OSError("sincronização indisponível")
+            return original_create(directory, prefix)
+
+        self.service.create = create  # type: ignore[method-assign]
+        first = self.service.run_daily()
+        self.assertEqual("PARCIAL", first.status)
+        self.assertEqual(1, len(first.created))
+        self.assertEqual(1, len(first.errors))
+        self.assertNotIn("ultimo_backup_diario", self.config)
+        second = self.service.run_daily()
+        self.assertEqual("SUCESSO", second.status)
+        self.assertEqual(1, len(second.created))
+        self.assertTrue(second.destinations[0].skipped)
+        self.assertFalse(second.destinations[1].skipped)
+        self.assertEqual(1, len(list((self.root / "local").glob("*.db"))))
+        self.assertEqual(1, len(list((self.root / "cloud").glob("*.db"))))
         self.assertEqual("2026-08-02", self.config["ultimo_backup_diario"])
 
     def test_run_daily_concorrente_cria_apenas_um_conjunto(self) -> None:
@@ -184,6 +220,31 @@ class BackupServiceTests(unittest.TestCase):
         empty.touch()
         with self.assertRaisesRegex(RuntimeError, "ausente ou vazio"):
             self.service._validate(empty)
+
+    def test_verificacao_de_restauracao_usa_copia_temporaria_sem_tocar_ativo(self):
+        backup = self.service.create(self.root / "restore", "teste_restore")
+        connection = sqlite3.connect(self.db)
+        connection.execute("UPDATE dados SET nome='ATIVO ALTERADO'")
+        connection.commit(); connection.close()
+        report = self.service.verify_restore_in_temporary(backup)
+        self.assertEqual("ok", report.integrity)
+        self.assertEqual((), report.foreign_key_errors)
+        self.assertEqual(64, len(report.sha256))
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("ATIVO ALTERADO", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
+
+    def test_verificacao_rejeita_schema_incompativel_sem_tocar_ativo(self):
+        incompatible = self.root / "incompatible.db"
+        connection = sqlite3.connect(incompatible)
+        connection.execute("CREATE TABLE configuracoes(chave TEXT PRIMARY KEY,valor TEXT)")
+        connection.execute("INSERT INTO configuracoes VALUES('db_schema_version','999')")
+        connection.commit(); connection.close()
+        with self.assertRaisesRegex(RuntimeError, "incompatível"):
+            self.service.verify_restore_in_temporary(incompatible)
+        connection = sqlite3.connect(self.db)
+        self.assertEqual("NabiCode", connection.execute("SELECT nome FROM dados").fetchone()[0])
+        connection.close()
 
 
 if __name__ == "__main__":
