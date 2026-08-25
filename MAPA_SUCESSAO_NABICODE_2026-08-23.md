@@ -2881,3 +2881,28 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Harmonização visual isolada — botões do PDV Qt consolidado
+
+- branch/worktree: `codex/pdv-botoes-metalicos-atual` em
+  `NabiCode-QT-PDVMetalAtual-codex`, derivada exatamente de `1cfdfa4`;
+- implementação: `fbc72b0` — `style: aplica botoes metalicos ao PDV Qt`;
+- foi criada uma folha exclusivamente visual e reutilizável para os botões já
+  existentes do PDV, Checkout, edição do carrinho, Orçamento, Suspensas, Vendas
+  do dia, pós-venda e pesquisa ampliada de produtos;
+- o desenho, dimensões, posições, textos, atalhos e `objectName` existentes não
+  mudaram. Aço/grafite/prata substitui cores chapadas, ciano aparece somente no
+  foco, fechamento principal e ações destrutivas já existentes usam vermelho e
+  ações positivas mantêm distinção metálica sóbria;
+- orçamento ativo deixou o laranja chapado por bronze metálico, sem alterar o
+  texto, `budgetActive`, F5, F9 ou a separação entre orçamento e venda;
+- Enter/Shift+Enter/Esc/F2/F4/F5/F6/F7/F9, auto-repeat, MoneyEdit, carrinho,
+  checkout, revisão, confirmação, orçamento, suspensas, vendas do dia,
+  pós-venda, comprovantes e seleção por ID real permaneceram intactos;
+- auditoria do diff confirmou somente QSS, aplicação de folhas visuais e testes;
+  nenhuma conexão, chamada de serviço, filtro de eventos ou identidade visual
+  usada pelo fluxo foi criada ou alterada;
+- validação Qt: `117 passed`, `2 subtests passed`; regressão Commercial/backend:
+  `111 passed`, `9 subtests passed`; `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual no Windows para todos os estados dos
+  botões, foco, disabled/hover, orçamento ligado/desligado e ações destrutivas.
