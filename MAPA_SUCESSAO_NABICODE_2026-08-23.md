@@ -2906,3 +2906,35 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: revisão independente e integração normal na consolidada. A
   branch pode ser promovida somente após confirmação do hash remoto e regressão
   cruzada na base de integração.
+
+### Caixa — despesas e retiradas documentadas
+
+- branch isolada `codex/caixa-despesas-documentadas`, derivada de `98044ea`;
+- implementação `2c4517b` — `feat: documenta despesas e retiradas do caixa`;
+- `cash_documented_outflows` preserva separadamente despesas empresariais,
+  retiradas de sócio, adiantamentos, pagamentos a fornecedor e outras saídas,
+  sem apagar nem reclassificar a sangria técnica existente;
+- valor decimal, data, competência, categoria controlada, forma/origem,
+  documento, observação, operador, sessão e referência opcional ao comprovante
+  são persistidos. Fornecedor informado é validado exclusivamente por ID real;
+- comprovante ausente fica explicitamente como documentação pendente. Toda
+  saída permanece visível e marcada `A_REVISAR_PELO_CONTADOR`; o programa não
+  decide dedutibilidade tributária e não oferece ocultação do contador;
+- rascunho imutável e fingerprint impedem alteração depois da revisão. A
+  confirmação exige sessão real e `financeiro/create`; `BEGIN IMMEDIATE`,
+  auditoria obrigatória e `cash_outflow_journal` são confirmados na mesma
+  transação da saída;
+- repetição idêntica retorna o mesmo registro, conteúdo divergente falha
+  fechado e concorrência confirma exatamente uma saída. Falha de fornecedor,
+  auditoria ou journal reverte todos os efeitos;
+- fechamento lista todas as saídas documentadas e desconta do dinheiro
+  esperado somente as pagas em DINHEIRO com origem CAIXA, evitando reduzir a
+  gaveta por PIX, cartão ou conta bancária;
+- Qt oferece fluxo por teclado, bloqueia auto-repeat, revisa explicitamente os
+  dados e alerta quando a documentação está pendente;
+- validação focada final: `56 passed`; regressão ampliada Caixa/Qt:
+  `126 passed`; `compileall` e `git diff --check` aprovados;
+- não houve alteração em Fiscal/SEFAZ, Nabi, pacote contábil, backup,
+  licenciamento, banco real, `main_qt.py` ou `ui_qt/app.py`;
+- pendência manual: homologação visual do diálogo no Windows e definição futura
+  da exportação destas saídas no pacote contábil, em checkpoint separado.
