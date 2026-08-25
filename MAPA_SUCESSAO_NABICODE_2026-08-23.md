@@ -3908,3 +3908,29 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - Fiscal/SEFAZ, IA/Nabi, licenciamento e `main_qt.py` não foram alterados. Não
   houve merge em outra branch nem acesso a banco real; próximo passo é revisão
   dos commits e homologação visual/teclado no Windows antes da integração.
+
+## Auditoria adversarial dos botões da Central Fiscal Qt — 25/08/2026
+
+- branch/worktree auditados: `codex/integracao-fiscal-dashboard-final` em
+  `NabiCode-QT-IntegracaoFinal-codex`, iniciando exatamente em `f34f1c4` e com
+  árvore limpa;
+- a auditoria OFFSCREEN, sem certificado/senha reais, banco operacional, rede ou
+  SEFAZ, confirmou cliques de Configurar Fiscal, Atualizar leitura, Fechar,
+  Selecionar A1, Revisar e salvar e Cancelar; também cobriu Enter, Shift+Enter,
+  Esc e auto-repeat;
+- defeito reproduzido: Shift+Enter e Enter auto-repeat nos botões da configuração
+  executavam Selecionar A1/Revisar e salvar. O filtro passou a consumir repetição,
+  usar Shift+Enter somente para retorno de foco e manter Enter simples como ação
+  única; Esc também ficou explicitamente sem auto-repeat;
+- o primeiro endurecimento revelou em regressão ampliada um evento tardio durante
+  destruição parcial do diálogo; o filtro agora tolera a ausência dos controles e
+  o ciclo de abertura/fechamento não deixa exceção residual;
+- seleção de arquivo cancelada preserva o caminho anterior; revisão cancelada e
+  Cancelar não gravam; erro sintético de certificado limpa a senha, preserva os
+  demais dados e mantém a tela aberta; salvamento confirmado limpa a senha;
+- validação final: `39 passed` no ciclo focado de diálogo/shell e `525 passed`,
+  `18 subtests passed` na regressão ampliada Fiscal/licenciamento/composição/Qt,
+  com somente a depreciação externa já conhecida do `brazilfiscalreport`;
+  `compileall` e `git diff --check` aprovados;
+- nenhuma transmissão, autorização, consulta, XML, certificado, senha ou endpoint
+  real foi usado. Produção fiscal e homologação SEFAZ continuam bloqueadas.

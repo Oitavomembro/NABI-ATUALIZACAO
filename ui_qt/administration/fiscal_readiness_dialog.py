@@ -221,7 +221,10 @@ class FiscalConfigurationDialog(QDialog):
         self.cancel_button = QPushButton("Cancelar [Esc]"); self.save_button = QPushButton("Revisar e salvar")
         self.cancel_button.clicked.connect(self.reject); self.save_button.clicked.connect(self._save)
         actions.addWidget(self.cancel_button); actions.addWidget(self.save_button); root.addLayout(actions)
-        QShortcut(QKeySequence("Esc"), self).activated.connect(self.reject)
+        for widget in (self.browse_button, self.cancel_button, self.save_button):
+            widget.installEventFilter(self)
+        self._escape = QShortcut(QKeySequence("Esc"), self)
+        self._escape.setAutoRepeat(False); self._escape.activated.connect(self.reject)
 
     def _browse(self) -> None:
         path, _ = QFileDialog.getOpenFileName(self, "Selecionar certificado A1", "", "Certificado A1 (*.pfx *.p12)")
@@ -257,3 +260,33 @@ class FiscalConfigurationDialog(QDialog):
         self.password.clear()
         QMessageBox.information(self, "Configuração fiscal", "Configuração de homologação salva. Nenhuma transmissão foi realizada.")
         self.accept()
+
+    def eventFilter(self, watched, event) -> bool:
+        browse_button = getattr(self, "browse_button", None)
+        cancel_button = getattr(self, "cancel_button", None)
+        save_button = getattr(self, "save_button", None)
+        operational = tuple(
+            button for button in (browse_button, cancel_button, save_button)
+            if button is not None
+        )
+        if watched in operational and event.type() == QEvent.Type.KeyPress:
+            if event.key() not in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                return super().eventFilter(watched, event)
+            event.accept()
+            if event.isAutoRepeat():
+                return True
+            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                previous = {
+                    browse_button: save_button,
+                    cancel_button: browse_button,
+                    save_button: cancel_button,
+                }
+                previous[watched].setFocus(Qt.FocusReason.BacktabFocusReason)
+            elif watched is browse_button:
+                self._browse()
+            elif watched is cancel_button:
+                self.reject()
+            else:
+                self._save()
+            return True
+        return super().eventFilter(watched, event)

@@ -100,6 +100,20 @@ def test_configuracao_seleciona_certificado_por_clique():
     dialog.close()
 
 
+def test_selecao_de_certificado_cancelada_preserva_caminho():
+    application = configuration_application()
+    application.configuration.return_value["certificate_path"] = "C:/certificados/anterior.pfx"
+    dialog = FiscalConfigurationDialog(application)
+    with patch(
+        "ui_qt.administration.fiscal_readiness_dialog.QFileDialog.getOpenFileName",
+        return_value=("", ""),
+    ):
+        QTest.mouseClick(dialog.browse_button, Qt.MouseButton.LeftButton)
+    assert dialog.certificate.text() == "C:/certificados/anterior.pfx"
+    application.configure_homologation.assert_not_called()
+    dialog.close()
+
+
 def test_revisar_salvar_confirma_uma_vez_e_limpa_senha():
     application = configuration_application()
     dialog = FiscalConfigurationDialog(application)
@@ -122,3 +136,83 @@ def test_cancelar_nao_salva_configuracao():
     QTest.mouseClick(dialog.cancel_button, Qt.MouseButton.LeftButton)
     application.configure_homologation.assert_not_called()
     assert dialog.result() == QDialog.DialogCode.Rejected
+
+
+def test_revisao_cancelada_preserva_tela_senha_e_nao_salva():
+    application = configuration_application()
+    dialog = FiscalConfigurationDialog(application)
+    dialog.password.setText("segredo-sintetico")
+    dialog.show(); APP.processEvents()
+    with patch(
+        "ui_qt.administration.fiscal_readiness_dialog.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.No,
+    ):
+        QTest.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    application.configure_homologation.assert_not_called()
+    assert dialog.password.text() == "segredo-sintetico"
+    assert dialog.isVisible()
+    dialog.close()
+
+
+def test_erro_de_certificado_limpa_senha_e_preserva_tela_e_dados():
+    application = configuration_application()
+    application.configure_homologation.side_effect = ValueError("Certificado inválido")
+    dialog = FiscalConfigurationDialog(application)
+    dialog.city.setText("Salvador")
+    dialog.password.setText("segredo-sintetico")
+    dialog.show(); APP.processEvents()
+    with patch(
+        "ui_qt.administration.fiscal_readiness_dialog.QMessageBox.question",
+        return_value=QMessageBox.StandardButton.Yes,
+    ), patch("ui_qt.administration.fiscal_readiness_dialog.QMessageBox.warning") as warning:
+        QTest.mouseClick(dialog.save_button, Qt.MouseButton.LeftButton)
+    warning.assert_called_once()
+    assert dialog.password.text() == ""
+    assert dialog.city.text() == "Salvador"
+    assert dialog.isVisible()
+    dialog.close()
+
+
+def test_configuracao_enter_shift_enter_e_auto_repeat_sao_deterministicos():
+    application = configuration_application()
+    dialog = FiscalConfigurationDialog(application)
+    dialog._browse = Mock(); dialog._save = Mock()
+    dialog.show(); dialog.activateWindow(); APP.processEvents()
+
+    for button, action in (
+        (dialog.browse_button, dialog._browse),
+        (dialog.save_button, dialog._save),
+    ):
+        button.setFocus()
+        enter = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier,
+        )
+        assert dialog.eventFilter(button, enter) is True
+        action.assert_called_once_with()
+
+        shift_enter = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.ShiftModifier,
+        )
+        assert dialog.eventFilter(button, shift_enter) is True
+        repeated = QKeyEvent(
+            QEvent.Type.KeyPress, Qt.Key.Key_Return,
+            Qt.KeyboardModifier.NoModifier, "", True, 2,
+        )
+        assert dialog.eventFilter(button, repeated) is True
+        action.assert_called_once_with()
+    dialog.reject = Mock()
+    enter = QKeyEvent(
+        QEvent.Type.KeyPress, Qt.Key.Key_Return,
+        Qt.KeyboardModifier.NoModifier,
+    )
+    assert dialog.eventFilter(dialog.cancel_button, enter) is True
+    dialog.reject.assert_called_once_with()
+    repeated = QKeyEvent(
+        QEvent.Type.KeyPress, Qt.Key.Key_Return,
+        Qt.KeyboardModifier.NoModifier, "", True, 2,
+    )
+    assert dialog.eventFilter(dialog.cancel_button, repeated) is True
+    dialog.reject.assert_called_once_with()
+    dialog.close()
