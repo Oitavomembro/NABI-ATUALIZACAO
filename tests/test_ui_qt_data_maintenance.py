@@ -2,7 +2,8 @@ from types import SimpleNamespace
 from unittest.mock import Mock
 
 import pytest
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QEvent, Qt
+from PySide6.QtGui import QKeyEvent
 from PySide6.QtTest import QTest
 from PySide6.QtWidgets import QApplication
 
@@ -52,7 +53,11 @@ def test_verificacao_em_temp_nao_prepara_automaticamente(qt_application):
 
 def test_escape_e_auto_repeat_nao_executam_operacao(qt_application):
     app = Mock(); dialog = DataMaintenanceDialog(app); dialog.show()
-    QTest.keyPress(dialog.choose_migration, Qt.Key.Key_Return, delay=1)
+    repeated = QKeyEvent(
+        QEvent.Type.KeyPress, Qt.Key.Key_Return,
+        Qt.KeyboardModifier.NoModifier, "\r", True, 2,
+    )
+    QApplication.sendEvent(dialog.choose_migration, repeated)
     app.preview_migration.assert_not_called(); app.execute_migration.assert_not_called()
     QTest.keyClick(dialog, Qt.Key.Key_Escape)
     assert not dialog.isVisible()
