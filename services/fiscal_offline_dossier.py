@@ -21,11 +21,11 @@ from unittest.mock import patch
 
 
 DOSSIER_SCHEMA_VERSION = "1.0"
-HARNESS_VERSION = "1.0.0"
-FIXED_TEST_TIME = "2026-08-24T12:00:00-03:00"
+HARNESS_VERSION = "1.1.0"
+FIXED_TEST_TIME = "2026-08-25T12:00:00-03:00"
 DEFAULT_SOURCE_REVISION = (
-    "base:db28b2648cf885e5bdc298f6c59efc485ad47bb6+"
-    "codex/dossie-homologacao-fiscal"
+    "base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+"
+    "codex/fiscal-regressao-offline"
 )
 
 
@@ -66,6 +66,7 @@ class FakeReadinessAdapter:
         gate_composed: bool = True,
         permission: bool = True,
         symbolic_certificate_ready: bool = True,
+        symbolic_numbering_ready: bool = True,
         production: bool = False,
     ) -> None:
         self.checks += 1
@@ -79,6 +80,8 @@ class FakeReadinessAdapter:
             raise PermissionError("Sessão/permissão fiscal ausente.")
         if not symbolic_certificate_ready:
             raise PermissionError("Pré-condição simbólica A1 ausente no cenário fake.")
+        if not symbolic_numbering_ready:
+            raise PermissionError("Numeração fiscal simbólica não inicializada no cenário fake.")
 
 
 @dataclass
@@ -476,6 +479,38 @@ class OfflineFiscalDossierService:
                 },
                 passed=(
                     blocked and len(self.transport.calls) == readiness_calls_before
+                ),
+            )
+        )
+
+        blocked = False
+        readiness_calls_before = len(self.transport.calls)
+        writes_before = self.store.writes
+        try:
+            self.readiness.require(symbolic_numbering_ready=False)
+        except PermissionError:
+            blocked = True
+        scenarios.append(
+            _scenario(
+                scenario_id="PRONTIDAO-NUMERACAO-AUSENTE",
+                category="prontidao",
+                model="55/65",
+                expected=(
+                    "Bloquear antes de transporte e persistência quando a numeração "
+                    "fake não foi inicializada."
+                ),
+                fiscal_outcome="BLOQUEADO",
+                evidence={
+                    "blocked_before_fake_transport": blocked,
+                    "fake_transport_calls_added": (
+                        len(self.transport.calls) - readiness_calls_before
+                    ),
+                    "in_memory_writes_added": self.store.writes - writes_before,
+                },
+                passed=(
+                    blocked
+                    and len(self.transport.calls) == readiness_calls_before
+                    and self.store.writes == writes_before
                 ),
             )
         )

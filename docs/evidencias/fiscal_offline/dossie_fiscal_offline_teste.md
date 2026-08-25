@@ -5,16 +5,16 @@
 
 - Dossiê: `NABICODE-FISCAL-OFFLINE-TESTE-001`
 - Aplicação: `2.5.1 R21`
-- Harness/schema: `1.0.0` / `1.0`
-- Fonte: `base:db28b2648cf885e5bdc298f6c59efc485ad47bb6+codex/dossie-homologacao-fiscal`
+- Harness/schema: `1.1.0` / `1.0`
+- Fonte: `base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+codex/fiscal-regressao-offline`
 - Perfil/ambiente: `TESTE` / `SIMULADO_OFFLINE`
-- Cenários automatizados: `16`; aprovados: `16`; reprovados: `0`
+- Cenários automatizados: `17`; aprovados: `17`; reprovados: `0`
 - Homologação fiscal real: `NAO_EXECUTADA`
 - Homologação física: `PENDENTE`
 - Produção fiscal: `BLOQUEADA`
-- SHA-256 do JSON: `5c3555317ed51a26a17a6a3a481139f94430aa058ef2ab57a9fc72828746cd64`
-- SHA-256 do payload canônico: `76658e732a8766e9f75672fb2c545f5eec3325d56d674f3bfd7e92b013d613e1`
-- SHA-256 do harness: `1c69e238b10f229d7e8bc753f4dc9c79a6d102ec3c6fde6b462710dad19a7cd6`
+- SHA-256 do JSON: `578f61213164a998c9879bd92b514213c0c28ad215a42aad951e8af07dc28af3`
+- SHA-256 do payload canônico: `3c3375cfda2007298856ed08a105c500ab566e67df1b4bcfe106b9ea9540c206`
+- SHA-256 do harness: `c46ebfe3b66bf52c673e82982b373c3128090851be2697fefe1cd72df06e5993`
 
 ## Matriz executada
 
@@ -22,6 +22,7 @@
 |---|---:|---|---|---|
 | PRONTIDAO-TESTE-FAKE | 55/65 | APROVADO | APTO_SOMENTE_PARA_TESTE_AUTOMATIZADO | `5e974f2e01a988e6320afe4ec98042cf1e7c22d22fdc2eb8278761cafad9ace6` |
 | PRONTIDAO-A1-AUSENTE | 55/65 | APROVADO | BLOQUEADO | `48663ffc7dffdeb035ee94a8e8faceaf56ef073c7794cf2edb58ba4ebefda9c3` |
+| PRONTIDAO-NUMERACAO-AUSENTE | 55/65 | APROVADO | BLOQUEADO | `a898a0a6389b254381de894b636cd81aa18320ccb30d489411625752a9f05799` |
 | AUTORIZACAO-SIMULADA | 65 | APROVADO | AUTORIZADO_SIMULADO_SEM_SEFAZ | `0ce6fd64295c4a3f488def0c616462545b87ad15753468059fffdad6996ad612` |
 | REJEICAO-SIMULADA | 55 | APROVADO | REJEITADO_SIMULADO | `1194e1e5b478e16caf6571e3e5854db67c73fa922dad186ad7d22999a4e9fa4d` |
 | TIMEOUT-ANTES-DESPACHO | 55/65 | APROVADO | NAO_ENVIADO_SIMULADO | `044b063cfaddc43e63cdc262ab8cf2bd154af4caf4b37f000bc498efdd5e424f` |

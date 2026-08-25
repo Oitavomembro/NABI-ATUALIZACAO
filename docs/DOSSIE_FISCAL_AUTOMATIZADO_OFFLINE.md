@@ -5,6 +5,11 @@ máquina de estados determinística com adapters fake para prontidão, autoriza�
 rejeição, timeout, resposta desconhecida, consulta/reconciliação, cancelamento,
 inutilização, contingência e bloqueios fail-closed.
 
+A revisão 1.1 acrescenta o bloqueio explícito de autorização quando a numeração
+fake não foi inicializada. A matriz operacional adversarial separada também
+confirma que a API real exige gate, catálogo, numeração e reserva correspondente
+antes de qualquer assinatura ou transporte simulado.
+
 O arquivo do harness não importa nem compõe `FiscalService`, repositórios,
 banco, certificado, endpoints ou interface. A entrada é executada diretamente
 para não carregar o agregador amplo de `services`. Durante os cenários, traps

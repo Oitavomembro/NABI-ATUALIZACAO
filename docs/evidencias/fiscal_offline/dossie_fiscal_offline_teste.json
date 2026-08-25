@@ -29,6 +29,20 @@
       "resultado_teste": "APROVADO"
     },
     {
+      "categoria": "prontidao",
+      "comportamento_esperado": "Bloquear antes de transporte e persistência quando a numeração fake não foi inicializada.",
+      "evidencia": {
+        "blocked_before_fake_transport": true,
+        "fake_transport_calls_added": 0,
+        "in_memory_writes_added": 0
+      },
+      "evidencia_sha256": "a898a0a6389b254381de894b636cd81aa18320ccb30d489411625752a9f05799",
+      "id": "PRONTIDAO-NUMERACAO-AUSENTE",
+      "modelo": "55/65",
+      "resultado_fiscal_simulado": "BLOQUEADO",
+      "resultado_teste": "APROVADO"
+    },
+    {
       "categoria": "autorizacao",
       "comportamento_esperado": "Registrar somente autorização simulada, sempre marcada como sem SEFAZ.",
       "evidencia": {
@@ -230,8 +244,8 @@
   ],
   "classificacao": "TESTE_AUTOMATIZADO_OFFLINE_COM_FAKES",
   "dossie_id": "NABICODE-FISCAL-OFFLINE-TESTE-001",
-  "gerado_em_deterministico": "2026-08-24T12:00:00-03:00",
-  "harness_source_sha256": "1c69e238b10f229d7e8bc753f4dc9c79a6d102ec3c6fde6b462710dad19a7cd6",
+  "gerado_em_deterministico": "2026-08-25T12:00:00-03:00",
+  "harness_source_sha256": "c46ebfe3b66bf52c673e82982b373c3128090851be2697fefe1cd72df06e5993",
   "limitacoes": [
     "Os resultados aprovam apenas as asserções do harness determinístico.",
     "Nenhum certificado A1, CSC, chave privada, senha ou arquivo fiscal real foi usado.",
@@ -245,7 +259,7 @@
   ],
   "nao_e_homologacao_fisica": true,
   "nao_houve_sucesso_sefaz": true,
-  "payload_sha256": "76658e732a8766e9f75672fb2c545f5eec3325d56d674f3bfd7e92b013d613e1",
+  "payload_sha256": "3c3375cfda2007298856ed08a105c500ab566e67df1b4bcfe106b9ea9540c206",
   "perfil": "TESTE",
   "prova_de_isolamento": {
     "adapters": [
@@ -276,16 +290,16 @@
     ]
   },
   "resumo": {
-    "aprovados": 16,
-    "cenarios": 16,
+    "aprovados": 17,
+    "cenarios": 17,
     "homologacao_fiscal_real": "NAO_EXECUTADA",
     "homologacao_fisica": "PENDENTE",
     "producao_fiscal": "BLOQUEADA",
     "reprovados": 0
   },
   "revisao_aplicacao": "21",
-  "revisao_fonte": "base:db28b2648cf885e5bdc298f6c59efc485ad47bb6+codex/dossie-homologacao-fiscal",
+  "revisao_fonte": "base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+codex/fiscal-regressao-offline",
   "schema_version": "1.0",
   "versao_aplicacao": "2.5.1",
-  "versao_harness": "1.0.0"
+  "versao_harness": "1.1.0"
 }

@@ -36,6 +36,7 @@ def test_dossie_executa_matriz_completa_sem_alegar_homologacao():
     assert report["nao_e_homologacao_fisica"] is True
     assert report["nao_houve_sucesso_sefaz"] is True
     assert report["resumo"]["reprovados"] == 0
+    assert report["resumo"]["cenarios"] == 17
     assert report["resumo"]["homologacao_fiscal_real"] == "NAO_EXECUTADA"
     assert report["resumo"]["producao_fiscal"] == "BLOQUEADA"
 
@@ -90,6 +91,21 @@ def test_prova_de_isolamento_registra_zero_rede_banco_e_certificado():
     assert proof["real_certificate_reads_by_adapters"] == 0
     assert proof["fake_transport_calls"] > 0
     assert proof["in_memory_writes"] > 0
+
+
+def test_numeracao_fake_ausente_bloqueia_antes_de_transporte_e_store():
+    report = run_offline_dossier()
+    scenario = next(
+        item for item in report["cenarios"]
+        if item["id"] == "PRONTIDAO-NUMERACAO-AUSENTE"
+    )
+    assert scenario["resultado_teste"] == "APROVADO"
+    assert scenario["resultado_fiscal_simulado"] == "BLOQUEADO"
+    assert scenario["evidencia"] == {
+        "blocked_before_fake_transport": True,
+        "fake_transport_calls_added": 0,
+        "in_memory_writes_added": 0,
+    }
 
 
 def test_guard_adversarial_bloqueia_socket_se_fake_tentar_escapar():
@@ -160,9 +176,13 @@ def test_evidencias_e_payload_possuem_hashes_sha256_validos():
     sha256 = re.compile(r"^[0-9a-f]{64}$")
 
     assert report["schema_version"] == "1.0"
-    assert report["versao_harness"] == "1.0.0"
+    assert report["versao_harness"] == "1.1.0"
     assert report["versao_aplicacao"] == "2.5.1"
     assert report["revisao_aplicacao"] == "21"
+    assert report["revisao_fonte"] == (
+        "base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+"
+        "codex/fiscal-regressao-offline"
+    )
     assert report["limitacoes"]
     assert sha256.fullmatch(report["payload_sha256"])
     assert sha256.fullmatch(report["harness_source_sha256"])
