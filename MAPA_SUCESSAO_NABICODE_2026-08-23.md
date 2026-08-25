@@ -2929,3 +2929,26 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   FICHÁRIO, alterar serviços ou misturar a modernização com Fiscal/SEFAZ/IA;
 - a composição global e os módulos fora desta branch precisam ser coordenados
   com a conversa integradora para evitar colisão de arquivos.
+
+### Harmonização visual isolada — Compras e Relatórios Qt
+
+- branch/worktree: `codex/compras-relatorios-qt-visual` em
+  `NabiCode-QT-ComprasRelatoriosVisual-codex`, derivada exatamente de `b3bfba8`;
+- implementação: `7530ba8` — `style: harmoniza compras e relatorios no Qt`;
+- Compras, Fornecedores, novo pedido, recebimento e Relatórios receberam apenas
+  acabamento em aço/grafite/prata, relevo metálico discreto, tabelas alternadas
+  e filete ciano de foco; cartões dos relatórios seguem a mesma linguagem;
+- esqueleto, hierarquia, campos, colunas, IDs reais, sessão/permissões,
+  Enter/Shift+Enter/Esc, bloqueio de auto-repeat e portas oficiais foram
+  preservados integralmente;
+- criação e recebimento continuam pela fachada existente. Revisão explícita,
+  `CompraService.receber`, idempotência, conta a pagar e persistência não foram
+  alterados; Relatórios continua somente leitura e exporta pelas portas atuais;
+- nenhuma função restrita foi revelada e nenhuma ação Fiscal/SEFAZ, PDV, Nabi,
+  licenciamento ou banco real foi adicionada ou modificada;
+- validação Qt direta: `15 passed`; regressão ampliada de Compras, Decimal,
+  consultas, relatórios, gateway e serviço de exportação: `51 passed`;
+  `compileall` e `git diff --check` aprovados;
+- pendência: homologação visual/manual em Windows real, incluindo DPI, tabelas,
+  foco, calendário, cartões, recebimento revisado e exportações em diretório de
+  teste. Nenhuma homologação visual é presumida por estes testes.
