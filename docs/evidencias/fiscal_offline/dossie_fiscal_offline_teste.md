@@ -12,9 +12,9 @@
 - Homologação fiscal real: `NAO_EXECUTADA`
 - Homologação física: `PENDENTE`
 - Produção fiscal: `BLOQUEADA`
-- SHA-256 do JSON: `c3a7898ab6ebcb35e437dbbc66651dd0e99e7bf27c62d9cc3686f64539f93d86`
-- SHA-256 do payload canônico: `c7ff3ec923a69103627b358aea48c605202fa14a5b9573759c292b7eaf71600a`
-- SHA-256 do harness: `f7f466b526de00c2086435f904416f06ee65585b86218f08bc181c932c847f31`
+- SHA-256 do JSON: `5c3555317ed51a26a17a6a3a481139f94430aa058ef2ab57a9fc72828746cd64`
+- SHA-256 do payload canônico: `76658e732a8766e9f75672fb2c545f5eec3325d56d674f3bfd7e92b013d613e1`
+- SHA-256 do harness: `1c69e238b10f229d7e8bc753f4dc9c79a6d102ec3c6fde6b462710dad19a7cd6`
 
 ## Matriz executada
 

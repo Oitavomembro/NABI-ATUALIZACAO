@@ -231,7 +231,7 @@
   "classificacao": "TESTE_AUTOMATIZADO_OFFLINE_COM_FAKES",
   "dossie_id": "NABICODE-FISCAL-OFFLINE-TESTE-001",
   "gerado_em_deterministico": "2026-08-24T12:00:00-03:00",
-  "harness_source_sha256": "f7f466b526de00c2086435f904416f06ee65585b86218f08bc181c932c847f31",
+  "harness_source_sha256": "1c69e238b10f229d7e8bc753f4dc9c79a6d102ec3c6fde6b462710dad19a7cd6",
   "limitacoes": [
     "Os resultados aprovam apenas as asserções do harness determinístico.",
     "Nenhum certificado A1, CSC, chave privada, senha ou arquivo fiscal real foi usado.",
@@ -245,7 +245,7 @@
   ],
   "nao_e_homologacao_fisica": true,
   "nao_houve_sucesso_sefaz": true,
-  "payload_sha256": "c7ff3ec923a69103627b358aea48c605202fa14a5b9573759c292b7eaf71600a",
+  "payload_sha256": "76658e732a8766e9f75672fb2c545f5eec3325d56d674f3bfd7e92b013d613e1",
   "perfil": "TESTE",
   "prova_de_isolamento": {
     "adapters": [

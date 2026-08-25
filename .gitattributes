@@ -1,0 +1,5 @@
+/docs/DOSSIE_FISCAL_AUTOMATIZADO_OFFLINE.md text eol=lf
+/docs/evidencias/fiscal_offline/*.json text eol=lf
+/docs/evidencias/fiscal_offline/*.md text eol=lf
+/services/fiscal_offline_dossier.py text eol=lf
+/tests/test_fiscal_offline_dossier.py text eol=lf
