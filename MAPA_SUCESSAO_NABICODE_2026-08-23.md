@@ -3397,6 +3397,51 @@ Critério de retirada/proibição:
 - lançamento contábil, regra tributária ou alegação de conformidade inventados.
 
 O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compartilháveis podem ser reaproveitadas após auditoria; regras exclusivas do Fichário não entram incidentalmente no NabiCode oficial.
+
+### Homologação reproduzível do primeiro uso Qt
+
+- branch/worktree isolados: `codex/homologacao-primeiro-uso` em
+  `NabiCode-QT-PrimeiroUso-codex`, derivados exatamente da integração resiliente
+  `739ad558033ba6621f25272ac4347d156acf7044`;
+- implementação: `af57e6d` — `test: homologa primeiro uso Qt em ambiente isolado`;
+- `build_tools/homologate_first_use.py` reproduz em diretório vazio e descartável
+  a sequência licença ausente/restrita → licença Ed25519 efêmera de teste → banco
+  novo/schema atual → primeiro administrador → login obrigatório → shell Qt →
+  Vendas → fechamento seguro;
+- o ensaio substitui `APPDATA` somente no subprocesso, força o perfil `TESTE`,
+  recusa o diretório ativo do NabiCode e qualquer destino não vazio, bloqueia
+  conexões de rede e nunca abre certificado, XML, CSC, banco ou licença reais;
+- a chave privada temporária existe somente em memória. O arquivo temporário de
+  licença é removido após a ativação do ensaio e não existe `.pem` ou `.pfx` no
+  resultado;
+- licença ausente foi comprovada antes da criação do banco: Qt e mutações ficam
+  bloqueados, enquanto ativação e diagnóstico permanecem disponíveis;
+- o primeiro acesso cria somente um administrador e não cria sessão implícita;
+  senha incorreta é recusada e o login correto é necessário para abrir o shell;
+- dependências de fonte/build verificadas: catálogo público de licença, spec
+  oficial, plugins Qt de plataforma e runtimes Tcl/Tk (inclusive Python 3.14 em
+  `zipfs`);
+- nenhum caminho absoluto da máquina de desenvolvimento foi incorporado ao
+  runner ou à configuração; a documentação usa marcador explícito para o Python;
+- validação própria: `3 passed`; regressão ampliada de startup, licença, banco,
+  primeiro acesso, login, shell, PDV, composição e empacotamento: `212 passed`,
+  `5 subtests passed`; `compileall` e `git diff --check` aprovados;
+- nenhum defeito operacional de primeiro uso foi confirmado na base, portanto
+  não houve alteração do produto para esconder falha. O único ajuste durante o
+  ensaio alinhou a ordem de imports do runner ao entrypoint real e reconheceu o
+  runtime Tcl 9 distribuído por `zipfs`;
+- `docs/HOMOLOGACAO_PRIMEIRO_USO_QT.md` contém o roteiro humano curto: instalar,
+  ativar com licença emitida externamente, configurar empresa, criar o primeiro
+  administrador, entrar e abrir Vendas;
+- o roteiro foi separado em três portões: Fase A comercial TESTE; Fase B de
+  prontidão Fiscal exclusivamente local/offline, sem senha persistida; e Fase C
+  manual posterior com proprietário presente e somente SEFAZ HOMOLOGAÇÃO;
+- qualquer falha da Fase A impede iniciar Fiscal; cadastro, A1, cadeia, vigência,
+  CNPJ, ambiente, série/numeração ou preflight pendentes bloqueiam a Fase C;
+  PRODUÇÃO permanece proibida e nenhuma fase a libera implicitamente;
+- pendências: o instalador final não foi gerado; instalação/desinstalação física,
+  ativação com licença TESTE real, DPI/tela, atalhos e abertura em uma segunda
+  máquina Windows continuam exigindo homologação humana antes de release.
 ## Integração resiliente/contábil — validação de abertura e regressão
 
 - branch: `codex/integracao-resiliencia-contabil`;
