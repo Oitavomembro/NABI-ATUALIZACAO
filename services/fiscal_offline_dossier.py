@@ -282,6 +282,12 @@ def _sha256(value: bytes) -> str:
     return hashlib.sha256(value).hexdigest()
 
 
+def _source_sha256(path: str | Path) -> str:
+    source = Path(path).read_bytes()
+    canonical_lf = source.replace(b"\r\n", b"\n").replace(b"\r", b"\n")
+    return _sha256(canonical_lf)
+
+
 def _scenario(
     *,
     scenario_id: str,
@@ -835,7 +841,7 @@ class OfflineFiscalDossierService:
                 ),
             ],
         }
-        report["harness_source_sha256"] = _sha256(Path(__file__).read_bytes())
+        report["harness_source_sha256"] = _source_sha256(__file__)
         report["payload_sha256"] = _sha256(_canonical_json(report))
         return report
 

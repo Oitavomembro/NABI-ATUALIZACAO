@@ -173,8 +173,9 @@ def test_evidencias_e_payload_possuem_hashes_sha256_validos():
     ).encode("utf-8")
     assert hashlib.sha256(canonical_report).hexdigest() == payload_hash
     source = ROOT / "services" / "fiscal_offline_dossier.py"
+    canonical_source = source.read_bytes().replace(b"\r\n", b"\n").replace(b"\r", b"\n")
     assert (
-        hashlib.sha256(source.read_bytes()).hexdigest()
+        hashlib.sha256(canonical_source).hexdigest()
         == report["harness_source_sha256"]
     )
     for item in report["cenarios"]:
@@ -189,7 +190,28 @@ def test_evidencias_e_payload_possuem_hashes_sha256_validos():
             sort_keys=True,
             separators=(",", ":"),
         ).encode("utf-8")
-        assert hashlib.sha256(canonical_evidence).hexdigest() == item["evidencia_sha256"]
+        assert (
+            hashlib.sha256(canonical_evidence).hexdigest()
+            == item["evidencia_sha256"]
+        )
+
+
+def test_hash_do_harness_independe_de_lf_ou_crlf(tmp_path):
+    source = (ROOT / "services" / "fiscal_offline_dossier.py").read_text(
+        encoding="utf-8"
+    )
+    lf_path = tmp_path / "harness-lf.py"
+    crlf_path = tmp_path / "harness-crlf.py"
+    lf_path.write_bytes(source.replace("\r\n", "\n").encode("utf-8"))
+    crlf_path.write_bytes(
+        source.replace("\r\n", "\n").replace("\n", "\r\n").encode("utf-8")
+    )
+
+    lf_hash = hashlib.sha256(lf_path.read_bytes().replace(b"\r\n", b"\n")).hexdigest()
+    crlf_hash = hashlib.sha256(
+        crlf_path.read_bytes().replace(b"\r\n", b"\n")
+    ).hexdigest()
+    assert lf_hash == crlf_hash == run_offline_dossier()["harness_source_sha256"]
 
 
 def test_artefatos_sao_deterministicos_sanitizados_e_distinguem_prova_fisica(tmp_path):
