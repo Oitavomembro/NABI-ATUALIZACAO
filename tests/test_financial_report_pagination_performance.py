@@ -75,3 +75,27 @@ def test_paginas_vazias_mantem_total_honesto(tmp_path):
     gateway = NabiCodeReportGateway(ReportService(lambda: _connect(path), output_dir=tmp_path / "out"))
     page = gateway.load_page(ReportQuery("clientes"), limit=25, offset=100, actor="operador")
     assert page.document.rows == () and page.total_records == 1
+
+
+def test_exportacao_refaz_filtro_completo_e_autorizacao_antecede_contagem(tmp_path):
+    path = tmp_path / "export.db"
+    connection = _connect(path)
+    connection.executescript(
+        "CREATE TABLE configuracoes(chave TEXT PRIMARY KEY,valor TEXT);"
+        "CREATE TABLE clientes(id INTEGER PRIMARY KEY,nome TEXT,saldo_devedor REAL);"
+        "INSERT INTO clientes VALUES(1,'ANA',10); INSERT INTO clientes VALUES(2,'BIA',20);"
+    )
+    connection.commit(); connection.close()
+    allowed = {"value": True}
+    service = ReportService(
+        lambda: _connect(path), output_dir=tmp_path / "out",
+        authorize=lambda _actor, _report: allowed["value"],
+    )
+    gateway = NabiCodeReportGateway(service)
+    destination = tmp_path / "clientes.csv"
+    gateway.export_query(ReportQuery("clientes"), "CSV", str(destination), actor="operador")
+    assert len(destination.read_text(encoding="utf-8-sig").splitlines()) == 3
+    allowed["value"] = False
+    import pytest
+    with pytest.raises(PermissionError):
+        gateway.export_query(ReportQuery("clientes"), "CSV", str(destination), actor="bloqueado")

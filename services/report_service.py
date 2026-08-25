@@ -125,7 +125,12 @@ class ReportService:
         self._audit(actor, "GERAR", result.report_id, f"linhas={result.row_count}")
         return result
 
-    def count(self, report_id: str, **filters) -> int:
+    def count(self, report_id: str, *, actor: str = "Sistema", **filters) -> int:
+        report_id = str(report_id).strip().lower()
+        if report_id not in self.REPORTS:
+            raise ValueError("Relatório desconhecido.")
+        if self.authorize and not self.authorize(actor, report_id):
+            raise PermissionError("Usuário sem permissão para este relatório.")
         _columns, rows = self._aggregate(report_id, **filters)
         return int(rows[0][0]) if rows else 0
 

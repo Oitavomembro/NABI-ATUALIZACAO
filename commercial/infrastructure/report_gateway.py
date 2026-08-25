@@ -67,7 +67,7 @@ class NabiCodeReportGateway:
     def export_query(self, query: ReportQuery, fmt: str, destination: str, *, actor: str) -> str:
         count = self.service.count(
             query.report_id, start_date=query.start_date, end_date=query.end_date,
-            search=query.search, status=query.status, user=query.user,
+            search=query.search, status=query.status, user=query.user, actor=actor,
         )
         if count > 50_000:
             raise ValueError("O período excede 50.000 registros; refine os filtros para exportar com segurança.")
