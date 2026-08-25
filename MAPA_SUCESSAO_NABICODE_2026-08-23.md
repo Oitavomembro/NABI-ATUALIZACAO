@@ -2881,3 +2881,29 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Portão obrigatório de prontidão Fiscal/SEFAZ
+
+- implementação isolada: `cbc1e3d` — `fix: exige prontidao antes de operar fiscal`;
+- o runtime Legacy liga um único `FiscalReadinessGate` ao serviço fiscal e ao
+  auditor oficial do catálogo; instâncias auxiliares sem essa composição não
+  representam uma entrada operacional do produto;
+- antes de rede ou mutação, o portão exige sessão/permissão oficial, módulo e
+  modelo habilitados, homologação, CNPJ, UF/perfil estadual, regime, endpoint,
+  A1 válido e correspondente ao emitente, cadeia ICP-Brasil e situação de
+  revogação confirmadas pelos mecanismos já existentes;
+- autorização e preparação da venda também exigem catálogo sem pendências e
+  numeração explicitamente inicializada para ambiente/modelo/série antes de
+  qualquer reserva; produção continua bloqueada;
+- distribuição DF-e, manifestação, consulta de status, consulta de documento,
+  eventos e inutilização passam pelo mesmo portão antes de abrir rede;
+- quando faltam requisitos básicos, a Central Fiscal não apresenta operações:
+  informa as pendências e abre somente a configuração/diagnóstico;
+- testes negativos comprovam que recusa do portão não reserva número e não
+  inicia rede DF-e; regressão ampliada: `279 passed`, `10 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- nenhum certificado, XML, banco real ou endpoint real foi usado; nenhuma
+  chamada à SEFAZ foi executada e nenhum push foi realizado;
+- pendências continuam físicas/documentais: homologação oficial acompanhada,
+  evidências com certificado e empresa de homologação, revisão jurídica e
+  autorização expressa antes de qualquer futura liberação de produção.
