@@ -994,7 +994,10 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
   duplicado, acima do último NSU ou conteúdo divergente para o mesmo NSU;
 - recepções registram SHA-256, origem, ambiente, operador e horário; repetição
   idêntica é idempotente;
-- validação sem rede ou certificado real: `25 passed`, `compileall` e
+- cursor de NSU e índice agora são confirmados na mesma transação SQLite; se a
+  confirmação falhar, arquivos novos desta tentativa são removidos e o cursor
+  anterior permanece intacto;
+- validação sem rede ou certificado real: `26 passed`, `compileall` e
   `git diff --check`;
 - pendências deliberadamente bloqueadas: confirmar em documentação vigente o
   intervalo de consultas/status 656 e regras após manifestação; adicionar
