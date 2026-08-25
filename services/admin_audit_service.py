@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Callable
 
 from repositories.admin_audit_repository import AdminAuditRepository
+from core.sensitive_data import sanitize_text
 
 
 @dataclass(frozen=True)
@@ -40,27 +41,28 @@ class AdminAuditService:
         database_exists: bool = True,
     ) -> None:
         """Registra auditoria geral sem expor SQL ou política de eventos ao legado."""
-        message = (
-            f"AUDITORIA | usuário={user} | módulo={module} | ação={action} | "
-            f"objeto={object_id} | resultado={result} | {details}"
+        safe_user, safe_object, safe_details = map(sanitize_text, (user, object_id, details))
+        message = sanitize_text(
+            f"AUDITORIA | usuário={safe_user} | módulo={module} | ação={action} | "
+            f"objeto={safe_object} | resultado={result} | {safe_details}"
         )
         (self._logger.info if result == "SUCESSO" else self._logger.error)(message)
         if events_enabled and event_bus is not None:
             event_bus.publish(
                 "auditoria.registrada",
-                modulo=module, acao=action, objeto=object_id, detalhes=details,
-                resultado=result, usuario=user,
+                modulo=module, acao=action, objeto=safe_object, detalhes=safe_details,
+                resultado=result, usuario=safe_user,
             )
         if not database_exists:
             return
         try:
             self._repository.record_event(
                 occurred_at=datetime.now().isoformat(timespec="seconds"),
-                user=user,
+                user=safe_user,
                 module=module,
                 action=action,
-                object_id=str(object_id),
-                details=str(details),
+                object_id=safe_object,
+                details=safe_details,
                 result=result,
             )
         except Exception:
@@ -74,12 +76,12 @@ class AdminAuditService:
 
         self._repository.record_event(
             occurred_at=datetime.now().isoformat(timespec="seconds"),
-            user=str(user), module=str(module), action=str(action),
-            object_id=str(object_id), details=str(details), result=str(result),
+            user=sanitize_text(user), module=str(module), action=str(action),
+            object_id=sanitize_text(object_id), details=sanitize_text(details), result=str(result),
         )
 
     def record_admin_access(self, success: bool, details: str, *, occurred_at: str | None = None) -> None:
-        text = str(details or "").strip()
+        text = sanitize_text(details or "").strip()
         if not text:
             raise ValueError("Os detalhes do acesso administrativo são obrigatórios.")
         try:
@@ -98,10 +100,10 @@ class AdminAuditService:
         return [
             SecurityAuditEntry(
                 date=str(row[0] or ""),
-                user=str(row[1] or ""),
+                user=sanitize_text(row[1] or ""),
                 action=str(row[2] or ""),
                 result=str(row[3] or ""),
-                details=str(row[4] or ""),
+                details=sanitize_text(row[4] or ""),
             )
             for row in rows
         ]

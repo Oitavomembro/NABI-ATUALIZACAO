@@ -47,8 +47,10 @@ class SystemDiagnosticsTests(unittest.TestCase):
         (snapshot / "banco.db").write_bytes(self.db_path.read_bytes())
         report = self.diagnostics.run()
         self.assertTrue(report["aprovado"])
-        self.assertTrue(Path(report["arquivo"]).is_file())
-        saved = json.loads(Path(report["arquivo"]).read_text(encoding="utf-8"))
+        self.assertNotIn(str(self.root), report["arquivo"])
+        self.assertEqual(len(list((self.root / "diagnosticos").glob("diagnostico_*.json"))), 1)
+        saved_path = next((self.root / "diagnosticos").glob("diagnostico_*.json"))
+        saved = json.loads(saved_path.read_text(encoding="utf-8"))
         self.assertEqual(saved["versao_app"], "2.4.6")
 
     def test_missing_required_table_fails(self):

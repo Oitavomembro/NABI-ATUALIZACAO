@@ -11,6 +11,7 @@ from pathlib import Path
 from typing import Iterable
 
 from database import DatabaseManager
+from core.sensitive_data import sanitize
 
 
 @dataclass(frozen=True)
@@ -70,9 +71,10 @@ class SystemDiagnostics:
         if save_report:
             self.diagnostic_dir.mkdir(parents=True, exist_ok=True)
             target = self.diagnostic_dir / f"diagnostico_{datetime.now():%Y%m%d_%H%M%S_%f}.json"
+            report = sanitize(report)
             self._write_json_atomic(target, report)
             report["arquivo"] = str(target)
-        return report
+        return sanitize(report)
 
     def _check_paths(self, checks: list[DiagnosticCheck]) -> None:
         checks.append(DiagnosticCheck("Pasta do aplicativo", self.app_dir.is_dir(), str(self.app_dir)))
