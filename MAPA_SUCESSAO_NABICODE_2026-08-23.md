@@ -949,6 +949,39 @@ Nenhuma fase mutável da Nabi deve chegar a cliente antes de existir evidência 
 
 ## Regra final para sucessores
 
+### Nabi visível nas edições operacionais
+
+- em `2026-08-25`, na branch `codex/integracao-fiscal-dashboard-final`, foi
+  identificado que o startup Qt compunha o painel somente quando a licença
+  trazia a capacidade separada `assistant`; por isso licenças válidas somente
+  `commercial` ou `fiscal` podiam abrir o shell sem mostrar a Nabi;
+- o commit `48e47c2` passou a habilitar a Nabi quando a
+  licença operacional permite `assistant`, `commercial` ou `fiscal`;
+- licença Comercial continua sem compor serviço de NF-e; a parte local de NF-e
+  permanece condicionada exclusivamente a `fiscal`, sem comunicação SEFAZ;
+- login, sessão, permissões, ativação autenticada e inicialização tardia do
+  modelo foram preservados; ausência do modelo mantém falha degradada segura;
+- validação focada: `28 passed` em ativação/composição da Nabi, integração
+  visual e licenciamento V2;
+- nenhum push foi realizado; homologar fisicamente a
+  presença da Nabi no shell com licenças Comercial e Fiscal antes de integrar.
+
+### Entrada de NF-e — revisão visual e sugestão segura de fator
+
+- a revisão final deixou de ser um bloco corrido e passou a apresentar tabela
+  branca com Produto, Ação, Fator, Conversão, Unidade, Custo, Margem e Preço;
+- as tabelas de itens e preços permitem redimensionar/reordenar colunas, alterar
+  fonte e alternar apenas entre os modos úteis Detalhes e Compacto;
+- o desvínculo humano passou a ter desfazer, restaurando exatamente a associação
+  anterior sem gravar qualquer dado;
+- a opção `Nabi sugerir fator` reconhece apenas evidência textual explícita como
+  `CAIXA COM 12 UN`, mostra a evidência e só preenche após confirmação humana;
+  ausência ou ambiguidade não produz palpite, e a sugestão nunca é persistida
+  automaticamente;
+- validação focada conjunta: `23 passed`, `compileall` e `git diff --check`;
+- o simulador local continua descartável e sem acesso ao banco; nenhum push foi
+  realizado.
+
 ### Checkpoint IA Nabi — integração Qt opcional e inerte
 
 - commit: `cfd994b` — `feat: integra painel Nabi opcional ao Qt`;
