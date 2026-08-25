@@ -2677,6 +2677,11 @@ class FiscalAuthorizationNumberingIntegrationTests(unittest.TestCase):
             actor_provider=lambda: "gerente",
             authorization_provider=lambda action: action == "transmit",
         )
+        # Estes testes cobrem a confirmação da numeração depois de o portão
+        # operacional ter aprovado a transmissão. O comportamento fail-closed
+        # do portão é exercitado separadamente em test_fiscal_readiness_gate.
+        self.service._readiness_enforced = True
+        self.service._readiness_gate = Mock()
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         FiscalServiceTests._create_pfx(self.pfx_path, self.password)
