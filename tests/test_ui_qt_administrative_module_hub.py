@@ -38,6 +38,12 @@ def _enter(*, shift=False, repeat=False):
     )
 
 
+def _key(key):
+    return QKeyEvent(
+        QEvent.Type.KeyPress, key, Qt.KeyboardModifier.NoModifier, "", False, 1,
+    )
+
+
 def setup_module():
     global APP
     APP = QApplication.instance() or QApplication([])
@@ -97,6 +103,25 @@ def test_shift_enter_volta_sem_abrir_modulo():
     APP.processEvents()
     assert hub.buttons[0].hasFocus()
     second_factory.assert_not_called()
+    hub.close()
+
+
+def test_setas_percorrem_a_grade_sem_abrir_modulos():
+    factories = [Mock() for _ in range(4)]
+    modules = tuple(
+        AdministrativeModule(
+            f"Módulo {index}", "Descrição", f"Ctrl+{index}", "dashboard", "view",
+            factory,
+        )
+        for index, factory in enumerate(factories, start=1)
+    )
+    hub = AdministrativeModuleHub(_security(), modules)
+    hub.show(); hub.buttons[0].setFocus(); APP.processEvents()
+    assert hub.eventFilter(hub.buttons[0], _key(Qt.Key.Key_Down)) is True
+    APP.processEvents(); assert hub.buttons[2].hasFocus()
+    assert hub.eventFilter(hub.buttons[2], _key(Qt.Key.Key_Right)) is True
+    APP.processEvents(); assert hub.buttons[3].hasFocus()
+    assert all(not factory.called for factory in factories)
     hub.close()
 
 

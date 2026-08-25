@@ -37,9 +37,22 @@ def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
     app_version="2.5.1", schema_version=21,
 ):
-    modules=[];dashboard=DashboardApplicationService(DashboardRepository(database),security)
+    modules=[];dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
-    if getattr(container,"customer_application",None):modules.append(AdministrativeModule("Clientes","Cadastro, busca, edição e fichas","F3","clientes","view",lambda p:CustomerManagementDialog(container.customer_application,parent=p),"clientes"))
+    if getattr(container,"customer_application",None):
+        def filtered_customers(parent, segment, title):
+            def provider(term, limit):
+                ids = dashboard_repository.client_segment_ids(segment, term, limit=limit)
+                return container.customer_application.list_customers_by_ids(ids)
+            return CustomerManagementDialog(
+                container.customer_application, parent=parent,
+                customer_provider=provider, filter_title=title,
+            )
+        modules.append(AdministrativeModule(
+            "Clientes", "Cadastro, busca, edição e fichas", "F3", "clientes", "view",
+            lambda p:CustomerManagementDialog(container.customer_application,parent=p),
+            "clientes", filtered_factory=filtered_customers,
+        ))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
         service=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):

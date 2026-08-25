@@ -34,22 +34,26 @@ class AdministrativeModule:
     module_id: str = ""
     embedded_factory: Callable[[QWidget], QWidget] | None = None
     summary_loader: Callable[[], object] | None = None
+    filtered_factory: Callable[[QWidget, str, str], QDialog] | None = None
 
 
 class AdministrativeModuleHub(QDialog):
     """Menu administrativo Qt inspirado nos cartões operacionais do Legacy."""
 
-    def __init__(self, security, modules: tuple[AdministrativeModule, ...], parent=None):
+    def __init__(
+        self, security, modules: tuple[AdministrativeModule, ...], parent=None, *,
+        window_title="Módulos NabiCode", heading="MÓDULOS DO NABICODE",
+    ):
         super().__init__(parent)
         self.security = security
         self.modules = tuple(modules)
-        self.setWindowTitle("Módulos NabiCode")
+        self.setWindowTitle(window_title)
         self.resize(840, 520)
         self.setMinimumSize(680, 430)
         self.setStyleSheet(STYLE)
 
         root = QVBoxLayout(self)
-        title = QLabel("MÓDULOS DO NABICODE")
+        title = QLabel(heading)
         title.setStyleSheet("font-size:25px;font-weight:900;color:#00d084")
         root.addWidget(title)
         self.identity = QLabel()
@@ -129,16 +133,28 @@ class AdministrativeModuleHub(QDialog):
         if (
             watched in self._module_by_button
             and event.type() == QEvent.Type.KeyPress
-            and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}
+            and event.key() in {
+                Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Left,
+                Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down,
+            }
         ):
             event.accept()
             if event.isAutoRepeat():
                 return True
             buttons = tuple(button for button in self.buttons if button.isEnabled())
             index = buttons.index(watched)
-            if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                buttons[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
-            else:
+            key = event.key()
+            if key in {Qt.Key.Key_Return, Qt.Key.Key_Enter} and not (
+                event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ):
                 self.open_module(self._module_by_button[watched])
+            else:
+                delta = {
+                    Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1,
+                    Qt.Key.Key_Up: -2, Qt.Key.Key_Down: 2,
+                    Qt.Key.Key_Return: -1, Qt.Key.Key_Enter: -1,
+                }[key]
+                target = max(0, min(len(buttons) - 1, index + delta))
+                buttons[target].setFocus(Qt.FocusReason.OtherFocusReason)
             return True
         return super().eventFilter(watched, event)

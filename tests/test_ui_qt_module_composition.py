@@ -77,6 +77,21 @@ def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios
     assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários","Configurações","Ajuda","Auditoria")
     assert backup.call_args.kwargs["fiscal_directory"] == Path("C:/Teste/fiscal")
 
+def test_composicao_de_clientes_liga_segmento_do_dashboard_ao_filtro_da_janela():
+    customer_application=Mock();customer_application.list_customers_by_ids.return_value=("cliente",)
+    container=SimpleNamespace(customer_application=customer_application,product_application=None,stock_actions=None,purchase_service=None,financial_query=None,financial_actions=None)
+    database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"));profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal")));security=Mock()
+    with patch("ui_qt.administration.composition.DashboardRepository") as repository_type,patch("ui_qt.administration.composition.CashService"),patch("ui_qt.administration.composition.ReportService"),patch("ui_qt.administration.composition.SettingsApplicationService"),patch("ui_qt.administration.composition.BackupService"),patch("ui_qt.administration.composition.CustomerManagementDialog") as dialog_type:
+        repository_type.return_value.client_segment_ids.return_value=(7,9)
+        modules=build_administrative_modules(container,database,profile,security)
+        customers=next(module for module in modules if module.module_id=="clientes")
+        customers.filtered_factory(None,"owing","CLIENTES DEVENDO")
+    provider=dialog_type.call_args.kwargs["customer_provider"]
+    assert dialog_type.call_args.kwargs["filter_title"]=="CLIENTES DEVENDO"
+    assert provider("ana",25)==("cliente",)
+    repository_type.return_value.client_segment_ids.assert_called_once_with("owing","ana",limit=25)
+    customer_application.list_customers_by_ids.assert_called_once_with((7,9))
+
 def test_shell_sem_factory_preserva_funcionamento_anterior():
     with patch.object(qt_app,"PDVWindow",Window),patch.object(qt_app,"PDVViewModel",lambda app:app):
         _qt,window=qt_app.create_application(object(),[])

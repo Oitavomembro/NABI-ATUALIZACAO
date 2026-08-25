@@ -3532,3 +3532,41 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   tributárias, schema, endpoint, certificado ou worker fiscal. A composição no
   shell/guia visual permanece checkpoint posterior; isto não é homologação
   fiscal real e não libera PRODUÇÃO.
+## UX global segura sobre a homologação de primeiro uso — 25/08/2026
+
+- branch/worktree isolados: `codex/ux-global-primeiro-uso` em
+  `NabiCode-QT-UXPrimeiroUso-codex`, derivados exatamente de
+  `codex/homologacao-primeiro-uso` em
+  `52bbfe2a361629471cc8e0dfa5a9694f56e0c0f0`;
+- o checkout de origem permaneceu intocado com as quatro alterações locais de
+  ativação já existentes; `main_qt.py`, `licensing/`, IA, Fiscal e banco real
+  não foram alterados;
+- `8c7241d` padroniza setas e Enter no hub administrativo, preservando
+  auto-repeat bloqueado, Shift+Enter regressivo e autorização individual de
+  cada módulo;
+- `bd14ed7` transforma os resumos laterais em cards de clientes acessíveis e
+  clicáveis, ligados aos segmentos existentes `all/current/owing/alert` do
+  `DashboardRepository`; a janela filtrada continua exigindo `clientes/view` e
+  não consulta o banco pela GUI;
+- Clientes e Produtos deixam de ser comprimidos dentro da área central do
+  shell e abrem como janelas Qt amplas/maximizadas, reutilizadas por módulo e
+  fechadas junto com o shell;
+- os botões inferiores passam a herdar o tema metálico principal do shell; as
+  setas percorrem cards e grades sem executar ações, enquanto Enter executa uma
+  única vez;
+- o gatilho Legacy de dez cliques em até cinco segundos foi restaurado no logo.
+  Ele falha fechado antes de mostrar senha sem `technical/view`, usa somente
+  `SecurityService.confirm_manager_password` e abre apenas módulos já marcados
+  como `technical`; cada entrada mantém sua permissão própria. Nenhuma senha,
+  licença ou operação administrativa paralela foi criada;
+- validação focada: `92 passed` em grupos isolados de shell/hub, Clientes,
+  Produtos, composição, segmentos do dashboard e segurança; casos adversariais
+  cobrem auto-repeat, janela temporal reiniciada, permissão negada, senha errada,
+  troca de segmento e reuso de janela;
+- `python -m compileall -q ui_qt` e `git diff --check` aprovados. A coleta direta
+  isolada de alguns testes no Python 3.14 ainda depende da ordem histórica de
+  imports entre `repositories` e `services`; o mesmo comportamento foi
+  reproduzido sem este diff na base de primeiro uso e não foi alterado neste
+  escopo;
+- próximo passo: homologação visual humana em DPI/telas suportadas e integração
+  por merge normal após revisão dos commits. O push desta branch foi autorizado.
