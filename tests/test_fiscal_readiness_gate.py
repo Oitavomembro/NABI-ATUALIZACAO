@@ -5,6 +5,7 @@ import pytest
 from services.fiscal_dfe_service import FiscalDFeService
 from services.fiscal_readiness_gate import FiscalReadinessGate
 from services.fiscal_sale_service import FiscalSaleService
+from services.fiscal_service import FiscalService
 
 
 class Catalog:
@@ -89,3 +90,50 @@ def test_dfe_nao_abre_rede_quando_portao_recusa(tmp_path):
     with pytest.raises(ValueError, match="A1 inválido"):
         service.fetch_next(password="senha")
     assert fiscal.http_calls == 0
+
+
+def test_servico_fiscal_sem_gate_falha_fechado_antes_de_autenticar():
+    fiscal = object.__new__(FiscalService)
+    fiscal._readiness_enforced = False
+    fiscal._readiness_gate = None
+    authenticated = []
+    fiscal._authenticated_fiscal_actor = lambda *_args, **_kwargs: authenticated.append(True)
+
+    with pytest.raises(PermissionError, match="portão de prontidão fiscal"):
+        fiscal.require_operational_readiness(
+            operation="autorizacao", model="65", password="",
+            permission="fiscal/transmit",
+        )
+    assert authenticated == []
+
+
+def test_tentativa_de_bypass_por_flag_sem_gate_tambem_falha_fechado():
+    fiscal = object.__new__(FiscalService)
+    fiscal._readiness_enforced = True
+    fiscal._readiness_gate = None
+    fiscal._authenticated_fiscal_actor = lambda *_args, **_kwargs: "ator"
+
+    with pytest.raises(PermissionError, match="nenhuma operação Fiscal/SEFAZ"):
+        fiscal.require_operational_readiness(
+            operation="evento", model="55", password="senha",
+            permission="fiscal/transmit",
+        )
+
+
+def test_gate_limpo_exige_cnpj_certificado_e_configuracao():
+    fiscal = GateFiscal()
+    fiscal.config.update({"cnpj": "", "certificate_path": "", "tax_regime": ""})
+    fiscal.validate_ready = lambda **_kwargs: [
+        "CNPJ obrigatório", "certificado obrigatório", "regime obrigatório"
+    ]
+    fiscal.inspect_certificate = lambda *_args: (_ for _ in ()).throw(
+        ValueError("certificado A1 não configurado")
+    )
+
+    result = FiscalReadinessGate(fiscal).evaluate(
+        operation="status", model="55", password=""
+    )
+    assert not result.ready
+    assert any("CNPJ obrigatório" in problem for problem in result.problems)
+    assert any("certificado" in problem for problem in result.problems)
+    assert any("regime obrigatório" in problem for problem in result.problems)

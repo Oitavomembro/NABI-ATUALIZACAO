@@ -141,11 +141,12 @@ def test_monta_manifestacoes_oficiais_e_exige_justificativa(dfe_service):
 
 
 def test_manifestacao_exige_documento_distribuido(dfe_service):
-    service, _fiscal, _root = dfe_service
-    with pytest.raises(ValueError, match="não foi localizada"):
-        service.send_manifestation(
-            access_key="1" * 44, kind="CIENCIA", password="senha"
-        )
+    service, fiscal, _root = dfe_service
+    with patch.object(fiscal, "require_operational_readiness", return_value="admin"):
+        with pytest.raises(ValueError, match="não foi localizada"):
+            service.send_manifestation(
+                access_key="1" * 44, kind="CIENCIA", password="senha"
+            )
 
 
 @pytest.mark.parametrize(
@@ -212,7 +213,9 @@ def test_manifestacao_assina_transmite_e_registra_sem_duplicar_conclusiva(dfe_se
         fiscal, "_event_envelope", side_effect=lambda xml: xml
     ), patch.object(fiscal, "transmit", return_value=response), patch.object(
         fiscal, "register_event", return_value={"success": True}
-    ) as register:
+    ) as register, patch.object(
+        fiscal, "require_operational_readiness", return_value="admin"
+    ):
         sent, record = service.send_manifestation(
             access_key=key, kind="CONFIRMACAO", password="senha"
         )
@@ -222,7 +225,8 @@ def test_manifestacao_assina_transmite_e_registra_sem_duplicar_conclusiva(dfe_se
     fiscal.list_events = lambda *_args: [{
         "success": True, "event_type": "MANIFESTACAO_CONFIRMACAO"
     }]
-    with pytest.raises(ValueError, match="manifestação conclusiva"):
-        service.send_manifestation(
-            access_key=key, kind="DESCONHECIMENTO", password="senha"
-        )
+    with patch.object(fiscal, "require_operational_readiness", return_value="admin"):
+        with pytest.raises(ValueError, match="manifestação conclusiva"):
+            service.send_manifestation(
+                access_key=key, kind="DESCONHECIMENTO", password="senha"
+            )

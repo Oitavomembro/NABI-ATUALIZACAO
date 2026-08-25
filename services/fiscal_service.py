@@ -189,7 +189,7 @@ class FiscalService:
         self.secret_protector = secret_protector or WindowsDataProtector()
         self._actor_provider = actor_provider
         self._authorization_provider = authorization_provider
-        self._readiness_gate = FiscalReadinessGate(self)
+        self._readiness_gate: FiscalReadinessGate | None = None
         self._readiness_enforced = False
         self._managed_certificate_dir = self.storage_dir / "certificate"
         self._managed_certificate_path = self._managed_certificate_dir / "active.pfx"
@@ -206,13 +206,10 @@ class FiscalService:
         require_catalog: bool = False, require_numbering: bool = False,
         check_revocation: bool = True,
     ) -> str:
-        if not self._readiness_enforced:
-            if permission == "view":
-                return str(self._actor_provider() if self._actor_provider else "LEITURA_LOCAL")
-            if self._actor_provider is None and self._authorization_provider is None:
-                return "SERVICO_COORDENADO"
-            return self._authenticated_fiscal_actor(
-                permission, operation=f"executar {operation} fiscal"
+        if not self._readiness_enforced or self._readiness_gate is None:
+            raise PermissionError(
+                "O portão de prontidão fiscal não foi configurado e validado; "
+                "nenhuma operação Fiscal/SEFAZ pode ser iniciada."
             )
         actor = self._authenticated_fiscal_actor(
             permission, operation=f"executar {operation} fiscal"

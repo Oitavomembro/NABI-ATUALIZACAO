@@ -42,8 +42,12 @@ class FiscalServiceTests(unittest.TestCase):
             self.connect,
             storage_dir=Path(self.tmp.name) / "docs",
             actor_provider=lambda: "gerente",
-            authorization_provider=lambda action: action in {"configure", "transmit"},
+            authorization_provider=lambda action: action in {"configure", "transmit", "view"},
         )
+        # Estes testes exercitam regras internas após um portão já aprovado.
+        # Os cenários fail-closed do portão ficam em test_fiscal_readiness_gate.
+        self.service._readiness_enforced = True
+        self.service._readiness_gate = Mock()
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         self._create_pfx(self.pfx_path, self.password)
