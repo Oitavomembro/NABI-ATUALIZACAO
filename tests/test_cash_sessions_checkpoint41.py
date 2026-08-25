@@ -88,6 +88,26 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         self.assertEqual(summary["dinheiro"], 50); self.assertEqual(summary["pix"], 20); self.assertEqual(summary["cartao"], 30)
         self.assertEqual(summary["movement_total"], 100); self.assertEqual(summary["expected_cash"], 50)
 
+    def test_summary_preserva_origem_responsavel_e_documento_quando_existentes(self):
+        session = self.open(value=0)
+        conn = sqlite3.connect(self.db)
+        conn.execute("ALTER TABLE movimentacoes ADD COLUMN responsavel TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE movimentacoes ADD COLUMN documento_numero TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE movimentacoes ADD COLUMN origem_sistema TEXT DEFAULT ''")
+        conn.execute("ALTER TABLE movimentacoes ADD COLUMN origem_id TEXT DEFAULT ''")
+        conn.execute(
+            """INSERT INTO movimentacoes(
+                   tipo,forma_pagamento,valor,valor_decimal,data,responsavel,
+                   documento_numero,origem_sistema,origem_id
+               ) VALUES('COMPRA','Dinheiro',25,'25.00','12/08/2026 09:00:00',
+                        'ANA','PED-77','PDV','77')"""
+        )
+        conn.commit(); conn.close()
+        movement = self.cash.session_summary(session.id)["movements"][0]
+        self.assertEqual(movement["origem"], "PDV #77")
+        self.assertEqual(movement["usuario"], "ANA")
+        self.assertEqual(movement["documento"], "PED-77")
+
     def test_cash_and_pix_receipts_are_classified(self):
         session = self.open(value=0)
         self.movement("PAGAMENTO", "Dinheiro", 40); self.movement("PAGAMENTO", "PIX", 25)

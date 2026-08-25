@@ -3876,3 +3876,35 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   login, shell e Vendas, sem comunicação Fiscal/SEFAZ;
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
+
+## Caixa e Financeiro — janelas amplas e detalhamento reconciliável
+
+- branch/worktree isolados: `codex/caixa-financeiro-janelas-detalhes` em
+  `NabiCode-QT-CaixaFinanceiroDetalhes-codex`, derivados exatamente de
+  `52ae726a446d7b85a7b88516e524a645e6947d08`;
+- Caixa e Financeiro passaram a abrir como janelas próprias amplas, maximizadas
+  e reutilizadas pelo shell, com controles nativos de minimizar, maximizar e
+  fechar. Diálogos de confirmação permanecem modais e sem minimização;
+- os seis cards do Caixa são botões acessíveis e abrem fotografia imutável do
+  resumo oficial. O detalhe é somente leitura, paginado, limitado a 100 linhas
+  por página e informa sessão/período, origem, tipo, valor, responsável,
+  documento e observação quando existentes;
+- cada fotografia compara explicitamente o total do card com a soma das linhas.
+  Dinheiro esperado inclui saldo inicial, vendas/recebimentos em dinheiro,
+  suprimentos e sangrias com sinal; divergência nunca é apresentada como
+  reconciliada;
+- origem e documento foram enriquecidos na consulta oficial do Caixa sem alterar
+  fechamento, persistência ou regra transacional. Colunas legadas ausentes
+  continuam aceitas por detecção de schema;
+- sessão e ator são revalidados em toda consulta e ação. Caixa distingue
+  `view`, `create` e `reconcile`; Financeiro distingue `view`, `create` e `pay`.
+  Sessão expirada ou permissão ausente bloqueia antes da operação;
+- Enter abre cada card uma única vez, Shift+Enter e setas retornam/avançam de
+  modo determinístico, PgUp/PgDown paginam, Esc fecha e auto-repeat é consumido;
+- validação focada final: `80 passed`; regressão `unittest`: `1555 passed`;
+  regressão integral final: `2469 passed`, `1 skipped`, `492 subtests passed`,
+  zero falhas e apenas dois avisos externos conhecidos; `compileall` e
+  `git diff --check` aprovados;
+- Fiscal/SEFAZ, IA/Nabi, licenciamento e `main_qt.py` não foram alterados. Não
+  houve merge em outra branch nem acesso a banco real; próximo passo é revisão
+  dos commits e homologação visual/teclado no Windows antes da integração.

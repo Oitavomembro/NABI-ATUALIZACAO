@@ -10,6 +10,7 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
 )
 
+from commercial.application.cash_application_service import CashDetailSnapshot
 from .widgets.money_edit import MoneyEdit
 
 
@@ -21,6 +22,9 @@ QLineEdit { min-height:38px;padding:0 9px; }
 QPushButton { background:#30363d;color:#f0f6fc;border:0;border-radius:6px;
  min-height:40px;padding:0 14px;font-weight:700; }
 QPushButton#primary { background:#1f6feb; } QPushButton#success { background:#2ea043; }
+QPushButton#cashSummaryCard { background:#161b22;border:1px solid #30363d;
+ border-radius:8px;padding:12px;font-weight:700;text-align:center;min-height:72px; }
+QPushButton#cashSummaryCard:focus { border:2px solid #58a6ff;background:#1f2937; }
 QHeaderView::section { background:#21262d;color:#f0f6fc;padding:9px;border:0;
  border-right:1px solid #30363d;font-weight:700; }
 """
@@ -30,9 +34,27 @@ def money(value: Decimal) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _main_window_controls(dialog: QDialog) -> None:
+    dialog.setModal(False)
+    dialog.setWindowFlags(
+        dialog.windowFlags()
+        | Qt.WindowType.WindowMinimizeButtonHint
+        | Qt.WindowType.WindowMaximizeButtonHint
+        | Qt.WindowType.WindowCloseButtonHint
+    )
+
+
+def _modal_window_controls(dialog: QDialog) -> None:
+    dialog.setModal(True)
+    dialog.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, False)
+    dialog.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+    dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
+
+
 class CashValueDialog(QDialog):
     def __init__(self, title: str, action_label: str, action, parent=None, *, note_required=False):
         super().__init__(parent)
+        _modal_window_controls(self)
         self.action = action
         self.note_required = note_required
         self.completed = False
@@ -77,10 +99,117 @@ class CashValueDialog(QDialog):
         self.completed = True; self.accept()
 
 
-class CashDialog(QDialog):
-    def __init__(self, service, parent=None):
+class CashDetailDialog(QDialog):
+    """Paginação somente leitura de uma fotografia reconciliável do Caixa."""
+
+    def __init__(self, snapshot: CashDetailSnapshot, parent=None, *, page_size=50):
         super().__init__(parent)
+        if not isinstance(snapshot, CashDetailSnapshot):
+            raise TypeError("O detalhamento do Caixa deve usar uma fotografia tipada.")
+        _modal_window_controls(self)
+        self.snapshot = snapshot
+        self.page_size = int(page_size)
+        self.current_page = 1
+        self.setWindowTitle(f"Caixa — {snapshot.label.title()}")
+        self.resize(1160, 700)
+        self.setMinimumSize(900, 560)
+        self.setStyleSheet(STYLE)
+
+        layout = QVBoxLayout(self)
+        heading = QLabel(snapshot.label)
+        heading.setStyleSheet("font-size:22px;font-weight:900;color:#00d084")
+        layout.addWidget(heading)
+        if snapshot.session_id is None:
+            period_text = "Nenhuma sessão de caixa aberta."
+        else:
+            period_text = (
+                f"Sessão #{snapshot.session_id}  •  Período: {snapshot.period_start} até "
+                f"{snapshot.period_end or 'EM ANDAMENTO'}"
+            )
+        self.period = QLabel(period_text)
+        self.period.setAccessibleName("Período comprovado do detalhamento")
+        layout.addWidget(self.period)
+        self.reconciliation = QLabel()
+        self.reconciliation.setAccessibleName("Reconciliação do detalhamento")
+        layout.addWidget(self.reconciliation)
+
+        self.table = QTableWidget(0, 7)
+        self.table.setHorizontalHeaderLabels([
+            "Data", "Origem", "Tipo", "Valor", "Responsável", "Documento",
+            "Observação",
+        ])
+        self.table.setAccessibleName(f"Detalhamento de {snapshot.label.lower()}")
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
+        self.table.verticalHeader().setVisible(False)
+        self.table.horizontalHeader().setSectionResizeMode(6, QHeaderView.ResizeMode.Stretch)
+        layout.addWidget(self.table, 1)
+
+        controls = QHBoxLayout()
+        self.previous_button = QPushButton("Página anterior  [PgUp]")
+        self.next_button = QPushButton("Próxima página  [PgDown]")
+        self.page_label = QLabel()
+        close_button = QPushButton("Fechar  [Esc]")
+        self.previous_button.clicked.connect(lambda: self.show_page(self.current_page - 1))
+        self.next_button.clicked.connect(lambda: self.show_page(self.current_page + 1))
+        close_button.clicked.connect(self.accept)
+        controls.addWidget(self.previous_button)
+        controls.addWidget(self.page_label)
+        controls.addWidget(self.next_button)
+        controls.addStretch()
+        controls.addWidget(close_button)
+        layout.addLayout(controls)
+        self._shortcuts = []
+        for key, callback in (
+            ("PgUp", lambda: self.show_page(self.current_page - 1)),
+            ("PgDown", lambda: self.show_page(self.current_page + 1)),
+            ("Esc", self.reject),
+        ):
+            shortcut = QShortcut(QKeySequence(key), self)
+            shortcut.setAutoRepeat(False)
+            shortcut.activated.connect(callback)
+            self._shortcuts.append(shortcut)
+        self.show_page(1)
+
+    def show_page(self, number: int) -> bool:
+        try:
+            page = self.snapshot.page(number, page_size=self.page_size)
+        except ValueError:
+            return False
+        self.current_page = page.page
+        self.table.setRowCount(0)
+        for item in page.items:
+            row = self.table.rowCount()
+            self.table.insertRow(row)
+            values = (
+                item.occurred_at, item.origin, item.movement_type, money(item.amount),
+                item.responsible or "—", item.document or "—", item.note or "—",
+            )
+            for column, value in enumerate(values):
+                self.table.setItem(row, column, QTableWidgetItem(str(value)))
+        self.page_label.setText(
+            f"Página {page.page} de {page.total_pages}  •  {page.total_items} lançamento(s)"
+        )
+        self.previous_button.setEnabled(page.page > 1)
+        self.next_button.setEnabled(page.page < page.total_pages)
+        status = "RECONCILIADO" if page.reconciled else "NÃO RECONCILIADO"
+        color = "#5df2a1" if page.reconciled else "#ff8582"
+        self.reconciliation.setText(
+            f"CARD: {money(page.card_total)}  •  SOMA DO DETALHE: "
+            f"{money(page.detail_total)}  •  {status}"
+        )
+        self.reconciliation.setStyleSheet(f"font-size:15px;font-weight:900;color:{color}")
+        return True
+
+
+class CashDialog(QDialog):
+    def __init__(self, service, parent=None, *, detail_dialog_factory=CashDetailDialog):
+        super().__init__(parent)
+        _main_window_controls(self)
         self.service = service
+        self.detail_dialog_factory = detail_dialog_factory
+        self._detail_open = False
         self.setWindowTitle("Caixa"); self.resize(1050, 700); self.setMinimumSize(820, 560)
         self.setStyleSheet(STYLE)
         layout = QVBoxLayout(self)
@@ -91,14 +220,25 @@ class CashDialog(QDialog):
         layout.addLayout(header)
         cards = QGridLayout(); self.cards = {}
         labels = (
-            ("expected", "DINHEIRO ESPERADO"), ("cash", "VENDAS DINHEIRO"),
-            ("pix", "PIX"), ("card", "CARTÃO"), ("supplies", "SUPRIMENTOS"),
-            ("withdrawals", "SANGRIAS"),
+            ("expected", "DINHEIRO ESPERADO", "Detalhar dinheiro esperado"),
+            ("cash", "VENDAS DINHEIRO", "Detalhar vendas em dinheiro"),
+            ("pix", "PIX", "Detalhar vendas em PIX"),
+            ("card", "CARTÃO", "Detalhar vendas em cartão"),
+            ("supplies", "SUPRIMENTOS", "Detalhar suprimentos"),
+            ("withdrawals", "SANGRIAS", "Detalhar sangrias"),
         )
-        for index, (key, text) in enumerate(labels):
-            label = QLabel(); label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-            label.setStyleSheet("background:#161b22;border:1px solid #30363d;border-radius:8px;padding:12px;font-weight:700")
-            self.cards[key] = (text, label); cards.addWidget(label, index // 3, index % 3)
+        self._card_by_button = {}
+        for index, (key, text, accessible_name) in enumerate(labels):
+            button = QPushButton()
+            button.setObjectName("cashSummaryCard")
+            button.setAccessibleName(accessible_name)
+            button.installEventFilter(self)
+            button.clicked.connect(
+                lambda _checked=False, selected=key: self.open_detail(selected)
+            )
+            self.cards[key] = (text, button)
+            self._card_by_button[button] = key
+            cards.addWidget(button, index // 3, index % 3)
         layout.addLayout(cards)
         self.table = QTableWidget(0, 5)
         self.table.setHorizontalHeaderLabels(["Data", "Tipo", "Valor", "Responsável", "Observação"])
@@ -123,6 +263,53 @@ class CashDialog(QDialog):
         row.addStretch(); row.addWidget(close_window); layout.addLayout(row)
         QShortcut(QKeySequence("Esc"), self, activated=self.reject).setAutoRepeat(False)
         self.reload()
+
+    def eventFilter(self, watched, event) -> bool:
+        if (
+            watched in self._card_by_button
+            and event.type() == QEvent.Type.KeyPress
+            and event.key() in {
+                Qt.Key.Key_Return, Qt.Key.Key_Enter, Qt.Key.Key_Left,
+                Qt.Key.Key_Right, Qt.Key.Key_Up, Qt.Key.Key_Down,
+            }
+        ):
+            event.accept()
+            if event.isAutoRepeat():
+                return True
+            buttons = tuple(self._card_by_button)
+            index = buttons.index(watched)
+            key = event.key()
+            if key in {Qt.Key.Key_Return, Qt.Key.Key_Enter} and not (
+                event.modifiers() & Qt.KeyboardModifier.ShiftModifier
+            ):
+                self.open_detail(self._card_by_button[watched])
+            else:
+                delta = {
+                    Qt.Key.Key_Left: -1, Qt.Key.Key_Right: 1,
+                    Qt.Key.Key_Up: -3, Qt.Key.Key_Down: 3,
+                    Qt.Key.Key_Return: -1, Qt.Key.Key_Enter: -1,
+                }[key]
+                target = max(0, min(len(buttons) - 1, index + delta))
+                buttons[target].setFocus(Qt.FocusReason.OtherFocusReason)
+            return True
+        return super().eventFilter(watched, event)
+
+    def open_detail(self, key: str) -> bool:
+        if self._detail_open:
+            return False
+        self._detail_open = True
+        try:
+            snapshot = self.service.detail_snapshot(key)
+            dialog = self.detail_dialog_factory(snapshot, self)
+            if not isinstance(dialog, QDialog):
+                raise TypeError("O detalhamento deve abrir uma janela Qt.")
+            dialog.exec()
+            return True
+        except Exception as exc:
+            QMessageBox.warning(self, "Caixa", str(exc))
+            return False
+        finally:
+            self._detail_open = False
 
     def reload(self):
         try: state = self.service.current()
