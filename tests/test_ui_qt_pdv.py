@@ -631,6 +631,97 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertEqual(self.dialog.adjustments_group.title(), "2. Ajustes da venda")
         self.assertEqual(self.dialog.credit_group.title(), "3. Condições do crediário")
 
+    def test_digitacao_de_ajuste_sincroniza_total_pagamento_e_saldo(self):
+        self.view_model.add_loose_item("OUTRO", "1", Decimal("23"))
+        self.dialog.discount.selectAll()
+        QTest.keyClicks(self.dialog.discount, "10")
+        self.assertEqual(self.dialog.amount.value(), Decimal("113.00"))
+        self.assertIn("Total R$ 113,00", self.dialog.total_label.text())
+        self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 0,00")
+
+        self.dialog.discount_type.setCurrentIndex(1)
+        self.assertEqual(self.dialog.amount.value(), Decimal("110.70"))
+        self.assertIn("Total R$ 110,70", self.dialog.total_label.text())
+        self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 0,00")
+
+    def test_desconto_nao_preserva_sugestao_antiga_de_vinte_e_um_reais(self):
+        view_model, _gateway = make_view_model()
+        view_model.select_customer(7)
+        view_model.add_loose_item("ITEM", "1", Decimal("21.00"))
+        dialog = CheckoutDialog(view_model)
+        try:
+            dialog.discount.set_value("1.05")
+            self.assertEqual(dialog.amount.value(), Decimal("19.95"))
+            self.assertIn("Total R$ 19,95", dialog.total_label.text())
+            self.assertEqual(dialog.balance_label.text(), "TROCO: R$ 0,00")
+        finally:
+            dialog.close()
+
+    def test_troca_de_percentual_para_valor_recalcula_sugestao(self):
+        self.view_model.add_loose_item("OUTRO", "1", Decimal("23"))
+        self.dialog.discount_type.setCurrentIndex(1)
+        self.dialog.discount.set_value("10")
+        self.assertEqual(self.dialog.amount.value(), Decimal("110.70"))
+
+        self.dialog.discount_type.setCurrentIndex(0)
+        self.assertEqual(self.dialog.amount.value(), Decimal("113.00"))
+
+    def test_digitacao_e_tipo_do_acrescimo_recalculam_sugestao(self):
+        self.view_model.add_loose_item("OUTRO", "1", Decimal("23"))
+        self.dialog.surcharge.selectAll()
+        QTest.keyClicks(self.dialog.surcharge, "10")
+        self.assertEqual(self.dialog.amount.value(), Decimal("133.00"))
+        self.assertIn("Total R$ 133,00", self.dialog.total_label.text())
+
+        self.dialog.surcharge_type.setCurrentIndex(1)
+        self.assertEqual(self.dialog.amount.value(), Decimal("135.30"))
+        self.assertIn("Total R$ 135,30", self.dialog.total_label.text())
+
+    def test_ajuste_preserva_pagamento_explicito_e_orienta_revisao(self):
+        self.dialog.amount.set_value("40")
+        self.assertTrue(self.dialog._add_payment())
+        original = tuple(self.dialog._payments)
+
+        self.dialog.discount.set_value("10")
+
+        self.assertEqual(tuple(self.dialog._payments), original)
+        self.assertEqual(self.dialog.amount.value(), Decimal("50.00"))
+        self.assertEqual(self.dialog.balance_label.text(), "FALTA: R$ 50,00")
+        self.assertIn("não foram alterados", self.dialog.error_label.text())
+        self.assertIsNone(self.dialog._reviewed_input)
+        self.assertFalse(self.dialog.confirm_button.isEnabled())
+
+    def test_ajuste_invalida_revisao_sem_reescrever_pagamento_adicionado(self):
+        self.assertTrue(self.dialog._add_payment())
+        original = tuple(self.dialog._payments)
+        with patch.object(QMessageBox, "information"):
+            self.dialog._review()
+        self.assertIsNotNone(self.dialog._reviewed_input)
+
+        self.dialog.discount.set_value("10")
+
+        self.assertEqual(tuple(self.dialog._payments), original)
+        self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 10,00")
+        self.assertIsNone(self.dialog._reviewed_input)
+        self.assertFalse(self.dialog.confirm_button.isEnabled())
+        self.assertIn("não foram alterados", self.dialog.error_label.text())
+
+    def test_ajuste_recalcula_parcelas_do_crediario_pelo_nucleo(self):
+        self.dialog.method.setCurrentIndex(
+            self.dialog.method.findData(PaymentMethod.STORE_CREDIT)
+        )
+        self.dialog.installments.setValue(3)
+        self.dialog.discount.set_value("5")
+
+        terms = self.view_model.preview_checkout(self.dialog._candidate_input())[2]
+        self.assertEqual(terms.financed_value, Decimal("95.00"))
+        self.assertEqual(
+            sum((item.amount for item in terms.installments), Decimal("0")),
+            Decimal("95.00"),
+        )
+        self.assertIn("3 parcela", self.dialog.credit_installment_label.text())
+        self.assertIn("R$ 95,00", self.dialog.credit_installment_label.text())
+
     def test_crediario_sem_entrada_e_com_entrada(self):
         due = date(2026, 9, 22)
         no_entry = CheckoutInput(
