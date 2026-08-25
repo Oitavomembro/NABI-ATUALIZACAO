@@ -76,7 +76,7 @@ class AdminAssistantConfirmationAuditAdapter:
     def record(self, event: str, *, actor: AssistantActor, draft, result: str) -> None:
         recorder = getattr(self._audit, "record_event_strict", None)
         if not callable(recorder):
-            recorder = self._audit.record_event
+            raise RuntimeError("Auditoria estrita indisponível para confirmação da Nabi.")
         recorder(
             "IA_NABI", str(event), object_id=draft.draft_id,
             details=(

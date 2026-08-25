@@ -54,6 +54,33 @@ class CashSessionCheckpoint41Tests(unittest.TestCase):
         self.assertEqual(self.cash.get_open_session("PC-CAIXA").id, first.id)
         self.assertEqual(self.cash.session_summary(first.id)["movements"][0]["usuario"], "Maria")
 
+    def test_falha_auditoria_reverte_sangria(self):
+        session = self.open()
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        conn.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.cash.register_session_movement("PC-CAIXA", "SANGRIA", 10, "Ana", "teste")
+        conn = sqlite3.connect(self.db)
+        self.assertEqual(conn.execute("SELECT COUNT(*) FROM cash_movements").fetchone()[0], 0)
+        conn.close()
+        self.assertEqual(self.cash.get_open_session("PC-CAIXA").id, session.id)
+
+    def test_falha_auditoria_reverte_fechamento(self):
+        self.open(value=0)
+        conn = sqlite3.connect(self.db)
+        conn.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        conn.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.cash.close_session("PC-CAIXA", 0, "Ana")
+        self.assertEqual(self.cash.get_open_session("PC-CAIXA").status, "ABERTO")
+
     def test_sales_payment_methods_split_movement_from_drawer(self):
         session = self.open(value=0)
         self.movement("COMPRA", "DINHEIRO R$ 50.00 + PIX R$ 20.00 + CARTÃO R$ 30.00", 100)

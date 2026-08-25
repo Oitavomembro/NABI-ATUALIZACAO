@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 import re
 
 from repositories.decimal_storage import DecimalStorage
+from services.critical_audit_policy import is_critical_event, record_in_transaction
 
 
 ConnectionFactory = Callable[[], object]
@@ -115,6 +116,17 @@ class CashService:
     @staticmethod
     def _audit(conn, user: str, action: str, session_id: int, details: str, occurred_at: str) -> None:
         tables = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if is_critical_event("CAIXA", action):
+            record_in_transaction(
+                conn,
+                "CAIXA",
+                action,
+                user=user,
+                object_id=session_id,
+                details=details,
+                occurred_at=occurred_at,
+            )
+            return
         if "auditoria" in tables:
             conn.execute(
                 "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) VALUES(?,?,'CAIXA',?,?,?,'SUCESSO')",

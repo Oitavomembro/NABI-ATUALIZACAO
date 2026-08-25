@@ -2912,3 +2912,35 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   roteiro Windows já documentado;
 - próximo passo seguro: revisão independente e integração normal na consolidada,
   seguida de novo build físico offline. Não integrar automaticamente.
+
+### Auditoria crítica fail-closed
+
+- implementação: `07932a6` — `fix: exige auditoria nas mutacoes criticas`;
+- o inventário confirmou que `record_event` era usado diretamente apenas pela
+  consulta informativa da Nabi e pela fachada genérica do Legacy. O primeiro
+  permanece best-effort; a fachada agora encaminha automaticamente os eventos
+  catalogados como críticos à persistência estrita;
+- o catálogo central cobre as ações existentes de usuários, perfis e senhas,
+  fechamento/sangria/suprimento, cancelamento e estorno financeiro, ajuste e
+  saída de estoque, recebimento de compras, operações administrativas de
+  restauração/reset/atualização/licenciamento e mutações fiscais conhecidas;
+- usuários/perfis/senhas, Caixa e Estoque passaram a gravar a auditoria na mesma
+  transação da mutação. Compras e Financeiro já possuíam esse comportamento e
+  receberam provas adicionais de rollback;
+- ausência da tabela, recusa SQL ou retorno de persistência falso bloqueiam a
+  operação. A confirmação da Nabi não possui mais fallback para auditoria
+  best-effort;
+- fault injection comprovou zero mutação após falha em criação de usuário,
+  sangria, fechamento de Caixa, ajuste/saída de estoque, recebimento de compra e
+  cancelamento financeiro. Testes arquiteturais protegem o catálogo e o contrato
+  estrito da Nabi;
+- regressão focada: `118 passed`; regressão ampliada de Administração,
+  Segurança, Caixa, Estoque, Compras, Financeiro, Nabi e Fiscal relacionado:
+  `650 passed`, `13 subtests passed`; único aviso é a depreciação externa já
+  conhecida do `BrazilFiscalReport`; `compileall` e `git diff --check`
+  aprovados;
+- backup/restauração física, reset, atualização, licenciamento criptográfico e
+  rede Fiscal/SEFAZ não foram modificados neste checkpoint. O catálogo impede
+  que chamadas futuras pela fachada sejam silenciosas, mas a atomicidade desses
+  fluxos externos exige checkpoint próprio, pois não pode ser simulada dentro
+  de uma transação SQLite.

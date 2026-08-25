@@ -33,6 +33,18 @@ class SecurityServiceTests(unittest.TestCase):
         self.assertTrue(self.service.require("vendas", "create"))
         self.assertFalse(self.service.require("technical", "view"))
 
+    def test_falha_auditoria_reverte_criacao_de_usuario(self):
+        connection = self.factory()
+        connection.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        connection.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
+        with self.assertRaisesRegex(ValueError, "inexistente"):
+            self.service.get_user("caixa")
+
     def test_bloqueio_por_inatividade(self):
         session = self.service.authenticate("admin", "segredo")
         session.last_activity_at = datetime.now() - timedelta(minutes=2)

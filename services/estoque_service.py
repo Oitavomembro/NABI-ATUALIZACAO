@@ -147,6 +147,10 @@ class EstoqueService:
             saldo_anterior=float(saldo_anterior), saldo_atual=float(saldo_destino),
             origem="AJUSTE", motivo=str(motivo).strip(), usuario=usuario, connection=connection,
         )
+        self.repository.registrar_auditoria_critica(
+            connection=connection,action="AJUSTE",produto_id=int(produto_id),usuario=usuario,
+            detalhes=f"movimentacao={mov_id}; saldo_anterior={saldo_anterior}; saldo_atual={saldo_destino}; motivo={str(motivo).strip()}",
+        )
         return ResultadoMovimentacaoEstoque(
             int(produto_id), float(saldo_anterior), float(saldo_destino),
             float(diferenca), "AJUSTE", mov_id,
@@ -440,6 +444,11 @@ class EstoqueService:
             origem=origem, origem_id=origem_id, motivo=motivo, usuario=usuario,
             connection=connection,
         )
+        if not entrada:
+            self.repository.registrar_auditoria_critica(
+                connection=connection,action="SAIDA",produto_id=int(produto_id),usuario=usuario,
+                detalhes=f"movimentacao={mov_id}; quantidade={quantidade_mov}; origem={origem}; origem_id={origem_id}",
+            )
         return ResultadoMovimentacaoEstoque(
             int(produto_id), float(saldo_anterior), float(saldo_atual),
             float(quantidade_mov), tipo, mov_id,
