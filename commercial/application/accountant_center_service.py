@@ -2,8 +2,16 @@ from __future__ import annotations
 
 import hashlib
 from pathlib import Path
+from dataclasses import dataclass
 
 from .accountant_center_dto import AccountantPackageOutcome, AccountantPackagePlan
+
+
+@dataclass(frozen=True, slots=True)
+class CompanyIdentity:
+    cnpj: str
+    legal_name: str
+    source: str
 
 
 class AccountantCenterApplicationService:
@@ -11,9 +19,25 @@ class AccountantCenterApplicationService:
 
     PROFILES = ("ESSENCIAL", "COMPLETO", "AUDITORIA")
 
-    def __init__(self, package_service, security) -> None:
+    def __init__(self, package_service, security, company_identity_provider) -> None:
         self._package_service = package_service
         self._security = security
+        if not callable(company_identity_provider):
+            raise ValueError("A fonte central da identidade empresarial é obrigatória.")
+        self._company_identity_provider = company_identity_provider
+
+    def company_identity(self) -> CompanyIdentity:
+        self._actor()
+        identity = self._company_identity_provider()
+        if not isinstance(identity, CompanyIdentity):
+            raise RuntimeError("A fonte central não forneceu uma identidade empresarial válida.")
+        document, _, _, _ = self._package_service.normalize_request(
+            cnpj=identity.cnpj, competence="2000-01", profile="ESSENCIAL",
+            output_path="identidade.zip",
+        )
+        if not str(identity.source or "").strip():
+            raise RuntimeError("A origem da identidade empresarial não foi comprovada.")
+        return CompanyIdentity(document, str(identity.legal_name or "").strip(), identity.source)
 
     def _actor(self) -> str:
         if not self._security.require("relatorios", "generate"):
@@ -24,13 +48,12 @@ class AccountantCenterApplicationService:
             raise PermissionError("Não foi possível confirmar o operador da sessão.")
         return actor
 
-    def review(self, *, cnpj: str, competence: str, profile: str,
-               output_path: str, cnpj_confirmed: bool) -> AccountantPackagePlan:
+    def review(self, *, competence: str, profile: str,
+               output_path: str) -> AccountantPackagePlan:
         actor = self._actor()
-        if not cnpj_confirmed:
-            raise ValueError("Confirme que o CNPJ pertence à empresa deste pacote.")
+        identity = self.company_identity()
         document,period,normalized_profile,destination=self._package_service.normalize_request(
-            cnpj=cnpj,competence=competence,profile=profile,output_path=output_path,
+            cnpj=identity.cnpj,competence=competence,profile=profile,output_path=output_path,
         )
         return AccountantPackagePlan.create(
             cnpj=document, competence=period, profile=normalized_profile,

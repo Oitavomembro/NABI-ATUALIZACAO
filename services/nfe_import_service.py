@@ -104,10 +104,10 @@ class NFeImportService:
         Qualquer falha em produto, vínculo, estoque, financeiro ou histórico causa
         rollback integral, mantendo a NF-e disponível para nova tentativa.
         """
-        permissions = [
-            ("compras", "receive"), ("financeiro", "create"),
-            *sorted(self._product_permissions(itens)),
-        ]
+        permissions = [("compras", "receive")]
+        if getattr(documento, "duplicatas", ()):
+            permissions.append(("financeiro", "create"))
+        permissions.extend(sorted(self._product_permissions(itens)))
         usuario = self._authenticated_actor(
             operation="importar uma NF-e de entrada", permissions=permissions
         )
@@ -212,12 +212,26 @@ class NFeImportService:
                 connection, documento=documento, arquivo_origem=str(arquivo_origem),
                 itens_criados=criados, itens_vinculados=vinculados, agora=agora,
             )
-            titulo_id = self.repository.registrar_financeiro_transacao(
+            titulo_ids = self.repository.registrar_financeiro_transacao(
                 connection, documento=documento, importacao_id=importacao_id,
                 fornecedor_id=fornecedor_id, agora=agora,
             )
+            financeiro_criado = bool(titulo_ids)
             result = {
-                "importacao_id": importacao_id, "titulo_id": titulo_id,
+                "importacao_id": importacao_id,
+                "titulo_id": titulo_ids[0] if len(titulo_ids) == 1 else None,
+                "titulo_ids": titulo_ids,
+                "financeiro_criado": financeiro_criado,
+                "cobranca_comprovada": bool(getattr(documento, "duplicatas", ())),
+                "pagamento_formas_informadas": [
+                    str(getattr(pagamento, "forma", "") or "")
+                    for pagamento in (getattr(documento, "pagamentos", ()) or ())
+                ],
+                "financeiro_indicacao": (
+                    "Títulos criados somente com as duplicatas informadas no XML."
+                    if financeiro_criado else
+                    "Nenhum título criado: o XML não informa duplicatas de cobrança."
+                ),
                 "itens_criados": criados, "itens_vinculados": vinculados,
                 "resultados": resultados,
             }

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -66,11 +67,41 @@ class DayHistoryPage:
     offset: int
 
 
+@dataclass(frozen=True)
+class DashboardDetailRow:
+    record_id: int
+    occurred_at: str
+    subject: str
+    description: str
+    value: Decimal
+    status: str
+
+
+@dataclass(frozen=True)
+class DashboardDetailPage:
+    kind: str
+    rows: tuple[DashboardDetailRow, ...]
+    total_records: int
+    total_value: Decimal
+    limit: int
+    offset: int
+
+
 class DashboardRepository:
     """Consultas consolidadas do dashboard e dos resumos da tela de clientes."""
 
     def __init__(self, database: DatabaseManager) -> None:
         self.database = database
+
+    @staticmethod
+    def _public_movement_description(value: Any) -> str:
+        """Remove marcadores operacionais; preserva nomes, quantidades e valores."""
+        text = str(value or "")
+        text = re.sub(
+            r"\s*\[(?:AVULSO\s*/\s*SEM\s+ESTOQUE|ESTOQUE\s+NEGATIVO\s+AUTORIZADO)\]\s*",
+            " ", text, flags=re.IGNORECASE,
+        )
+        return re.sub(r"\s+", " ", text).strip()
 
     def client_summary(self, *, now: datetime | None = None) -> ClientSummary:
         reference = now or datetime.now()
@@ -221,6 +252,70 @@ class DashboardRepository:
             active_products=active_products,
         )
 
+    def detail_page(
+        self, kind: str, *, now: datetime | None = None,
+        limit: int = 50, offset: int = 0,
+    ) -> DashboardDetailPage:
+        """Detalhe paginado com o mesmo predicado dos quatro cartões."""
+        normalized = str(kind or "").strip().lower()
+        if normalized not in {"sales", "receipts", "overdue", "products"}:
+            raise ValueError("Detalhe do Dashboard inválido.")
+        reference = now or datetime.now()
+        safe_limit = max(1, min(int(limit), 100))
+        safe_offset = max(0, int(offset))
+        if normalized in {"sales", "receipts"}:
+            movement_type = "COMPRA" if normalized == "sales" else "PAGAMENTO"
+            day_prefix = reference.strftime("%d/%m/%Y") + "%"
+            rows = self.database.fetch_all(
+                """SELECT m.id,m.data,COALESCE(c.nome,'Cliente não encontrado'),
+                          COALESCE(m.descricao,''),m.valor,COALESCE(m.status_pagamento,'')
+                   FROM movimentacoes m LEFT JOIN clientes c ON c.id=m.cliente_id
+                   WHERE m.data LIKE ? AND m.tipo=?
+                   ORDER BY m.id DESC LIMIT ? OFFSET ?""",
+                (day_prefix, movement_type, safe_limit, safe_offset),
+            )
+            totals = self.database.fetch_one(
+                "SELECT COUNT(*),COALESCE(SUM(valor),0) FROM movimentacoes WHERE data LIKE ? AND tipo=?",
+                (day_prefix, movement_type),
+            )
+        elif normalized == "overdue":
+            today = reference.strftime("%Y-%m-%d")
+            rows = self.database.fetch_all(
+                """SELECT m.id,m.vencimento,COALESCE(c.nome,'Cliente não encontrado'),
+                          COALESCE(m.descricao,''),m.valor_aberto,'VENCIDA'
+                   FROM movimentacoes m LEFT JOIN clientes c ON c.id=m.cliente_id
+                   WHERE m.status_pagamento='PENDENTE' AND NULLIF(m.vencimento,'') IS NOT NULL
+                     AND m.vencimento < ? ORDER BY m.vencimento,m.id LIMIT ? OFFSET ?""",
+                (today, safe_limit, safe_offset),
+            )
+            totals = self.database.fetch_one(
+                """SELECT COUNT(*),COALESCE(SUM(valor_aberto),0) FROM movimentacoes
+                   WHERE status_pagamento='PENDENTE' AND NULLIF(vencimento,'') IS NOT NULL
+                     AND vencimento < ?""",
+                (today,),
+            )
+        else:
+            rows = self.database.fetch_all(
+                """SELECT id,COALESCE(atualizado_em,''),nome,codigo,
+                          COALESCE(NULLIF(TRIM(preco_venda_decimal),''),CAST(preco_venda AS TEXT)),'ATIVO'
+                   FROM produtos WHERE ativo=1 ORDER BY nome COLLATE NOCASE,id LIMIT ? OFFSET ?""",
+                (safe_limit, safe_offset),
+            )
+            totals = self.database.fetch_one(
+                """SELECT COUNT(*),COALESCE(SUM(
+                       CAST(COALESCE(NULLIF(TRIM(preco_venda_decimal),''),CAST(preco_venda AS TEXT)) AS REAL)
+                   ),0) FROM produtos WHERE ativo=1"""
+            )
+        detail_rows = tuple(DashboardDetailRow(
+            int(row[0]), str(row[1] or ""), str(row[2] or ""), self._public_movement_description(row[3]),
+            DecimalStorage.to_decimal(row[4] or 0, field="valor do detalhe"), str(row[5] or ""),
+        ) for row in rows)
+        return DashboardDetailPage(
+            normalized, detail_rows, int((totals[0] if totals else 0) or 0),
+            DecimalStorage.to_decimal((totals[1] if totals else 0) or 0, field="total do detalhe"),
+            safe_limit, safe_offset,
+        )
+
     def day_history(self, *, day: datetime | None = None) -> DayHistory:
         reference = day or datetime.now()
         day_prefix = reference.strftime("%d/%m/%Y") + "%"
@@ -246,7 +341,7 @@ class DashboardRepository:
                     timestamp=str(row[1] or ""),
                     customer_name=str(row[2] or "Cliente não encontrado"),
                     movement_type=movement_type,
-                    description=str(row[4] or ""),
+                    description=self._public_movement_description(row[4]),
                     value=value,
                 )
             )
@@ -286,7 +381,8 @@ class DashboardRepository:
         movements = tuple(DayMovement(
             movement_id=int(row[0]), timestamp=str(row[1] or ""),
             customer_name=str(row[2] or "Cliente não encontrado"),
-            movement_type=str(row[3] or ""), description=str(row[4] or ""),
+            movement_type=str(row[3] or ""),
+            description=self._public_movement_description(row[4]),
             value=DecimalStorage.to_decimal(row[5] or 0, field="valor da movimentação"),
         ) for row in rows)
         return DayHistoryPage(

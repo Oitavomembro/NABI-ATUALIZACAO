@@ -30,6 +30,8 @@ class PrintingSettingsSnapshot:
 class StoreIdentitySnapshot:
     name: str
     receipt_footer: str
+    name_locked: bool = False
+    name_source: str = "configuração comercial"
 
 
 @dataclass(frozen=True, slots=True)
@@ -54,6 +56,7 @@ class SettingsApplicationService:
         backup_service,
         diagnostics,
         printing_service=None,
+        fiscal_service=None,
     ) -> None:
         self.security = security
         self.system_repository = system_repository
@@ -69,6 +72,7 @@ class SettingsApplicationService:
         self.printing_service = printing_service or PrintingService(
             self.system_repository.get_config
         )
+        self.fiscal_service = fiscal_service
 
     def _require(self, action: str) -> str:
         session = getattr(self.security, "session", None)
@@ -111,7 +115,7 @@ class SettingsApplicationService:
     def save_preferences(self, values: Mapping[str, Any]) -> SettingsSnapshot:
         username = self._require("edit")
         key = UIPreferencesService.user_key(username)
-        normalized = UIPreferencesService.normalize(values)
+        normalized = UIPreferencesService.validate_visual(values)
         users = self.config.get("interface_usuarios", {})
         if not isinstance(users, dict):
             users = {}
@@ -119,6 +123,12 @@ class SettingsApplicationService:
         users[key] = normalized
         self.config.set("interface_usuarios", users)
         return self.load()
+
+    def preview_preferences(self, values: Mapping[str, Any]) -> Mapping[str, Any]:
+        """Valida uma prévia sem tocar no arquivo de configuração."""
+
+        self._require("view")
+        return deepcopy(UIPreferencesService.validate_visual(values))
 
     def snapshot_preferences_for_repair(self) -> Mapping[str, Any]:
         """Captura as preferências efetivas sem normalizar para o reparo VERDE."""
@@ -262,6 +272,23 @@ class SettingsApplicationService:
 
     def load_store_identity(self) -> StoreIdentitySnapshot:
         self._require("view")
+        if self.fiscal_service is not None:
+            fiscal = self.fiscal_service.load_config()
+            issuer = fiscal.get("issuer") or {}
+            name = str(issuer.get("trade_name") or issuer.get("name") or "").strip()
+            if name:
+                return StoreIdentitySnapshot(
+                    name=name,
+                    receipt_footer=self.system_repository.get_config(
+                        "rodape_cupom", "Guarde este comprovante.\nObrigado pela preferência!"
+                    ).strip(),
+                    name_locked=True,
+                    name_source=(
+                        "nome fantasia da empresa fiscal"
+                        if str(issuer.get("trade_name") or "").strip()
+                        else "razão social da empresa fiscal"
+                    ),
+                )
         return StoreIdentitySnapshot(
             name=self.system_repository.get_config(
                 "nome_loja", "NabiCode — Gerenciador de Crediário"
@@ -273,7 +300,11 @@ class SettingsApplicationService:
 
     def save_store_identity(self, *, name: str, receipt_footer: str) -> StoreIdentitySnapshot:
         self._require("edit")
-        clean_name = self._clean_text(name, field="O nome da loja", maximum=120, multiline=False)
+        current = self.load_store_identity()
+        clean_name = (
+            current.name if current.name_locked else
+            self._clean_text(name, field="O nome da loja", maximum=120, multiline=False)
+        )
         clean_footer = self._clean_text(
             receipt_footer, field="O rodapé do comprovante", maximum=500, multiline=True
         )

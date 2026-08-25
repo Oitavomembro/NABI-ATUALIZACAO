@@ -18,6 +18,38 @@ class NFeImportRepository:
 
     _table_exists = staticmethod(table_exists)
 
+    def listar_unidades_ativas(self) -> list[dict[str, Any]]:
+        rows = self.database.fetch_all(
+            """SELECT id,sigla,descricao,permite_fracionado
+               FROM unidades_medida WHERE ativo=1 ORDER BY sigla COLLATE NOCASE"""
+        )
+        return [dict(row) for row in rows]
+
+    def localizar_vinculo_fornecedor(
+        self, *, fornecedor_documento: str, codigo_fornecedor: str
+    ) -> dict[str, Any] | None:
+        document = "".join(ch for ch in str(fornecedor_documento or "") if ch.isdigit())
+        code = str(codigo_fornecedor or "").strip()
+        if not document or not code:
+            return None
+        row = self.database.fetch_one(
+            """SELECT pf.produto_id,pf.unidade_fornecedor,
+                      COALESCE(NULLIF(TRIM(pf.fator_conversao_decimal),''),
+                               CAST(pf.fator_conversao AS TEXT)) AS fator_conversao,
+                      p.codigo,p.nome,COALESCE(p.codigo_barras,'') AS codigo_barras,
+                      COALESCE(u.sigla,'UN') AS unidade_estoque
+               FROM produto_fornecedores pf
+               JOIN fornecedores f ON f.id=pf.fornecedor_id
+               JOIN produtos p ON p.id=pf.produto_id AND p.ativo=1
+               LEFT JOIN unidades_medida u ON u.id=p.unidade_id
+               WHERE pf.ativo=1
+                 AND REPLACE(REPLACE(REPLACE(f.cnpj,'.',''),'/',''),'-','')=?
+                 AND pf.codigo_fornecedor=? COLLATE NOCASE
+               ORDER BY pf.id DESC LIMIT 1""",
+            (document, code),
+        )
+        return dict(row) if row else None
+
     def obter_ou_criar_fornecedor_transacao(self, connection, cnpj: str, nome: str, agora: str) -> int:
         cnpj_limpo = "".join(ch for ch in str(cnpj or "") if ch.isdigit())
         row = None
@@ -268,48 +300,81 @@ class NFeImportRepository:
 
     def registrar_financeiro_transacao(
         self, connection, *, documento, importacao_id: int, fornecedor_id: int, agora: str,
-    ) -> int | None:
+    ) -> list[int]:
+        duplicatas = tuple(getattr(documento, "duplicatas", ()) or ())
+        if not duplicatas:
+            return []
         if not self._table_exists(connection, "titulos_financeiros"):
-            return None
+            return []
         colunas = {row["name"] for row in connection.execute("PRAGMA table_info(titulos_financeiros)").fetchall()}
         obrigatorias = {"tipo","origem","origem_id","pessoa_id","pessoa_nome","documento","descricao",
                        "data_emissao","data_vencimento","valor_original","valor_pago","status","observacao",
                        "criado_em","atualizado_em"}
         if not obrigatorias.issubset(colunas):
-            return None
-        origem_id = str(importacao_id); documento_ref = str(documento.numero or documento.chave or importacao_id)
-        existente = connection.execute(
-            "SELECT id FROM titulos_financeiros WHERE tipo='PAGAR' AND origem='NFE_XML' AND origem_id=? AND documento=? AND status<>'CANCELADO'",
-            (origem_id, documento_ref),
-        ).fetchone()
-        if existente:
-            return int(existente["id"])
-        valor = DecimalStorage.to_decimal(getattr(documento, "valor_total", 0) or 0, field="valor total da NF-e")
-        if valor <= 0:
-            valor = sum((DecimalStorage.to_decimal(item.valor_total or 0, field="valor do item da NF-e") for item in documento.itens), Decimal("0"))
-        data_emissao = str(getattr(documento, "data_emissao", "") or agora[:10])[:10]
-        legacy, canonical = DecimalStorage.pair(valor, field="valor total da NF-e")
-        if {"valor_original_decimal", "valor_pago_decimal"}.issubset(colunas):
-            cursor = connection.execute(
+            return []
+        origem_id = str(importacao_id)
+        existentes = connection.execute(
+            "SELECT id FROM titulos_financeiros WHERE tipo='PAGAR' AND origem='NFE_XML' "
+            "AND origem_id=? AND status<>'CANCELADO' ORDER BY id", (origem_id,),
+        ).fetchall()
+        if existentes:
+            return [int(row["id"]) for row in existentes]
+        total_duplicatas = sum(
+            (DecimalStorage.to_decimal(dup.valor, field="valor da duplicata") for dup in duplicatas),
+            Decimal("0"),
+        )
+        valor_comprovado = getattr(documento, "valor_cobranca", None)
+        if valor_comprovado is None:
+            valor_comprovado = DecimalStorage.to_decimal(
+                getattr(documento, "valor_total", 0) or 0, field="valor total da NF-e"
+            )
+        else:
+            valor_comprovado = DecimalStorage.to_decimal(
+                valor_comprovado, field="valor líquido da cobrança da NF-e"
+            )
+        if valor_comprovado > 0 and total_duplicatas != valor_comprovado:
+            raise ValueError(
+                "A soma exata das duplicatas difere do valor líquido comprovado no XML."
+            )
+        data_emissao = str(getattr(documento, "data_emissao", "") or "")[:10]
+        formas = tuple(
+            str(getattr(pagamento, "forma", "") or "").strip()
+            for pagamento in (getattr(documento, "pagamentos", ()) or ())
+            if str(getattr(pagamento, "forma", "") or "").strip()
+        )
+        observacao = "Duplicata comprovada no XML da NF-e"
+        if formas:
+            observacao += "; formas tPag informadas: " + ", ".join(formas)
+        ids: list[int] = []
+        for duplicata in duplicatas:
+            numero_dup = str(getattr(duplicata, "numero", "") or "")
+            vencimento = str(getattr(duplicata, "data_vencimento", "") or "")
+            legacy, canonical = DecimalStorage.pair(
+                getattr(duplicata, "valor", 0), field="valor da duplicata"
+            )
+            descricao = f"Duplicata {numero_dup} da NF-e {documento.numero or documento.chave}".strip()
+            if {"valor_original_decimal", "valor_pago_decimal"}.issubset(colunas):
+                cursor = connection.execute(
                 """INSERT INTO titulos_financeiros
                    (tipo,origem,origem_id,pessoa_id,pessoa_nome,documento,descricao,data_emissao,data_vencimento,
                     valor_original,valor_original_decimal,valor_pago,valor_pago_decimal,status,observacao,criado_em,atualizado_em)
                    VALUES('PAGAR','NFE_XML',?,?,?,?,?,?,?, ?,?,0,'0','ABERTO',?,?,?)""",
-                (origem_id, int(fornecedor_id), str(documento.fornecedor or ""), documento_ref,
-                 f"NF-e de entrada {documento_ref}", data_emissao, data_emissao, legacy, canonical,
-                 "Gerado automaticamente pela importação XML", agora, agora),
-            )
-        else:
-            cursor = connection.execute(
+                    (origem_id, int(fornecedor_id), str(documento.fornecedor or ""), numero_dup,
+                     descricao, data_emissao, vencimento, legacy, canonical,
+                     observacao, agora, agora),
+                )
+            else:
+                cursor = connection.execute(
                 """INSERT INTO titulos_financeiros
                    (tipo,origem,origem_id,pessoa_id,pessoa_nome,documento,descricao,data_emissao,data_vencimento,
                     valor_original,valor_pago,status,observacao,criado_em,atualizado_em)
                    VALUES('PAGAR','NFE_XML',?,?,?,?,?,?,?, ?,0,'ABERTO',?,?,?)""",
-                (origem_id, int(fornecedor_id), str(documento.fornecedor or ""), documento_ref,
-                 f"NF-e de entrada {documento_ref}", data_emissao, data_emissao, legacy,
-                 "Gerado automaticamente pela importação XML", agora, agora),
-            )
-        return int(cursor.lastrowid)
+                    (origem_id, int(fornecedor_id), str(documento.fornecedor or ""), numero_dup,
+                     descricao, data_emissao, vencimento, legacy,
+                     observacao, agora, agora),
+                )
+            ids.append(int(cursor.lastrowid))
+        return ids
 
 
     def buscar_importacao_por_chave(self, chave: str) -> dict[str, Any] | None:

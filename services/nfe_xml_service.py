@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal, InvalidOperation
 import json
 from pathlib import Path
 import xml.etree.ElementTree as ET
@@ -52,6 +53,19 @@ class NFeItem:
 
 
 @dataclass(frozen=True)
+class NFeDuplicata:
+    numero: str
+    data_vencimento: str
+    valor: Decimal
+
+
+@dataclass(frozen=True)
+class NFePagamento:
+    forma: str
+    valor: Decimal
+
+
+@dataclass(frozen=True)
 class NFeDocument:
     chave: str
     numero: str
@@ -83,6 +97,9 @@ class NFeDocument:
     emitente_uf: str = ""
     emitente_cep: str = ""
     protocolo_status: str = ""
+    duplicatas: tuple[NFeDuplicata, ...] = ()
+    pagamentos: tuple[NFePagamento, ...] = ()
+    valor_cobranca: Decimal | None = None
 
 
 class NFeXMLService:
@@ -100,6 +117,17 @@ class NFeXMLService:
             return float(texto or 0)
         except ValueError as exc:
             raise ValueError(f"A NF-e contém valor tributário inválido em {caminho}.") from exc
+
+    @classmethod
+    def _decimal_financeiro(cls, elemento, caminho: str, *, contexto: str) -> Decimal:
+        texto = cls._texto(elemento, caminho)
+        try:
+            valor = Decimal(texto.replace(",", "."))
+        except InvalidOperation as exc:
+            raise ValueError(f"A NF-e contém valor inválido em {contexto}.") from exc
+        if not valor.is_finite() or valor < 0:
+            raise ValueError(f"A NF-e contém valor inválido em {contexto}.")
+        return valor
 
     def ler(self, caminho: str | Path) -> NFeDocument:
         arquivo = Path(caminho)
@@ -138,6 +166,40 @@ class NFeXMLService:
             valor_total = float(self._texto(total, "vNF", "0").replace(",", "."))
         except ValueError:
             valor_total = 0.0
+
+        duplicatas: list[NFeDuplicata] = []
+        valor_cobranca = None
+        fat = inf_nfe.find("cobr/fat")
+        if fat is not None and self._texto(fat, "vLiq"):
+            valor_cobranca = self._decimal_financeiro(
+                fat, "vLiq", contexto="cobr/fat/vLiq"
+            )
+        for dup in inf_nfe.findall("cobr/dup"):
+            numero_dup = self._texto(dup, "nDup")
+            vencimento = self._texto(dup, "dVenc")
+            valor_dup = self._decimal_financeiro(dup, "vDup", contexto="cobr/dup/vDup")
+            if not vencimento:
+                raise ValueError("A duplicata da NF-e não informa dVenc.")
+            try:
+                datetime.strptime(vencimento, "%Y-%m-%d")
+            except ValueError as exc:
+                raise ValueError("A duplicata da NF-e contém dVenc inválido.") from exc
+            if valor_dup <= 0:
+                raise ValueError("A duplicata da NF-e deve possuir vDup maior que zero.")
+            duplicatas.append(NFeDuplicata(numero_dup, vencimento, valor_dup))
+
+        pagamentos: list[NFePagamento] = []
+        for det_pag in inf_nfe.findall("pag/detPag"):
+            forma = self._texto(det_pag, "tPag")
+            valor_texto = self._texto(det_pag, "vPag")
+            if not forma and not valor_texto:
+                continue
+            if not forma or not valor_texto:
+                raise ValueError("A forma de pagamento da NF-e está incompleta.")
+            pagamentos.append(NFePagamento(
+                forma,
+                self._decimal_financeiro(det_pag, "vPag", contexto="pag/detPag/vPag"),
+            ))
 
         itens: list[NFeItem] = []
         for indice, det in enumerate(inf_nfe.findall("det"), start=1):
@@ -242,6 +304,9 @@ class NFeXMLService:
             emitente_uf=self._texto(ender_emit, "UF"),
             emitente_cep=self._texto(ender_emit, "CEP"),
             protocolo_status=protocolo_status,
+            duplicatas=tuple(duplicatas),
+            pagamentos=tuple(pagamentos),
+            valor_cobranca=valor_cobranca,
         )
 
     @staticmethod

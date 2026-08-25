@@ -15,6 +15,7 @@ from commercial.application.product_dto import (
     StockMovementCommand,
 )
 from administration.product_xml_import_service import ProductXMLDecision
+from .nfe_purchase_import_dialog import NFePurchaseImportDialog
 from .widgets.money_edit import MoneyEdit
 
 
@@ -521,6 +522,14 @@ class ProductManagementDialog(QDialog):
         if not path:
             return
         try:
+            if self.application.nfe_purchase_import is not None:
+                draft = self.application.prepare_purchase_xml(path)
+                dialog = NFePurchaseImportDialog(
+                    self.application.nfe_purchase_import, draft, self,
+                )
+                if dialog.exec() == QDialog.DialogCode.Accepted:
+                    self.reload()
+                return
             draft = self.application.prepare_xml(path)
         except Exception as error:
             QMessageBox.warning(self, "XML não preparado", str(error))

@@ -1,5 +1,6 @@
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 from services import NFeXMLService
@@ -45,6 +46,40 @@ class NFeXMLServiceTests(unittest.TestCase):
             arquivo = Path(pasta) / "invalido.xml"
             arquivo.write_text("<raiz/>", encoding="utf-8")
             with self.assertRaises(ValueError):
+                NFeXMLService().ler(arquivo)
+
+    def test_le_duplicatas_e_formas_de_pagamento_sem_inferir_dados(self):
+        financeiro = XML.replace(
+            "</infNFe>",
+            "<cobr><dup><nDup>001</nDup><dVenc>2026-09-10</dVenc><vDup>10.00</vDup></dup>"
+            "<dup><nDup>002</nDup><dVenc>2026-10-10</dVenc><vDup>15.00</vDup></dup></cobr>"
+            "<pag><detPag><tPag>03</tPag><vPag>25.00</vPag></detPag></pag></infNFe>",
+        )
+        with tempfile.TemporaryDirectory() as pasta:
+            arquivo = Path(pasta) / "nfe.xml"
+            arquivo.write_text(financeiro, encoding="utf-8")
+            doc = NFeXMLService().ler(arquivo)
+        self.assertEqual(
+            [(dup.numero, dup.data_vencimento, dup.valor) for dup in doc.duplicatas],
+            [("001", "2026-09-10", Decimal("10.00")),
+             ("002", "2026-10-10", Decimal("15.00"))],
+        )
+        self.assertEqual([(pag.forma, pag.valor) for pag in doc.pagamentos], [("03", Decimal("25.00"))])
+
+    def test_xml_antigo_sem_cobranca_mantem_financeiro_vazio(self):
+        with tempfile.TemporaryDirectory() as pasta:
+            arquivo = Path(pasta) / "nfe.xml"
+            arquivo.write_text(XML, encoding="utf-8")
+            doc = NFeXMLService().ler(arquivo)
+        self.assertEqual(doc.duplicatas, ())
+        self.assertEqual(doc.pagamentos, ())
+
+    def test_rejeita_duplicata_sem_vencimento(self):
+        xml = XML.replace("</infNFe>", "<cobr><dup><nDup>1</nDup><vDup>25.00</vDup></dup></cobr></infNFe>")
+        with tempfile.TemporaryDirectory() as pasta:
+            arquivo = Path(pasta) / "nfe.xml"
+            arquivo.write_text(xml, encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "dVenc"):
                 NFeXMLService().ler(arquivo)
 
     def test_salva_relatorio_atomico(self):

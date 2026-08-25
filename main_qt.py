@@ -343,7 +343,7 @@ def main(argv=None) -> int:
                     return 5
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
-        fiscal_service = fiscal_catalog_service = None
+        fiscal_service = fiscal_catalog_service = nfe_purchase_import = None
         if license_gate.allows(Capability.FISCAL_WRITE):
             fiscal_service = FiscalService(
                 database.connect,
@@ -359,6 +359,21 @@ def main(argv=None) -> int:
             )
             fiscal_catalog_service = FiscalCatalogReadinessService(database.connect)
             fiscal_service.bind_readiness_catalog(fiscal_catalog_service)
+            import_security = {
+                "actor_provider": lambda: (
+                    module_security.session.user.username
+                    if module_security.session is not None
+                    and not module_security.is_expired()
+                    and module_security.session.user.active else None
+                ),
+                "authorization_provider": lambda module, action: module_security.require(module, action),
+            }
+            purchase_imports = NFeImportService(NFeImportRepository(database), **import_security)
+            from administration.nfe_purchase_import_service import NFePurchaseImportManagementService
+            nfe_purchase_import = NFePurchaseImportManagementService(
+                purchase_imports, module_security,
+                company_document_provider=lambda: fiscal_service.load_config().get("cnpj", ""),
+            )
         module_actions = build_administrative_modules(
             container, database, profile, module_security,
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
@@ -366,6 +381,7 @@ def main(argv=None) -> int:
             schema_version=SCHEMA_VERSION,
             fiscal_service=fiscal_service,
             fiscal_catalog_service=fiscal_catalog_service,
+            nfe_purchase_import=nfe_purchase_import,
         )
         daily_backup = BackupService(
             database_path=database.database_path,

@@ -75,6 +75,12 @@ class FiscalReadinessDialog(QDialog):
         self._escape.setAutoRepeat(False); self._escape.activated.connect(self.reject)
         self.reload()
 
+    def configure_numbering(self, model) -> bool:
+        dialog = FiscalNumberingDialog(self.application, model, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return False
+        return self.reload()
+
     def configure(self) -> bool:
         dialog = FiscalConfigurationDialog(self.application, self)
         if dialog.exec() != QDialog.DialogCode.Accepted:
@@ -153,11 +159,14 @@ class FiscalReadinessDialog(QDialog):
                 ),
             ]
             lines.extend(f"• {problem}" for problem in model.local_problems)
-            card = QLabel("\n".join(lines)); card.setWordWrap(True)
-            card.setTextFormat(Qt.TextFormat.PlainText)
+            card = QPushButton("\n".join(lines) + "\n\nClique para configurar esta pendência")
+            card.setCursor(Qt.CursorShape.PointingHandCursor)
+            card.clicked.connect(
+                lambda _checked=False, selected=model: self.configure_numbering(selected)
+            )
             card.setStyleSheet(
                 "background:#161b22;border:1px solid #30363d;border-left:6px solid #ff5263;"
-                "border-radius:8px;padding:12px;font-size:15px"
+                "border-radius:8px;padding:12px;font-size:15px;text-align:left"
             )
             self.content.addWidget(card)
         notice = QLabel("\n".join(f"• {text}" for text in snapshot.notices))
@@ -222,8 +231,11 @@ class FiscalConfigurationDialog(QDialog):
         warning.setWordWrap(True); warning.setStyleSheet("color:#ffb454;font-weight:900")
         root.addWidget(warning)
         form = QFormLayout(); root.addLayout(form)
-        self.cnpj = QLineEdit(str(config.get("cnpj") or ""))
+        self.cnpj = QLabel(str(config.get("cnpj") or "Será identificado pelo certificado A1"))
+        self.cnpj.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.cnpj.setStyleSheet("font-weight:900;padding:8px;background:#171d24;border:1px solid #3b4652;border-radius:6px")
         self.name = QLineEdit(str(issuer.get("name") or ""))
+        self.trade_name = QLineEdit(str(issuer.get("trade_name") or ""))
         self.ie = QLineEdit(str(issuer.get("state_registration") or ""))
         self.state = QComboBox(); self.state.addItems(sorted(application._fiscal.STATE_CODES))
         self.state.setCurrentText(str(config.get("state") or "BA"))
@@ -236,7 +248,8 @@ class FiscalConfigurationDialog(QDialog):
         self.district = QLineEdit(str(issuer.get("district") or ""))
         self.zip_code = QLineEdit(str(issuer.get("zip_code") or ""))
         for label, widget in (
-            ("CNPJ", self.cnpj), ("Razão social", self.name),
+            ("CNPJ do certificado A1", self.cnpj), ("Razão social", self.name),
+            ("Nome fantasia (se houver)", self.trade_name),
             ("Inscrição estadual", self.ie), ("UF", self.state),
             ("Regime tributário", self.regime), ("Código IBGE do município", self.city_code),
             ("Município", self.city), ("Logradouro", self.street),
@@ -256,6 +269,14 @@ class FiscalConfigurationDialog(QDialog):
         certificate_row.addWidget(self.certificate, 1); certificate_row.addWidget(self.browse_button); form.addRow("Certificado .pfx/.p12", certificate_row)
         self.password = QLineEdit(); self.password.setEchoMode(QLineEdit.EchoMode.Password)
         form.addRow("Senha do certificado", self.password)
+        self.remember_securely = QCheckBox(
+            "Guardar cópia e senha protegidas pelo Windows neste computador (recomendado)"
+        )
+        self.remember_securely.setChecked(True)
+        self.remember_securely.setToolTip(
+            "A senha é criptografada pelo DPAPI e não é salva em texto nem no banco."
+        )
+        form.addRow("", self.remember_securely)
         actions = QHBoxLayout(); actions.addStretch()
         self.cancel_button = QPushButton("Cancelar [Esc]"); self.save_button = QPushButton("Revisar e salvar")
         self.cancel_button.clicked.connect(self.reject); self.save_button.clicked.connect(self._save)
@@ -271,7 +292,7 @@ class FiscalConfigurationDialog(QDialog):
 
     def _values(self) -> dict:
         return {
-            "cnpj": self.cnpj.text(), "issuer_name": self.name.text(),
+            "issuer_name": self.name.text(), "issuer_trade_name": self.trade_name.text(),
             "state_registration": self.ie.text(), "state": self.state.currentText(),
             "tax_regime": self.regime.currentText(), "city_code": self.city_code.text(),
             "city": self.city.text(), "street": self.street.text(), "number": self.number.text(),
@@ -286,14 +307,17 @@ class FiscalConfigurationDialog(QDialog):
         values = self._values()
         models = ", ".join(model for model in ("55", "65") if values[f"model_{model}"]) or "nenhum"
         review = (
-            f"Ambiente: HOMOLOGAÇÃO\nCNPJ: {values['cnpj']}\nUF: {values['state']}\n"
+            f"Ambiente: HOMOLOGAÇÃO\nCNPJ: será confirmado pelo certificado A1\nUF: {values['state']}\n"
             f"Regime: {values['tax_regime']}\nModelos: {models}\n"
             f"Certificado: {Path(values['certificate_path']).name}\n\nSalvar esta configuração?"
         )
         if QMessageBox.question(self, "Revisar configuração fiscal", review) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.application.configure_homologation(values, password=self.password.text())
+            self.application.configure_homologation(
+                values, password=self.password.text(),
+                remember_securely=self.remember_securely.isChecked(),
+            )
         except Exception as error:
             QMessageBox.warning(self, "Configuração fiscal", str(error)); self.password.clear(); self.password.setFocus(); return
         self.password.clear()
@@ -329,3 +353,56 @@ class FiscalConfigurationDialog(QDialog):
                 self._save()
             return True
         return super().eventFilter(watched, event)
+
+
+class FiscalNumberingDialog(QDialog):
+    """Revisão explícita da numeração inicial, limitada à homologação."""
+
+    def __init__(self, application, model, parent=None) -> None:
+        super().__init__(parent)
+        self.application = application; self.model = model
+        self.setWindowTitle(f"Preparar numeração — {model.label}")
+        self.setMinimumWidth(620); self.setStyleSheet(STYLE)
+        root = QVBoxLayout(self)
+        title = QLabel(f"NUMERAÇÃO DE HOMOLOGAÇÃO — {model.label}")
+        title.setStyleSheet("font-size:20px;font-weight:900;color:#ffb454")
+        root.addWidget(title)
+        config = application.configuration()
+        self.series = int(config.get(f"sale_series_{model.model}", 1))
+        self.next_number = QSpinBox(); self.next_number.setRange(1, 999_999_999)
+        self.next_number.setValue(int(model.next_number or 1))
+        form = QFormLayout(); form.addRow("Ambiente", QLabel("HOMOLOGAÇÃO"))
+        form.addRow("Modelo", QLabel(model.model)); form.addRow("Série configurada", QLabel(str(self.series)))
+        form.addRow("Próximo número a emitir", self.next_number); root.addLayout(form)
+        warning = QLabel(
+            "Confira o último número usado no sistema anterior e com a contabilidade. "
+            "Depois de inicializada, uma lacuna exige procedimento fiscal próprio."
+        )
+        warning.setWordWrap(True); warning.setStyleSheet("color:#ffb454;font-weight:800")
+        root.addWidget(warning)
+        self.expected = QLabel(); self.expected.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
+        self.confirmation = QLineEdit(); self.next_number.valueChanged.connect(self._refresh_phrase)
+        form2 = QFormLayout(); form2.addRow("Digite a confirmação", self.confirmation); root.addLayout(form2)
+        root.addWidget(self.expected); self._refresh_phrase()
+        buttons = QHBoxLayout(); buttons.addStretch(); cancel = QPushButton("Cancelar [Esc]")
+        confirm = QPushButton("Inicializar somente em homologação")
+        cancel.clicked.connect(self.reject); confirm.clicked.connect(self._save)
+        buttons.addWidget(cancel); buttons.addWidget(confirm); root.addLayout(buttons)
+
+    def _refresh_phrase(self) -> None:
+        phrase = f"HOMOLOGACAO {self.model.model}/{self.series} PROXIMO {self.next_number.value()}"
+        self.expected.setText(f"Confirmação exigida: {phrase}")
+
+    def _save(self) -> None:
+        try:
+            self.application.initialize_homologation_numbering(
+                model=self.model.model, series=self.series,
+                next_number=self.next_number.value(),
+                confirmation_text=self.confirmation.text(),
+            )
+        except Exception as error:
+            QMessageBox.warning(self, "Numeração fiscal", str(error)); return
+        QMessageBox.information(
+            self, "Numeração fiscal", "Numeração de homologação registrada com auditoria."
+        )
+        self.accept()

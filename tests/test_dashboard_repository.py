@@ -171,6 +171,26 @@ class DashboardRepositoryTests(unittest.TestCase):
         indicators = self.repo.indicators(now=datetime(2026, 8, 2))
         self.assertIsNone(indicators.active_products)
 
+    def test_detalhe_publico_remove_marcadores_sem_apagar_itens_quantidades_e_valores(self) -> None:
+        connection = sqlite3.connect(self.db_path)
+        try:
+            connection.execute(
+                "UPDATE movimentacoes SET descricao=? WHERE id=1",
+                ("2x Café [AVULSO/SEM ESTOQUE] (R$ 10,00) | 1x Leite "
+                 "[ESTOQUE NEGATIVO AUTORIZADO] (R$ 5,00)",),
+            )
+            connection.commit()
+        finally:
+            connection.close()
+        page = self.repo.detail_page("sales", now=datetime(2026, 8, 2))
+        description = next(row.description for row in page.rows if row.record_id == 1)
+        self.assertNotIn("[AVULSO/SEM ESTOQUE]", description)
+        self.assertNotIn("[ESTOQUE NEGATIVO AUTORIZADO]", description)
+        self.assertIn("2x Café", description)
+        self.assertIn("1x Leite", description)
+        self.assertIn("R$ 10,00", description)
+        self.assertIn("R$ 5,00", description)
+
 
 if __name__ == "__main__":
     unittest.main()

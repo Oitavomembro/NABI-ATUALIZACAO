@@ -1,11 +1,13 @@
 import sqlite3
 import tempfile
 import unittest
+from decimal import Decimal
 from pathlib import Path
 
 from database import DatabaseManager
 from repositories import NFeImportRepository
 from services import NFeDocument, NFeImportService, NFeItem
+from services.nfe_xml_service import NFeDuplicata, NFePagamento
 
 
 SCHEMA = """
@@ -37,6 +39,8 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.doc = NFeDocument(
             chave="CHAVE-ATOMIC", numero="77", fornecedor="Fornecedor", cnpj="123",
             data_emissao="2026-08-02", valor_total=25,
+            duplicatas=(NFeDuplicata("001", "2026-09-02", Decimal("25")),),
+            pagamentos=(NFePagamento("03", Decimal("25")),),
             itens=(NFeItem("P1", "Produto Um", 2, "UN", 12.5, valor_total=25),),
         )
         self.preparados = [{
@@ -56,9 +60,54 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 1)
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM historico_precos_produtos")["n"], 1)
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM nfe_importacoes")["n"], 1)
-        titulo = db.fetch_one("SELECT origem,valor_original FROM titulos_financeiros")
+        titulo = db.fetch_one("SELECT origem,documento,data_vencimento,valor_original,observacao FROM titulos_financeiros")
         self.assertEqual(titulo["origem"], "NFE_XML")
+        self.assertEqual((titulo["documento"], titulo["data_vencimento"]), ("001", "2026-09-02"))
         self.assertEqual(titulo["valor_original"], 25)
+        self.assertIn("03", titulo["observacao"])
+
+    def test_sem_duplicatas_nao_inventa_titulo_e_informa_ausencia(self):
+        doc = NFeDocument(
+            chave="CHAVE-SEM-COBRANCA", numero="79", fornecedor="Fornecedor", cnpj="123",
+            data_emissao="2026-08-02", valor_total=25,
+            itens=(NFeItem("P1", "Produto Um", 2, "UN", 12.5, valor_total=25),),
+        )
+        resultado = self.service.importar_atomicamente(doc, arquivo_origem="nfe.xml", itens=self.preparados)
+        self.assertEqual(resultado["titulo_ids"], [])
+        self.assertFalse(resultado["financeiro_criado"])
+        self.assertIn("não informa duplicatas", resultado["financeiro_indicacao"])
+        self.assertEqual(self.repo.database.fetch_one("SELECT COUNT(*) n FROM titulos_financeiros")["n"], 0)
+
+    def test_duplicatas_criam_titulos_separados_com_dados_exatos(self):
+        doc = NFeDocument(
+            chave="CHAVE-PARCELADA", numero="80", fornecedor="Fornecedor", cnpj="123",
+            data_emissao="2026-08-02", valor_total=25,
+            duplicatas=(
+                NFeDuplicata("A", "2026-09-01", Decimal("10.00")),
+                NFeDuplicata("B", "2026-10-01", Decimal("15.00")),
+            ),
+            itens=(NFeItem("P1", "Produto Um", 2, "UN", 12.5, valor_total=25),),
+        )
+        resultado = self.service.importar_atomicamente(doc, arquivo_origem="nfe.xml", itens=self.preparados)
+        self.assertEqual(len(resultado["titulo_ids"]), 2)
+        rows = self.repo.database.fetch_all(
+            "SELECT documento,data_vencimento,valor_original FROM titulos_financeiros ORDER BY id"
+        )
+        self.assertEqual(
+            [(row["documento"], row["data_vencimento"], row["valor_original"]) for row in rows],
+            [("A", "2026-09-01", 10), ("B", "2026-10-01", 15)],
+        )
+
+    def test_soma_divergente_reverte_toda_importacao_sem_tolerancia(self):
+        self.doc = NFeDocument(
+            **{**self.doc.__dict__, "duplicatas": (
+                NFeDuplicata("001", "2026-09-02", Decimal("24.999")),
+            )}
+        )
+        with self.assertRaisesRegex(ValueError, "soma exata"):
+            self.service.importar_atomicamente(self.doc, arquivo_origem="nfe.xml", itens=self.preparados)
+        for table in ("produtos", "estoque_movimentacoes", "titulos_financeiros", "nfe_importacoes"):
+            self.assertEqual(self.repo.database.fetch_one(f"SELECT COUNT(*) n FROM {table}")["n"], 0)
 
     def test_conferencia_pode_corrigir_ncm_cest_e_codigo_de_barras_antes_de_criar(self):
         self.preparados[0].update({
@@ -119,6 +168,7 @@ class NFeImportAtomicTests(unittest.TestCase):
         segunda = NFeDocument(
             chave="CHAVE-ATOMIC-2", numero="78", fornecedor="Fornecedor", cnpj="123",
             data_emissao="2026-08-03", valor_total=40,
+            duplicatas=(NFeDuplicata("001", "2026-09-03", Decimal("40")),),
             itens=(NFeItem("P1", "Produto Um", 1, "UN", 20, valor_total=20),),
         )
         preparados = [{"acao":"ATUALIZAR","produto_id":produto_id,"quantidade":1,"fator":"1","unidade":"UN","custo":"20.000000001","margem":"25.5","preco":"25.000000001"}]

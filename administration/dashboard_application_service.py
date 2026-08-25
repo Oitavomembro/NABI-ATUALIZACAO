@@ -38,3 +38,9 @@ class DashboardApplicationService:
 
         self._require()
         return self.repository.client_summary()
+
+    def detail(self, kind: str, *, limit: int = 50, offset: int = 0):
+        self._require()
+        return self.repository.detail_page(
+            kind, limit=max(1, min(int(limit), 100)), offset=max(0, int(offset)),
+        )

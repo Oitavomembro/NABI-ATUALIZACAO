@@ -9,7 +9,7 @@ class ProductManagementService:
 
     def __init__(
         self, products, stock_actions, security, assisted_actions=None,
-        xml_catalog_import=None,
+        xml_catalog_import=None, nfe_purchase_import=None,
     ) -> None:
         if products is None or stock_actions is None or security is None:
             raise ValueError("Produtos, estoque e segurança são obrigatórios.")
@@ -18,6 +18,7 @@ class ProductManagementService:
         self.security = security
         self.assisted_actions = assisted_actions
         self.xml_catalog_import = xml_catalog_import or ProductXMLCatalogImportService(products)
+        self.nfe_purchase_import = nfe_purchase_import
 
     def _require(self, action: str) -> str:
         session = self.security.session
@@ -53,6 +54,11 @@ class ProductManagementService:
         return self.xml_catalog_import.commit(
             draft, tuple(decisions), actor=actor, confirmed=bool(confirmed),
         )
+
+    def prepare_purchase_xml(self, path):
+        if self.nfe_purchase_import is None:
+            raise RuntimeError("A entrada completa por NF-e não está disponível nesta edição.")
+        return self.nfe_purchase_import.prepare(path)
 
     def stock(self, product_id: int):
         self._require("view")

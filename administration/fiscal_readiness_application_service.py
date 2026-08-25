@@ -33,7 +33,10 @@ class FiscalReadinessSnapshot:
 class FiscalReadinessApplicationService:
     """Consulta local da Central Fiscal; não recebe senha nem expõe transmissão."""
 
-    def __init__(self, fiscal_service, security, catalog_service=None) -> None:
+    def __init__(
+        self, fiscal_service, security, catalog_service=None,
+        company_display_writer=None,
+    ) -> None:
         if fiscal_service is None or security is None:
             raise ValueError("FiscalService e segurança são obrigatórios.")
         self._fiscal = fiscal_service
@@ -42,6 +45,7 @@ class FiscalReadinessApplicationService:
             FiscalPreflightService(fiscal_service, catalog_service)
             if catalog_service is not None else None
         )
+        self._company_display_writer = company_display_writer
 
     def _require_view(self) -> None:
         session = getattr(self._security, "session", None)
@@ -63,16 +67,15 @@ class FiscalReadinessApplicationService:
         self._require_view()
         return dict(self._fiscal.load_config())
 
-    def configure_homologation(self, values: dict, *, password: str) -> dict:
+    def configure_homologation(
+        self, values: dict, *, password: str, remember_securely: bool = False
+    ) -> dict:
         """Valida o A1 e salva somente configuração de homologação.
 
-        A senha permanece apenas na memória da sessão do FiscalService. O arquivo
-        original não é movido, apagado ou incorporado ao banco.
+        Sem adesão explícita, a senha permanece apenas na memória da sessão. Com
+        ``remember_securely``, o FiscalService usa seu cofre DPAPI no Windows.
         """
         self._require_configure()
-        cnpj = "".join(ch for ch in str(values.get("cnpj") or "") if ch.isdigit())
-        if len(cnpj) != 14:
-            raise ValueError("Informe um CNPJ com 14 dígitos.")
         certificate_path = str(values.get("certificate_path") or "").strip()
         if not certificate_path:
             raise ValueError("Selecione o certificado A1 (.pfx ou .p12).")
@@ -82,12 +85,19 @@ class FiscalReadinessApplicationService:
         certificate = self._fiscal.inspect_certificate(certificate_path, secret)
         if certificate.expired:
             raise ValueError("O certificado A1 está expirado ou ainda não é válido.")
-        if certificate.document and certificate.document != cnpj:
+        cnpj = "".join(ch for ch in str(certificate.document or "") if ch.isdigit())
+        if len(cnpj) != 14:
+            raise ValueError("O certificado A1 não forneceu um CNPJ empresarial válido.")
+        configured = "".join(
+            ch for ch in str(self._fiscal.load_config().get("cnpj") or "") if ch.isdigit()
+        )
+        if configured and configured != cnpj:
             raise ValueError(
-                "O CNPJ do certificado não corresponde ao emitente informado. "
-                f"Informado: {cnpj}; certificado: {certificate.document}."
+                "Este A1 pertence a outro CNPJ. A troca de empresa exige o fluxo "
+                "administrativo próprio; nenhuma identidade foi substituída."
             )
         models = [model for model in ("55", "65") if values.get(f"model_{model}")]
+        previous = self._fiscal.load_config()
         saved = self._fiscal.save_config({
             "enabled": True,
             "environment": "HOMOLOGACAO",
@@ -101,6 +111,7 @@ class FiscalReadinessApplicationService:
             "certificate_path": certificate_path,
             "issuer": {
                 "name": values.get("issuer_name"),
+                "trade_name": values.get("issuer_trade_name"),
                 "state_registration": values.get("state_registration"),
                 "city_code": values.get("city_code"),
                 "city": values.get("city"),
@@ -110,8 +121,22 @@ class FiscalReadinessApplicationService:
                 "zip_code": values.get("zip_code"),
             },
         })
-        self._fiscal.cache_certificate_password(secret)
-        return saved
+        try:
+            if remember_securely:
+                self._fiscal.install_certificate_securely(certificate_path, secret)
+            else:
+                self._fiscal.cache_certificate_password(secret)
+            display_name = str(
+                values.get("issuer_trade_name") or values.get("issuer_name") or ""
+            ).strip()
+            if not display_name:
+                raise ValueError("Informe a razão social ou o nome fantasia da empresa.")
+            if self._company_display_writer is not None:
+                self._company_display_writer(display_name)
+        except Exception:
+            self._fiscal.save_config(previous)
+            raise
+        return self._fiscal.load_config() if remember_securely else saved
 
     def run_local_preflight(self):
         self._require_configure()
@@ -124,6 +149,26 @@ class FiscalReadinessApplicationService:
                 "revise os dados e digite a senha novamente."
             )
         return self._preflight.run(password=password)
+
+    def initialize_homologation_numbering(
+        self, *, model: str, series: int, next_number: int, confirmation_text: str
+    ) -> dict:
+        self._require_configure()
+        config = self._fiscal.load_config()
+        environment = str(config.get("environment") or "").upper()
+        if environment != "HOMOLOGACAO":
+            raise PermissionError("Esta tela só inicializa numeração de HOMOLOGAÇÃO.")
+        model = str(model)
+        expected_series = int(config.get(f"sale_series_{model}", 1))
+        if int(series) != expected_series:
+            raise ValueError("A série mudou; atualize a leitura e revise novamente.")
+        expected = f"HOMOLOGACAO {model}/{expected_series} PROXIMO {int(next_number)}"
+        if str(confirmation_text or "").strip().upper() != expected:
+            raise PermissionError(f"Digite exatamente: {expected}")
+        return self._fiscal.initialize_numbering(
+            model=model, series=expected_series, next_number=int(next_number),
+            environment="HOMOLOGACAO",
+        )
 
     @staticmethod
     def _masked_document(value: object) -> str:
@@ -149,10 +194,7 @@ class FiscalReadinessApplicationService:
         for model in ("55", "65"):
             problems = tuple(self._fiscal.validate_ready(operation="status", model=model))
             all_problems.extend(problems)
-            series = int(
-                issuer.get("return_series", 1)
-                if model == "55" else config.get("nfce_series", 1)
-            )
+            series = int(config.get(f"sale_series_{model}", 1))
             numbering = self._fiscal.numbering_scope(
                 model=model, series=series, environment=environment,
             )
@@ -170,7 +212,11 @@ class FiscalReadinessApplicationService:
 
         notices = [
             "Consulta somente local: nenhuma comunicação com a SEFAZ foi iniciada.",
-            "A senha do certificado não foi solicitada, lida nem armazenada.",
+            (
+                "O A1 está no cofre local e a senha foi protegida pelo Windows para este usuário."
+                if config.get("certificate_managed") else
+                "A senha do certificado não está persistida e será solicitada novamente após reiniciar."
+            ),
             "A prontidão completa depende da verificação manual do A1, cadeia, revogação e catálogo pelo portão oficial.",
         ]
         if environment == "PRODUCAO":

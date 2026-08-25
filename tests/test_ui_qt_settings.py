@@ -31,6 +31,7 @@ class Application:
         )
     def can(self, action): return self.editable
     def save_preferences(self, values): self.saved.append(dict(values)); return self.load()
+    def preview_preferences(self, values): return UIPreferencesService.validate_visual(values)
     def configure_backup(self, **values): self.saved.append(values); return self.load()
     def create_backup(self):
         self.backups += 1; return SimpleNamespace(created=("C:\\Teste\\backup.db",))
@@ -118,6 +119,18 @@ def test_gui_nao_importa_banco_repositorios_fiscal_ou_legacy():
         elif isinstance(node, ast.ImportFrom): modules.append(str(node.module or "").lower())
     for forbidden in ("sqlite3", "database", "repositories", "fiscal", "sefaz", "nabicode_legacy"):
         assert not any(forbidden in module for module in modules)
+
+
+def test_personalizacao_muda_previa_antes_de_salvar_e_nao_persiste_sozinha():
+    application = Application(); dialog = SettingsDialog(application)
+    before = dialog.visual_preview.styleSheet()
+    dialog.button_color.setText("#123456")
+    APP.processEvents()
+    assert dialog.visual_preview.styleSheet() != before
+    assert "#123456" in dialog.visual_preview.styleSheet()
+    assert application.saved == []
+    dialog.reject()
+    assert application.saved == []
 
 
 def test_backup_distingue_diario_legado_da_opcao_protegida():

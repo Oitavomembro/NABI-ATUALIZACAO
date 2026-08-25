@@ -70,12 +70,11 @@ def test_configura_somente_homologacao_e_nao_persiste_senha():
     assert "segredo" not in repr(fiscal.saved)
 
 
-def test_cnpj_divergente_do_certificado_falha_antes_de_salvar():
+def test_cnpj_digitado_nao_substitui_identidade_do_certificado():
     fiscal = Fiscal(); service = FiscalReadinessApplicationService(fiscal, Security())
     data = values(); data["cnpj"] = "12345678000195"
-    with pytest.raises(ValueError, match="não corresponde"):
-        service.configure_homologation(data, password="segredo")
-    assert fiscal.saved is None
+    service.configure_homologation(data, password="segredo")
+    assert fiscal.saved["cnpj"] == Certificate().document
 
 
 def test_configuracao_exige_permissao_real():

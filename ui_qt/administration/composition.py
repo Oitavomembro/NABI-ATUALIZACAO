@@ -11,7 +11,9 @@ from administration.user_application_service import UserAdministrationService
 from administration.fiscal_readiness_application_service import FiscalReadinessApplicationService
 from commercial.application.cash_application_service import CashApplicationService
 from commercial.application.report_application_service import ReportApplicationService
-from commercial.application.accountant_center_service import AccountantCenterApplicationService
+from commercial.application.accountant_center_service import (
+    AccountantCenterApplicationService, CompanyIdentity,
+)
 from commercial.application.accountant_delivery_service import AccountantDeliveryApplicationService
 from commercial.infrastructure.accountant_delivery_gateway import LocalFolderAccountantDeliveryGateway
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
@@ -56,6 +58,43 @@ def _financial_actor(security, action="view"):
         raise PermissionError("Seu perfil não possui permissão para esta ação financeira.")
     security.touch()
     return username
+
+
+def _company_identity_provider(database, fiscal_service):
+    """Identidade única; no Fiscal exige concordância entre cadastro e A1."""
+    def provide():
+        if fiscal_service is not None:
+            config = fiscal_service.load_config()
+            cnpj = "".join(char for char in str(config.get("cnpj") or "") if char.isdigit())
+            certificate = config.get("certificate_info") or {}
+            certificate_cnpj = "".join(
+                char for char in str(certificate.get("document") or "") if char.isdigit()
+            )
+            if not cnpj or not certificate_cnpj:
+                raise RuntimeError(
+                    "Configure a empresa e instale o certificado A1 antes de gerar o pacote."
+                )
+            if cnpj != certificate_cnpj:
+                raise RuntimeError(
+                    "O CNPJ do cadastro diverge do certificado A1; geração bloqueada."
+                )
+            issuer = config.get("issuer") or {}
+            legal_name = str(issuer.get("name") or certificate.get("subject") or "").strip()
+            return CompanyIdentity(cnpj, legal_name, "certificado A1 + configuração fiscal")
+        connection = database.connect()
+        try:
+            values = dict(connection.execute(
+                "SELECT chave,valor FROM configuracoes WHERE chave IN ('cnpj','nome_loja')"
+            ).fetchall())
+        finally:
+            connection.close()
+        cnpj = "".join(char for char in str(values.get("cnpj") or "") if char.isdigit())
+        if not cnpj:
+            raise RuntimeError("Confirme o cadastro empresarial antes de gerar o pacote.")
+        return CompanyIdentity(
+            cnpj, str(values.get("nome_loja") or "").strip(), "cadastro empresarial central",
+        )
+    return provide
 
 def _database_probe(database):
     path = database.database_path.resolve()
@@ -129,8 +168,10 @@ def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
     app_version="2.5.1", schema_version=21, fiscal_service=None,
     fiscal_catalog_service=None,
+    nfe_purchase_import=None,
 ):
-    modules=[];dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
+    modules=[]; system=SystemRepository(database.connect)
+    dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
     if getattr(container,"customer_application",None):
         def filtered_customers(parent, segment, title):
@@ -147,7 +188,10 @@ def build_administrative_modules(
             "clientes", filtered_factory=filtered_customers,
         ))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
-        product_management=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p, service=product_management:ProductManagementDialog(service,p),"produtos"))
+        product_management=ProductManagementService(
+            container.product_application, container.stock_actions, security,
+            nfe_purchase_import=nfe_purchase_import,
+        );modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p, service=product_management:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):
         purchase_management=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p, service=purchase_management:PurchaseDialog(service,p),"compras"))
     cash = CashService(database.connect)
@@ -174,6 +218,7 @@ def build_administrative_modules(
     if fiscal_service is not None:
         fiscal_readiness = FiscalReadinessApplicationService(
             fiscal_service, security, fiscal_catalog_service,
+            company_display_writer=lambda name: system.set_config("nome_loja", name),
         )
         modules.append(AdministrativeModule(
             "Central Fiscal", "Configuração e prontidão local segura", "",
@@ -182,7 +227,9 @@ def build_administrative_modules(
             "fiscal",
         ))
     accountant_center = AccountantCenterApplicationService(
-        AccountantMonthlyPackageService(database.connect, fiscal_service=None), security,
+        AccountantMonthlyPackageService(database.connect, fiscal_service=fiscal_service),
+        security,
+        _company_identity_provider(database, fiscal_service),
     )
     delivery_gateway = LocalFolderAccountantDeliveryGateway(
         outbox_path=profile.paths.config / "entrega_contabil" / "outbox.sqlite3",
@@ -203,7 +250,6 @@ def build_administrative_modules(
         "contador",
     ))
     users=UserAdministrationService(security);modules.append(AdministrativeModule("Usuários","Contas, perfis e controle de acesso","Ctrl+U","technical","users",lambda p:UsersDialog(users,p),"usuarios",restricted_menu=True))
-    system = SystemRepository(database.connect)
     backups = BackupService(
         database_path=database.database_path,
         default_directory=profile.paths.backups,
@@ -228,6 +274,7 @@ def build_administrative_modules(
         backup_service=backups,
         diagnostics=diagnostics,
         printing_service=PrintingService(system.get_config),
+        fiscal_service=fiscal_service,
     )
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",

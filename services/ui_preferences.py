@@ -2,6 +2,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import dataclass
+from pathlib import Path
+import re
 from typing import Any, Mapping
 
 
@@ -25,6 +27,13 @@ class UIPreferencesService:
     THEMES = ("Azul Profissional", "Claro Minimalista", "Escuro Profissional", "Verde Empresarial", "Grafite Executivo")
     BACKGROUND_SCALES = ("automática", "pequena", "média", "grande")
     BACKGROUND_POSITIONS = ("centro", "superior", "inferior")
+    COLOR_PATTERN = re.compile(r"#[0-9a-fA-F]{6}\Z")
+    IMAGE_EXTENSIONS = {".bmp", ".gif", ".jpeg", ".jpg", ".png", ".webp"}
+    VISUAL_KEYS = (
+        "window_background", "common_button_background", "text_color",
+        "focus_color", "background_image", "background_opacity",
+        "background_scale", "background_position", "background_enabled",
+    )
 
     DASHBOARD_WIDGETS = {
         "resumo": "Resumo financeiro do dia",
@@ -71,6 +80,11 @@ class UIPreferencesService:
         "background_opacity": 0.10,
         "background_scale": "automática",
         "background_position": "centro",
+        "background_image": "",
+        "window_background": "#0d1117",
+        "common_button_background": "#21262d",
+        "text_color": "#f0f6fc",
+        "focus_color": "#58a6ff",
     }
 
     MODE_MODULES = {
@@ -116,6 +130,13 @@ class UIPreferencesService:
             data["background_scale"] = cls.DEFAULTS["background_scale"]
         if data["background_position"] not in cls.BACKGROUND_POSITIONS:
             data["background_position"] = cls.DEFAULTS["background_position"]
+        for key in (
+            "window_background", "common_button_background", "text_color", "focus_color"
+        ):
+            value = str(data.get(key, ""))
+            data[key] = value.lower() if cls.COLOR_PATTERN.fullmatch(value) else cls.DEFAULTS[key]
+        image = str(data.get("background_image", "") or "").strip()
+        data["background_image"] = image if cls.is_valid_image_path(image) else ""
 
         navigation_modules = data.get("navigation_modules")
         if not isinstance(navigation_modules, list):
@@ -151,6 +172,57 @@ class UIPreferencesService:
                 normalized_favorites.append(module_id)
         data["favorites"] = normalized_favorites
         return data
+
+    @classmethod
+    def validate_visual(cls, values: Mapping[str, Any]) -> dict[str, Any]:
+        """Valida entradas visuais antes de prévia ou persistência.
+
+        A normalização tolerante continua adequada para configurações antigas; esta
+        fronteira é deliberadamente estrita para nunca transformar texto em QSS.
+        """
+        if not isinstance(values, Mapping):
+            raise TypeError("As preferências visuais devem ser um mapeamento.")
+        data = cls.normalize(values)
+        for key in (
+            "window_background", "common_button_background", "text_color", "focus_color"
+        ):
+            raw = values.get(key, cls.DEFAULTS[key])
+            if not isinstance(raw, str) or cls.COLOR_PATTERN.fullmatch(raw) is None:
+                raise ValueError(f"Cor visual inválida: {key}.")
+            data[key] = raw.lower()
+        raw_opacity = values.get("background_opacity", cls.DEFAULTS["background_opacity"])
+        try:
+            opacity = float(raw_opacity)
+        except (TypeError, ValueError) as error:
+            raise ValueError("Opacidade da imagem inválida.") from error
+        if not 0.02 <= opacity <= 0.25:
+            raise ValueError("A opacidade deve ficar entre 2% e 25%.")
+        data["background_opacity"] = opacity
+        if values.get("background_scale", cls.DEFAULTS["background_scale"]) not in cls.BACKGROUND_SCALES:
+            raise ValueError("Escala da imagem inválida.")
+        if values.get("background_position", cls.DEFAULTS["background_position"]) not in cls.BACKGROUND_POSITIONS:
+            raise ValueError("Posição da imagem inválida.")
+        image = str(values.get("background_image", "") or "").strip()
+        enabled = bool(values.get("background_enabled", False))
+        if image and not cls.is_valid_image_path(image):
+            raise ValueError("Escolha uma imagem local válida (PNG, JPG, WEBP, GIF ou BMP).")
+        data["background_image"] = str(Path(image).resolve()) if image else ""
+        return data
+
+    @classmethod
+    def is_valid_image_path(cls, value: str) -> bool:
+        if not value:
+            return True
+        if any(char in value for char in ('\x00', '\r', '\n', '"', "'", '{', '}', ';')):
+            return False
+        path = Path(value)
+        try:
+            return (
+                path.is_absolute() and path.is_file()
+                and path.suffix.casefold() in cls.IMAGE_EXTENSIONS
+            )
+        except OSError:
+            return False
 
 
     @staticmethod

@@ -75,6 +75,20 @@ def test_preferencias_sao_normalizadas_e_isoladas_por_usuario(tmp_path):
     assert application.load().preferences["mode"] == "Simples"
 
 
+def test_previa_visual_nao_persiste_e_rejeita_injecao_de_estilo(tmp_path):
+    application, *_ = service(tmp_path)
+    before = application.load().preferences
+    preview = application.preview_preferences({
+        **before, "common_button_background": "#123456",
+    })
+    assert preview["common_button_background"] == "#123456"
+    assert application.load().preferences == before
+    with pytest.raises(ValueError, match="Cor visual inválida"):
+        application.preview_preferences({
+            **before, "common_button_background": "red;} QPushButton{color:red",
+        })
+
+
 def test_porta_de_reparo_captura_e_restaura_snapshot_sem_normalizar(tmp_path):
     application, _security, _system, _backup, _diagnostics = service(tmp_path)
     invalid = {"mode": "INVÁLIDO", "theme": "desconhecido"}

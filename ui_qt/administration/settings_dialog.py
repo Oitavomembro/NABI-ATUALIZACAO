@@ -1,14 +1,14 @@
 from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QCheckBox,
+    QCheckBox, QColorDialog,
     QComboBox,
     QDialog,
     QFileDialog,
     QFormLayout,
-    QHBoxLayout,
+    QHBoxLayout, QFrame,
     QLabel,
     QLineEdit,
     QMessageBox,
@@ -83,12 +83,37 @@ class SettingsDialog(QDialog):
         self.theme = QComboBox(); self.theme.addItems(UIPreferencesService.THEMES)
         self.adaptive = QCheckBox("Adaptar módulos ao espaço de trabalho")
         self.background = QCheckBox("Exibir imagem de fundo")
+        self.background.toggled.connect(self._update_visual_preview)
         form.addRow("Modo de interface", self.mode)
         form.addRow("Espaço de trabalho", self.workspace)
         form.addRow("Densidade", self.density)
         form.addRow("Tema oficial", self.theme)
         form.addRow("", self.adaptive)
         form.addRow("", self.background)
+        self.window_color = QLineEdit(); self.button_color = QLineEdit()
+        self.text_color = QLineEdit(); self.focus_color = QLineEdit()
+        for label, field, key in (
+            ("Fundo geral", self.window_color, "window_background"),
+            ("Botões comuns", self.button_color, "common_button_background"),
+            ("Letras", self.text_color, "text_color"),
+            ("Destaque de foco", self.focus_color, "focus_color"),
+        ):
+            field.setReadOnly(True); choose = QPushButton("Escolher cor…")
+            choose.clicked.connect(lambda _=False, target=field: self._choose_color(target))
+            row = QHBoxLayout(); row.addWidget(field, 1); row.addWidget(choose)
+            form.addRow(label, row)
+        self.background_image = QLineEdit(); self.background_image.setReadOnly(True)
+        image_button = QPushButton("Escolher imagem…"); image_button.clicked.connect(self._choose_background_image)
+        image_row = QHBoxLayout(); image_row.addWidget(self.background_image, 1); image_row.addWidget(image_button)
+        form.addRow("Imagem de fundo", image_row)
+        self.visual_preview = QFrame(); self.visual_preview.setMinimumHeight(120)
+        preview_layout = QVBoxLayout(self.visual_preview)
+        self.preview_text = QLabel("PRÉVIA AO VIVO — texto comum")
+        self.preview_button = QPushButton("Botão comum de exemplo")
+        preview_layout.addWidget(self.preview_text); preview_layout.addWidget(self.preview_button)
+        form.addRow("Prévia", self.visual_preview)
+        for field in (self.window_color, self.button_color, self.text_color, self.focus_color):
+            field.textChanged.connect(self._update_visual_preview)
         self.save_interface = QPushButton("Salvar e aplicar")
         self.save_interface.setObjectName("primary")
         self.save_interface.clicked.connect(self._save_preferences)
@@ -200,14 +225,25 @@ class SettingsDialog(QDialog):
         self.workspace.setCurrentText(values["workspace"])
         self.density.setCurrentText(values["density"])
         self.theme.setCurrentText(values["theme"])
+        self.window_color.setText(values["window_background"])
+        self.button_color.setText(values["common_button_background"])
+        self.text_color.setText(values["text_color"])
+        self.focus_color.setText(values["focus_color"])
+        self.background_image.setText(values.get("background_image", ""))
         self.adaptive.setChecked(bool(values["adaptive_menu"]))
         self.background.setChecked(bool(values["background_enabled"]))
+        self._update_visual_preview()
         directories = snapshot.backup_directories
         self.local_backup.setText(directories[0] if directories else "")
         self.cloud_backup.setText(directories[1] if len(directories) > 1 else "")
         self.daily.setChecked(snapshot.daily_backup_enabled)
         try:
             store=self.service.load_store_identity(); self.store_name.setText(store.name); self.receipt_footer.setPlainText(store.receipt_footer)
+            if getattr(store, "name_locked", False):
+                self.store_name.setReadOnly(True)
+                self.store_name.setToolTip(
+                    f"Definido automaticamente por: {getattr(store, 'name_source', 'identidade fiscal')}"
+                )
         except Exception as error:
             self.store_name.setPlaceholderText(str(error))
         try:
@@ -226,6 +262,8 @@ class SettingsDialog(QDialog):
         for widget in (
             self.mode, self.workspace, self.density, self.theme, self.adaptive,
             self.background, self.local_backup, self.cloud_backup, self.daily,
+            self.window_color, self.button_color, self.text_color, self.focus_color,
+            self.background_image,
             self.save_interface, self.save_backup,
             self.store_name,self.receipt_footer,self.save_store,
             *(widget for _key, printer, output_format in self.document_outputs.values() for widget in (printer, output_format)),
@@ -270,11 +308,57 @@ class SettingsDialog(QDialog):
                 "theme": self.theme.currentText(),
                 "adaptive_menu": self.adaptive.isChecked(),
                 "background_enabled": self.background.isChecked(),
+                "window_background": self.window_color.text(),
+                "common_button_background": self.button_color.text(),
+                "text_color": self.text_color.text(),
+                "focus_color": self.focus_color.text(),
+                "background_image": self.background_image.text(),
             })
             self.service.save_preferences(current)
             QMessageBox.information(self, "Configurações", "Preferências salvas para este usuário.")
         except Exception as error:
             QMessageBox.warning(self, "Configurações", str(error))
+
+    def _choose_color(self, target: QLineEdit) -> None:
+        color = QColorDialog.getColor(QColor(target.text()), self, "Escolher cor")
+        if color.isValid():
+            target.setText(color.name())
+
+    def _choose_background_image(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(
+            self, "Escolher imagem de fundo", self.background_image.text(),
+            "Imagens (*.png *.jpg *.jpeg *.webp *.gif *.bmp)",
+        )
+        if path:
+            self.background_image.setText(path)
+            self.background.setChecked(True)
+            self._update_visual_preview()
+
+    def _update_visual_preview(self, *_args) -> None:
+        values = {
+            "window_background": self.window_color.text() or "#0d1117",
+            "common_button_background": self.button_color.text() or "#21262d",
+            "text_color": self.text_color.text() or "#f0f6fc",
+            "focus_color": self.focus_color.text() or "#58a6ff",
+            "background_image": self.background_image.text(),
+            "background_enabled": self.background.isChecked(),
+            "background_opacity": 0.10,
+            "background_scale": "automática",
+            "background_position": "centro",
+        }
+        try:
+            safe = self.service.preview_preferences(values)
+        except Exception:
+            return
+        image = ""
+        if safe.get("background_enabled") and safe.get("background_image"):
+            escaped = str(safe["background_image"]).replace("\\", "/")
+            image = f"background-image:url('{escaped}');background-position:center;"
+        self.visual_preview.setStyleSheet(
+            f"QFrame{{background:{safe['window_background']};{image}border:2px solid {safe['focus_color']};border-radius:8px}}"
+            f"QLabel{{color:{safe['text_color']};font-weight:800}}"
+            f"QPushButton{{background:{safe['common_button_background']};color:{safe['text_color']};border:2px solid {safe['focus_color']};border-radius:7px}}"
+        )
 
     def _choose_directory(self, target: QLineEdit) -> None:
         selected = QFileDialog.getExistingDirectory(self, "Escolher pasta de backup", target.text())

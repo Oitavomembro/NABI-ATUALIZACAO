@@ -57,21 +57,27 @@ class DashboardDialog(QDialog):
         self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#8b949e")
         heading.addWidget(title); heading.addStretch(); heading.addWidget(self.loading); root.addLayout(heading)
         cards = QGridLayout(); cards.setSpacing(12); self.cards = {}
-        for index, (key, label, color) in enumerate((
-            ("sales", "VENDAS REALIZADAS HOJE", "#00ff88"),
-            ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff"),
-            ("overdue", "COBRANÇAS VENCIDAS", "#f2cc60"),
-            ("products", "PRODUTOS ATIVOS", "#a371f7"),
+        for index, (key, label, color, tint) in enumerate((
+            ("sales", "VENDAS REALIZADAS HOJE", "#00e88a", "rgba(0,232,138,28)"),
+            ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff", "rgba(88,166,255,30)"),
+            ("overdue", "COBRANÇAS VENCIDAS", "#f2cc60", "rgba(242,204,96,28)"),
+            ("products", "PRODUTOS ATIVOS", "#a371f7", "rgba(163,113,247,30)"),
         )):
-            card = QLabel(f"{label}\n—"); card.setAccessibleName(label)
-            card.setMinimumHeight(82)
+            card = QPushButton(f"{label}\n—"); card.setAccessibleName(label)
+            card.setCursor(Qt.CursorShape.PointingHandCursor); card.setAutoRepeat(False)
+            card.setToolTip(f"Abrir detalhes de {label.casefold()}")
+            # Qt desconta a borda/padding efetivos do estilo em alguns backends.
             card.setStyleSheet(
-                "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                "stop:0 #21262d,stop:1 #0d1117);"
+                f"QPushButton{{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {tint},stop:1 #171d24);text-align:left;min-height:90px;"
                 f"border:1px solid #30363d;border-bottom:5px solid {color};"
                 f"border-radius:12px;padding:16px;color:{color};"
-                "font-size:17px;font-weight:900"
+                "font-size:17px;font-weight:900}"
+                f"QPushButton:hover{{background:qlineargradient(x1:0,y1:0,x2:1,y2:1,stop:0 {tint},stop:1 #202a35);border:2px solid {color};border-bottom:6px solid {color}}}"
+                f"QPushButton:focus{{border:3px solid {color}}}"
             )
+            # Aplicar depois do QSS: o min-height do tema não pode encolher o cartão.
+            card.setFixedHeight(90)
+            card.clicked.connect(lambda _checked=False, selected=key: self.open_detail(selected))
             cards.addWidget(card, index // 2, index % 2); self.cards[key] = (label, card)
         root.addLayout(cards)
         subtitle = QLabel("HISTÓRICO DE MOVIMENTAÇÕES DO DIA")
@@ -105,6 +111,16 @@ class DashboardDialog(QDialog):
             shortcut = QShortcut(QKeySequence(key), self); shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback); self._shortcuts.append(shortcut)
         self.reload()
+
+    def open_detail(self, kind: str) -> bool:
+        try:
+            dialog = DashboardDetailDialog(self.application, kind, self)
+            dialog.exec()
+            self.cards[kind][1].setFocus(Qt.FocusReason.OtherFocusReason)
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, "Detalhes do Início", str(error))
+            return False
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self.table and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
@@ -146,4 +162,60 @@ class DashboardDialog(QDialog):
 
     def next_page(self) -> None:
         if self.offset + self.page_size >= self.total_records: return
+        self.offset += self.page_size; self.reload()
+
+
+class DashboardDetailDialog(QDialog):
+    TITLES = {
+        "sales": "VENDAS REALIZADAS HOJE", "receipts": "RECEBIMENTOS DE FICHAS HOJE",
+        "overdue": "COBRANÇAS VENCIDAS", "products": "PRODUTOS ATIVOS",
+    }
+
+    def __init__(self, application, kind: str, parent=None, *, page_size=50) -> None:
+        super().__init__(parent); self.application = application; self.kind = kind
+        self.page_size = max(10, min(int(page_size), 100)); self.offset = 0; self.total = 0
+        if kind not in self.TITLES: raise ValueError("Cartão de detalhe inválido.")
+        self.setWindowTitle(self.TITLES[kind]); self.resize(1080, 680); self.setMinimumSize(820, 520)
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint |
+                            Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowCloseButtonHint)
+        self.setStyleSheet(STYLE); root = QVBoxLayout(self)
+        title = QLabel(self.TITLES[kind]); title.setStyleSheet("font-size:23px;font-weight:900;color:#58a6ff")
+        root.addWidget(title)
+        self.summary = QLabel(); root.addWidget(self.summary)
+        self.table = QTableWidget(0, 6); self.table.setHorizontalHeaderLabels(
+            ("ID", "Data / atualização", "Cliente / produto", "Descrição / código", "Valor", "Situação")
+        )
+        self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
+        self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
+        self.table.verticalHeader().setVisible(False); self.table.verticalHeader().setDefaultSectionSize(36)
+        self.table.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
+        self.table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
+        root.addWidget(self.table, 1)
+        footer = QHBoxLayout(); self.page = QLabel(); self.previous = QPushButton("← Anterior")
+        self.next = QPushButton("Próxima →"); close = QPushButton("Fechar [Esc]")
+        self.previous.clicked.connect(self.previous_page); self.next.clicked.connect(self.next_page); close.clicked.connect(self.reject)
+        footer.addWidget(self.page); footer.addStretch(); footer.addWidget(self.previous); footer.addWidget(self.next); footer.addWidget(close)
+        root.addLayout(footer); QShortcut(QKeySequence("Esc"), self, activated=self.reject).setAutoRepeat(False)
+        self.reload()
+
+    def reload(self):
+        detail = self.application.detail(self.kind, limit=self.page_size, offset=self.offset)
+        self.total = detail.total_records; self.table.setRowCount(0)
+        for item in detail.rows:
+            row = self.table.rowCount(); self.table.insertRow(row)
+            values = (item.record_id, item.occurred_at, item.subject, item.description, _money(item.value), item.status)
+            for column, value in enumerate(values): self.table.setItem(row, column, QTableWidgetItem(str(value)))
+        pages = max(1, (self.total + self.page_size - 1) // self.page_size)
+        current = self.offset // self.page_size + 1
+        self.summary.setText(f"{self.total} registro(s) • total { _money(detail.total_value) }")
+        self.page.setText(f"Página {current} de {pages}")
+        self.previous.setEnabled(self.offset > 0); self.next.setEnabled(self.offset + self.page_size < self.total)
+        if self.table.rowCount(): self.table.selectRow(0)
+
+    def previous_page(self):
+        if self.offset <= 0: return
+        self.offset = max(0, self.offset - self.page_size); self.reload()
+
+    def next_page(self):
+        if self.offset + self.page_size >= self.total: return
         self.offset += self.page_size; self.reload()

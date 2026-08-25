@@ -9,9 +9,10 @@ import pytest
 pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent,Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QCheckBox, QLabel, QLineEdit
 
 from commercial.application.accountant_center_dto import AccountantPackagePlan
+from commercial.application.accountant_center_service import CompanyIdentity
 from ui_qt.commercial.accountant_center_dialog import AccountantCenterDialog
 
 
@@ -20,6 +21,8 @@ APP=QApplication.instance() or QApplication([])
 
 class Application:
     def __init__(self):self.reviews=0;self.generations=0;self.status="PENDENTE"
+    def company_identity(self):
+        return CompanyIdentity("12345678000195", "EMPRESA TESTE LTDA", "cadastro central")
     def review(self,**kwargs):
         self.reviews+=1
         return AccountantPackagePlan.create(cnpj="12345678000195",competence="2026-08",profile=kwargs["profile"],output_path=kwargs["output_path"],reviewed_by="operador")
@@ -41,7 +44,7 @@ def enter(*,shift=False,repeat=False):
 
 
 def ready(dialog,tmp_path):
-    dialog.cnpj.setText("12345678000195");dialog.cnpj_confirmed.setChecked(True);dialog.output.setText(str(tmp_path/"pacote.zip"));dialog._review()
+    dialog.output.setText(str(tmp_path/"pacote.zip"));dialog._review()
 
 
 def test_dois_caminhos_principais_e_auditoria_avancada(tmp_path):
@@ -63,7 +66,7 @@ def test_auto_repeat_shift_enter_e_alteracao_invalidam_revisao(tmp_path):
     application=Application();dialog=AccountantCenterDialog(application,worker_pool=Pool());ready(dialog,tmp_path)
     dialog.eventFilter(dialog.generate_button,enter(repeat=True));assert application.generations==0
     dialog.generate_button.setFocus();dialog.eventFilter(dialog.generate_button,enter(shift=True));assert application.generations==0
-    dialog.cnpj.setText("12345678000196");assert dialog._plan is None and not dialog.generate_button.isEnabled();dialog.close()
+    dialog.output.setText(str(tmp_path/"outro.zip"));assert dialog._plan is None and not dialog.generate_button.isEnabled();dialog.close()
 
 
 def test_bloqueio_reentrada_resposta_atrasada_e_fechamento(tmp_path):
@@ -76,6 +79,28 @@ def test_bloqueio_reentrada_resposta_atrasada_e_fechamento(tmp_path):
 
 def test_status_divergente_e_erro_sao_honestos(tmp_path):
     application=Application();application.status="DIVERGENTE";dialog=AccountantCenterDialog(application,worker_pool=Pool());ready(dialog,tmp_path);dialog._generate();assert dialog.semaphore.text().startswith("DIVERGENTE");dialog.close()
+
+
+def test_cnpj_e_somente_rotulo_sem_checkbox_ou_entrada_manual():
+    dialog=AccountantCenterDialog(Application(),worker_pool=Pool())
+    assert isinstance(dialog.cnpj,QLabel)
+    assert dialog.cnpj.text()=="12.345.678/0001-95"
+    assert dialog.cnpj.textInteractionFlags()==Qt.TextInteractionFlag.NoTextInteraction
+    assert "Origem comprovada: cadastro central" in dialog.identity_source.text()
+    assert not hasattr(dialog,"cnpj_confirmed")
+    assert all(widget is not dialog.cnpj for widget in dialog.findChildren(QLineEdit))
+    assert not any("CNPJ" in widget.text() for widget in dialog.findChildren(QCheckBox))
+    dialog.close()
+
+
+def test_identidade_indisponivel_bloqueia_revisao():
+    application=Application()
+    application.company_identity=lambda: (_ for _ in ()).throw(RuntimeError("CNPJ divergente entre fontes"))
+    dialog=AccountantCenterDialog(application,worker_pool=Pool())
+    assert not dialog.review.isEnabled()
+    assert "indisponível" in dialog.cnpj.text().casefold()
+    assert "divergente" in dialog.identity_source.text().casefold()
+    dialog.close()
 
 
 def test_entrega_so_abre_por_clique_depois_de_geracao_bem_sucedida(tmp_path):

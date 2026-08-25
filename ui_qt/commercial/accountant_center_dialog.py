@@ -48,9 +48,12 @@ class AccountantCenterDialog(QDialog):
         subtitle=QLabel("Prepare fontes do mês sem esconder movimentos, inventar lançamentos ou apurar tributos."); subtitle.setWordWrap(True)
         root.addWidget(title); root.addWidget(subtitle)
         form=QHBoxLayout(); self.competence=QDateEdit(QDate.currentDate()); self.competence.setDisplayFormat("MM/yyyy"); self.competence.setCalendarPopup(True)
-        self.cnpj=QLineEdit(); self.cnpj.setPlaceholderText("CNPJ confirmado da empresa")
-        self.cnpj_confirmed=QCheckBox("Confirmei o CNPJ da empresa")
-        form.addWidget(QLabel("Competência")); form.addWidget(self.competence); form.addWidget(QLabel("CNPJ")); form.addWidget(self.cnpj,1); form.addWidget(self.cnpj_confirmed); root.addLayout(form)
+        self.cnpj=QLabel("—"); self.cnpj.setObjectName("companyIdentity")
+        self.cnpj.setStyleSheet("background:#171d24;border:1px solid #59636f;border-radius:7px;min-height:38px;padding:0 12px;font-weight:800")
+        self.cnpj.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+        self.identity_source=QLabel(""); self.identity_source.setStyleSheet("color:#9fb1c2")
+        identity_box=QVBoxLayout(); identity_box.addWidget(self.cnpj); identity_box.addWidget(self.identity_source)
+        form.addWidget(QLabel("Competência")); form.addWidget(self.competence); form.addWidget(QLabel("CNPJ da empresa")); form.addLayout(identity_box,1); root.addLayout(form)
         destination=QHBoxLayout(); self.output=QLineEdit(); self.output.setPlaceholderText("Destino do pacote .zip"); self.choose=QPushButton("Escolher destino"); self.choose.clicked.connect(self._choose_destination); destination.addWidget(self.output,1); destination.addWidget(self.choose); root.addLayout(destination)
         profiles=QHBoxLayout(); self.essential=self._profile_button("PACOTE ESSENCIAL","Entrega curta com resumo, fontes e intercâmbio universal.","ESSENCIAL"); self.complete=self._profile_button("PACOTE COMPLETO","Acrescenta JSON/XLSX auxiliares sem alterar totais.","COMPLETO"); profiles.addWidget(self.essential); profiles.addWidget(self.complete); root.addLayout(profiles)
         self.advanced=QCheckBox("Mostrar opção avançada de Auditoria"); self.audit=self._profile_button("PACOTE DE AUDITORIA","Acrescenta a trilha existente para conferência técnica.","AUDITORIA"); self.audit.setVisible(False); self.advanced.toggled.connect(self.audit.setVisible); root.addWidget(self.advanced); root.addWidget(self.audit)
@@ -59,13 +62,27 @@ class AccountantCenterDialog(QDialog):
         self.semaphore=QLabel("PENDENTE — revise os dados antes de gerar"); self.semaphore.setStyleSheet("font-size:18px;font-weight:900;color:#d6b95f"); self.details=QLabel("Nenhum arquivo foi gerado."); self.details.setWordWrap(True); root.addWidget(self.semaphore); root.addWidget(self.details)
         footer=QHBoxLayout(); footer.addStretch(); close=QPushButton("Fechar [Esc]"); close.clicked.connect(self.reject); footer.addWidget(close); root.addLayout(footer)
         self.review.clicked.connect(self._review); self.generate_button.clicked.connect(self._generate); self.delivery_button.clicked.connect(self._open_delivery)
-        self._fields=(self.competence,self.cnpj,self.cnpj_confirmed,self.output,self.choose,self.essential,self.complete,self.advanced,self.audit,self.review,self.generate_button,self.delivery_button)
+        self._fields=(self.competence,self.output,self.choose,self.essential,self.complete,self.advanced,self.audit,self.review,self.generate_button,self.delivery_button)
         for field in self._fields: field.installEventFilter(self)
-        for field in (self.competence,self.cnpj,self.cnpj_confirmed,self.output):
+        for field in (self.competence,self.output):
             signal=getattr(field,"textChanged",None) or getattr(field,"dateChanged",None) or getattr(field,"toggled",None)
             if signal: signal.connect(self._invalidate_review)
         self._escape=QShortcut(QKeySequence("Esc"),self); self._escape.setAutoRepeat(False); self._escape.activated.connect(self.reject)
-        self.essential.setChecked(True); self.competence.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.essential.setChecked(True); self._load_company_identity(); self.competence.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _load_company_identity(self):
+        try:
+            identity = self.application.company_identity()
+        except Exception as error:
+            self.cnpj.setText("Identidade empresarial indisponível")
+            self.identity_source.setText(str(error))
+            self.review.setEnabled(False)
+            return
+        digits = str(identity.cnpj)
+        formatted = f"{digits[:2]}.{digits[2:5]}.{digits[5:8]}/{digits[8:12]}-{digits[12:]}"
+        self.cnpj.setText(formatted)
+        name = f" • {identity.legal_name}" if identity.legal_name else ""
+        self.identity_source.setText(f"Origem comprovada: {identity.source}{name}")
 
     def _profile_button(self,title,description,profile):
         button=QPushButton(f"{title}\n{description}"); button.setObjectName("profile"); button.setCheckable(True); button.setProperty("profile",profile); button.setMinimumHeight(82); button.clicked.connect(lambda _=False,b=button:self._select_profile(b)); return button
@@ -87,7 +104,7 @@ class AccountantCenterDialog(QDialog):
 
     def _review(self):
         if self._busy:return
-        try:self._plan=self.application.review(cnpj=self.cnpj.text(),competence=self.competence.date().toString("yyyy-MM"),profile=self._selected_profile(),output_path=self.output.text(),cnpj_confirmed=self.cnpj_confirmed.isChecked())
+        try:self._plan=self.application.review(competence=self.competence.date().toString("yyyy-MM"),profile=self._selected_profile(),output_path=self.output.text())
         except Exception as error: QMessageBox.warning(self,"Central do Contador",str(error)); return
         self.generate_button.setEnabled(True); self.semaphore.setText("PENDENTE — revisão concluída; geração ainda não executada"); self.details.setText(f"CNPJ: {self._plan.cnpj} • Competência: {self._plan.competence} • Perfil: {self._plan.profile}\nDestino: {self._plan.output_path}\nRevise: o pacote incluirá todos os movimentos disponíveis e declarará as pendências externas."); self.generate_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
