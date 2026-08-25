@@ -3877,6 +3877,59 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
 
+## Checkpoint integrado identidade/entrada XML/Dashboard — 25/08/2026
+
+- branch: `codex/integracao-fiscal-dashboard-final`;
+- implementação principal: `02bad5a`;
+- merge normal da trilha de dados empresariais por XML: histórico de
+  `codex/empresa-importar-xml` preservado;
+- a identidade empresarial deixou de ser informada manualmente na Central do
+  Contador. No modo Fiscal, cadastro e documento do A1 devem coincidir; CNPJ é
+  apresentado sem edição ou seleção. Nome exibido usa nome fantasia confirmado
+  quando presente e razão social quando ausente;
+- Configurar Fiscal extrai o CNPJ do A1, impede troca silenciosa de empresa,
+  separa razão social/nome fantasia e pode guardar A1/senha pelo cofre DPAPI do
+  usuário Windows. Numeração 55/65 em HOMOLOGAÇÃO exige confirmação textual
+  explícita e nunca transmite nessa etapa;
+- Dashboard possui cartões acionáveis com cursor de mão, foco, detalhe paginado
+  e mesmos predicados/totais. Relatórios humanos removem somente marcadores
+  técnicos de estoque, preservando nome, quantidade, preço e valor; evidência
+  bruta permanece no banco/auditoria;
+- entrada de compra por XML ganhou revisão compacta, unidade fechada,
+  multiplicador/divisor, fator, vínculo fornecedor/produto, custo unitário,
+  margem/preço e confirmação atômica. `cobr/dup` e `pag/detPag` são lidos como
+  evidência: títulos são criados somente para duplicatas comprovadas, um por
+  parcela; sem duplicatas nenhum vencimento ou título é inventado;
+- a configuração empresarial pode importar XML local autorizado com prévia e
+  escolha segura do participante, sem SEFAZ, inferência tributária ou
+  sobrescrita silenciosa;
+- personalização visual ganhou cores estritas para fundo, botões comuns, texto
+  e foco, além de imagem local validada e prévia ao vivo. A prévia não persiste;
+  salvar é ação separada. Cores semânticas continuam fora desse contrato;
+- evidência automatizada: `130 passed` no checkpoint principal; após o merge,
+  `10 passed` do serviço XML empresarial, `12 passed` da tela empresarial,
+  `56 passed` de composição/Fiscal/Contador e `24 passed` de configurações;
+  `compileall` e `git diff --check` aprovados;
+- homologação manual ainda pendente: fluxo visual completo, XML real de compra,
+  A1 físico/DPAPI, numeração conferida com fonte competente, impressora e
+  qualquer comunicação oficial com a SEFAZ. Nenhuma transmissão foi feita.
+
+### Checklist de continuidade
+
+- [x] CNPJ imutável na Central do Contador e derivado da identidade central;
+- [x] relatórios comuns sem rótulos internos de estoque;
+- [x] cartões do Início acionáveis e paginados;
+- [x] entrada XML com fator/unidade/preço e financeiro somente comprovado;
+- [x] importação local de dados empresariais por XML;
+- [~] aplicar o motor visual de forma global a todos os widgets comuns sem
+  alterar vermelho/amarelo/estados fiscais; prévia local já concluída;
+- [ ] expor Migração e restauração ativa no menu técnico com pré-backup,
+  encerramento, helper externo, rollback e auditoria; nunca sobrescrever banco
+  aberto;
+- [ ] ligar a Nabi contextual às novas portas tipadas de configuração e XML,
+  sem banco direto, clique livre, invenção de dados ou liberação fiscal;
+- [!] produção Fiscal/SEFAZ continua bloqueada até homologação física adversarial.
+
 ### Importação local de dados empresariais por XML — checkpoint isolado
 
 - branch/worktree: `codex/empresa-importar-xml` em
