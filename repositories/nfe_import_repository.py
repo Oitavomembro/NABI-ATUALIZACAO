@@ -305,13 +305,19 @@ class NFeImportRepository:
         if not duplicatas:
             return []
         if not self._table_exists(connection, "titulos_financeiros"):
-            return []
+            raise RuntimeError(
+                "A NF-e contém duplicatas, mas o Financeiro não está disponível. "
+                "Nenhum produto ou estoque foi lançado."
+            )
         colunas = {row["name"] for row in connection.execute("PRAGMA table_info(titulos_financeiros)").fetchall()}
         obrigatorias = {"tipo","origem","origem_id","pessoa_id","pessoa_nome","documento","descricao",
                        "data_emissao","data_vencimento","valor_original","valor_pago","status","observacao",
                        "criado_em","atualizado_em"}
         if not obrigatorias.issubset(colunas):
-            return []
+            raise RuntimeError(
+                "A estrutura do Financeiro está incompleta para registrar as duplicatas. "
+                "Nenhum produto ou estoque foi lançado."
+            )
         origem_id = str(importacao_id)
         existentes = connection.execute(
             "SELECT id FROM titulos_financeiros WHERE tipo='PAGAR' AND origem='NFE_XML' "

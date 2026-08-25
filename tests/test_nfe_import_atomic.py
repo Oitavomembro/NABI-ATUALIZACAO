@@ -212,11 +212,7 @@ class NFeImportAtomicTests(unittest.TestCase):
         conn.execute("DROP TABLE titulos_financeiros")
         conn.execute("CREATE TABLE titulos_financeiros(id INTEGER PRIMARY KEY, tipo TEXT NOT NULL, origem TEXT NOT NULL, origem_id TEXT NOT NULL, pessoa_id INTEGER NOT NULL)")
         conn.commit(); conn.close()
-        # Tabela incompatível é ignorada por compatibilidade; força falha no último passo via trigger.
-        conn = sqlite3.connect(self.path)
-        conn.execute("CREATE TRIGGER falhar_nfe BEFORE INSERT ON nfe_importacoes BEGIN SELECT RAISE(ABORT, 'falha final'); END")
-        conn.commit(); conn.close()
-        with self.assertRaises(sqlite3.IntegrityError):
+        with self.assertRaisesRegex(RuntimeError, "estrutura do Financeiro"):
             self.service.importar_atomicamente(self.doc, arquivo_origem="nfe.xml", itens=self.preparados)
         db = self.repo.database
         self.assertEqual(db.fetch_one("SELECT COUNT(*) n FROM produtos")["n"], 0)

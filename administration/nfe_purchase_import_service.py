@@ -3,6 +3,7 @@ from __future__ import annotations
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
 import hashlib
 import json
+from pathlib import Path
 
 from assistant_nabi import NFeEntryDraftService
 
@@ -58,14 +59,23 @@ class NFePurchaseImportManagementService:
     def prepare(self, path):
         self._require("produtos", "view")
         draft = self.drafts.prepare_selected_file(path)
+        document = self.document(draft.draft_id)
+        if str(getattr(document, "modelo", "") or "").strip() != "55":
+            raise ValueError("Selecione um XML autorizado de NF-e modelo 55.")
+        access_key = self._digits(getattr(document, "chave", ""))
+        if len(access_key) != 44:
+            raise ValueError("A chave de acesso da NF-e deve possuir 44 dígitos.")
         configured = self._digits(
             self.company_document_provider() if self.company_document_provider else ""
         )
         recipient = self._digits(draft.recipient_document)
-        if configured and recipient and configured != recipient:
-            raise ValueError(
-                "O destinatário do XML não corresponde ao CNPJ configurado nesta empresa."
-            )
+        if configured:
+            if not recipient:
+                raise ValueError("O XML não informa o documento do destinatário.")
+            if configured != recipient:
+                raise ValueError(
+                    "O destinatário do XML não corresponde ao CNPJ configurado nesta empresa."
+                )
         return draft
 
     def document(self, draft_id):
@@ -91,6 +101,15 @@ class NFePurchaseImportManagementService:
         actor = self._require("compras", "receive")
         if not confirmed:
             raise PermissionError("A confirmação humana final é obrigatória.")
+        source = Path(draft.source_path)
+        try:
+            current_hash = hashlib.sha256(source.read_bytes()).hexdigest()
+        except OSError as exc:
+            raise ValueError("O XML revisado não está mais disponível no local original.") from exc
+        if current_hash != draft.source_sha256:
+            raise ValueError(
+                "O XML foi alterado depois da revisão. Selecione e revise o arquivo novamente."
+            )
         document = self.document(draft.draft_id)
         if draft.protocol_status_evidence != "100":
             raise ValueError("O XML não contém evidência cStat 100; a entrada foi bloqueada.")

@@ -46,6 +46,15 @@ class Application:
         return {"produto_id": 7, "fator_conversao": "20", "unidade_estoque": "UN",
                 "nome": "BRILHANTE", "codigo": "P7", "codigo_barras": "789"}
 
+    def commit(self, _draft, rows, *, confirmed):
+        assert confirmed is True
+        return {
+            "importacao_id": 55, "itens_criados": 0, "itens_vinculados": 1,
+            "titulo_ids": [], "financeiro_indicacao": "Nenhum título criado.",
+            "resultados": [{"descricao": rows[0]["descricao"], "status": "atualizado",
+                            "quantidade_estoque": 40}],
+        }
+
 
 def test_grade_branca_compacta_recupera_vinculo_e_converte_caixa_para_unidade():
     dialog = NFePurchaseImportDialog(Application(), draft())
@@ -69,6 +78,33 @@ def test_edicao_item_preco_em_margem_e_voltar_preservam_estado():
     dialog._apply_bulk_margin()
     assert dialog._rows[0]["unit_cost"] == Decimal("10.00")
     assert dialog._rows[0]["preco"] == Decimal("15.00")
-    dialog.pages.setCurrentIndex(0)
+    dialog.back_to_items.click()
     assert dialog._rows[0]["fator"] == "10"
+    dialog.close()
+
+
+def test_vinculo_e_decisao_sao_automaticos_com_desvinculo_explicito():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    assert dialog._rows[0]["acao"] == "ATUALIZAR"
+    assert dialog._rows[0]["produto_id"] == 7
+    assert "ID 7" in dialog.linked_product.text()
+    assert not hasattr(dialog, "action")
+    assert not hasattr(dialog, "product")
+    dialog.unlink.click()
+    assert dialog._rows[0]["acao"] == "CRIAR"
+    assert dialog._rows[0]["produto_id"] is None
+    assert "produto novo" in dialog.linked_product.text()
+    dialog.close()
+
+
+def test_segunda_etapa_nao_expoe_quantidade_e_revisao_e_separada():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog._show_prices()
+    headers = [dialog.price_table.horizontalHeaderItem(i).text()
+               for i in range(dialog.price_table.columnCount())]
+    assert all("Qtd" not in header and "Quantidade" not in header for header in headers)
+    dialog.review.click()
+    assert dialog.pages.currentIndex() == 2
+    assert "ATUALIZAR E VINCULAR" in dialog.confirmation_text.toPlainText()
+    assert "Nenhuma comunicação com a SEFAZ" in dialog.confirmation_text.toPlainText()
     dialog.close()
