@@ -81,6 +81,13 @@ class LicenseIssuerWindow(QDialog):
         self.valid_until.setDisplayFormat("dd/MM/yyyy")
         self.features = QLineEdit()
         self.features.setReadOnly(True)
+        self.fiscal_enabled = QCheckBox(
+            "Habilitar Fiscal/SEFAZ (somente após homologação e configuração)"
+        )
+        self.fiscal_enabled.setToolTip(
+            "Assina apenas o direito de configurar/testar o módulo fiscal. "
+            "Não libera produção nem ignora os portões fiscais do NabiCode."
+        )
         self.license_id = QLineEdit()
         self.license_id.setPlaceholderText("Gerado automaticamente em nova licença")
         self.revoked = QCheckBox("Emitir revogação assinada")
@@ -101,6 +108,7 @@ class LicenseIssuerWindow(QDialog):
         form.addRow("Edição:", self.edition)
         form.addRow("Período:", self.duration)
         form.addRow("Validade calculada:", self.valid_until)
+        form.addRow("Módulo Fiscal:", self.fiscal_enabled)
         form.addRow("Arquivo portátil:", output_row)
         layout.addLayout(form)
 
@@ -155,7 +163,7 @@ class LicenseIssuerWindow(QDialog):
         for widget in (
             self.private_key, self.public_catalog, self.key_id, self.machine_fingerprint, self.customer,
             self.edition, self.valid_until, self.features, self.license_id,
-            self.revoked, self.output,
+            self.fiscal_enabled, self.revoked, self.output,
         ):
             signal = getattr(widget, "textChanged", None)
             if signal is None:
@@ -166,6 +174,7 @@ class LicenseIssuerWindow(QDialog):
                 signal = getattr(widget, "toggled", None)
             signal.connect(self._invalidate_review)
         self.edition.currentTextChanged.connect(self._apply_edition_defaults)
+        self.fiscal_enabled.toggled.connect(self._refresh_features)
         self.duration.currentIndexChanged.connect(self._apply_duration)
         self.customer.textChanged.connect(self._suggest_output)
         self._discover_owner_keys()
@@ -196,13 +205,24 @@ class LicenseIssuerWindow(QDialog):
 
     def _apply_edition_defaults(self, *_args) -> None:
         edition = LicenseEdition(self.edition.currentText())
-        self.features.setText(self.EDITION_FEATURES[edition])
+        commercial = edition is LicenseEdition.COMMERCIAL
+        self.fiscal_enabled.setEnabled(commercial)
+        if not commercial:
+            self.fiscal_enabled.setChecked(False)
+        self._refresh_features()
         evaluation = edition is LicenseEdition.EVALUATION
         self.duration.setEnabled(not evaluation)
         if evaluation:
             self.duration.setCurrentIndex(self.duration.findData(1))
             self.valid_until.setDate(QDate.currentDate().addDays(29))
         self._suggest_output()
+
+    def _refresh_features(self, *_args) -> None:
+        edition = LicenseEdition(self.edition.currentText())
+        features = self.EDITION_FEATURES[edition].split(",")
+        if edition is LicenseEdition.COMMERCIAL and self.fiscal_enabled.isChecked():
+            features.append("fiscal")
+        self.features.setText(",".join(sorted(set(features))))
 
     def _apply_duration(self, *_args) -> None:
         if LicenseEdition(self.edition.currentText()) is LicenseEdition.EVALUATION:
@@ -310,7 +330,8 @@ class LicenseIssuerWindow(QDialog):
         self.machine_code.setText(machine_code(payload.machine_fingerprint))
         self.customer.setText(payload.customer_name)
         self.edition.setCurrentText(payload.edition.value)
-        self.features.setText(",".join(payload.features))
+        self.fiscal_enabled.setChecked("fiscal" in payload.features)
+        self._refresh_features()
         self.license_id.setText(payload.license_id)
         suggested = max(date.today(), payload.valid_until) + timedelta(days=365)
         self.valid_until.setDate(QDate(suggested.year, suggested.month, suggested.day))

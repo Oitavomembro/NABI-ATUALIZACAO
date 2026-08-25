@@ -363,9 +363,15 @@ def test_interface_facil_usuario_escolhe_edicao_periodo_e_nome(tmp_path, monkeyp
     window.edition.setCurrentText("COMERCIAL")
     window.duration.setCurrentIndex(window.duration.findData(3))
     assert window.features.text() == "commercial,legacy,qt"
+    assert window.fiscal_enabled.isEnabled()
+    window.fiscal_enabled.setChecked(True)
+    assert window.features.text() == "commercial,fiscal,legacy,qt"
     assert window.valid_until.date() == QDate.currentDate().addMonths(3)
     assert "comercial-pedro-miranda" in window.output.text()
     window.edition.setCurrentText("AVALIACAO")
+    assert not window.fiscal_enabled.isChecked()
+    assert not window.fiscal_enabled.isEnabled()
+    assert "fiscal" not in window.features.text()
     assert not window.duration.isEnabled()
     assert window.valid_until.date() == QDate.currentDate().addDays(29)
     window.close(); app.processEvents()
