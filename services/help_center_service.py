@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime
 from enum import Enum
@@ -54,11 +56,12 @@ class HelpCenterDiagnosticService:
     def __init__(self, *, persistent_dirs, database_probe: Callable[[], Mapping] | None,
                  backup_probe: Callable[[], Mapping] | None, printer_probe: Callable[[], Mapping] | None,
                  nabi_probe: Callable[[], Mapping] | None, audit: Callable[..., None] | None = None,
-                 minimum_free_mb: int = 200):
+                 minimum_free_mb: int = 200, clock: Callable[[], datetime] | None = None):
         self.dirs = tuple(Path(p).resolve() for p in persistent_dirs)
         self.probes = {HelpCheck.DATABASE: database_probe, HelpCheck.BACKUP: backup_probe,
                        HelpCheck.PRINTER: printer_probe, HelpCheck.NABI: nabi_probe}
         self.audit, self.minimum_free_mb = audit, minimum_free_mb
+        self.clock = clock or datetime.now
 
     def run(self) -> tuple[DiagnosticResult, ...]:
         results = tuple(self._run(entry) for entry in CATALOG)
@@ -86,3 +89,53 @@ class HelpCenterDiagnosticService:
             return DiagnosticResult(entry, state, sanitize_text(data.get("message", "Sem detalhe")), sanitize_text(data.get("technical_id", "")))
         except Exception as exc:
             return DiagnosticResult(entry, DiagnosticState.INCONCLUSIVO, sanitize_text(f"Falha segura no verificador: {type(exc).__name__}"))
+
+    def report_bytes(self, results: tuple[DiagnosticResult, ...]) -> bytes:
+        """Serializa somente o catálogo fechado e já sanitizado para suporte."""
+        expected = tuple(entry.check for entry in CATALOG)
+        if not isinstance(results, tuple) or tuple(item.entry.check for item in results) != expected:
+            raise ValueError("O relatório exige um resultado único para cada diagnóstico conhecido.")
+        payload = {
+            "schema": "nabicode.help-center-report.v1",
+            "generated_at": self.clock().isoformat(timespec="seconds"),
+            "scope": "DIAGNOSTICO_SOMENTE_LEITURA",
+            "protected": [
+                "Nenhum autorreparo ou mutação operacional foi executado.",
+                "Credenciais, documentos pessoais, XML fiscal e caminhos pessoais são omitidos.",
+                "O relatório não comprova homologação física, fiscal ou disponibilidade externa.",
+            ],
+            "results": [
+                {
+                    "check": item.entry.check.value,
+                    "title": sanitize_text(item.entry.title),
+                    "state": item.state.value,
+                    "message": sanitize_text(item.message),
+                    "technical_id": sanitize_text(item.technical_id),
+                }
+                for item in results
+            ],
+        }
+        return (json.dumps(payload, ensure_ascii=False, sort_keys=True, indent=2) + "\n").encode("utf-8")
+
+    def save_report(self, destination, results: tuple[DiagnosticResult, ...]) -> Path:
+        """Grava o relatório por substituição atômica; nunca modifica dados diagnosticados."""
+        path = Path(destination).expanduser().resolve()
+        if path.suffix.lower() != ".json":
+            raise ValueError("O relatório de suporte deve usar a extensão .json.")
+        if not path.parent.is_dir():
+            raise ValueError("Selecione uma pasta existente para o relatório.")
+        content = self.report_bytes(results)
+        temporary = None
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="wb", dir=path.parent, prefix=f".{path.name}.", suffix=".tmp", delete=False,
+            ) as stream:
+                temporary = Path(stream.name)
+                stream.write(content); stream.flush(); os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            return path
+        except Exception:
+            if temporary is not None:
+                try: temporary.unlink(missing_ok=True)
+                except OSError: pass
+            raise
