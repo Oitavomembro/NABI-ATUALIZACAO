@@ -3329,3 +3329,71 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   módulos não fiscais não passam por esta API e permanecem operacionais;
 - próximo passo: revisão independente, regressão fiscal integral e integração
   normal na consolidada; produção fiscal continua bloqueada.
+## Radar regulatório — MEI e Simples Nacional em 2027 (pesquisa de 24/08/2026)
+
+Registro preventivo; não representa homologação fiscal nem autorização para alterar leiautes sem nova auditoria.
+
+- fonte oficial: Ministério da Fazenda, notícia de 11/08/2026 sobre as Resoluções CGSN nº 190 e nº 191/2026;
+- regra divulgada: as alterações da Resolução CGSN nº 190 produzem efeitos, em regra, a partir de 01/01/2027 e ampliam a emissão de documento fiscal pelo MEI para vendas de mercadorias e prestações de serviços;
+- serviços: permanece prevista a NFS-e de padrão nacional, gratuita;
+- mercadorias e determinadas prestações de transporte: a regulamentação prevê uso preferencial e gratuito da Nota Fiscal Fácil (NFF);
+- Simples Nacional: documentos fiscais passam a observar também as regras de CBS/IBS aplicáveis a partir de 01/01/2027, conforme hipóteses e leiautes oficiais;
+- cronograma oficial dos documentos fiscais da Reforma Tributária indica 01/01/2027 para documentos de contribuintes do Simples Nacional, com leiautes previstos para publicação/adequação anterior;
+- não existe, nas fontes consultadas, obrigação de o MEI comprar ou usar um programa privado específico. O NabiCode pode integrar os emissores/APIs oficiais quando houver contrato técnico publicado, mas não pode substituir, contornar ou presumir autorização governamental;
+- a regra atual anterior à vigência de 2027 não deve ser apagada: a dispensa e as hipóteses de emissão do MEI continuam dependentes da data, operação, destinatário, atividade e ente federado.
+
+Fontes oficiais registradas:
+
+- `https://www.gov.br/fazenda/pt-br/assuntos/noticias/2026/agosto/cgsn-atualiza-regras-do-simples-nacional-para-adequacao-a-reforma-tributaria-do-consumo`;
+- `https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/julho/receita-federal-e-comite-gestor-do-ibs-publicam-o-cronograma-de-implementacao-dos-documentos-fiscais-eletronicos-da-reforma-tributaria-do-consumo`;
+- `https://www.gov.br/receitafederal/pt-br/assuntos/noticias/2026/agosto/simples-nacional-nfs-e-nacional-sera-obrigatoria-para-me-e-epp-a-partir-de-1o-de-novembro-de-2026`;
+- `https://normas.receita.fazenda.gov.br/sijut2consulta/link.action?idAto=92278` (Resolução CGSN nº 140/2018 consolidada; conferir novamente antes da implementação).
+
+Checkpoint futuro obrigatório antes de release fiscal 2027:
+
+1. reler Resoluções CGSN nº 190/191 e atos posteriores na fonte normativa consolidada;
+2. identificar o enquadramento real do contribuinte (MEI, ME/EPP, atividade, UF e município);
+3. homologar leiautes 2027 de NF-e/NFC-e/NFS-e/NFF e campos CBS/IBS sem inventar regra;
+4. implementar por adaptadores versionados, mantendo Comercial/NÃO FISCAL isolado;
+5. testar nos ambientes oficiais de homologação e preservar evidências físicas;
+6. somente então liberar qualquer operação fiscal correspondente.
+
+Estratégia de produto para aproveitar a transição sem reduzir conformidade:
+
+- manter um único NabiCode oficial completo e atualizável, sem binários diferentes por regime tributário; o perfil confirmado da empresa controla módulos, obrigações, campos, assistentes e conectores aplicáveis;
+- não inferir enquadramento somente pelo número do CNPJ: onboarding deve confirmar dados oficiais, regime, atividade, UF, município, inscrições e documentos, com rastreabilidade da fonte e da confirmação humana;
+- separar três conceitos: licença comercial define o direito de uso; perfil empresarial define o que se aplica; permissões do usuário definem quem pode executar. Nenhum deles pode contornar os outros;
+- permitir mudança futura de MEI para ME/EPP ou outro regime por migração de configuração versionada, preservando histórico, documentos e evidências sem reinstalar ou trocar de banco;
+- oferecer entrada simples para MEI, sem exigir conhecimento contábil: cadastro guiado, importação de clientes/produtos, vendas, recebimentos, despesas documentadas e pacote mensal Essencial;
+- permitir evolução para o pacote Completo/Auditoria e para contador sem nova digitação ou troca de banco;
+- usar a Nabi como orientadora e preparadora de rascunhos, nunca como autoridade fiscal ou fonte de regra;
+- manter conectores independentes e versionados para NFS-e Nacional, NFF, NF-e/NFC-e e futuros campos CBS/IBS, ativados somente conforme atividade e enquadramento;
+- criar um assistente de prontidão 2027 que mostre cadastro incompleto, documentos necessários, ambiente de homologação, data de vigência e evidências pendentes;
+- manter o produto utilizável em Comercial/NÃO FISCAL enquanto a configuração fiscal não estiver aprovada, sem permitir emissão fiscal por fallback;
+- planejar migração e onboarding rápidos para escritórios contábeis e carteiras de MEIs, com pacotes Essencial/Completo padronizados e sem dependência de fornecedor contábil específico;
+- não anunciar “conforme 2027” antes da auditoria jurídica, técnica e de homologação real de cada documento aplicável.
+
+## Regra permanente de evolução do produto
+
+Critério de entrada: uma capacidade entra no NabiCode oficial somente quando reduz trabalho, preserva as regras existentes, possui fronteira autorizada, falha fechada, testes proporcionais ao risco e caminho de atualização/migração sem perda de dados.
+
+Prioridades aprovadas para entrada progressiva:
+
+- perfil empresarial único e onboarding guiado;
+- Central do Contador em camadas, conciliação e intercâmbio universal;
+- Central de Socorro com diagnóstico determinístico e autorreparo apenas reversível;
+- backup autenticado/criptografado e restauração comprovada;
+- conectores fiscais versionados conforme documentos e vigências oficiais;
+- Nabi global por portas tipadas, com confirmação, idempotência e auditoria;
+- acessibilidade, paginação, desempenho e mensagens humanas.
+
+Critério de retirada/proibição:
+
+- edições diferentes do NabiCode oficial por regime, telas duplicadas, botões provisórios ou sem ação;
+- carregamento integral desnecessário, acesso direto da GUI/IA ao banco e identidade fornecida livremente pelo chamador;
+- senha mestra universal, permissão implícita, função escondida que contorne autorização ou fallback fiscal;
+- autorreparo de venda, Caixa, estoque, Fiscal, licenciamento, usuários, backup/restore ou atualização sem o nível de confirmação exigido;
+- logs/pacotes de suporte com segredo ou dado pessoal cru;
+- lançamento contábil, regra tributária ou alegação de conformidade inventados.
+
+O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compartilháveis podem ser reaproveitadas após auditoria; regras exclusivas do Fichário não entram incidentalmente no NabiCode oficial.
