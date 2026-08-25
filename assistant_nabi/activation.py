@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+import inspect
 from threading import Lock
 
 
@@ -51,7 +52,11 @@ class AuthenticatedAssistantActivation:
             runtime.start()
             model = runtime.create_model_adapter()
             session_id = uuid.uuid4().hex
-            service = self._assistant_factory(model, session_id)
+            parameters = inspect.signature(self._assistant_factory).parameters
+            if len(parameters) >= 3:
+                service = self._assistant_factory(model, session_id, session)
+            else:
+                service = self._assistant_factory(model, session_id)
             with self._lock:
                 if self._cancel_requested:
                     raise RuntimeError("A ativação da Nabi foi cancelada pelo operador.")

@@ -33,6 +33,8 @@ from administration.product_management_service import ProductManagementService
 from commercial.infrastructure.runtime import create_commercial_container
 from commercial.application.report_application_service import ReportApplicationService
 from commercial.application.cash_application_service import CashApplicationService
+from assistant_nabi.cash_drafts import CashDraftService
+from assistant_nabi.cash_gateway import NabiCodeCashAssistantGateway
 from commercial.infrastructure.report_gateway import NabiCodeReportGateway
 from core.app_version import load_app_version
 from core.runtime_profile import DatabaseUsageLock, configure_profile_environment
@@ -160,13 +162,21 @@ def _create_assistant_activation(
             log_directory=ia_root / "logs",
         )
 
-    def assistant_factory(model, session_id):
+    def assistant_factory(model, session_id, authenticated_session):
+        actor = getattr(authenticated_session, "user", None)
+        cash_drafts = cash_executor = None
+        if actor is not None and getattr(actor, "active", False):
+            cash_application = cash_service_factory(actor)
+            cash_drafts = CashDraftService(cash_application)
+            cash_executor = NabiCodeCashAssistantGateway(cash_application)
         return create_draft_assistant(
             model=model,
             query_service=container.query,
             financial_query_service=getattr(container, "financial_query", None),
             report_service=report_service,
             cash_service_factory=cash_service_factory,
+            cash_draft_service=cash_drafts,
+            cash_executor=cash_executor,
             security_service=security,
             audit_service=audit,
             session_id=session_id,
