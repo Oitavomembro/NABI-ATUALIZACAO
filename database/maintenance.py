@@ -8,6 +8,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
 
+from .sqlite_connection import open_connection
+
 
 @dataclass(frozen=True)
 class DatabaseCheckReport:
@@ -59,10 +61,7 @@ class DatabaseMaintenanceService:
         self.timeout = float(timeout)
 
     def _connect(self, path: Path | None = None) -> sqlite3.Connection:
-        connection = sqlite3.connect(str(path or self.database_path), timeout=self.timeout)
-        connection.execute(f"PRAGMA busy_timeout={int(self.timeout * 1000)}")
-        connection.execute("PRAGMA foreign_keys=ON")
-        return connection
+        return open_connection(path or self.database_path, timeout=self.timeout)
 
     @staticmethod
     def _schema_version(connection: sqlite3.Connection) -> int:
