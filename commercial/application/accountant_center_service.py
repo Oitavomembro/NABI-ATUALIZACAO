@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import hashlib
+from pathlib import Path
+
 from .accountant_center_dto import AccountantPackageOutcome, AccountantPackagePlan
 
 
@@ -48,7 +51,12 @@ class AccountantCenterApplicationService:
             cnpj=plan.cnpj, competence=plan.competence, profile=plan.profile,
             output_path=plan.output_path,
         )
+        digest = hashlib.sha256()
+        with Path(result.path).open("rb") as package:
+            for chunk in iter(lambda: package.read(1024 * 1024), b""):
+                digest.update(chunk)
         return AccountantPackageOutcome(
             result.path, result.cnpj, result.competence, result.profile,
             result.status, result.files, result.movements, result.pendencies,
+            digest.hexdigest(),
         )
