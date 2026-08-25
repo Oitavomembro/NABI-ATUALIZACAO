@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from commercial.application.dto import BudgetDocument
 from commercial.domain.money import MoneyCodec
+from .pdv_button_style import PDV_BUTTON_STYLE
 
 
 class _BudgetDialogBase(QDialog):
@@ -52,7 +53,7 @@ class BudgetPreviewDialog(_BudgetDialogBase):
         self.setStyleSheet(
             "QDialog { background:#0d1117; color:#f0f6fc; } "
             "QLabel { color:#f0f6fc; } QTextBrowser { background:#161b22; color:#f0f6fc; "
-            "border:1px solid #30363d; } QPushButton { padding:9px 14px; }"
+            "border:1px solid #30363d; }" + PDV_BUTTON_STYLE
         )
         root = QVBoxLayout(self)
         title = QLabel("ORÇAMENTO SALVO — SEM VALOR FISCAL")
@@ -105,6 +106,7 @@ class BudgetListDialog(_BudgetDialogBase):
         self.setWindowTitle("Orçamentos salvos")
         self.setModal(True)
         self.resize(780, 480)
+        self.setStyleSheet(PDV_BUTTON_STYLE)
         root = QVBoxLayout(self)
         root.addWidget(QLabel("ORÇAMENTOS ABERTOS — SEM VALOR FISCAL"))
         self.table = QTableWidget(0, 4)

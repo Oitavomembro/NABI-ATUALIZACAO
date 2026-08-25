@@ -14,6 +14,7 @@ from commercial.domain.money import MoneyCodec
 from commercial.domain.payments import Payment, PaymentMethod
 from .pdv_view_model import CheckoutInput, PDVViewModel
 from .widgets.money_edit import MoneyEdit
+from .pdv_button_style import PDV_BUTTON_STYLE, PDV_DESTRUCTIVE_BUTTON_STYLE
 
 
 class CheckoutDialog(QDialog):
@@ -33,6 +34,7 @@ class CheckoutDialog(QDialog):
         self.setWindowTitle("Pagamentos")
         self.setModal(True)
         self.resize(820, 680)
+        self.setStyleSheet(PDV_BUTTON_STYLE)
         root = QVBoxLayout(self)
         self.total_label = QLabel()
         self.total_label.setStyleSheet("font-size: 20px; font-weight: 700;")
@@ -63,6 +65,7 @@ class CheckoutDialog(QDialog):
         self.payment_table.setHorizontalHeaderLabels(["Forma", "Valor", "Autorização"])
         root.addWidget(self.payment_table)
         self.remove_payment = QPushButton("Remover pagamento selecionado")
+        self.remove_payment.setStyleSheet(PDV_DESTRUCTIVE_BUTTON_STYLE)
         root.addWidget(self.remove_payment)
 
         adjustments = QHBoxLayout()

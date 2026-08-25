@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from commercial.application.dto import ProductRecord
 from commercial.domain.money import MoneyCodec
+from .pdv_button_style import PDV_BUTTON_STYLE
 
 
 class ProductSearchDialog(QDialog):
@@ -103,11 +104,7 @@ class ProductSearchDialog(QDialog):
                 gridline-color: #30363d; font-size: 18px; selection-background-color: #1f6feb; }
             QHeaderView::section { background: #21262d; color: #f0f6fc; padding: 10px;
                 border: 0; border-right: 1px solid #30363d; font-size: 16px; font-weight: 800; }
-            QPushButton { background: #30363d; color: #f0f6fc; border: 0; border-radius: 7px;
-                min-height: 46px; padding: 0 20px; font-size: 16px; font-weight: 700; }
-            QPushButton#primary { background: #1f6feb; }
-            QPushButton:focus { border: 2px solid #ffffff; }
-        """
+        """ + PDV_BUTTON_STYLE + "QPushButton { min-height:46px;font-size:16px;padding:0 20px; }"
 
     @staticmethod
     def _money(value: Decimal) -> str:

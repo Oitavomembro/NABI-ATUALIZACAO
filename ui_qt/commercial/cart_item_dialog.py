@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QDialog, QDialogButtonBox, QFormLayout, QLabel, QL
 
 from commercial.domain.cart import CartItem
 from .widgets.money_edit import MoneyEdit
+from .pdv_button_style import PDV_BUTTON_STYLE
 
 
 class CartItemDialog(QDialog):
@@ -16,6 +17,7 @@ class CartItemDialog(QDialog):
         self.setWindowTitle("Editar item da venda")
         self.setModal(True)
         self.resize(470, 330)
+        self.setStyleSheet(PDV_BUTTON_STYLE)
         root = QVBoxLayout(self)
         title = QLabel("EDITAR ITEM DA VENDA")
         title.setStyleSheet("font-size: 18px; font-weight: 700;")

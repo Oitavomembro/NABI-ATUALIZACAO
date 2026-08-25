@@ -20,6 +20,9 @@ from .post_sale_dialog import PostSaleDialog
 from .product_search_dialog import ProductSearchDialog
 from .pdv_view_model import PDVViewModel
 from .widgets.money_edit import MoneyEdit
+from .pdv_button_style import (
+    PDV_BUDGET_ACTIVE_STYLE, PDV_BUTTON_STYLE, PDV_DESTRUCTIVE_BUTTON_STYLE,
+)
 
 
 class PDVWindow(QMainWindow):
@@ -109,17 +112,7 @@ class PDVWindow(QMainWindow):
                 background: #21262d; color: {c['text']}; border: 0; border-right: 1px solid {c['border']};
                 border-bottom: 1px solid {c['border']}; padding: 9px; font-weight: 700;
             }}
-            QPushButton {{
-                background: #30363d; color: {c['text']}; border: 0; border-radius: 6px;
-                min-height: 36px; padding: 0 14px; font-weight: 700;
-            }}
-            QPushButton:hover {{ background: #484f58; }}
-            QPushButton#primary {{ background: {c['blue']}; }}
-            QPushButton#primary:hover {{ background: {c['blue_hover']}; }}
-            QPushButton#checkout {{ background: {c['green']}; min-height: 50px; font-size: 15px; }}
-            QPushButton#checkout:hover {{ background: {c['green_hover']}; }}
-            QPushButton#close {{ background: {c['red']}; }}
-            QPushButton#inactive {{ color: #c9d1d9; background: #30363d; }}
+            {PDV_BUTTON_STYLE}
             QCheckBox {{ color: {c['text']}; font-weight: 700; spacing: 8px; }}
             QCheckBox::indicator {{ width: 18px; height: 18px; }}
             QSplitter::handle {{ background: {c['background']}; width: 8px; }}
@@ -314,6 +307,7 @@ class PDVWindow(QMainWindow):
         edit.clicked.connect(self._edit_selected_item)
         summary_layout.addWidget(edit)
         remove = QPushButton("Remover item selecionado  [Del]")
+        remove.setStyleSheet(PDV_DESTRUCTIVE_BUTTON_STYLE)
         remove.setToolTip("Selecione uma linha em Itens da venda para remover")
         remove.clicked.connect(self._remove_selected_item)
         summary_layout.addWidget(remove)
@@ -521,9 +515,7 @@ class PDVWindow(QMainWindow):
         if self._budget_mode:
             self.budget_button.setText("ORÇAMENTO LIGADO  [F5]")
             self.budget_button.setObjectName("budgetActive")
-            self.budget_button.setStyleSheet(
-                "background:#9a6700; color:white; font-weight:700; padding:9px;"
-            )
+            self.budget_button.setStyleSheet(PDV_BUDGET_ACTIVE_STYLE)
             self.statusBar().showMessage(
                 "Modo Orçamento: F9 salva sem registrar venda, estoque ou Caixa.", 3500
             )

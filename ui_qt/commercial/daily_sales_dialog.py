@@ -13,6 +13,7 @@ from commercial.application.query_dto import DailySaleSummary
 from commercial.domain.money import MoneyCodec
 
 from .budget_dialog import BudgetPreviewDialog
+from .pdv_button_style import PDV_BUTTON_STYLE, PDV_DESTRUCTIVE_BUTTON_STYLE
 
 
 class DailySalePreviewDialog(QDialog):
@@ -22,6 +23,7 @@ class DailySalePreviewDialog(QDialog):
         self.sale = sale
         self.setWindowTitle(f"Segunda via — venda #{sale.sale_id}")
         self.resize(650, 610)
+        self.setStyleSheet(PDV_BUTTON_STYLE)
         root = QVBoxLayout(self)
         root.addWidget(QLabel("PRÉ-VISUALIZAÇÃO DO COMPROVANTE — SEGUNDA VIA"))
         self.preview = QPlainTextEdit(view_model.daily_sale_preview_text(sale))
@@ -112,6 +114,8 @@ class DailySalesDialog(QDialog):
         root.addWidget(self.guidance)
         buttons = QHBoxLayout()
         self.cancel_button = QPushButton("Cancelar venda selecionada")
+        self.setStyleSheet(PDV_BUTTON_STYLE)
+        self.cancel_button.setStyleSheet(PDV_DESTRUCTIVE_BUTTON_STYLE)
         self.preview_button = QPushButton("Visualizar / segunda via")
         self.close_button = QPushButton("Fechar  [Esc]")
         self.cancel_button.clicked.connect(self._cancel)
