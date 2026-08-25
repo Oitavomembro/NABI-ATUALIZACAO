@@ -37,7 +37,14 @@ class Backup:
         return SimpleNamespace(created=(f"{self.directory}/{prefix}.db",), errors=())
     def verify_restore_in_temporary(self, path):
         self.calls += 1
-        return SimpleNamespace(source=str(path), integrity="ok")
+        return SimpleNamespace(
+            source=str(path), integrity="ok", backup_format="SQLITE_LEGACY_UNENCRYPTED",
+            encrypted=False, sha256="a" * 64, schema_version=21,
+        )
+    def create(self, directory, prefix):
+        self.calls += 1; return f"{directory}/{prefix}.db"
+    def create_encrypted(self, directory, password, prefix):
+        self.calls += 1; return f"{directory}/{prefix}.nabibackup"
 
 
 class Diagnostics:
@@ -100,6 +107,39 @@ def test_verificacao_de_restore_exige_permissao_e_delega_somente_ao_temp(tmp_pat
     blocked, *_ = service(tmp_path / "blocked", ("view",))
     with pytest.raises(PermissionError):
         blocked.verify_backup_restore(tmp_path / "backup.db")
+
+
+def test_pacote_criptografado_e_gerado_e_verificado_sem_persistir_senha(tmp_path):
+    application, _security, system, backup, _diagnostics = service(tmp_path)
+    original_verify = backup.verify_restore_in_temporary
+    received = {}
+
+    def verify(path, password=None):
+        received["password"] = password
+        result = original_verify(path)
+        return SimpleNamespace(**{
+            **result.__dict__, "backup_format": "NABICODE_ENCRYPTED_V1",
+            "encrypted": True,
+        })
+
+    backup.verify_restore_in_temporary = verify
+    result = application.create_backup_package(
+        directory=tmp_path / "secure", encrypted=True,
+        password="senha efemera segura",
+    )
+    assert result.encrypted is True
+    assert result.filename.endswith(".nabibackup")
+    assert received["password"] == "senha efemera segura"
+    assert "senha efemera segura" not in repr(system.values)
+
+
+def test_pacote_legado_fica_marcado_como_nao_criptografado(tmp_path):
+    application, *_ = service(tmp_path)
+    result = application.create_backup_package(
+        directory=tmp_path / "legacy", encrypted=False
+    )
+    assert result.encrypted is False
+    assert result.backup_format == "SQLITE_LEGACY_UNENCRYPTED"
 
 
 def test_diagnostico_e_somente_leitura_para_dados_de_negocio(tmp_path):

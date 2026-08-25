@@ -120,10 +120,11 @@ def test_gui_nao_importa_banco_repositorios_fiscal_ou_legacy():
         assert not any(forbidden in module for module in modules)
 
 
-def test_backup_avisa_que_dados_pessoais_nao_sao_criptografados():
+def test_backup_distingue_diario_legado_da_opcao_protegida():
     dialog = SettingsDialog(Application())
     texts = [label.text() for label in dialog.findChildren(__import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel)]
     assert any("dados pessoais" in text and "não é criptografado" in text for text in texts)
+    assert dialog.protected_backup.text().startswith("Backup protegido")
     dialog.close()
 
 

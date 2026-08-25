@@ -101,8 +101,8 @@ class SettingsDialog(QDialog):
             "Backup do banco e dos documentos fiscais. Certificados, senhas e e-mails não são incluídos."
         ))
         privacy = QLabel(
-            "Atenção: o backup contém dados pessoais e não é criptografado pelo NabiCode. "
-            "Use uma pasta protegida e com acesso restrito."
+            "O backup diário tradicional contém dados pessoais e não é criptografado. "
+            "Para uma cópia manual protegida, use Backup protegido."
         )
         privacy.setWordWrap(True); privacy.setStyleSheet("color:#d29922;font-weight:700")
         layout.addWidget(privacy)
@@ -125,7 +125,10 @@ class SettingsDialog(QDialog):
         self.backup_now = QPushButton("Fazer backup agora")
         self.backup_now.setObjectName("primary")
         self.backup_now.clicked.connect(self._create_backup)
+        self.protected_backup = QPushButton("Backup protegido…")
+        self.protected_backup.clicked.connect(self._open_protected_backup)
         buttons.addWidget(self.save_backup); buttons.addWidget(self.backup_now)
+        buttons.addWidget(self.protected_backup)
         layout.addLayout(buttons); layout.addStretch(1)
         self.tabs.addTab(page, "Backup")
 
@@ -231,6 +234,7 @@ class SettingsDialog(QDialog):
         ):
             widget.setEnabled(editable)
         self.backup_now.setEnabled(self.service.can("backup"))
+        self.protected_backup.setEnabled(self.service.can("backup"))
         self.run_diagnostic.setEnabled(self.service.can("diagnose"))
         self.mode.setFocus(Qt.FocusReason.OtherFocusReason)
 
@@ -303,6 +307,15 @@ class SettingsDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, "Backup", str(error))
         self.backup_now.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_protected_backup(self) -> None:
+        from ui_qt.administration.backup_package_dialog import BackupPackageDialog
+
+        dialog = BackupPackageDialog(
+            self.service, initial_directory=self.local_backup.text(), parent=self
+        )
+        dialog.exec()
+        self.protected_backup.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _run_diagnostics(self) -> None:
         try:
