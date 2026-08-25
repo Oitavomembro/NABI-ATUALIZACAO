@@ -2881,3 +2881,30 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Segurança SQLite — PRAGMAs verificados e falha fechada
+
+- branch isolada `codex/sqlite-pragmas-fail-closed`, derivada de `1cfdfa4`;
+- implementação principal `6d9f8a1` — `fix: valida pragmas sqlite em modo fail closed`;
+- estabilização concorrente `fe2098e` — `fix: estabiliza verificacao sqlite concorrente`;
+- a fronteira central agora aplica e relê `foreign_keys`, `journal_mode`,
+  `synchronous`, `busy_timeout` e `query_only` antes de liberar a conexão;
+- perfil local exige `WAL/NORMAL`, rede preserva `DELETE/FULL`, memória exige
+  `MEMORY/NORMAL` e leitura/diagnóstico ativa `query_only` sem declarar garantia
+  de durabilidade de escrita;
+- valor efetivo divergente, PRAGMA recusado, filesystem incompatível ou leitura
+  ausente geram `SQLitePragmaPolicyError` acionável e a conexão é fechada antes
+  de chegar aos serviços. Sessão diagnóstica não pode ser solicitada como escrita;
+- backup abre a origem fisicamente somente leitura e o destino pela política de
+  escrita verificada. A manutenção oficial deixou de duplicar PRAGMAs e reutiliza
+  a mesma fronteira;
+- disputa transitória de primeiras conexões pelo mesmo modo de journal usa
+  espera curta limitada ao timeout e aceita apenas o valor efetivo esperado;
+  divergência ou lock persistente continuam falhando fechados;
+- fault injection cobre PRAGMA recusado/ignorado, divergência efetiva, fechamento
+  do handle, local, rede, memória, banco legado, somente leitura, diagnóstico e
+  dez repetições concorrentes;
+- regressão final de database/startup/perfis/rede/backup: `91 passed`, `3
+  subtests passed`; `compileall` e `git diff --check` aprovados;
+- não houve alteração em serviços de negócio, Fiscal/SEFAZ, Nabi, Qt, regras de
+  backup, banco real ou detecção de filesystem/rede.
