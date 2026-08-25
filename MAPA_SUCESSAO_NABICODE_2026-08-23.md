@@ -2917,3 +2917,29 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - auditoria recebe apenas estados sanitizados; XML/PII/segredos não são emitidos;
 - testes focados: `6 passed`; `compileall` e `git diff --check` aprovados;
 - nenhuma UI, Fiscal/SEFAZ, Caixa, estoque, venda, Qt, licença ou banco real foi alterado.
+
+### Central de Socorro — interface Qt somente diagnóstica
+
+- branch/worktree isolados: `codex/central-socorro-qt` em
+  `NabiCode-QT-CentralSocorroQt-codex`, derivados exatamente de `4a84d90`;
+- implementação: `f4ddd94` — `feat: cria Central de Socorro Qt somente diagnostica`;
+- a janela apresenta os seis checks do catálogo fechado em cartões com estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`; detalhes e identificadores
+  técnicos são sanitizados novamente antes da exibição;
+- execução ocorre em `QThreadPool`, fora da thread gráfica. Reentrada é bloqueada,
+  respostas de geração anterior são descartadas e os workers permanecem vivos
+  até a conclusão;
+- a tela explica separadamente o que foi protegido/testado e o que permanece
+  inconclusivo ou dependente de homologação física. Nenhum estado é apresentado
+  como reparo, autorização ou prova fiscal;
+- o relatório JSON `nabicode.help-center-report.v1` cobre exatamente um resultado
+  por check, repete os limites do diagnóstico, sanitiza todo texto e é gravado por
+  arquivo temporário + `fsync` + substituição atômica. Falha preserva o destino
+  anterior e remove o temporário;
+- Enter avança ou executa uma única ação, Shift+Enter retorna, Esc fecha e invalida
+  resultado tardio, e auto-repeat é consumido sem ação;
+- testes focados finais: `12 passed`; regressão administrativa/Qt e redação:
+  `51 passed`; `compileall` e `git diff --check` aprovados;
+- não há autorreparo, SQL, shell, credencial, gravação operacional ou conexão a
+  `main_qt.py`/shell. Fiscal/SEFAZ, Caixa, estoque, vendas, licença e banco real
+  permaneceram intocados; conexão ao shell exige checkpoint posterior separado.
