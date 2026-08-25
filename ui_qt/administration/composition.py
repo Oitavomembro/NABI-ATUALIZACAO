@@ -37,6 +37,12 @@ def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
     app_version="2.5.1", schema_version=21,
 ):
+    customer_application = getattr(container, "customer_application", None)
+    financial_actions = getattr(container, "financial_actions", None)
+    for service in (customer_application, financial_actions):
+        bind = getattr(service, "bind_mutation_authorizer", None)
+        if callable(bind):
+            bind(security.require_actor)
     modules=[];dashboard=DashboardApplicationService(DashboardRepository(database),security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
     if getattr(container,"customer_application",None):modules.append(AdministrativeModule("Clientes","Cadastro, busca, edição e fichas","F3","clientes","view",lambda p:CustomerManagementDialog(container.customer_application,parent=p),"clientes"))

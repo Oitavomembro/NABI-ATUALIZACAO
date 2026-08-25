@@ -1177,6 +1177,17 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             messagebox.showerror("Acesso negado", f"Seu perfil não possui permissão para {modulo}:{acao}.", parent=self)
         return False
 
+    def _ator_mutacao(self, modulo, acao, *, parent=None):
+        """Revalida a sessão no instante da escrita e retorna seu ator real."""
+
+        try:
+            return self.security.require_actor(modulo, acao)
+        except PermissionError as exc:
+            messagebox.showerror(
+                "Acesso negado", str(exc), parent=parent or self,
+            )
+            return None
+
     def abrir_login_usuario(self, inicial=False):
         if self.security.session and not self.security.is_expired():
             return True
@@ -8234,6 +8245,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
 
         def salvar_novo_cliente():
             nome = e_nome.get().strip()
+            actor = self._ator_mutacao("clientes", "create", parent=janela_cad)
+            if actor is None:
+                return False
             try:
                 cliente_id = CUSTOMER_REGISTRATION_SERVICE.criar(
                     nome=nome,
@@ -8255,6 +8269,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     fiscal_municipio=e_fiscal_municipio.get(),
                     fiscal_uf=e_fiscal_uf.get(),
                     fiscal_cep=e_fiscal_cep.get(),
+                    usuario=actor,
                 )
                 janela_cad.destroy(); self.carregar_clientes(); self.atualizar_resumo_lateral()
                 if callable(on_saved):
@@ -8303,6 +8318,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
             ctk.CTkLabel(win, text=rotulo, anchor="w").pack(fill="x", padx=25)
             e=ctk.CTkEntry(win, height=34, fg_color="#161b22", text_color="#ffffff"); e.pack(fill="x", padx=25, pady=(1,6)); e.insert(0, "" if valor is None else str(valor)); entradas.append(e)
         def salvar():
+            actor = self._ator_mutacao("clientes", "edit", parent=win)
+            if actor is None:
+                return
             try:
                 CUSTOMER_REGISTRATION_SERVICE.editar(
                     cliente_id,
@@ -8310,6 +8328,7 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
                     nome=entradas[2].get(), cpf=entradas[3].get(), rg=entradas[4].get(),
                     telefone=entradas[5].get(), endereco=entradas[6].get(),
                     limite=entradas[7].get(), observacoes=entradas[8].get(),
+                    usuario=actor,
                 )
             except (ValueError, sqlite3.IntegrityError) as exc:
                 mensagem = str(exc) if isinstance(exc, ValueError) else "Código já utilizado por outro cliente."
@@ -8323,6 +8342,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkButton(win, text="🧾 Dados fiscais do cliente", fg_color="#1f6feb", height=38, command=lambda: self.editar_perfil_fiscal_cliente(cliente_id)).pack(fill="x", padx=25, pady=(0, 12))
 
     def editar_perfil_fiscal_cliente(self, cliente_id):
+        actor = self._ator_mutacao("clientes", "edit")
+        if actor is None:
+            return
         conn = conectar_banco()
         try:
             row = conn.execute(
@@ -8359,6 +8381,9 @@ class FicharioMoveisApp(LegacyBackendAdapterMixin, ctk.CTk):
         ctk.CTkCheckBox(frame, text="Contribuinte de ICMS", variable=contribuinte).pack(anchor="w", padx=8, pady=8)
 
         def salvar_fiscal():
+            current_actor = self._ator_mutacao("clientes", "edit", parent=win)
+            if current_actor is None:
+                return
             try:
                 CUSTOMER_REGISTRATION_SERVICE.atualizar_perfil_fiscal(
                     int(cliente_id), email=entries[0].get(), inscricao_estadual=entries[1].get(),

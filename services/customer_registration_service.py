@@ -55,6 +55,7 @@ class CustomerRegistrationService:
         fiscal_municipio: str = "",
         fiscal_uf: str = "",
         fiscal_cep: str = "",
+        usuario: str | None = None,
     ) -> int:
         nome_limpo = CustomerValidator.normalize_name(nome)
         ficha = CustomerValidator.parse_record_number(numero_ficha)
@@ -97,7 +98,9 @@ class CustomerRegistrationService:
         if ficha is not None and ficha >= atual:
             self.set_config("proxima_ficha", str(ficha + 1))
         if self.history_callback:
-            self.history_callback(cliente_id, "CADASTRO", "Cadastro criado.")
+            actor = str(usuario or "").strip()
+            details = "Cadastro criado." + (f" Operador: {actor}." if actor else "")
+            self.history_callback(cliente_id, "CADASTRO", details)
         return cliente_id
 
     def criar_assistido(
@@ -205,6 +208,7 @@ class CustomerRegistrationService:
         endereco: str = "",
         observacoes: str = "",
         limite: Decimal | float | str = Decimal("0"),
+        usuario: str | None = None,
     ) -> None:
         normalized_id = int(cliente_id)
         if normalized_id <= 0:
@@ -233,9 +237,13 @@ class CustomerRegistrationService:
         if dados["numero_ficha"] is not None and dados["numero_ficha"] >= atual:
             self.set_config("proxima_ficha", str(dados["numero_ficha"] + 1))
         if self.history_callback:
-            self.history_callback(normalized_id, "EDIÇÃO", "Dados cadastrais atualizados.")
+            actor = str(usuario or "").strip()
+            details = "Dados cadastrais atualizados." + (f" Operador: {actor}." if actor else "")
+            self.history_callback(normalized_id, "EDIÇÃO", details)
 
-    def excluir_cadastro_sem_movimento(self, cliente_id: int) -> None:
+    def excluir_cadastro_sem_movimento(
+        self, cliente_id: int, *, usuario: str | None = None,
+    ) -> None:
         """Exclui somente cadastro vazio; qualquer vínculo comercial bloqueia."""
         normalized_id = int(cliente_id)
         if normalized_id <= 0:
