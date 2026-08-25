@@ -25,9 +25,26 @@ def money(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+def _main_window_controls(dialog):
+    dialog.setModal(False)
+    dialog.setWindowFlags(
+        dialog.windowFlags()
+        | Qt.WindowType.WindowMinimizeButtonHint
+        | Qt.WindowType.WindowMaximizeButtonHint
+        | Qt.WindowType.WindowCloseButtonHint
+    )
+
+
+def _modal_window_controls(dialog):
+    dialog.setModal(True)
+    dialog.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, False)
+    dialog.setWindowFlag(Qt.WindowType.WindowMaximizeButtonHint, False)
+    dialog.setWindowFlag(Qt.WindowType.WindowCloseButtonHint, True)
+
+
 class TitleEditorDialog(QDialog):
     def __init__(self, kind, submit, parent=None):
-        super().__init__(parent); self.kind=kind; self.submit=submit; self.completed=False
+        super().__init__(parent); _modal_window_controls(self); self.kind=kind; self.submit=submit; self.completed=False
         self.setWindowTitle("Nova conta a receber" if kind=="RECEBER" else "Nova conta a pagar")
         self.setMinimumWidth(520); self.setStyleSheet(STYLE); layout=QVBoxLayout(self); form=QFormLayout()
         self.party=QLineEdit(); self.document=QLineEdit(); self.description=QLineEdit(); self.notes=QLineEdit()
@@ -60,7 +77,7 @@ class TitleEditorDialog(QDialog):
 
 class SettlementDialog(QDialog):
     def __init__(self,title,kind,submit,parent=None):
-        super().__init__(parent); self.title=title; self.kind=kind; self.submit=submit
+        super().__init__(parent); _modal_window_controls(self); self.title=title; self.kind=kind; self.submit=submit
         self.setWindowTitle("Baixar título"); self.setMinimumWidth(480); self.setStyleSheet(STYLE); layout=QVBoxLayout(self); form=QFormLayout()
         self.amount=MoneyEdit(); self.amount.set_value(title.open_amount); self.method=QComboBox(); self.method.addItems(["DINHEIRO","PIX","CARTÃO","TRANSFERÊNCIA","OUTRO"]); self.payment_date=QDateEdit(QDate.currentDate()); self.payment_date.setCalendarPopup(True); self.notes=QLineEdit()
         for label,widget in (("Valor",self.amount),("Forma",self.method),("Data",self.payment_date),("Observação",self.notes)): form.addRow(label,widget)
@@ -76,8 +93,9 @@ class SettlementDialog(QDialog):
 
 
 class FinancialDialog(QDialog):
-    def __init__(self,query,actions,*,user,parent=None):
-        super().__init__(parent); self.query=query; self.actions=actions; self.context=ActionContext(user,ActionOrigin.UI)
+    def __init__(self,query,actions,*,user,parent=None,access_guard=None):
+        super().__init__(parent); _main_window_controls(self); self.query=query; self.actions=actions; self.user=str(user or "").strip(); self.access_guard=access_guard
+        if not self.user: raise ValueError("O usuário do Financeiro é obrigatório.")
         self.setWindowTitle("Financeiro"); self.resize(1150,720); self.setMinimumSize(880,580); self.setStyleSheet(STYLE)
         layout=QVBoxLayout(self); title=QLabel("FINANCEIRO"); title.setStyleSheet("font-size:24px;font-weight:800;color:#00d084"); layout.addWidget(title)
         self.summary=QLabel(); self.summary.setStyleSheet("background:#161b22;padding:12px;font-size:14px;font-weight:700"); layout.addWidget(self.summary)
@@ -105,6 +123,7 @@ class FinancialDialog(QDialog):
         return super().eventFilter(watched,event)
 
     def reload(self):
+        self._actor("view")
         self.receivables=tuple(self.query.receivables()); self.payables=tuple(self.query.payables()); self._fill(self.receivable_table,self.receivables); self._fill(self.payable_table,self.payables)
         today=date.today(); summary=self.query.financial_summary(today,today); self.summary.setText(f"A RECEBER: {money(summary.receivable_open)}  •  VENCIDO: {money(summary.receivable_overdue)}  •  A PAGAR: {money(summary.payable_open)}  •  VENCE HOJE: {money(summary.payable_due_today)}")
 
@@ -121,17 +140,27 @@ class FinancialDialog(QDialog):
 
     def _kind(self): return "RECEBER" if self.tabs.currentIndex()==0 else "PAGAR"
     def _rows(self): return self.receivables if self._kind()=="RECEBER" else self.payables
+    def _actor(self,action):
+        actor=self.access_guard(action) if self.access_guard is not None else self.user
+        actor=str(actor or "").strip()
+        if not actor:raise PermissionError("Sessão ativa e permissão financeira são obrigatórias.")
+        return actor
+    def _context(self,action):return ActionContext(self._actor(action),ActionOrigin.UI)
     def _selected(self):
         table=self.receivable_table if self._kind()=="RECEBER" else self.payable_table; row=table.currentRow(); return self._rows()[row] if 0<=row<len(self._rows()) else None
 
     def new_title(self):
         kind=self._kind(); method=self.actions.create_receivable if kind=="RECEBER" else self.actions.create_payable
-        dialog=TitleEditorDialog(kind,lambda command:method(command,context=self.context,confirmed=True),self)
+        try:self._actor("create")
+        except PermissionError as error:QMessageBox.warning(self,"Acesso negado",str(error));return
+        dialog=TitleEditorDialog(kind,lambda command:method(command,context=self._context("create"),confirmed=True),self)
         if dialog.exec()==QDialog.DialogCode.Accepted:self.reload()
 
     def settle(self):
         title=self._selected()
         if title is None: QMessageBox.information(self,"Financeiro","Selecione um título."); return
         kind=self._kind(); method=self.actions.settle_receivable if kind=="RECEBER" else self.actions.settle_payable
-        dialog=SettlementDialog(title,kind,lambda command:method(command,context=self.context,confirmed=True),self)
+        try:self._actor("pay")
+        except PermissionError as error:QMessageBox.warning(self,"Acesso negado",str(error));return
+        dialog=SettlementDialog(title,kind,lambda command:method(command,context=self._context("pay"),confirmed=True),self)
         if dialog.exec()==QDialog.DialogCode.Accepted:self.reload()

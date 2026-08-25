@@ -192,8 +192,12 @@ class CashService:
             status = "COALESCE(status_pagamento,'')" if "status_pagamento" in movement_columns else "''"
             responsible = "COALESCE(responsavel,'')" if "responsavel" in movement_columns else "''"
             description = "COALESCE(descricao,'')" if "descricao" in movement_columns else "''"
+            document = "COALESCE(documento_numero,'')" if "documento_numero" in movement_columns else "''"
+            source_system = "COALESCE(origem_sistema,'')" if "origem_sistema" in movement_columns else "''"
+            source_reference = "COALESCE(origem_id,'')" if "origem_id" in movement_columns else "''"
             movement_sql = (
-                f"SELECT id,tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status},{responsible},{description} "
+                f"SELECT id,tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,"
+                f"{status},{responsible},{description},{document},{source_system},{source_reference} "
                 "FROM movimentacoes WHERE tipo IN ('COMPRA','PAGAMENTO')"
             )
             movement_params: list[str] = []
@@ -202,7 +206,11 @@ class CashService:
                 movement_sql += " AND (" + " OR ".join("data GLOB ?" for _ in date_prefixes) + ")"
                 movement_params.extend(f"{prefix} *" for prefix in date_prefixes)
             movements = conn.execute(movement_sql, movement_params).fetchall()
-            own = conn.execute("SELECT type,amount,user_id,note,created_at FROM cash_movements WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
+            own = conn.execute(
+                "SELECT id,type,amount,user_id,note,created_at "
+                "FROM cash_movements WHERE cash_session_id=? ORDER BY id",
+                (session.id,),
+            ).fetchall()
         finally:
             conn.close()
         totals = {key: Decimal("0.00") for key in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "sangrias", "suprimentos")}
@@ -211,28 +219,36 @@ class CashService:
             except (TypeError, ValueError): return None
         start_dt, end_dt = parsed(session.opened_at), parsed(end)
         history = []
-        for source_id, kind, method, legacy, canonical, date_text, status, responsible, description in movements:
+        for source_id, kind, method, legacy, canonical, date_text, status, responsible, description, document, source_system, source_reference in movements:
             when = parsed(date_text)
             if str(status).upper() == "CANCELADO" or not when or (start_dt and when < start_dt) or (end_dt and when > end_dt):
                 continue
             value = DecimalStorage.read(canonical, legacy, field="movimento")
             parts = self._payment_parts(method, value)
             if kind == "COMPRA":
+                origin = (
+                    f"{source_system} #{source_reference}"
+                    if source_system and source_reference else f"VENDA #{source_id}"
+                )
                 for key in ("DINHEIRO", "PIX", "CARTAO", "OUTROS"):
                     totals[key.casefold().replace("cartao", "cartao")] += parts[key]
                 for key, value_part in parts.items():
                     if value_part:
-                        history.append({"tipo": f"VENDA {key}", "valor": value_part, "usuario": responsible or "Sistema", "observacao": description or f"Venda #{source_id}", "data": date_text, "origem": f"VENDA #{source_id}", "sinal": 1})
+                        history.append({"tipo": f"VENDA {key}", "valor": value_part, "usuario": responsible or "", "observacao": description or f"Venda #{source_id}", "data": date_text, "origem": origin, "documento": document or "", "sinal": 1})
             elif kind == "PAGAMENTO":
+                origin = (
+                    f"{source_system} #{source_reference}"
+                    if source_system and source_reference else f"RECEBIMENTO #{source_id}"
+                )
                 totals["recebimentos_dinheiro"] += parts["DINHEIRO"]
                 totals["recebimentos_eletronicos"] += parts["PIX"] + parts["CARTAO"] + parts["OUTROS"]
                 for key, value_part in parts.items():
                     if value_part:
-                        history.append({"tipo": f"RECEBIMENTO {key}", "valor": value_part, "usuario": responsible or "Sistema", "observacao": description or f"Recebimento #{source_id}", "data": date_text, "origem": f"RECEBIMENTO #{source_id}", "sinal": 1})
-        for kind, amount, user, note, created in own:
+                        history.append({"tipo": f"RECEBIMENTO {key}", "valor": value_part, "usuario": responsible or "", "observacao": description or f"Recebimento #{source_id}", "data": date_text, "origem": origin, "documento": document or "", "sinal": 1})
+        for movement_id, kind, amount, user, note, created in own:
             value = Decimal(str(amount))
             totals["sangrias" if kind == "SANGRIA" else "suprimentos"] += value
-            history.append({"tipo": kind, "valor": value, "usuario": user, "observacao": note, "data": created, "origem": "CAIXA", "sinal": -1 if kind == "SANGRIA" else 1})
+            history.append({"tipo": kind, "valor": value, "usuario": user, "observacao": note, "data": created, "origem": f"CAIXA #{movement_id}", "documento": "", "sinal": -1 if kind == "SANGRIA" else 1})
         history.sort(key=lambda item: parsed(item["data"]) or datetime.min)
         expected = session.opening_balance + totals["dinheiro"] + totals["recebimentos_dinheiro"] + totals["suprimentos"] - totals["sangrias"]
         movement_total = sum(

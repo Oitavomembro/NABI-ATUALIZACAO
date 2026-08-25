@@ -48,6 +48,13 @@ def _username(security):
     if security.session is None or security.is_expired():raise PermissionError("Sessão expirada. Entre novamente.")
     return security.session.user.username
 
+def _financial_actor(security, action="view"):
+    username = _username(security)
+    if not security.require("financeiro", action):
+        raise PermissionError("Seu perfil não possui permissão para esta ação financeira.")
+    security.touch()
+    return username
+
 def _database_probe(database):
     path = database.database_path.resolve()
     if not path.is_file():
@@ -140,8 +147,25 @@ def build_administrative_modules(
         product_management=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p, service=product_management:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):
         purchase_management=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p, service=purchase_management:PurchaseDialog(service,p),"compras"))
-    cash=CashService(database.connect);modules.append(AdministrativeModule("Caixa","Abertura, movimentos e fechamento","","financeiro","view",lambda p:CashDialog(CashApplicationService(cash,terminal=terminal,user=_username(security)),p),"caixa"))
-    if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p),"financeiro"))
+    cash = CashService(database.connect)
+    modules.append(AdministrativeModule(
+        "Caixa", "Abertura, movimentos e fechamento", "", "financeiro", "view",
+        lambda p: CashDialog(CashApplicationService(
+            cash, terminal=terminal, user=_username(security),
+            actor_provider=lambda action: _financial_actor(security, action),
+        ), p),
+        "caixa",
+    ))
+    if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):
+        modules.append(AdministrativeModule(
+            "Financeiro", "Contas a receber, pagar e baixas", "", "financeiro", "view",
+            lambda p: FinancialDialog(
+                container.financial_query, container.financial_actions,
+                user=_username(security), parent=p,
+                access_guard=lambda action: _financial_actor(security, action),
+            ),
+            "financeiro",
+        ))
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
     modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","","relatorios","view",lambda p:ReportDialog(reports,_username(security),p),"relatorios"))
     accountant_center = AccountantCenterApplicationService(

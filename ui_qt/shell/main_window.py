@@ -115,7 +115,7 @@ class _SummaryWorker(QRunnable):
 class NabiCodeShellWindow(QMainWindow):
     """Janela principal com a mesma hierarquia operacional do NabiCode Legacy."""
 
-    WIDE_PRIMARY_MODULES = frozenset({"clientes", "produtos"})
+    WIDE_PRIMARY_MODULES = frozenset({"clientes", "produtos", "caixa", "financeiro"})
     CUSTOMER_SEGMENTS = {
         "total": ("all", "TODOS OS CLIENTES"),
         "current": ("current", "CLIENTES EM DIA"),
