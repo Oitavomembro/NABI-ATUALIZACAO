@@ -2881,3 +2881,26 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### UX global segura do shell Qt
+
+- branch isolada: `codex/ux-global-segura`, derivada de `1cfdfa4`, sem
+  integração ou push;
+- implementação: `ab64928` — `feat: adiciona ux segura ao shell Qt`;
+- a busca global indexa exclusivamente módulos que já estão visíveis,
+  disponíveis e autorizados na sessão corrente. Enter abre somente resultado
+  único; resultados ambíguos exigem seleção e auto-repeat é consumido;
+- favoritos são locais por usuário, aceitam módulos principais e auxiliares
+  conhecidos sem alterar a ordem Legacy, e são removidos da preferência quando
+  a permissão ou disponibilidade deixa de existir;
+- densidade Compacta/Normal/Confortável e fonte entre 10 e 22 pontos são
+  normalizadas pelo `UIPreferencesService`, sem mudar regras, módulos ou
+  persistência de negócio;
+- notificações discretas informam somente aberturas/fechamentos já concluídos;
+  falhas não produzem mensagem antecipada de sucesso;
+- regressão shell/admin: `81 passed`; validação focada final com preferências:
+  `71 passed`; `compileall` de `services`/`ui_qt` e `git diff --check`
+  aprovados;
+- não houve alteração em PDV, Nabi flutuante, Fiscal/SEFAZ, licenciamento,
+  banco ou regras. Pendente: homologação visual de busca, favoritos, densidade
+  e fonte antes de qualquer integração/promoção.
