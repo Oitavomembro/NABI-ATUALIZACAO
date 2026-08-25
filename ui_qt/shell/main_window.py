@@ -1,15 +1,18 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 
-from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, Qt, Signal, Slot
-from PySide6.QtGui import QKeySequence, QShortcut
+from PySide6.QtCore import QEvent, QObject, QRunnable, QSettings, QThreadPool, Qt, Signal, Slot
+from PySide6.QtGui import QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QMainWindow, QMessageBox,
-    QPushButton, QStackedWidget, QVBoxLayout, QWidget,
+    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QListWidget,
+    QListWidgetItem, QMainWindow, QMessageBox, QPushButton, QStackedWidget,
+    QVBoxLayout, QWidget,
 )
 
 from commercial.domain.money import MoneyCodec
+from services.ui_preferences import UIPreferencesService
 
 
 @dataclass(frozen=True, slots=True)
@@ -93,7 +96,8 @@ class NabiCodeShellWindow(QMainWindow):
 
     def __init__(
         self, security, modules, pdv_factory, *, store_name="NabiCode",
-        profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None, parent=None,
+        profile_label="COMERCIAL / NÃO FISCAL", reauthenticate=None,
+        ux_settings=None, parent=None,
     ) -> None:
         super().__init__(parent)
         self.security = security
@@ -104,6 +108,9 @@ class NabiCodeShellWindow(QMainWindow):
         self._modules = {m.module_id: m for m in self.modules if m.module_id}
         self._open_dialogs = {}
         self._module_pages = {}
+        # Widgets may deliver focus/style events while the shell is still being
+        # assembled. Keep the event filter safe throughout that construction.
+        self.navigation_buttons = {}
         self._pdv_window = None
         self._shortcuts = []
         self._summary_generation = 0
@@ -111,6 +118,9 @@ class NabiCodeShellWindow(QMainWindow):
         self.worker_pool = QThreadPool(self)
         self.worker_pool.setMaxThreadCount(2)
         self._active_module = "dashboard"
+        self._ux_settings = ux_settings or QSettings("NabiCode", "NabiCode-UX")
+        self._ux_user_key = self._current_user_key()
+        self._ui_preferences = self._load_ux_preferences()
         self.setWindowTitle(f"NabiCode — {store_name}")
         self.resize(1360, 820)
         self.setMinimumSize(1024, 680)
@@ -122,10 +132,137 @@ class NabiCodeShellWindow(QMainWindow):
         body = QWidget(); body_layout = QVBoxLayout(body)
         body_layout.setContentsMargins(18, 10, 18, 12); body_layout.setSpacing(10)
         body_layout.addLayout(self._build_header(store_name, profile_label))
+        body_layout.addWidget(self._build_module_search())
         body_layout.addLayout(self._build_navigation())
         self.pages = QStackedWidget(objectName="shellPages"); body_layout.addWidget(self.pages, 1)
         layout.addWidget(body, 1)
+        self._apply_ui_preferences(); self._refresh_favorites()
         self._install_shortcuts(); self.show_module("dashboard")
+
+    def _current_user_key(self):
+        session = getattr(self.security, "session", None)
+        user = getattr(session, "user", None)
+        value = getattr(user, "username", "") or getattr(user, "display_name", "")
+        try:
+            return UIPreferencesService.user_key(value)
+        except ValueError:
+            return "sessao"
+
+    def _load_ux_preferences(self):
+        raw = self._ux_settings.value(f"users/{self._ux_user_key}/preferences", "{}")
+        try:
+            values = json.loads(str(raw or "{}"))
+        except (TypeError, ValueError, json.JSONDecodeError):
+            values = {}
+        return UIPreferencesService.normalize(values)
+
+    def _save_ux_preferences(self):
+        self._ux_settings.setValue(
+            f"users/{self._ux_user_key}/preferences",
+            json.dumps(self._ui_preferences, ensure_ascii=False, sort_keys=True),
+        )
+
+    def _apply_ui_preferences(self):
+        point_size = int(self._ui_preferences.get("font_size", 12))
+        font = QFont(self.font()); font.setPointSize(point_size); self.setFont(font)
+        height = {"Compacta": 70, "Normal": 82, "Confortável": 94}.get(
+            self._ui_preferences.get("density"), 82
+        )
+        for button in self.navigation_buttons.values(): button.setFixedHeight(height)
+
+    def apply_ui_preferences(self, values):
+        """Aplica somente preferências visuais normalizadas e locais do operador."""
+        self._ui_preferences = UIPreferencesService.normalize(values)
+        self._save_ux_preferences(); self._apply_ui_preferences(); self._refresh_favorites()
+
+    def _module_is_authorized_now(self, module_id):
+        session = getattr(self.security, "session", None)
+        if session is None or self.security.is_expired(): return False
+        if module_id == "vendas": return True
+        module = self._modules.get(module_id)
+        if module is None: return False
+        try: return bool(self.security.require(module.permission_module, module.permission_action))
+        except Exception: return False
+
+    def _visible_authorized_modules(self):
+        visible = []
+        for item in LEGACY_NAVIGATION:
+            button = self.navigation_buttons.get(item.module_id)
+            if button is not None and button.isEnabled() and self._module_is_authorized_now(item.module_id):
+                visible.append((item.module_id, item.label, NAVIGATION_SUBTITLES[item.module_id]))
+        canonical = {item.module_id for item in LEGACY_NAVIGATION}
+        for module in self.modules:
+            if module.module_id in canonical or not module.module_id: continue
+            button = getattr(self, "auxiliary_buttons", {}).get(module.module_id)
+            if button is not None and not button.isHidden() and self._module_is_authorized_now(module.module_id):
+                visible.append((module.module_id, module.label, module.description))
+        return tuple(visible)
+
+    def _build_module_search(self):
+        frame = QFrame(); layout = QVBoxLayout(frame); layout.setContentsMargins(0, 0, 0, 0); layout.setSpacing(3)
+        self.module_search = QLineEdit(); self.module_search.setPlaceholderText("Buscar módulo autorizado…")
+        self.module_search.setAccessibleName("Busca de módulos autorizados")
+        self.module_results = QListWidget(); self.module_results.setMaximumHeight(130); self.module_results.hide()
+        self.module_search.textChanged.connect(self._refresh_module_search)
+        self.module_search.installEventFilter(self); self.module_results.installEventFilter(self)
+        self.module_results.itemDoubleClicked.connect(lambda *_args: self._open_selected_search_result())
+        layout.addWidget(self.module_search); layout.addWidget(self.module_results)
+        return frame
+
+    def _refresh_module_search(self, text):
+        term = str(text or "").strip().casefold(); self.module_results.clear()
+        if not term:
+            self.module_results.hide(); return
+        for module_id, label, description in self._visible_authorized_modules():
+            if term not in f"{label} {description}".casefold(): continue
+            item = QListWidgetItem(f"{label} — {description}")
+            item.setData(Qt.ItemDataRole.UserRole, module_id); self.module_results.addItem(item)
+        self.module_results.setVisible(self.module_results.count() > 0)
+        if self.module_results.count(): self.module_results.setCurrentRow(0)
+
+    def _open_selected_search_result(self):
+        item = self.module_results.currentItem()
+        if item is None: return False
+        module_id = str(item.data(Qt.ItemDataRole.UserRole) or "")
+        self.module_search.clear(); self.module_results.hide()
+        return self.show_module(module_id) if module_id in self.navigation_buttons else self.open_module(module_id)
+
+    def _toggle_active_favorite(self):
+        module_id = self._active_module
+        if not self._module_is_authorized_now(module_id): return False
+        self._ui_preferences = UIPreferencesService.toggle_favorite(self._ui_preferences, module_id)
+        self._save_ux_preferences(); self._refresh_favorites(); return True
+
+    def _refresh_favorites(self):
+        while self.favorites_layout.count():
+            item = self.favorites_layout.takeAt(0)
+            if item.widget() is not None: item.widget().deleteLater()
+        available = {module_id: label for module_id, label, _description in self._visible_authorized_modules()}
+        requested = UIPreferencesService.favorites(self._ui_preferences)
+        allowed = tuple(module_id for module_id in requested if module_id in available)
+        if allowed != requested:
+            self._ui_preferences = dict(self._ui_preferences); self._ui_preferences["favorites"] = list(allowed)
+            self._save_ux_preferences()
+        # Preserve the public compatibility view used by the existing shell:
+        # auxiliary authorized modules remain discoverable here even though
+        # their visual section is now correctly labelled "Outros módulos".
+        self.favorite_buttons = dict(getattr(self, "auxiliary_buttons", {}))
+        for module_id in allowed:
+            button = QPushButton(available[module_id]); button.setAccessibleName(available[module_id])
+            button.setStyleSheet("background:#21262d;text-align:left;min-height:34px")
+            button.clicked.connect(lambda _checked=False, selected=module_id: self.show_module(selected) if selected in self.navigation_buttons else self.open_module(selected))
+            self.favorites_layout.addWidget(button); self.favorite_buttons[module_id] = button
+
+    def _build_auxiliary_modules(self):
+        canonical = {item.module_id for item in LEGACY_NAVIGATION}
+        self.auxiliary_buttons = {}
+        for module in self.modules:
+            if not module.module_id or module.module_id in canonical: continue
+            if not self._module_is_authorized_now(module.module_id): continue
+            button = QPushButton(module.label); button.setAccessibleName(module.label)
+            button.setStyleSheet("background:#21262d;text-align:left;min-height:34px")
+            button.clicked.connect(lambda _checked=False, selected=module.module_id: self.open_module(selected))
+            self.auxiliary_layout.addWidget(button); self.auxiliary_buttons[module.module_id] = button
 
     def _build_side_menu(self):
         frame = QFrame(objectName="sideMenu"); frame.setFixedWidth(300)
@@ -151,21 +288,19 @@ class NabiCodeShellWindow(QMainWindow):
         shortcuts = QLabel("ATALHOS RÁPIDOS\n\n[F1]  Início\n[F2]  Vendas\n[F3]  Clientes\n[F4]  Produtos\n[F5]  Configs\n[Ctrl+Shift+P]  Pânico")
         shortcuts.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:12px;font-size:13px;font-weight:700;color:#c9d1d9")
         root.addWidget(shortcuts)
+        auxiliary = QLabel("OUTROS MÓDULOS"); auxiliary.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:11px;font-size:14px;font-weight:800")
+        root.addWidget(auxiliary)
+        auxiliary_container = QWidget(); self.auxiliary_layout = QVBoxLayout(auxiliary_container)
+        self.auxiliary_layout.setContentsMargins(0, 0, 0, 0); self.auxiliary_layout.setSpacing(5)
+        root.addWidget(auxiliary_container); self._build_auxiliary_modules()
         favorites = QLabel("FAVORITOS"); favorites.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:11px;font-size:14px;font-weight:800")
         root.addWidget(favorites)
+        favorite_container = QWidget(); self.favorites_layout = QVBoxLayout(favorite_container)
+        self.favorites_layout.setContentsMargins(0, 0, 0, 0); self.favorites_layout.setSpacing(5)
+        root.addWidget(favorite_container)
+        self.favorite_toggle_button = QPushButton("☆ Favoritar módulo atual")
+        self.favorite_toggle_button.clicked.connect(self._toggle_active_favorite); root.addWidget(self.favorite_toggle_button)
         self.favorite_buttons = {}
-        canonical = {item.module_id for item in LEGACY_NAVIGATION}
-        for module in self.modules:
-            if module.module_id in canonical or module.module_id in {"ajuda"}:
-                continue
-            button = QPushButton(module.label)
-            button.setAccessibleName(module.label)
-            button.setStyleSheet("background:#21262d;text-align:left;min-height:34px")
-            button.clicked.connect(
-                lambda _checked=False, selected=module.module_id: self.open_module(selected)
-            )
-            root.addWidget(button)
-            self.favorite_buttons[module.module_id] = button
         root.addStretch()
         self.help_button = QPushButton("Central de Ajuda"); self.help_button.setStyleSheet("background:#1f6feb")
         self.help_button.clicked.connect(lambda: self.open_module("ajuda")); root.addWidget(self.help_button)
@@ -183,6 +318,9 @@ class NabiCodeShellWindow(QMainWindow):
         row.addWidget(self.menu_toggle)
         title = QLabel(str(store_name).upper()); title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;letter-spacing:1px"); row.addWidget(title, 1)
+        self.status_notification = QLabel("")
+        self.status_notification.setStyleSheet("color:#aeb5bb;font-size:12px;font-weight:700")
+        row.addWidget(self.status_notification)
         profile = QLabel(profile_label); profile.setStyleSheet("color:#8b949e;font-size:12px;font-weight:700"); row.addWidget(profile)
         self.history_button = QPushButton("Histórico"); self.history_button.setStyleSheet("background:#161b22")
         self.history_button.clicked.connect(lambda: self.open_module("auditoria")); row.addWidget(self.history_button)
@@ -250,6 +388,13 @@ class NabiCodeShellWindow(QMainWindow):
             )
         button = self.navigation_buttons.get(module_id)
         if button is not None: button.setFocus(Qt.FocusReason.OtherFocusReason)
+        if hasattr(self, "favorite_toggle_button"):
+            favorite = module_id in UIPreferencesService.favorites(self._ui_preferences)
+            self.favorite_toggle_button.setText(("★ Remover favorito" if favorite else "☆ Favoritar módulo atual"))
+
+    def _notify_known_state(self, text):
+        """Exibe somente estado já concluído; nunca antecipa sucesso."""
+        self.status_notification.setText(str(text or ""))
 
     @staticmethod
     def _style_navigation_button(button, item, *, active):
@@ -286,6 +431,7 @@ class NabiCodeShellWindow(QMainWindow):
                 self._authorized(module)
                 if self.pages.count() == 0: self.pages.addWidget(module.embedded_factory(self.pages))
                 self.pages.setCurrentIndex(0); self._mark_active("dashboard")
+                self._notify_known_state("Início aberto")
                 self.refresh_summary(); return True
             except Exception as error:
                 QMessageBox.warning(self, "Início", str(error)); return False
@@ -319,6 +465,7 @@ class NabiCodeShellWindow(QMainWindow):
             self.pages.setCurrentWidget(page)
             page.show()
             self._mark_active(module_id)
+            self._notify_known_state(f"{module.label} aberto")
             return True
         except Exception as error:
             QMessageBox.warning(self, module.label, str(error))
@@ -336,7 +483,8 @@ class NabiCodeShellWindow(QMainWindow):
         try:
             self._authorized(module); dialog = module.factory(self)
             if not isinstance(dialog, QDialog): raise TypeError("O módulo deve abrir uma janela Qt.")
-            self._open_dialogs[module_id] = dialog; self._mark_active(module_id); dialog.exec(); return True
+            self._open_dialogs[module_id] = dialog; self._mark_active(module_id); dialog.exec()
+            self._notify_known_state(f"{module.label} fechado"); return True
         except Exception as error:
             QMessageBox.warning(self, module.label, str(error)); return False
         finally:
@@ -349,7 +497,8 @@ class NabiCodeShellWindow(QMainWindow):
             window = self.pdv_factory()
             if not isinstance(window, QMainWindow): raise TypeError("A tela de Vendas deve ser uma janela Qt.")
             self._pdv_window = window; window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
-            window.destroyed.connect(self._pdv_closed); self._mark_active("vendas"); window.showMaximized(); return True
+            window.destroyed.connect(self._pdv_closed); self._mark_active("vendas"); window.showMaximized()
+            self._notify_known_state("Vendas aberto"); return True
         except Exception as error:
             self._pdv_window = None; QMessageBox.warning(self, "Vendas", str(error)); return False
 
@@ -394,7 +543,19 @@ class NabiCodeShellWindow(QMainWindow):
         self.summary_labels["alert"].setText(f"Alerta (>60d): {value}")
 
     def eventFilter(self, watched, event):
-        if watched in self.navigation_buttons.values() and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+        if watched in {getattr(self, "module_search", None), getattr(self, "module_results", None)} and event.type() == QEvent.Type.KeyPress:
+            if event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
+                event.accept()
+                if event.isAutoRepeat(): return True
+                if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
+                    self.module_search.setFocus(Qt.FocusReason.BacktabFocusReason); return True
+                if watched is self.module_search and self.module_results.count() != 1:
+                    if self.module_results.count(): self.module_results.setFocus(Qt.FocusReason.TabFocusReason)
+                    return True
+                self._open_selected_search_result(); return True
+            if event.key() == Qt.Key.Key_Escape:
+                event.accept(); self.module_search.clear(); self.module_results.hide(); self.module_search.setFocus(); return True
+        if watched in getattr(self, "navigation_buttons", {}).values() and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
             event.accept()
             if event.isAutoRepeat(): return True
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier: watched.focusPreviousChild()

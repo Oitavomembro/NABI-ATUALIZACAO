@@ -114,6 +114,12 @@ class UIPreferencesServiceTests(unittest.TestCase):
         data = UIPreferencesService.toggle_favorite({}, "financeiro")
         self.assertEqual(data["favorites"], ["financeiro"])
 
+    def test_authorized_auxiliary_module_can_be_favorited_without_reordering_legacy(self):
+        original_order = UIPreferencesService.MODULE_ORDER
+        data = UIPreferencesService.toggle_favorite({}, "compras")
+        self.assertEqual(data["favorites"], ["compras"])
+        self.assertEqual(UIPreferencesService.MODULE_ORDER, original_order)
+
     def test_move_favorite_preserves_bounds_and_order(self):
         data = {"favorites": ["dashboard", "clientes", "produtos"]}
         moved = UIPreferencesService.move_favorite(data, "produtos", -1)

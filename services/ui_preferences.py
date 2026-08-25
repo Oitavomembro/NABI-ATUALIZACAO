@@ -56,11 +56,17 @@ class UIPreferencesService:
         "configs": "Configurações",
     }
     MODULE_ORDER = tuple(MODULE_LABELS)
+    # Módulos legítimos exibidos fora da navegação Legacy também podem ser
+    # favoritos, sem alterar a ordem oficial dos nove módulos principais.
+    FAVORITE_MODULE_IDS = frozenset(MODULE_LABELS).union(
+        {"compras", "usuarios", "ajuda", "auditoria"}
+    )
 
     DEFAULTS: dict[str, Any] = {
         "mode": "Intermediário",
         "workspace": "Geral",
         "density": "Normal",
+        "font_size": 12,
         "theme": "Azul Profissional",
         "adaptive_menu": True,
         "custom_navigation": False,
@@ -102,6 +108,10 @@ class UIPreferencesService:
             data["workspace"] = cls.DEFAULTS["workspace"]
         if data["density"] not in cls.DENSITIES:
             data["density"] = cls.DEFAULTS["density"]
+        try:
+            data["font_size"] = max(10, min(22, int(data["font_size"])))
+        except (TypeError, ValueError):
+            data["font_size"] = cls.DEFAULTS["font_size"]
         if data["theme"] not in cls.THEMES:
             data["theme"] = cls.DEFAULTS["theme"]
         data["adaptive_menu"] = bool(data["adaptive_menu"])
@@ -146,8 +156,8 @@ class UIPreferencesService:
             favorites = []
         normalized_favorites: list[str] = []
         for item in favorites:
-            module_id = "fiscal" if str(item).strip() == "compras" else str(item).strip()
-            if module_id in cls.MODULE_LABELS and module_id not in normalized_favorites:
+            module_id = str(item).strip()
+            if module_id in cls.FAVORITE_MODULE_IDS and module_id not in normalized_favorites:
                 normalized_favorites.append(module_id)
         data["favorites"] = normalized_favorites
         return data
@@ -220,7 +230,7 @@ class UIPreferencesService:
     @classmethod
     def toggle_favorite(cls, values: Mapping[str, Any] | None, module_id: str) -> dict[str, Any]:
         """Adiciona ou remove um módulo dos favoritos sem alterar outras preferências."""
-        if module_id not in cls.MODULE_LABELS:
+        if module_id not in cls.FAVORITE_MODULE_IDS:
             raise ValueError(f"Módulo desconhecido: {module_id}")
         data = cls.normalize(values)
         favorites = list(data["favorites"])
