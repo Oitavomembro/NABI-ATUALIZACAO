@@ -2911,3 +2911,36 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: revisão independente e integração normal na consolidada. O
   pacote mensal do contador permanece fora deste checkpoint até contrato
   oficial delimitado pela trilha arquiteta.
+
+### Backup criptografado autenticado opcional
+
+- branch isolada `codex/backup-criptografado-v2`, derivada de
+  `codex/backup-diario-qt-confiavel@ac9b69f`;
+- implementação `8a5cb8a` — `feat: adiciona backup criptografado autenticado`;
+- novo envelope `.nabibackup` versão 1 usa AES-256-GCM em fluxo por blocos e
+  scrypt com parâmetros fixos da implementação; a dependência `cryptography`
+  permanece na versão `46.0.0` já bloqueada pelo build oficial;
+- cabeçalho canônico, versão, cifra, KDF, salt, nonce e tamanho declarado são
+  validados antes da derivação/descriptografia e autenticados como AAD;
+- senha possui mínimo de 12 caracteres, nunca é persistida ou registrada e não
+  existe senha mestra nem recuperação. Perder a senha torna o envelope
+  irrecuperável;
+- criação usa cópia SQLite consistente em TEMP, `integrity_check`,
+  `foreign_key_check`, arquivo temporário exclusivo, validação completa e troca
+  atômica. Falha remove envelope parcial e texto temporário;
+- verificação/restauração de prova autentica e descriptografa somente em TEMP,
+  valida integridade/FK/schema e nunca toca no banco ativo. A restauração real
+  permanece no fluxo oficial reforçado;
+- backups `.db` existentes continuam aceitos e são identificados explicitamente
+  como `SQLITE_LEGACY_UNENCRYPTED`; não há renomeação, conversão ou criptografia
+  silenciosa;
+- o envelope protege somente o banco operacional. O ZIP fiscal separado não foi
+  alterado neste checkpoint e segue sua política própria;
+- testes cobrem roundtrip, senha errada, adulteração, truncamento, cabeçalho
+  malicioso, tamanho declarado abusivo, colisão, atomicidade, limpeza e
+  compatibilidade legado. Regressão Backup/Configurações/Fichário: `74 passed`;
+  supply chain/empacotamento/backup: `34 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum Fiscal/SEFAZ, Nabi, Qt visual, licenciamento, banco real ou instalador
+  foi alterado. Próximo passo: integrar por merge normal e expor a opção de
+  senha somente em fluxo humano explícito, sem persistência.
