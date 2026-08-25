@@ -2907,3 +2907,25 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - pendências continuam físicas/documentais: homologação oficial acompanhada,
   evidências com certificado e empresa de homologação, revisão jurídica e
   autorização expressa antes de qualquer futura liberação de produção.
+
+### Correção fail-closed do portão de prontidão Fiscal/SEFAZ
+
+- branch isolada `codex/fiscal-readiness-fail-closed`, derivada exatamente de
+  `codex/fiscal-readiness-gate` em `76fc54c`;
+- removido o fallback de `_readiness_enforced == False` que autorizava leitura,
+  ator coordenado sintético ou autenticação sem executar o portão;
+- `FiscalService` nasce sem gate operacional; ausência de composição, flag
+  desligada ou tentativa de ligar apenas a flag falha com `PermissionError`
+  antes de autenticação, reserva, arquivo, assinatura ou rede;
+- o gate composto continua revalidando configuração, CNPJ, certificado,
+  confiança/revogação, catálogo e numeração conforme a operação; nenhuma regra
+  tributária, XML, endpoint ou modo de produção foi alterado;
+- testes novos cobrem inicialização limpa, configuração/CNPJ/A1 ausentes e
+  tentativa de bypass; testes DFe comprovam bloqueio antes de rede/reserva;
+- regressão focada de prontidão/DFe/Central/venda: `52 passed`; `compileall` e
+  `git diff --check` aprovados. A regressão fiscal ampliada foi iniciada, mas
+  excedeu a janela curta desta execução e deve ser repetida antes da integração;
+- nenhum certificado real, banco real ou chamada SEFAZ foi usado. Comercial e
+  módulos não fiscais não passam por esta API e permanecem operacionais;
+- próximo passo: revisão independente, regressão fiscal integral e integração
+  normal na consolidada; produção fiscal continua bloqueada.
