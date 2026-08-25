@@ -80,6 +80,7 @@ class ReportService:
         status: str = "",
         user: str = "",
         limit: int = 5000,
+        offset: int = 0,
         actor: str = "Sistema",
     ) -> ReportResult:
         report_id = str(report_id).strip().lower()
@@ -90,15 +91,16 @@ class ReportService:
         start = self._normalize_date(start_date, end=False)
         end = self._normalize_date(end_date, end=True)
         safe_limit = min(max(int(limit), 1), 50_000)
+        safe_offset = max(int(offset), 0)
         filters = {
             "start_date": start_date.strip(), "end_date": end_date.strip(),
             "search": search.strip(), "status": status.strip(), "user": user.strip(),
-            "limit": safe_limit,
+            "limit": safe_limit, "offset": safe_offset,
         }
         connection = self.connection_factory()
         try:
             columns, rows = getattr(self, f"_report_{report_id}")(
-                connection, start=start, end=end, search=search.strip(), status=status.strip(), user=user.strip(), limit=safe_limit
+                connection, start=start, end=end, search=search.strip(), status=status.strip(), user=user.strip(), limit=safe_limit, offset=safe_offset
             )
         finally:
             connection.close()
@@ -122,6 +124,35 @@ class ReportService:
         })
         self._audit(actor, "GERAR", result.report_id, f"linhas={result.row_count}")
         return result
+
+    def count(self, report_id: str, **filters) -> int:
+        _columns, rows = self._aggregate(report_id, **filters)
+        return int(rows[0][0]) if rows else 0
+
+    def generate_page(self, report_id: str, *, limit: int, offset: int = 0,
+                      actor: str = "Sistema", **filters):
+        result = self.generate(report_id, limit=limit, offset=offset, actor=actor, **filters)
+        _columns, aggregate = self._aggregate(report_id, **filters)
+        quantity = int(aggregate[0][0]) if aggregate else 0
+        value_total = DecimalStorage.to_decimal(aggregate[0][1] if aggregate else 0, field="valor total")
+        return result, {"quantidade": quantity, "valor_total": value_total}, quantity
+
+    def _aggregate(self, report_id: str, **filters):
+        report_id = str(report_id).strip().lower()
+        if report_id not in self.REPORTS:
+            raise ValueError("Relatório desconhecido.")
+        options = {
+            "start": self._normalize_date(str(filters.get("start_date") or ""), end=False),
+            "end": self._normalize_date(str(filters.get("end_date") or ""), end=True),
+            "search": str(filters.get("search") or "").strip(),
+            "status": str(filters.get("status") or "").strip(),
+            "user": str(filters.get("user") or "").strip(), "aggregate": True,
+        }
+        connection = self.connection_factory()
+        try:
+            return getattr(self, f"_report_{report_id}")(connection, **options)
+        finally:
+            connection.close()
 
     def indicators(self, *, start_date: str = "", end_date: str = "") -> dict[str, Decimal | int]:
         start = self._normalize_date(start_date, end=False)
@@ -590,15 +621,27 @@ class ReportService:
         if user and user_col:
             where.append(f"UPPER(CAST({user_col} AS TEXT))=UPPER(?)")
             params.append(user)
-        sql = f"SELECT {', '.join(selected)} FROM {table}"
+        aggregate = bool(options.get("aggregate"))
+        value_col = self._first(columns, "valor_total", "valor", "total", "valor_original")
+        projection = (
+            f"COUNT(*), COALESCE(SUM({value_col}),0)" if aggregate and value_col
+            else "COUNT(*), 0" if aggregate
+            else ", ".join(selected)
+        )
+        sql = f"SELECT {projection} FROM {table}"
         if where:
             sql += " WHERE " + " AND ".join(where)
+        if aggregate:
+            row = connection.execute(sql, params).fetchone()
+            return ("quantidade", "valor_total"), ((row[0], row[1]),)
         if date_col:
             sql += f" ORDER BY {date_col} DESC"
+            if "id" in columns and date_col != "id":
+                sql += ", id DESC"
         elif "id" in columns:
             sql += " ORDER BY id DESC"
-        sql += " LIMIT ?"
-        params.append(int(options.get("limit") or 5000))
+        sql += " LIMIT ? OFFSET ?"
+        params.extend((int(options.get("limit") or 5000), max(0, int(options.get("offset") or 0))))
         rows = connection.execute(sql, params).fetchall()
         return tuple(selected), tuple(tuple(row[column] for column in selected) if hasattr(row, "keys") else tuple(row) for row in rows)
 

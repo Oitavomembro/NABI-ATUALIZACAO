@@ -3,7 +3,7 @@ from __future__ import annotations
 from decimal import Decimal
 
 from commercial.application.report_dto import (
-    ReportDocument, ReportIndicators, ReportOption, ReportQuery, ReportSummary,
+    ReportDocument, ReportIndicators, ReportOption, ReportPage, ReportQuery, ReportSummary,
 )
 from services.report_service import ReportResult, ReportService
 
@@ -29,6 +29,18 @@ class NabiCodeReportGateway:
         )
         return self._document(result)
 
+    def load_page(self, query: ReportQuery, *, limit: int, offset: int, actor: str) -> ReportPage:
+        result, summary, total = self.service.generate_page(
+            query.report_id, start_date=query.start_date, end_date=query.end_date,
+            search=query.search, status=query.status, user=query.user,
+            limit=limit, offset=offset, actor=actor,
+        )
+        return ReportPage(
+            self._document(result),
+            ReportSummary(int(summary["quantidade"]), Decimal(str(summary["valor_total"]))),
+            total, limit, offset,
+        )
+
     def summary(self, document: ReportDocument) -> ReportSummary:
         result = self._result(document)
         summary = self.service.result_summary(result)
@@ -51,6 +63,20 @@ class NabiCodeReportGateway:
         self, document: ReportDocument, fmt: str, destination: str, *, actor: str
     ) -> str:
         return str(self.service.export(self._result(document), fmt, destination, actor=actor))
+
+    def export_query(self, query: ReportQuery, fmt: str, destination: str, *, actor: str) -> str:
+        count = self.service.count(
+            query.report_id, start_date=query.start_date, end_date=query.end_date,
+            search=query.search, status=query.status, user=query.user,
+        )
+        if count > 50_000:
+            raise ValueError("O período excede 50.000 registros; refine os filtros para exportar com segurança.")
+        result = self.service.generate(
+            query.report_id, start_date=query.start_date, end_date=query.end_date,
+            search=query.search, status=query.status, user=query.user,
+            limit=max(1, count), actor=actor,
+        )
+        return str(self.service.export(result, fmt, destination, actor=actor))
 
     @staticmethod
     def _document(result: ReportResult) -> ReportDocument:

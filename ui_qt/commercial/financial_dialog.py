@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import date
 
-from PySide6.QtCore import QDate, QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, QObject, QRunnable, QThreadPool, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout,
@@ -23,6 +23,27 @@ QPushButton#primary{background:#1f6feb} QHeaderView::section{background:#21262d;
 
 def money(value):
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
+
+
+class _LoadSignals(QObject):
+    done = Signal(int, object)
+    failed = Signal(int, str)
+
+
+class _FinancialLoad(QRunnable):
+    def __init__(self, generation, query, limit, offsets):
+        super().__init__(); self.generation=generation; self.query=query; self.limit=limit; self.offsets=offsets; self.signals=_LoadSignals()
+    def run(self):
+        try:
+            today=date.today()
+            result=(
+                self.query.receivables_page(limit=self.limit,offset=self.offsets[0]),
+                self.query.payables_page(limit=self.limit,offset=self.offsets[1]),
+                self.query.financial_summary(today,today),
+            )
+            self.signals.done.emit(self.generation,result)
+        except Exception as error:
+            self.signals.failed.emit(self.generation,str(error))
 
 
 class TitleEditorDialog(QDialog):
@@ -76,20 +97,25 @@ class SettlementDialog(QDialog):
 
 
 class FinancialDialog(QDialog):
-    def __init__(self,query,actions,*,user,parent=None):
+    def __init__(self,query,actions,*,user,parent=None,page_size=100,thread_pool=None):
         super().__init__(parent); self.query=query; self.actions=actions; self.context=ActionContext(user,ActionOrigin.UI)
+        self.page_size=min(max(int(page_size),25),500); self._offsets=[0,0]; self._generation=0; self._pool=thread_pool or QThreadPool.globalInstance(); self.receivables=(); self.payables=()
         self.setWindowTitle("Financeiro"); self.resize(1150,720); self.setMinimumSize(880,580); self.setStyleSheet(STYLE)
         layout=QVBoxLayout(self); title=QLabel("FINANCEIRO"); title.setStyleSheet("font-size:24px;font-weight:800;color:#00d084"); layout.addWidget(title)
         self.summary=QLabel(); self.summary.setStyleSheet("background:#161b22;padding:12px;font-size:14px;font-weight:700"); layout.addWidget(self.summary)
+        self.load_state=QLabel("Carregando…"); layout.addWidget(self.load_state)
         self.tabs=QTabWidget(); layout.addWidget(self.tabs,1); self.receivable_table=self._table(); self.payable_table=self._table()
         for name,table in (("Contas a receber",self.receivable_table),("Contas a pagar",self.payable_table)):
-            page=QWidget(); box=QVBoxLayout(page); box.addWidget(table); self.tabs.addTab(page,name)
+            page=QWidget(); box=QVBoxLayout(page); box.addWidget(table); nav=QHBoxLayout(); previous=QPushButton("Página anterior [PgUp]"); following=QPushButton("Próxima página [PgDown]"); label=QLabel(); nav.addWidget(previous); nav.addWidget(label); nav.addWidget(following); nav.addStretch(); box.addLayout(nav); self.tabs.addTab(page,name)
+            index=self.tabs.count()-1; previous.clicked.connect(lambda _=False,i=index:self.change_page(i,-1)); following.clicked.connect(lambda _=False,i=index:self.change_page(i,1));
+            if not hasattr(self,"_page_labels"): self._page_labels=[]; self._previous=[]; self._following=[]
+            self._page_labels.append(label); self._previous.append(previous); self._following.append(following)
         row=QHBoxLayout(); self.new_button=QPushButton("Novo título [F3]"); self.settle_button=QPushButton("Baixar selecionado [Enter]"); refresh=QPushButton("Atualizar [F5]"); close=QPushButton("Fechar [Esc]"); self.new_button.setObjectName("primary")
         self.new_button.clicked.connect(self.new_title); self.settle_button.clicked.connect(self.settle); refresh.clicked.connect(self.reload); close.clicked.connect(self.reject)
         for b in (self.new_button,self.settle_button,refresh):row.addWidget(b)
         row.addStretch(); row.addWidget(close); layout.addLayout(row)
         self._shortcuts=[]
-        for key,callback in (("F3",self.new_title),("F5",self.reload),("Esc",self.reject)):
+        for key,callback in (("F3",self.new_title),("F5",self.reload),("PgUp",lambda:self.change_page(self.tabs.currentIndex(),-1)),("PgDown",lambda:self.change_page(self.tabs.currentIndex(),1)),("Esc",self.reject)):
             shortcut=QShortcut(QKeySequence(key),self); shortcut.setAutoRepeat(False); shortcut.activated.connect(callback); self._shortcuts.append(shortcut)
         for table in (self.receivable_table,self.payable_table):table.installEventFilter(self)
         self.reload()
@@ -105,8 +131,28 @@ class FinancialDialog(QDialog):
         return super().eventFilter(watched,event)
 
     def reload(self):
-        self.receivables=tuple(self.query.receivables()); self.payables=tuple(self.query.payables()); self._fill(self.receivable_table,self.receivables); self._fill(self.payable_table,self.payables)
-        today=date.today(); summary=self.query.financial_summary(today,today); self.summary.setText(f"A RECEBER: {money(summary.receivable_open)}  •  VENCIDO: {money(summary.receivable_overdue)}  •  A PAGAR: {money(summary.payable_open)}  •  VENCE HOJE: {money(summary.payable_due_today)}")
+        self._generation+=1; generation=self._generation; self.load_state.setText("Carregando…"); self.settle_button.setEnabled(False)
+        worker=_FinancialLoad(generation,self.query,self.page_size,tuple(self._offsets)); worker.signals.done.connect(self._loaded); worker.signals.failed.connect(self._failed); self._pool.start(worker)
+
+    def _loaded(self,generation,result):
+        if generation!=self._generation:return
+        receivable_page,payable_page,summary=result; self.receivables=tuple(receivable_page.items); self.payables=tuple(payable_page.items); self._fill(self.receivable_table,self.receivables); self._fill(self.payable_table,self.payables)
+        self.summary.setText(f"A RECEBER: {money(summary.receivable_open)}  •  VENCIDO: {money(summary.receivable_overdue)}  •  A PAGAR: {money(summary.payable_open)}  •  VENCE HOJE: {money(summary.payable_due_today)}")
+        for index,page in enumerate((receivable_page,payable_page)):
+            current=(page.offset//page.limit)+1; pages=max(1,(page.total_records+page.limit-1)//page.limit); self._page_labels[index].setText(f"Página {current} de {pages} — {page.total_records} registros"); self._previous[index].setEnabled(page.offset>0); self._following[index].setEnabled(page.offset+page.limit<page.total_records)
+        self.load_state.setText("Sem resultados." if not self.receivables and not self.payables else "Dados atualizados."); self.settle_button.setEnabled(True)
+
+    def _failed(self,generation,message):
+        if generation!=self._generation:return
+        self.load_state.setText(f"Não foi possível carregar: {message}"); self.settle_button.setEnabled(False)
+
+    def change_page(self,index,direction):
+        if direction<0:self._offsets[index]=max(0,self._offsets[index]-self.page_size)
+        else:self._offsets[index]+=self.page_size
+        self.reload()
+
+    def closeEvent(self,event):
+        self._generation+=1; super().closeEvent(event)
 
     @staticmethod
     def _fill(table,rows):

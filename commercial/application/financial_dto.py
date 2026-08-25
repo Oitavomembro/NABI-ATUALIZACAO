@@ -89,6 +89,20 @@ class FinancialSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class FinancialTitlePage:
+    items: tuple[ReceivableSummary | PayableSummary, ...]
+    total_records: int
+    limit: int
+    offset: int
+
+    def __post_init__(self) -> None:
+        if self.total_records < 0 or self.limit < 1 or self.offset < 0:
+            raise ValueError("Página financeira inválida.")
+        if len(self.items) > self.limit:
+            raise ValueError("A página financeira excede o limite solicitado.")
+
+
+@dataclass(frozen=True, slots=True)
 class CashFlowEntry:
     payment_id: int
     title_id: int

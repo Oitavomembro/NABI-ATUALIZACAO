@@ -148,6 +148,67 @@ class FinanceiroRepository:
         )
         return self._decimalizar_lista(rows)
 
+    def listar_titulos_pagina(
+        self, *, tipo: str, limite: int, offset: int = 0,
+        status: str | None = None, vencidos: bool = False,
+        abertos: bool = False, pessoa_id: int | None = None,
+        vencimento_de: str | None = None, vencimento_ate: str | None = None,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Lê exatamente uma página, com total completo na mesma consulta SQL."""
+
+        safe_limit = min(max(int(limite), 1), 500)
+        safe_offset = max(int(offset), 0)
+        filtros = ["tipo=?"]
+        parametros: list[Any] = [str(tipo).strip().upper()]
+        if status:
+            filtros.append("status=?"); parametros.append(str(status).strip().upper())
+        if abertos:
+            filtros.append("status IN ('ABERTO','PARCIAL')")
+        if vencidos:
+            filtros.extend(("data_vencimento<date('now','localtime')", "status IN ('ABERTO','PARCIAL')"))
+        if pessoa_id is not None:
+            filtros.append("pessoa_id=?"); parametros.append(int(pessoa_id))
+        if vencimento_de:
+            filtros.append("data_vencimento>=?"); parametros.append(str(vencimento_de)[:10])
+        if vencimento_ate:
+            filtros.append("data_vencimento<=?"); parametros.append(str(vencimento_ate)[:10])
+        parametros.extend((safe_limit, safe_offset))
+        rows = self.database.fetch_all(
+            f"""
+            SELECT *, (valor_original-valor_pago) AS saldo_aberto,
+                   CASE WHEN data_vencimento<date('now','localtime')
+                             AND status IN ('ABERTO','PARCIAL') THEN 1 ELSE 0 END AS vencido,
+                   COUNT(*) OVER() AS __total_records
+            FROM titulos_financeiros
+            WHERE {' AND '.join(filtros)}
+            ORDER BY data_vencimento,id LIMIT ? OFFSET ?
+            """,
+            tuple(parametros),
+        )
+        converted = self._decimalizar_lista(rows)
+        total = int(converted[0].pop("__total_records", 0)) if converted else 0
+        for row in converted[1:]:
+            row.pop("__total_records", None)
+        return converted, total
+
+    def resumo_titulos_abertos(self) -> dict[str, Decimal]:
+        row = self.database.fetch_one(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN tipo='RECEBER' AND status IN ('ABERTO','PARCIAL') THEN valor_original-valor_pago ELSE 0 END),0) receber,
+              COALESCE(SUM(CASE WHEN tipo='RECEBER' AND status IN ('ABERTO','PARCIAL') AND data_vencimento<date('now','localtime') THEN valor_original-valor_pago ELSE 0 END),0) receber_vencido,
+              COALESCE(SUM(CASE WHEN tipo='PAGAR' AND status IN ('ABERTO','PARCIAL') THEN valor_original-valor_pago ELSE 0 END),0) pagar,
+              COALESCE(SUM(CASE WHEN tipo='PAGAR' AND status IN ('ABERTO','PARCIAL') AND data_vencimento=date('now','localtime') THEN valor_original-valor_pago ELSE 0 END),0) pagar_hoje
+            FROM titulos_financeiros
+            """
+        )
+        return {
+            "receber": DecimalStorage.to_decimal(row["receber"] if row else 0, field="a receber"),
+            "receber_vencido": DecimalStorage.to_decimal(row["receber_vencido"] if row else 0, field="a receber vencido"),
+            "pagar": DecimalStorage.to_decimal(row["pagar"] if row else 0, field="a pagar"),
+            "pagar_hoje": DecimalStorage.to_decimal(row["pagar_hoje"] if row else 0, field="a pagar hoje"),
+        }
+
     def registrar_pagamento(
         self,
         *,
@@ -253,6 +314,23 @@ class FinanceiroRepository:
             (data_inicial, data_final),
         )
         return self._decimalizar_lista(rows)
+
+    def resumo_pagamentos_periodo(self, data_inicial: str, data_final: str) -> dict[str, Decimal]:
+        row = self.database.fetch_one(
+            """
+            SELECT
+              COALESCE(SUM(CASE WHEN t.tipo='RECEBER' THEN p.valor ELSE 0 END),0) AS recebido,
+              COALESCE(SUM(CASE WHEN t.tipo='PAGAR' THEN p.valor ELSE 0 END),0) AS pago
+            FROM pagamentos_titulos p
+            JOIN titulos_financeiros t ON t.id=p.titulo_id
+            WHERE p.data_pagamento BETWEEN ? AND ? AND t.status<>'CANCELADO'
+            """,
+            (data_inicial, data_final),
+        )
+        return {
+            "recebido": DecimalStorage.to_decimal(row["recebido"] if row else 0, field="recebido"),
+            "pago": DecimalStorage.to_decimal(row["pago"] if row else 0, field="pago"),
+        }
 
     def listar_titulos_periodo(self, data_inicial: str, data_final: str) -> list[dict[str, Any]]:
         rows = self.database.fetch_all(

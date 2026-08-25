@@ -17,6 +17,12 @@ class FinancialQueryService:
     def payables(self, **filters):
         return self._gateway.payables(**filters)
 
+    def receivables_page(self, *, limit: int = 100, offset: int = 0, **filters):
+        return self._gateway.receivables_page(limit=limit, offset=offset, **filters)
+
+    def payables_page(self, *, limit: int = 100, offset: int = 0, **filters):
+        return self._gateway.payables_page(limit=limit, offset=offset, **filters)
+
     def overdue_receivables(self, *, customer_id: int | None = None):
         return self._gateway.receivables(overdue=True, customer_id=customer_id)
 

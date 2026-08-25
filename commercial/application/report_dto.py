@@ -65,6 +65,19 @@ class ReportSummary:
 
 
 @dataclass(frozen=True, slots=True)
+class ReportPage:
+    document: ReportDocument
+    summary: ReportSummary
+    total_records: int
+    limit: int
+    offset: int
+
+    def __post_init__(self) -> None:
+        if self.total_records < 0 or self.limit < 1 or self.offset < 0:
+            raise ValueError("Página de relatório inválida.")
+
+
+@dataclass(frozen=True, slots=True)
 class ReportIndicators:
     sales_total: Decimal
     receivable_open: Decimal

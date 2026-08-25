@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from commercial.application.financial_dto import (
     CashFlowEntry, CreateFinancialTitleCommand, CustomerCollectionSummary,
-    FinancialSummary, PayableSummary, PersistedFinancialAction,
+    FinancialSummary, FinancialTitlePage, PayableSummary, PersistedFinancialAction,
     ReceivableSummary, SettleFinancialTitleCommand,
 )
 
@@ -75,6 +75,40 @@ class NabiCodeFinancialGateway:
             ))
         return tuple(result)
 
+    def receivables_page(self, *, limit: int, offset: int = 0, **filters) -> FinancialTitlePage:
+        rows, total = self.repository.listar_titulos_pagina(
+            tipo="RECEBER", limite=limit, offset=offset,
+            status=filters.get("status"), vencidos=bool(filters.get("overdue")),
+            abertos=bool(filters.get("open_only")), pessoa_id=filters.get("customer_id"),
+            vencimento_de=filters.get("due_from"), vencimento_ate=filters.get("due_to"),
+        )
+        items = tuple(ReceivableSummary(
+            int(row["id"]), int(row["pessoa_id"]) if row.get("pessoa_id") is not None else None,
+            str(row.get("pessoa_nome") or ""), str(row.get("origem") or ""),
+            str(row.get("origem_id") or ""), str(row.get("documento") or ""),
+            str(row.get("descricao") or ""), row["valor_original"], row["valor_pago"],
+            row["saldo_aberto"], _date(row["data_emissao"]), _date(row["data_vencimento"]),
+            str(row["status"]), bool(row.get("vencido")),
+        ) for row in rows)
+        return FinancialTitlePage(items, total, min(max(int(limit), 1), 500), max(int(offset), 0))
+
+    def payables_page(self, *, limit: int, offset: int = 0, **filters) -> FinancialTitlePage:
+        rows, total = self.repository.listar_titulos_pagina(
+            tipo="PAGAR", limite=limit, offset=offset,
+            status=filters.get("status"), vencidos=bool(filters.get("overdue")),
+            abertos=bool(filters.get("open_only")),
+            vencimento_de=filters.get("due_from"), vencimento_ate=filters.get("due_to"),
+        )
+        items = tuple(PayableSummary(
+            int(row["id"]), int(row["pessoa_id"]) if row.get("pessoa_id") is not None else None,
+            str(row.get("pessoa_nome") or ""), str(row.get("origem") or ""),
+            str(row.get("origem_id") or ""), str(row.get("documento") or ""),
+            str(row.get("descricao") or ""), row["valor_original"], row["valor_pago"],
+            row["saldo_aberto"], _date(row["data_emissao"]), _date(row["data_vencimento"]),
+            str(row["status"]), bool(row.get("vencido")), "",
+        ) for row in rows)
+        return FinancialTitlePage(items, total, min(max(int(limit), 1), 500), max(int(offset), 0))
+
     def customer_collections(self, customer_id: int | None = None) -> tuple[CustomerCollectionSummary, ...]:
         result = []
         today = date.today()
@@ -91,20 +125,14 @@ class NabiCodeFinancialGateway:
         return tuple(result)
 
     def financial_summary(self, start_date, end_date) -> FinancialSummary:
-        receivables = self.receivables(open_only=True)
-        payables = self.payables(open_only=True)
-        today = date.today()
-        payments = self.repository.listar_pagamentos_periodo(
+        totals = self.repository.resumo_titulos_abertos()
+        payments = self.repository.resumo_pagamentos_periodo(
             _date(start_date).isoformat(), _date(end_date).isoformat()
         )
-        total = lambda values: sum(values, Decimal("0.00"))
         return FinancialSummary(
-            total(x.open_amount for x in receivables),
-            total(x.open_amount for x in receivables if x.overdue),
-            total(x.open_amount for x in payables),
-            total(x.open_amount for x in payables if x.due_date == today),
-            total(x["valor"] for x in payments if x["tipo"] == "RECEBER"),
-            total(x["valor"] for x in payments if x["tipo"] == "PAGAR"),
+            totals["receber"], totals["receber_vencido"],
+            totals["pagar"], totals["pagar_hoje"],
+            payments["recebido"], payments["pago"],
         )
 
     def cash_flow(self, start_date, end_date) -> tuple[CashFlowEntry, ...]:

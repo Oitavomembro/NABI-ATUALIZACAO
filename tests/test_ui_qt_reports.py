@@ -11,7 +11,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
 from commercial.application.report_dto import (
-    ReportDocument, ReportIndicators, ReportOption, ReportSummary,
+    ReportDocument, ReportIndicators, ReportOption, ReportPage, ReportSummary,
 )
 from ui_qt.commercial.report_dialog import ReportDialog
 
@@ -28,11 +28,19 @@ class Application:
             "vendas", "Vendas", ("id", "valor_total"), ((1, "5.00"),),
             (), datetime.now().isoformat(),
         )
+    def load_page(self,query,*,limit,offset,actor):
+        self.generated += 1
+        document=ReportDocument("vendas","Vendas",("id","valor_total"),((1,"5.00"),) if offset==0 else (),(),datetime.now().isoformat())
+        return ReportPage(document,ReportSummary(1,Decimal("5")),1,limit,offset)
     def summary(self, document): return ReportSummary(1, Decimal("5"))
     def indicators(self, start, end):
         return ReportIndicators(Decimal("5"), Decimal("2"), Decimal("1"), 3, 4)
     def export(self, document, fmt, destination, *, actor):
         self.exports.append((document, fmt, str(destination), actor)); return str(destination)
+    def export_query(self,query,fmt,destination,*,actor):return str(destination)
+
+class Pool:
+    def start(self,worker): worker.run()
 
 
 def _enter(*, shift=False, repeat=False):
@@ -41,7 +49,7 @@ def _enter(*, shift=False, repeat=False):
 
 
 def test_enter_avanca_uma_etapa_e_botao_gera_uma_vez():
-    application = Application(); dialog = ReportDialog(application, "operador")
+    application = Application(); dialog = ReportDialog(application, "operador",thread_pool=Pool())
     dialog.show(); APP.processEvents()
     assert dialog.eventFilter(dialog.report_type, _enter())
     APP.processEvents()
@@ -53,7 +61,7 @@ def test_enter_avanca_uma_etapa_e_botao_gera_uma_vez():
 
 
 def test_shift_enter_volta_e_auto_repeat_nao_gera():
-    application = Application(); dialog = ReportDialog(application, "operador")
+    application = Application(); dialog = ReportDialog(application, "operador",thread_pool=Pool())
     dialog.show(); dialog.search.setFocus(); APP.processEvents()
     assert dialog.eventFilter(dialog.search, _enter(shift=True))
     APP.processEvents()
@@ -64,12 +72,24 @@ def test_shift_enter_volta_e_auto_repeat_nao_gera():
 
 
 def test_geracao_normal_atualiza_resumo_sem_acao_fiscal():
-    application = Application(); dialog = ReportDialog(application, "operador")
+    application = Application(); dialog = ReportDialog(application, "operador",thread_pool=Pool())
     dialog.generate()
     assert application.generated == 1
     assert "R$ 5,00" in dialog.total.text()
     assert "Estoque baixo 3" in dialog.indicators.text()
     dialog.close()
+
+
+def test_resposta_atrasada_erro_e_fechamento_nao_substituem_pagina_atual():
+    application=Application(); dialog=ReportDialog(application,"operador",thread_pool=Pool())
+    dialog.generate(); current=dialog.current_document
+    old_generation=dialog._generation-1
+    stale=ReportPage(ReportDocument("vendas","Antigo",("id",),((99,),),(),datetime.now().isoformat()),ReportSummary(99,Decimal("99")),99,100,0)
+    dialog._loaded(old_generation,(stale,application.indicators("","")))
+    assert dialog.current_document is current
+    dialog._failed(old_generation,"erro antigo")
+    assert "erro antigo" not in dialog.load_state.text().lower()
+    generation=dialog._generation; dialog.close(); assert dialog._generation>generation
 
 
 def test_gui_nao_importa_banco_fiscal_sefaz_ou_legacy():

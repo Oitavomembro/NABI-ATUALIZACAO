@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from PySide6.QtCore import QDate, QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, QObject, QRunnable, QThreadPool, Qt, Signal
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QComboBox, QDateEdit, QDialog, QFileDialog, QGridLayout,
@@ -30,14 +30,39 @@ def _money(value) -> str:
     return f"R$ {value:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
+class _WorkerSignals(QObject):
+    done = Signal(int, object)
+    failed = Signal(int, str)
+
+
+class _ReportLoad(QRunnable):
+    def __init__(self,generation,application,query,actor,limit,offset):
+        super().__init__(); self.generation=generation; self.application=application; self.query=query; self.actor=actor; self.limit=limit; self.offset=offset; self.signals=_WorkerSignals()
+    def run(self):
+        try:
+            page=self.application.load_page(self.query,limit=self.limit,offset=self.offset,actor=self.actor)
+            indicators=self.application.indicators(self.query.start_date,self.query.end_date)
+            self.signals.done.emit(self.generation,(page,indicators))
+        except Exception as error:self.signals.failed.emit(self.generation,str(error))
+
+
+class _ReportExport(QRunnable):
+    def __init__(self,generation,application,query,fmt,destination,actor):
+        super().__init__(); self.generation=generation; self.application=application; self.query=query; self.fmt=fmt; self.destination=destination; self.actor=actor; self.signals=_WorkerSignals()
+    def run(self):
+        try:self.signals.done.emit(self.generation,self.application.export_query(self.query,self.fmt,self.destination,actor=self.actor))
+        except Exception as error:self.signals.failed.emit(self.generation,str(error))
+
+
 class ReportDialog(QDialog):
     """Consulta e exportação; não executa operação fiscal nem altera registros operacionais."""
 
-    def __init__(self, application, actor: str, parent=None) -> None:
+    def __init__(self, application, actor: str, parent=None, *, page_size=100, thread_pool=None) -> None:
         super().__init__(parent)
         self.application = application
         self.actor = str(actor or "").strip()
         self.current_document = None
+        self.current_query = None; self.page_size=min(max(int(page_size),25),500); self.offset=0; self._generation=0; self._pool=thread_pool or QThreadPool.globalInstance()
         self.setWindowTitle("Relatórios")
         self.resize(1180, 760); self.setMinimumSize(900, 600); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
@@ -87,6 +112,9 @@ class ReportDialog(QDialog):
         self.table.horizontalHeader().setStretchLastSection(True)
         root.addWidget(self.table, 1)
 
+        navigation=QHBoxLayout(); self.previous=QPushButton("Página anterior [PgUp]"); self.page_label=QLabel("Página 1 de 1"); self.following=QPushButton("Próxima página [PgDown]"); self.load_state=QLabel("Pronto."); navigation.addWidget(self.previous); navigation.addWidget(self.page_label); navigation.addWidget(self.following); navigation.addStretch(); navigation.addWidget(self.load_state); root.addLayout(navigation)
+        self.previous.clicked.connect(lambda:self.change_page(-1)); self.following.clicked.connect(lambda:self.change_page(1))
+
         buttons = QHBoxLayout()
         self.csv = QPushButton("Exportar CSV")
         self.xlsx = QPushButton("Exportar Excel")
@@ -107,6 +135,8 @@ class ReportDialog(QDialog):
         shortcut.setAutoRepeat(False); shortcut.activated.connect(self.generate)
         escape = QShortcut(QKeySequence("Esc"), self)
         escape.setAutoRepeat(False); escape.activated.connect(self.reject)
+        for key,callback in (("PgUp",lambda:self.change_page(-1)),("PgDown",lambda:self.change_page(1))):
+            shortcut=QShortcut(QKeySequence(key),self); shortcut.setAutoRepeat(False); shortcut.activated.connect(callback)
         self.report_type.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def eventFilter(self, watched, event) -> bool:
@@ -136,16 +166,16 @@ class ReportDialog(QDialog):
         )
 
     def generate(self) -> None:
-        try:
-            document = self.application.generate(self._query(), actor=self.actor)
-            summary = self.application.summary(document)
-            indicators = self.application.indicators(
-                self.start_date.date().toString("dd/MM/yyyy"),
-                self.end_date.date().toString("dd/MM/yyyy"),
-            )
-        except Exception as error:
-            QMessageBox.warning(self, "Relatórios", str(error)); self.search.setFocus(); return
-        self.current_document = document
+        self.offset=0; self.current_query=self._query(); self._start_load()
+
+    def _start_load(self):
+        if self.current_query is None:return
+        self._generation+=1; generation=self._generation; self.load_state.setText("Carregando…"); self.generate_button.setEnabled(False)
+        worker=_ReportLoad(generation,self.application,self.current_query,self.actor,self.page_size,self.offset); worker.signals.done.connect(self._loaded); worker.signals.failed.connect(self._failed); self._pool.start(worker)
+
+    def _loaded(self,generation,payload):
+        if generation!=self._generation:return
+        page,indicators=payload; document=page.document; summary=page.summary; self.current_document=document
         self.table.clear(); self.table.setColumnCount(len(document.columns))
         self.table.setHorizontalHeaderLabels(
             [column.replace("_", " ").title() for column in document.columns]
@@ -162,7 +192,16 @@ class ReportDialog(QDialog):
             f"Estoque baixo {indicators.low_stock}"
         )
         for button in (self.csv, self.xlsx, self.pdf): button.setEnabled(True)
+        current=(page.offset//page.limit)+1; pages=max(1,(page.total_records+page.limit-1)//page.limit); self.page_label.setText(f"Página {current} de {pages} — {page.total_records} registros"); self.previous.setEnabled(page.offset>0); self.following.setEnabled(page.offset+page.limit<page.total_records); self.load_state.setText("Sem resultados." if not document.rows else "Dados atualizados."); self.generate_button.setEnabled(True)
         self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _failed(self,generation,message):
+        if generation!=self._generation:return
+        self.load_state.setText(f"Erro: {message}"); self.generate_button.setEnabled(True); self.search.setFocus()
+
+    def change_page(self,direction):
+        if self.current_query is None:return
+        self.offset=max(0,self.offset+(self.page_size if direction>0 else -self.page_size)); self._start_load()
 
     def export(self, fmt: str) -> None:
         if self.current_document is None:
@@ -174,9 +213,13 @@ class ReportDialog(QDialog):
         )
         if not destination: return
         try:
-            path = self.application.export(
-                self.current_document, fmt, Path(destination), actor=self.actor
-            )
-        except Exception as error:
-            QMessageBox.critical(self, "Exportação", str(error)); return
-        QMessageBox.information(self, "Relatório exportado", f"Arquivo salvo em:\n{path}")
+            self._generation+=1; generation=self._generation; self.load_state.setText("Exportando período completo…")
+            worker=_ReportExport(generation,self.application,self.current_query,fmt,Path(destination),self.actor); worker.signals.done.connect(self._exported); worker.signals.failed.connect(self._failed); self._pool.start(worker)
+        except Exception as error: QMessageBox.critical(self,"Exportação",str(error))
+
+    def _exported(self,generation,path):
+        if generation!=self._generation:return
+        self.load_state.setText("Exportação concluída."); QMessageBox.information(self,"Relatório exportado",f"Arquivo salvo em:\n{path}")
+
+    def closeEvent(self,event):
+        self._generation+=1; super().closeEvent(event)
