@@ -38,6 +38,16 @@ CREATE TABLE estoque_movimentacoes (
 CREATE UNIQUE INDEX idx_estoque_mov_origem_produto
 ON estoque_movimentacoes(origem, origem_id, produto_id)
 WHERE origem<>'' AND origem_id<>'';
+CREATE TABLE auditoria (
+ id INTEGER PRIMARY KEY AUTOINCREMENT,
+ data TEXT NOT NULL,
+ usuario TEXT NOT NULL,
+ modulo TEXT NOT NULL,
+ acao TEXT NOT NULL,
+ objeto TEXT NOT NULL DEFAULT '',
+ detalhes TEXT NOT NULL DEFAULT '',
+ resultado TEXT NOT NULL
+);
 """
 
 
@@ -88,6 +98,30 @@ class EstoqueServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "Estoque insuficiente"):
             self.service.saida(1, 11, origem="VENDA", origem_id="99")
         self.assertEqual(self.service.saldo(1), 10)
+
+    def test_falha_auditoria_reverte_saida_e_movimento(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        conn.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.saida(1, 2, origem="AJUSTE_MANUAL", usuario="ana")
+        self.assertEqual(self.service.saldo(1), 10)
+        self.assertEqual(self.repository.listar_movimentacoes(1), [])
+
+    def test_falha_auditoria_reverte_ajuste_e_movimento(self):
+        conn = sqlite3.connect(self.path)
+        conn.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        conn.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.ajustar(1, 8, motivo="Contagem física", usuario="ana")
+        self.assertEqual(self.service.saldo(1), 10)
+        self.assertEqual(self.repository.listar_movimentacoes(1), [])
         self.assertEqual(len(self.repository.listar_movimentacoes(1)), 0)
 
     def test_baixa_venda_agrega_produto_repetido_e_e_idempotente(self):

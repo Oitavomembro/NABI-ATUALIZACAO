@@ -7,6 +7,7 @@ import os
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Any, Callable
+from services.critical_audit_policy import record_in_transaction
 
 
 DEFAULT_PERMISSIONS = {
@@ -88,7 +89,7 @@ class SecurityService:
             "display_name": "Administrador", "profile": "ADMIN", "active": True,
             "password": {"algorithm": "legacy_sha256", "digest": str(legacy_hash)},
         }
-        self._save(state)
+        self._save_critical(state,"CRIAR_USUARIO","admin","Bootstrap da identidade administrativa legada.")
 
     def has_users(self) -> bool:
         """Informa se a instalação já possui uma identidade administrativa."""
@@ -268,7 +269,7 @@ class SecurityService:
             "display_name": str(display_name).strip() or username,
             "profile": profile, "active": bool(active), "password": self.hash_password(password),
         }
-        self._save(state)
+        self._save_critical(state,"CRIAR_USUARIO",username,f"perfil={profile}; ativo={bool(active)}")
         return self.get_user(username)
 
     def set_password(self, username: str, password: str) -> None:
@@ -278,7 +279,7 @@ class SecurityService:
         if username not in state["users"]:
             raise ValueError("Usuário inexistente.")
         state["users"][username]["password"] = self.hash_password(password)
-        self._save(state)
+        self._save_critical(state,"ALTERAR_SENHA",username,"Senha alterada.")
 
     def set_user_active(self, username: str, active: bool) -> None:
         self.update_user(username, active=active)
@@ -436,7 +437,7 @@ class SecurityService:
             normalized[module_name] = action_values
         state = self._load()
         state["profiles"][profile] = normalized
-        self._save(state)
+        self._save_critical(state,"SALVAR_PERFIL",profile,"Permissões do perfil atualizadas.")
 
     def delete_profile(self, name: str) -> None:
         profile = str(name).strip().upper()
@@ -448,7 +449,7 @@ class SecurityService:
         if profile not in state["profiles"]:
             raise ValueError("Perfil inexistente.")
         del state["profiles"][profile]
-        self._save(state)
+        self._save_critical(state,"EXCLUIR_PERFIL",profile,"Perfil excluído.")
 
     def update_user(self, username: str, *, display_name: str | None = None, profile: str | None = None, active: bool | None = None) -> SecurityUser:
         state = self._load()
@@ -473,7 +474,7 @@ class SecurityService:
                 if len(admins) <= 1:
                     raise ValueError("Não é permitido desativar o último administrador ativo.")
             data["active"] = bool(active)
-        self._save(state)
+        self._save_critical(state,"ATUALIZAR_USUARIO",username,f"perfil={data.get('profile')}; ativo={bool(data.get('active'))}")
         if self.session and self.session.user.username == username:
             refreshed = self.get_user(username)
             self.session.user = refreshed
@@ -528,6 +529,26 @@ class SecurityService:
         try:
             connection.execute("INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)", (self.CONFIG_KEY, json.dumps(state, ensure_ascii=False, sort_keys=True)))
             connection.commit()
+        finally:
+            connection.close()
+
+    def _save_critical(self, state: dict[str, Any], action: str, object_id: str, details: str) -> None:
+        connection = self.connection_factory()
+        actor = self.session.user.username if self.session is not None else "Sistema"
+        occurred_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+                (self.CONFIG_KEY,json.dumps(state,ensure_ascii=False,sort_keys=True)),
+            )
+            record_in_transaction(
+                connection,"SEGURANCA",action,user=actor,object_id=object_id,
+                details=details,occurred_at=occurred_at,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback(); raise
         finally:
             connection.close()
 

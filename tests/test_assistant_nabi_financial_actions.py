@@ -20,6 +20,7 @@ from commercial.application.financial_action_service import FinancialActionServi
 
 class _Audit:
     def record_event(self, *args, **kwargs): pass
+    def record_event_strict(self, *args, **kwargs): pass
 
 
 class _Queries:

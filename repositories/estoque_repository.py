@@ -4,6 +4,7 @@ from datetime import datetime
 from typing import Any
 
 from database import DatabaseManager
+from services.critical_audit_policy import record_in_transaction
 
 
 class EstoqueRepository:
@@ -60,6 +61,20 @@ class EstoqueRepository:
             ),
         )
         return int(cursor.lastrowid)
+
+    @staticmethod
+    def registrar_auditoria_critica(
+        *, connection, action: str, produto_id: int, usuario: str, detalhes: str
+    ) -> None:
+        record_in_transaction(
+            connection,
+            "ESTOQUE",
+            action,
+            user=str(usuario or "Sistema"),
+            object_id=int(produto_id),
+            details=detalhes,
+            occurred_at=datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        )
 
     def buscar_movimentacao_por_origem(self, origem: str, origem_id: str, produto_id: int, connection=None):
         sql = """

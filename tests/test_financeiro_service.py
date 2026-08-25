@@ -87,6 +87,21 @@ class FinanceiroServiceTest(unittest.TestCase):
         self.service.cancelar(titulo_id)
         self.assertEqual(self.repo.obter_titulo(titulo_id)["status"], "CANCELADO")
 
+    def test_falha_auditoria_reverte_cancelamento(self):
+        titulo_id = self.service.criar_titulo(
+            tipo="PAGAR", valor=50, data_vencimento="2026-08-20"
+        )
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "WHEN NEW.acao='CANCELAR_TITULO' "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        connection.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.cancelar(titulo_id)
+        self.assertEqual(self.repo.obter_titulo(titulo_id)["status"], "ABERTO")
+
     def test_nao_cancela_titulo_com_pagamento(self):
         titulo_id = self.service.criar_titulo(tipo="PAGAR", valor=50, data_vencimento="2026-08-20")
         self.service.pagar(titulo_id, 10)

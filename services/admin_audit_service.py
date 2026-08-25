@@ -6,6 +6,7 @@ from datetime import datetime
 from typing import Callable
 
 from repositories.admin_audit_repository import AdminAuditRepository
+from services.critical_audit_policy import is_critical_event
 
 
 @dataclass(frozen=True)
@@ -40,6 +41,9 @@ class AdminAuditService:
         database_exists: bool = True,
     ) -> None:
         """Registra auditoria geral sem expor SQL ou política de eventos ao legado."""
+        if is_critical_event(module, action):
+            self.record_event_strict(module, action, object_id=object_id, details=details, result=result, user=user)
+            return
         message = (
             f"AUDITORIA | usuário={user} | módulo={module} | ação={action} | "
             f"objeto={object_id} | resultado={result} | {details}"
@@ -72,11 +76,13 @@ class AdminAuditService:
     ) -> None:
         """Persiste evento sensível ou propaga a falha para bloquear a operação."""
 
-        self._repository.record_event(
+        persisted = self._repository.record_event(
             occurred_at=datetime.now().isoformat(timespec="seconds"),
             user=str(user), module=str(module), action=str(action),
             object_id=str(object_id), details=str(details), result=str(result),
         )
+        if not persisted:
+            raise RuntimeError("Auditoria crítica indisponível: tabela auditoria ausente.")
 
     def record_admin_access(self, success: bool, details: str, *, occurred_at: str | None = None) -> None:
         text = str(details or "").strip()

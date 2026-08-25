@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+import inspect
 from pathlib import Path
 
 from services.admin_audit_service import AdminAuditService
@@ -88,6 +89,43 @@ class AdminAuditServiceTests(unittest.TestCase):
         check = sqlite3.connect(bad)
         self.assertEqual(check.execute("SELECT COUNT(*) FROM log_acesso_admin").fetchone()[0], 0)
         check.close()
+
+    def test_evento_critico_nunca_cai_em_best_effort(self):
+        connection = sqlite3.connect(self.db)
+        connection.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        connection.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.record_event("CAIXA", "SANGRIA", object_id="1")
+
+    def test_evento_informativo_continua_best_effort(self):
+        connection = sqlite3.connect(self.db)
+        connection.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        connection.close()
+        self.service.record_event("IA_NABI", "CONSULTA_FERRAMENTA", object_id="busca")
+
+    def test_catalogo_cobre_familias_criticas_documentadas(self):
+        from services.critical_audit_policy import is_critical_event
+
+        eventos = (
+            ("SEGURANCA", "ALTERAR_SENHA"), ("CAIXA", "CAIXA_FECHADO"),
+            ("FINANCEIRO", "ESTORNAR_PAGAMENTO"), ("ESTOQUE", "AJUSTE"),
+            ("COMPRAS", "RECEBER"), ("SISTEMA", "RESTAURAR"),
+            ("LICENCIAMENTO", "REVOGAR"), ("FISCAL", "CANCELAR"),
+        )
+        self.assertTrue(all(is_critical_event(*evento) for evento in eventos))
+
+    def test_confirmacao_nabi_nao_possui_fallback_best_effort(self):
+        from assistant_nabi.adapters import AdminAssistantConfirmationAuditAdapter
+
+        source = inspect.getsource(AdminAssistantConfirmationAuditAdapter.record)
+        self.assertIn("record_event_strict", source)
+        self.assertNotIn("recorder = self._audit.record_event", source)
 
 
 if __name__ == "__main__":

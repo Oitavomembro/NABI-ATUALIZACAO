@@ -114,6 +114,26 @@ class CompraServiceTest(unittest.TestCase):
         self.assertEqual(self.estoque.buscar_produto(1)['estoque_atual'], 10)
         self.assertEqual(self.repo.obter_pedido(pedido)['status'], 'ABERTO')
 
+    def test_falha_auditoria_reverte_recebimento_inteiro(self):
+        pedido = self.service.criar_pedido(
+            1, [{'produto_id': 1, 'quantidade': 2, 'custo_unitario': 8}]
+        )
+        item = self.repo.obter_pedido(pedido)['itens'][0]
+        connection = sqlite3.connect(self.db_path)
+        connection.execute(
+            "CREATE TRIGGER bloquear_auditoria BEFORE INSERT ON auditoria "
+            "WHEN NEW.modulo='Compras' AND NEW.acao='RECEBER' "
+            "BEGIN SELECT RAISE(ABORT, 'auditoria indisponivel'); END"
+        )
+        connection.close()
+        with self.assertRaisesRegex(sqlite3.IntegrityError, "auditoria indisponivel"):
+            self.service.receber(
+                pedido, [{'pedido_item_id': item['id'], 'quantidade': 2}]
+            )
+        self.assertEqual(self.estoque.buscar_produto(1)['estoque_atual'], 10)
+        self.assertEqual(self.repo.obter_pedido(pedido)['status'], 'ABERTO')
+        self.assertEqual(self.repo.obter_pedido(pedido)['itens'][0]['quantidade_recebida'], 0)
+
     def test_servico_nao_pode_ser_comprado_para_estoque(self):
         with self.assertRaises(ValueError):
             self.service.criar_pedido(1, [{'produto_id': 3, 'quantidade': 1, 'custo_unitario': 10}])
