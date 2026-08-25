@@ -4137,3 +4137,21 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - nenhuma rede, certificado, SEFAZ, banco operacional ou Nabi foi acessado; nenhum
   push foi realizado. Próximo passo: homologação
   visual do catálogo/retomada antes de integrar.
+
+## Homologação real NabiMig e suíte sem testes ignorados — 25/08/2026
+
+- o pacote real local `HOST_R6_EXE_REAL.nabimig` foi identificado na área de
+  validação externa do Conversor, sem ser copiado, alterado ou versionado;
+- a importação foi executada duas vezes contra banco SQLite temporário. Foram
+  comprovados 87 clientes, 198 produtos, 12 fornecedores, 277 vendas, 317 itens,
+  32 contas e saldo aberto de R$ 10.171,00;
+- a segunda execução não inseriu duplicatas, os dois pré-backups foram gerados e
+  `PRAGMA foreign_key_check` permaneceu vazio;
+- regressão integral final com o pacote real habilitado: `2591 passed`,
+  `492 subtests passed`, **zero skipped** e zero falhas em 262,80 segundos;
+- permanecem somente dois avisos não funcionais: criação intencional de nome
+  duplicado em ZIP no teste adversarial do pacote contábil e depreciação interna
+  da dependência externa `brazilfiscalreport`. Nenhum aviso representa aprovação
+  de homologação fiscal física;
+- nenhum banco ativo, XML fiscal real, certificado, senha, rede ou SEFAZ foi
+  acessado nessa validação e nenhum push foi realizado.
