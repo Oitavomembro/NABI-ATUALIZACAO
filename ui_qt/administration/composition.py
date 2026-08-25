@@ -30,6 +30,7 @@ from services.help_center_repair_service import (
     GreenRepairService, VisualPreferencesCallbacks,
 )
 from services.ui_preferences import UIPreferencesService
+from services.company_profile_service import CompanyProfileService
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
 from ui_qt.commercial.financial_dialog import FinancialDialog
@@ -229,9 +230,12 @@ def build_administrative_modules(
         diagnostics=diagnostics,
         printing_service=PrintingService(system.get_config),
     )
+    company_profile = CompanyProfileService(database.connect, security_service=security)
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",
-        "configs", "view", lambda p: SettingsDialog(settings, p), "configs",
+        "configs", "view", lambda p: SettingsDialog(
+            settings, p, company_profile_service=company_profile,
+        ), "configs",
         restricted_menu=True,
     ))
     modules.append(AdministrativeModule(
