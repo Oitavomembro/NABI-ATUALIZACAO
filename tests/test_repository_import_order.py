@@ -36,4 +36,3 @@ def test_services_then_repositories_import_in_fresh_interpreter() -> None:
     result = _fresh_import("services", "repositories")
     assert result.returncode == 0, result.stderr
     assert result.stdout.strip() == "EstoqueRepository EstoqueService"
-
