@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Callable, Optional
+import hashlib
+import json
 import re
 
 from repositories.decimal_storage import DecimalStorage
@@ -113,8 +115,13 @@ class CashService:
         return self.get_open_session(terminal)  # type: ignore[return-value]
 
     @staticmethod
-    def _audit(conn, user: str, action: str, session_id: int, details: str, occurred_at: str) -> None:
+    def _audit(
+        conn, user: str, action: str, session_id: int, details: str,
+        occurred_at: str, *, required: bool = False,
+    ) -> None:
         tables = {str(row[0]) for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if required and "auditoria" not in tables:
+            raise RuntimeError("Auditoria obrigatória do fechamento indisponível.")
         if "auditoria" in tables:
             conn.execute(
                 "INSERT INTO auditoria(data,usuario,modulo,acao,objeto,detalhes,resultado) VALUES(?,?,'CAIXA',?,?,?,'SUCESSO')",
@@ -247,23 +254,57 @@ class CashService:
 
     def close_session(self, terminal: str, counted_cash: Any, user: str, note: str = "",
                       closed_at: Optional[str] = None) -> CashSession:
-        session = self.get_open_session(terminal)
-        if session is None:
-            raise RuntimeError("Não existe caixa aberto neste terminal.")
+        terminal = str(terminal or "").strip()
+        actor = str(user or "").strip()
+        if not terminal:
+            raise ValueError("Terminal não identificado.")
+        if not actor:
+            raise PermissionError("Operador autenticado é obrigatório para fechar o caixa.")
         counted = self._money(counted_cash, "valor contado")
         if counted < 0:
             raise ValueError("O valor contado não pode ser negativo.")
-        summary = self.session_summary(session.id)
-        expected = summary["expected_cash"]
-        difference = counted - expected
         note = str(note or "").strip()
-        if difference != 0 and not note:
-            raise ValueError("Informe uma observação para sobra ou falta de caixa.")
-        actor = str(user or "Sistema").strip() or "Sistema"
         now = closed_at or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
         conn = self._connection_factory()
         try:
             conn.execute("BEGIN IMMEDIATE")
+            row = conn.execute(
+                """SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,
+                          closed_by,closed_at,expected_cash,counted_cash,difference,closing_note
+                     FROM cash_sessions WHERE terminal=? ORDER BY id DESC LIMIT 1""",
+                (terminal,),
+            ).fetchone()
+            session = self._session(row)
+            if session is None:
+                raise RuntimeError("Não existe caixa neste terminal.")
+            fingerprint = self._closing_fingerprint(
+                session.id, terminal, counted, note, actor
+            )
+            journal = conn.execute(
+                "SELECT fingerprint,status,result_json FROM cash_closing_journal WHERE cash_session_id=?",
+                (session.id,),
+            ).fetchone()
+            if journal is not None:
+                if str(journal[0]).lower() != fingerprint:
+                    raise ValueError("O fechamento repetido diverge do fechamento oficial.")
+                if str(journal[1]).upper() != "COMMITTED":
+                    raise RuntimeError("O fechamento possui diário incompleto e permanece bloqueado.")
+                if session.status != "FECHADO":
+                    raise RuntimeError("O diário do fechamento está inconsistente.")
+                conn.commit()
+                return session
+            if session.status != "ABERTO":
+                raise RuntimeError("A sessão de caixa já foi fechada.")
+            expected = self._expected_cash_in_connection(conn, session, now)
+            difference = counted - expected
+            if difference != 0 and not note:
+                raise ValueError("Informe uma observação para sobra ou falta de caixa.")
+            conn.execute(
+                """INSERT INTO cash_closing_journal
+                   (cash_session_id,fingerprint,status,result_json,username,created_at)
+                   VALUES(?,?,'PENDING','',?,?)""",
+                (session.id, fingerprint, actor, now),
+            )
             updated = conn.execute(
                 """UPDATE cash_sessions SET status='FECHADO',closed_by=?,closed_at=?,expected_cash=?,counted_cash=?,difference=?,closing_note=?
                    WHERE id=? AND status='ABERTO'""",
@@ -271,14 +312,106 @@ class CashService:
             )
             if updated.rowcount != 1:
                 raise RuntimeError("A sessão de caixa já foi fechada.")
-            self._audit(conn, actor, "CAIXA_FECHADO", session.id, f"esperado={expected:.2f}; contado={counted:.2f}; diferenca={difference:.2f}; observacao={note}", now)
+            self._audit(conn, actor, "CAIXA_FECHADO", session.id, f"esperado={expected:.2f}; contado={counted:.2f}; diferenca={difference:.2f}; observacao={note}", now, required=True)
+            result_json = json.dumps(
+                {"cash_session_id": session.id, "fingerprint": fingerprint},
+                ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+            )
+            committed = conn.execute(
+                """UPDATE cash_closing_journal
+                   SET status='COMMITTED',result_json=?,committed_at=?
+                   WHERE cash_session_id=? AND status='PENDING'""",
+                (result_json, now, session.id),
+            )
+            if committed.rowcount != 1:
+                raise RuntimeError("Não foi possível confirmar o diário do fechamento.")
+            closed_row = conn.execute(
+                """SELECT id,terminal,opened_by,opened_at,opening_balance,opening_mode,status,
+                          closed_by,closed_at,expected_cash,counted_cash,difference,closing_note
+                     FROM cash_sessions WHERE id=?""",
+                (session.id,),
+            ).fetchone()
+            closed_session = self._session(closed_row)
+            if closed_session is None:
+                raise RuntimeError("Fechamento confirmado sem sessão correspondente.")
             conn.commit()
+            return closed_session
         except Exception:
             conn.rollback()
             raise
         finally:
             conn.close()
-        return self.history(terminal, session.id)[0]
+
+    @staticmethod
+    def _closing_fingerprint(
+        session_id: int, terminal: str, counted: Decimal, note: str, actor: str,
+    ) -> str:
+        payload = json.dumps(
+            {
+                "actor": actor,
+                "counted_cash": DecimalStorage.canonical(counted, field="valor contado"),
+                "note": note,
+                "session_id": int(session_id),
+                "terminal": terminal,
+            },
+            ensure_ascii=True, sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(payload).hexdigest()
+
+    def _expected_cash_in_connection(
+        self, conn, session: CashSession, closed_at: str,
+    ) -> Decimal:
+        movement_columns = self._columns(conn, "movimentacoes")
+        canonical = "valor_decimal" if "valor_decimal" in movement_columns else "NULL"
+        status = "COALESCE(status_pagamento,'')" if "status_pagamento" in movement_columns else "''"
+        movement_sql = (
+            f"SELECT tipo,COALESCE(forma_pagamento,''),valor,{canonical},data,{status} "
+            "FROM movimentacoes WHERE tipo IN ('COMPRA','PAGAMENTO')"
+        )
+        params: list[str] = []
+        prefixes = self._session_date_prefixes(session.opened_at, closed_at)
+        if prefixes:
+            movement_sql += " AND (" + " OR ".join("data GLOB ?" for _ in prefixes) + ")"
+            params.extend(f"{prefix} *" for prefix in prefixes)
+        rows = conn.execute(movement_sql, params).fetchall()
+        own = conn.execute(
+            "SELECT type,amount FROM cash_movements WHERE cash_session_id=?",
+            (session.id,),
+        ).fetchall()
+
+        def parsed(value):
+            try:
+                return datetime.strptime(str(value), "%d/%m/%Y %H:%M:%S")
+            except (TypeError, ValueError):
+                return None
+
+        start_dt, end_dt = parsed(session.opened_at), parsed(closed_at)
+        cash_sales = Decimal("0")
+        cash_receipts = Decimal("0")
+        for kind, method, legacy, canonical_value, occurred, payment_status in rows:
+            when = parsed(occurred)
+            if (
+                str(payment_status).upper() == "CANCELADO"
+                or when is None
+                or (start_dt is not None and when < start_dt)
+                or (end_dt is not None and when > end_dt)
+            ):
+                continue
+            value = DecimalStorage.read(canonical_value, legacy, field="movimento")
+            cash = self._payment_parts(method, value)["DINHEIRO"]
+            if kind == "COMPRA":
+                cash_sales += cash
+            elif kind == "PAGAMENTO":
+                cash_receipts += cash
+        supplies = sum(
+            (Decimal(str(amount)) for kind, amount in own if kind == "SUPRIMENTO"),
+            Decimal("0"),
+        )
+        withdrawals = sum(
+            (Decimal(str(amount)) for kind, amount in own if kind == "SANGRIA"),
+            Decimal("0"),
+        )
+        return session.opening_balance + cash_sales + cash_receipts + supplies - withdrawals
 
     def history(
         self,

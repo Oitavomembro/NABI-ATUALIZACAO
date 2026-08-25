@@ -27,6 +27,15 @@ class Backend:
     def history(self, terminal): return []
 
 
+class Security:
+    def __init__(self, allowed=True):
+        self.allowed=allowed; self.expired=False
+        self.session=SimpleNamespace(user=SimpleNamespace(username="ANA"))
+    def is_expired(self): return self.expired
+    def require(self,module,action): return self.allowed and (module,action)==("financeiro","view")
+    def touch(self): pass
+
+
 @pytest.fixture(scope="module")
 def app(): return QApplication.instance() or QApplication([])
 
@@ -37,7 +46,7 @@ def key(widget, auto=False, shift=False):
 
 
 def test_porta_fixa_terminal_usuario_e_retorna_resumo_tipado():
-    backend=Backend(); service=CashApplicationService(backend,terminal="PC1",user="ANA")
+    backend=Backend(); service=CashApplicationService(backend,terminal="PC1",user="ANA",security=Security())
     assert not service.current().is_open
     state=service.open(Decimal("100"),informed=True)
     assert state.is_open and state.expected_cash==Decimal("110.00")

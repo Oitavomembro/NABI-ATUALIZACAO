@@ -782,6 +782,20 @@ def initialize_database(
         ON cash_sessions(terminal) WHERE status='ABERTO'
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_sessions_terminal_opened ON cash_sessions(terminal, opened_at)")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS cash_closing_journal (
+            cash_session_id INTEGER PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL,
+            result_json TEXT NOT NULL DEFAULT '',
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            committed_at TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(cash_session_id) REFERENCES cash_sessions(id)
+        )
+        """
+    )
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS cash_movements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,

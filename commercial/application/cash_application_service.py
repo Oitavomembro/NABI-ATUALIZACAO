@@ -38,12 +38,29 @@ class CashSessionView:
 class CashApplicationService:
     """Porta operacional do Caixa: fixa terminal/ator fora da GUI."""
 
-    def __init__(self, cash_service, *, terminal: str, user: str) -> None:
+    def __init__(self, cash_service, *, terminal: str, user: str = "", security=None) -> None:
         self._cash = cash_service
+        self._security = security
         self.terminal = str(terminal or "").strip()
         self.user = str(user or "").strip()
-        if not self.terminal or not self.user:
-            raise ValueError("Terminal e usuário do caixa são obrigatórios.")
+        if not self.terminal:
+            raise ValueError("Terminal do caixa é obrigatório.")
+        if not self.user and self._security is None:
+            raise ValueError("Usuário ou sessão do caixa é obrigatório.")
+
+    def _authenticated_actor(self) -> str:
+        security = self._security
+        session = getattr(security, "session", None) if security is not None else None
+        if security is None or session is None or security.is_expired():
+            raise PermissionError("Sessão autenticada é obrigatória para fechar o caixa.")
+        if not security.require("financeiro", "view"):
+            raise PermissionError("Seu perfil não possui permissão para fechar o caixa.")
+        user = getattr(session, "user", None)
+        actor = str(getattr(user, "username", "") or "").strip()
+        if not actor:
+            raise PermissionError("A sessão não possui operador identificado.")
+        security.touch()
+        return actor
 
     def current(self) -> CashSessionView:
         session = self._cash.get_open_session(self.terminal)
@@ -85,7 +102,7 @@ class CashApplicationService:
 
     def close(self, counted_cash, note: str = "") -> CashSession:
         return self._cash.close_session(
-            self.terminal, counted_cash, self.user, note
+            self.terminal, counted_cash, self._authenticated_actor(), note
         )
 
     def history(self) -> tuple[CashSession, ...]:
