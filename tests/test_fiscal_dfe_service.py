@@ -97,9 +97,10 @@ def test_resposta_sem_documento_tambem_preserva_nsu(dfe_service):
 def test_nao_regride_nsu_e_rejeita_documento_malformado(dfe_service):
     service, fiscal, _root = dfe_service
     fiscal._set_setting(service.CONFIG_KEY, '{"last_nsu":"100","max_nsu":"100"}')
-    service.parse_response(
-        '<retDistDFeInt><cStat>137</cStat><ultNSU>50</ultNSU><maxNSU>100</maxNSU></retDistDFeInt>'
-    )
+    with pytest.raises(ValueError, match="regredir"):
+        service.parse_response(
+            '<retDistDFeInt><cStat>137</cStat><ultNSU>50</ultNSU><maxNSU>100</maxNSU></retDistDFeInt>'
+        )
     assert service.state()["last_nsu"] == "000000000000100"
     invalid = base64.b64encode(b"nao-gzip").decode("ascii")
     with pytest.raises(ValueError, match="GZip inválido"):
