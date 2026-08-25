@@ -49,9 +49,11 @@ class SecurityService:
     LOGIN_COOLDOWN_SECONDS = 60
     MANAGER_CONFIRMATION_THROTTLE_ID = "__confirmacao_gerencial__"
 
-    def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int = 15) -> None:
+    def __init__(self, connection_factory: Callable[[], Any], *, inactivity_minutes: int | None = None) -> None:
         self.connection_factory = connection_factory
-        self.inactivity_minutes = max(1, int(inactivity_minutes))
+        self.inactivity_minutes = (
+            max(1, int(inactivity_minutes)) if inactivity_minutes is not None else None
+        )
         self.session: SecuritySession | None = None
         self._ensure_state()
 
@@ -376,6 +378,8 @@ class SecurityService:
     def is_expired(self, now: datetime | None = None) -> bool:
         if not self.session:
             return True
+        if self.inactivity_minutes is None:
+            return False
         now = now or datetime.now()
         return now - self.session.last_activity_at >= timedelta(minutes=self.inactivity_minutes)
 

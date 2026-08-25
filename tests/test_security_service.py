@@ -50,6 +50,16 @@ class SecurityServiceTests(unittest.TestCase):
         session.last_activity_at = datetime.now() - timedelta(minutes=2)
         self.assertTrue(self.service.is_expired()); self.assertFalse(self.service.require("dashboard"))
 
+    def test_sessao_padrao_permanece_ativa_ate_logout_ou_fechamento(self):
+        service = SecurityService(self.factory)
+        service.bootstrap_admin(hashlib.sha256(b"segredo").hexdigest())
+        session = service.authenticate("admin", "segredo")
+        session.last_activity_at = datetime.now() - timedelta(days=30)
+        self.assertFalse(service.is_expired())
+        self.assertTrue(service.require("dashboard"))
+        service.logout()
+        self.assertTrue(service.is_expired())
+
     def test_confirmacao_de_gerente(self):
         self.service.create_user("gerente", "Gerente", "senha456", "GERENTE")
         self.assertTrue(self.service.confirm_manager_password("senha456"))
