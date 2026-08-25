@@ -16,7 +16,15 @@ from .contracts import (
 from .registry import DraftToolRegistry, ReadOnlyToolRegistry
 from .adapters import AdminAssistantAuditAdapter, CurrentSessionPermissionAdapter
 from .read_tools import register_commercial_read_tools
-from .ui_tools import OPEN_MODULE_HUB, OPEN_PRODUCT_SEARCH, register_ui_intent_tools
+from .ui_tools import (
+    EXPLAIN_CONFIGURATION,
+    OPEN_COMPANY_XML_IMPORT,
+    OPEN_FISCAL_CONFIGURATION,
+    OPEN_MODULE_HUB,
+    OPEN_PRODUCT_SEARCH,
+    OPEN_PRODUCT_XML_IMPORT,
+    register_ui_intent_tools,
+)
 from .application import AssistantApplicationService, UnavailableAssistantService
 from .unavailable_provider import (
     AssistantProviderUnavailableError,
@@ -181,6 +189,10 @@ __all__ = [
     "OPEN_PRODUCT_SEARCH",
     "OPEN_MODULE_HUB",
     "register_ui_intent_tools",
+    "EXPLAIN_CONFIGURATION",
+    "OPEN_COMPANY_XML_IMPORT",
+    "OPEN_FISCAL_CONFIGURATION",
+    "OPEN_PRODUCT_XML_IMPORT",
     "create_read_only_assistant",
     "create_draft_assistant",
     "verify_model_artifact",

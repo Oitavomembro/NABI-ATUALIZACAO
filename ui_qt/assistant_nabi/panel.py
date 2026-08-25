@@ -107,6 +107,9 @@ class NabiAssistantPanel(QWidget):
         nfe_entry_service=None,
         product_search_opener=None,
         module_hub_opener=None,
+        fiscal_configuration_opener=None,
+        company_xml_import_opener=None,
+        product_xml_import_opener=None,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -118,6 +121,9 @@ class NabiAssistantPanel(QWidget):
         self._nfe_entry_service = nfe_entry_service
         self._product_search_opener = product_search_opener
         self._module_hub_opener = module_hub_opener
+        self._fiscal_configuration_opener = fiscal_configuration_opener
+        self._company_xml_import_opener = company_xml_import_opener
+        self._product_xml_import_opener = product_xml_import_opener
         self._workers: set[_AskWorker] = set()
         self._pending_draft = None
         self._confirmation_token = None
@@ -417,6 +423,30 @@ class NabiAssistantPanel(QWidget):
                     )
                 else:
                     self._module_hub_opener()
+            if result.success and result.tool_name in {
+                "interface.abrir_configuracao_fiscal",
+                "interface.abrir_importacao_xml_empresa",
+                "interface.abrir_importacao_xml_produtos",
+            }:
+                routes = {
+                    "interface.abrir_configuracao_fiscal": (
+                        self._fiscal_configuration_opener,
+                        "A configuração Fiscal não está disponível nesta tela.",
+                    ),
+                    "interface.abrir_importacao_xml_empresa": (
+                        self._company_xml_import_opener,
+                        "A importação de dados empresariais não está disponível nesta tela.",
+                    ),
+                    "interface.abrir_importacao_xml_produtos": (
+                        self._product_xml_import_opener,
+                        "A importação de produtos não está disponível nesta tela.",
+                    ),
+                }
+                opener, unavailable = routes[result.tool_name]
+                if opener is None:
+                    self.history.append(f"<b>Nabi:</b> {self._escape(unavailable)}")
+                else:
+                    opener()
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def review_draft(self) -> None:
@@ -808,6 +838,12 @@ class NabiAssistantPanel(QWidget):
                 for item in payload.get("items", ())
             )
             return "\n".join(lines)
+        if result.tool_name == "contexto.explicar_configuracao":
+            return "\n".join((
+                str(payload["title"]),
+                str(payload["guidance"]),
+                str(payload["limits"]),
+            ))
         if result.tool_name == "compras.preparar_fornecedor":
             return "\n".join((
                 f"Fornecedor: {payload['name']}",
