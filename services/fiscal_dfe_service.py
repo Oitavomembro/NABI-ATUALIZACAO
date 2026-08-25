@@ -222,30 +222,36 @@ class FiscalDFeService:
             raise ValueError("Resposta DF-e tentou regredir o último NSU confirmado.")
         if status in {"137", "138"} and persist:
             index = self._index()
-            for document in documents:
-                previous = next((
-                    row for row in index
-                    if row.get("nsu") == document["nsu"] and row.get("schema") == document["schema"]
-                ), None)
-                if previous and previous.get("sha256") != document["sha256"]:
-                    raise ValueError(f"NSU {document['nsu']} já existe com conteúdo divergente.")
-                if previous:
-                    continue
-                self._atomic_write(Path(document["path"]), document["xml"])
-                index.append({
-                    "nsu": document["nsu"], "schema": document["schema"],
-                    "path": document["path"], "sha256": document["sha256"],
-                    "origin": origin_url or "RESPOSTA_LOCAL_NAO_TRANSMITIDA",
-                    "environment": environment or "NAO_INFORMADO",
-                    "received_by": str(actor or "NAO_INFORMADO").strip(),
-                    "received_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-                })
-            self.fiscal_service._set_setting(self.CONFIG_KEY, json.dumps({
-                "last_nsu": last_nsu, "max_nsu": max_nsu,
-            }, sort_keys=True))
-            self.fiscal_service._set_setting(
-                self.INDEX_KEY, json.dumps(index[-5000:], ensure_ascii=False, sort_keys=True)
-            )
+            created_paths: list[Path] = []
+            try:
+                for document in documents:
+                    previous = next((
+                        row for row in index
+                        if row.get("nsu") == document["nsu"] and row.get("schema") == document["schema"]
+                    ), None)
+                    if previous and previous.get("sha256") != document["sha256"]:
+                        raise ValueError(f"NSU {document['nsu']} já existe com conteúdo divergente.")
+                    if previous:
+                        continue
+                    path = Path(document["path"])
+                    self._atomic_write(path, document["xml"])
+                    created_paths.append(path)
+                    index.append({
+                        "nsu": document["nsu"], "schema": document["schema"],
+                        "path": document["path"], "sha256": document["sha256"],
+                        "origin": origin_url or "RESPOSTA_LOCAL_NAO_TRANSMITIDA",
+                        "environment": environment or "NAO_INFORMADO",
+                        "received_by": str(actor or "NAO_INFORMADO").strip(),
+                        "received_at": datetime.now().astimezone().isoformat(timespec="seconds"),
+                    })
+                self._persist_state_and_index(last_nsu, max_nsu, index)
+            except Exception:
+                for path in created_paths:
+                    try:
+                        path.unlink(missing_ok=True)
+                    except OSError:
+                        pass
+                raise
         return DFeDistributionResult(status, message, last_nsu, max_nsu, tuple(documents))
 
     def next_request(self, *, cnpj: str, state_code: str, environment: str) -> bytes:
@@ -335,6 +341,32 @@ class FiscalDFeService:
         except (TypeError, ValueError):
             value = []
         return [dict(row) for row in value if isinstance(row, dict)] if isinstance(value, list) else []
+
+    def _persist_state_and_index(
+        self, last_nsu: str, max_nsu: str, index: list[dict[str, Any]]
+    ) -> None:
+        """Confirma cursor e índice na mesma transação SQLite."""
+        connection = self.fiscal_service.connection_factory()
+        try:
+            connection.execute("BEGIN IMMEDIATE")
+            values = (
+                (self.CONFIG_KEY, json.dumps({
+                    "last_nsu": last_nsu, "max_nsu": max_nsu,
+                }, sort_keys=True)),
+                (self.INDEX_KEY, json.dumps(
+                    index[-5000:], ensure_ascii=False, sort_keys=True
+                )),
+            )
+            connection.executemany(
+                "INSERT OR REPLACE INTO configuracoes (chave, valor) VALUES (?, ?)",
+                values,
+            )
+            connection.commit()
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     def build_manifestation(
         self, *, access_key: str, cnpj: str, environment: str,

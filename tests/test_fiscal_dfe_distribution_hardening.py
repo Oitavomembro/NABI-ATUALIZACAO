@@ -2,6 +2,8 @@ import base64
 import gzip
 import hashlib
 import json
+import sqlite3
+import uuid
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -25,9 +27,15 @@ class FakeFiscal:
     STATE_CODES = {"BA": "29"}
 
     def __init__(self, response=b""):
-        self.settings = {}
         self.response = response
         self.calls = []
+        self._db_uri = f"file:dfe-fake-{uuid.uuid4().hex}?mode=memory&cache=shared"
+        self._keeper = sqlite3.connect(self._db_uri, uri=True)
+        self._keeper.execute("CREATE TABLE configuracoes (chave TEXT PRIMARY KEY, valor TEXT)")
+        self._keeper.commit()
+
+    def connection_factory(self):
+        return sqlite3.connect(self._db_uri, uri=True)
 
     _normalize_cnpj = staticmethod(lambda value: "".join(c for c in str(value or "") if c.isdigit()))
     _is_valid_cnpj = staticmethod(lambda value: value == VALID_CNPJ)
@@ -35,10 +43,25 @@ class FakeFiscal:
     _is_valid_access_key = staticmethod(lambda value: len(value) == 44)
 
     def _get_setting(self, key):
-        return self.settings.get(key, "")
+        connection = self.connection_factory()
+        try:
+            row = connection.execute(
+                "SELECT valor FROM configuracoes WHERE chave=?", (key,)
+            ).fetchone()
+            return "" if row is None else row[0]
+        finally:
+            connection.close()
 
     def _set_setting(self, key, value):
-        self.settings[key] = value
+        connection = self.connection_factory()
+        try:
+            connection.execute(
+                "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES (?,?)",
+                (key, value),
+            )
+            connection.commit()
+        finally:
+            connection.close()
 
     def load_config(self):
         return {
@@ -157,3 +180,23 @@ def test_schema_raiz_hash_origem_e_idempotencia(tmp_path):
     wrong_root = b'<nfeProc xmlns="http://www.portalfiscal.inf.br/nfe" versao="4.00"/>'
     with pytest.raises(ValueError, match="schema declarado"):
         service.parse_response(response_xml(last="2", maximum="2", content=wrong_root))
+
+
+def test_falha_no_indice_reverte_cursor_e_remove_arquivo_novo(tmp_path):
+    fiscal = FakeFiscal()
+    service = FiscalDFeService(fiscal, storage_dir=tmp_path)
+    connection = fiscal.connection_factory()
+    connection.execute(f"""
+        CREATE TRIGGER falha_indice BEFORE INSERT ON configuracoes
+        WHEN NEW.chave='{service.INDEX_KEY}'
+        BEGIN SELECT RAISE(ABORT, 'falha simulada no índice'); END
+    """)
+    connection.commit(); connection.close()
+    content = b'<resNFe xmlns="http://www.portalfiscal.inf.br/nfe" versao="1.00"/>'
+
+    with pytest.raises(sqlite3.IntegrityError, match="falha simulada"):
+        service.parse_response(response_xml(content=content))
+
+    assert fiscal._get_setting(service.CONFIG_KEY) == ""
+    assert fiscal._get_setting(service.INDEX_KEY) == ""
+    assert list(tmp_path.glob("NSU_*.xml")) == []
