@@ -2910,3 +2910,34 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo: integrar somente por merge normal após revisão cruzada e
   repetir a suíte consolidada. Homologação manual deve confirmar uma janela
   aberta durante expiração/troca de usuário nos cadastros e nas baixas.
+
+### P0 — Financeiro e Relatórios Qt paginados e responsivos
+
+- branch/worktree isolados: `codex/financeiro-relatorios-paginados` em
+  `NabiCode-QT-FinRelPerformance-codex`, derivados de `45b7464`, preservando a
+  revalidação de sessão por mutação;
+- implementação funcional: `e038c4e` —
+  `perf: pagina financeiro e relatorios no Qt`;
+- títulos financeiros usam `LIMIT/OFFSET` SQL, total completo separado e ordem
+  determinística por vencimento/ID; resumos financeiros são agregados no banco,
+  sem materializar 5.000 contas ou consultar centro de custo uma vez por linha;
+- Financeiro e Relatórios carregam páginas por `QThreadPool`, exibem estados
+  honestos de carregamento/erro/vazio, descartam respostas atrasadas e invalidam
+  trabalhos ao fechar. F5, PgUp, PgDown, Enter, Shift+Enter, Esc e bloqueio de
+  auto-repeat permanecem preservados;
+- relatórios totalizam o filtro completo, embora a tabela mantenha apenas uma
+  página em memória. A exportação refaz a consulta completa pelo filtro e recusa
+  explicitamente períodos acima do limite seguro de 50.000 registros; nunca
+  apresenta a página atual como arquivo completo;
+- prova TEMP com 20.000 títulos e 20.000 movimentos confirmou no máximo 125 e
+  100 linhas materializadas, respectivamente, com totais integrais e paginação
+  estável. Respostas fora de ordem, erro de worker e fechamento durante carga
+  possuem regressão automatizada;
+- validação focada: `47 passed`; regressão ampliada Financeiro/Relatórios/
+  Segurança/Qt: `151 passed`; `compileall` e `git diff --check` aprovados;
+- não foram alterados Fiscal/SEFAZ, Nabi, PDV, Caixa, backup, pacote contábil,
+  licenciamento, estilos globais ou banco real;
+- próximo passo: revisão cruzada e merge normal na consolidada. Depois, realizar
+  homologação visual de navegação entre páginas e exportação de período amplo.
+  A futura Central do Contador deve aguardar o hash publicado do pacote contábil
+  em camadas e não faz parte deste checkpoint.
