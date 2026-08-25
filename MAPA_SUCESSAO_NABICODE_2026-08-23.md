@@ -3876,3 +3876,36 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   login, shell e Vendas, sem comunicação Fiscal/SEFAZ;
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
+
+## Produtos — preparação cadastral por XML local
+
+- branch/worktree isolados: `codex/produtos-importacao-xml` em
+  `NabiCode-QT-ProdutosImportacaoXML-codex`, derivados exatamente de `52ae726`;
+- `381d63c` substitui na Central de Socorro os rótulos técnicos visíveis por
+  linguagem amigável, sem alterar enums, catálogo fechado, portas, confirmações,
+  auditoria ou regras internas;
+- `8e1b0ba` adiciona em Produtos a preparação manual por arquivo XML local usando
+  `NFeXMLService`; o arquivo é tratado como fonte não confiável e gera somente um
+  rascunho imutável para revisão humana, com nome da fonte, SHA-256, fingerprint,
+  alertas por item e limites explícitos;
+- protocolo, evento e status fiscal são ignorados e não conferem autorização;
+  não há transmissão, rede, SEFAZ, certificado, outbox, importação fiscal, compra,
+  financeiro ou movimento de estoque. Todo produto novo começa com estoque zero;
+- NCM ausente ou inválido permanece vazio e nunca é sugerido. Código e EAN são
+  revalidados contra o catálogo na preparação e na confirmação; ambiguidades
+  exigem escolha explícita por ID real, repetições internas são ignoradas e
+  numeração de item ausente, inválida ou repetida falha antes da revisão;
+- a confirmação revalida sessão/permissão `produtos/create`, ator, fingerprint,
+  uma decisão por item e mudanças concorrentes. A criação do lote e a auditoria
+  sanitizada `CADASTRAR_POR_XML` compartilham a mesma transação; falha de qualquer
+  cadastro ou da auditoria reverte integralmente o lote;
+- Produtos e a revisão XML são janelas amplas com minimizar, maximizar e fechar;
+  F8 abre a seleção local, Enter/Shift+Enter/Esc têm transição única e auto-repeat
+  não confirma duas vezes;
+- validação focada inicial: `33 passed`; regressão relacionada final: `146 passed`;
+  regressão integral final: `2477 passed`, `1 skipped`, `492 subtests passed`,
+  zero falhas e apenas os dois avisos externos já conhecidos; `compileall` e
+  `git diff --check` aprovados;
+- nenhum merge foi feito em outra branch. Próximo passo: homologação visual no
+  Windows com XML sintético/local e, depois, integração por merge normal antes de
+  qualquer teste Fiscal; PRODUÇÃO fiscal permanece bloqueada.
