@@ -11,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QLabel
 
 from services.help_center_service import HelpCenterDiagnosticService
 from services.help_center_repair_service import (
@@ -77,7 +77,10 @@ def test_carrega_fora_da_ui_renderiza_quatro_estados_e_detalhes(tmp_path):
     assert dialog.reload() is True and dialog.run_button.isEnabled() is False
     complete(pool)
     states = " ".join(card.text() for card in dialog.cards)
-    for state in ("SAUDAVEL", "ALERTA", "FALHA", "INCONCLUSIVO"): assert state in states
+    for state in ("Tudo certo", "Atenção", "Precisa de suporte", "Não foi possível verificar"):
+        assert state in states
+    for technical in ("SAUDAVEL", "INCONCLUSIVO"):
+        assert technical not in states
     assert dialog.report_button.isEnabled() and "não executou reparo" in dialog.details.toPlainText()
     dialog.close()
 
@@ -173,7 +176,7 @@ def test_reparo_exige_confirmacao_e_cria_somente_request_tipado(tmp_path):
     assert type(repairs.requests[0]) is RepairRequest
     assert repairs.requests[0].repair is GreenRepair.VISUAL_PREFERENCES
     assert dialog.repair_result.outcome is RepairOutcome.INCONCLUSIVO
-    assert "INCONCLUSIVO" in dialog.details.toPlainText()
+    assert "Não foi possível concluir" in dialog.details.toPlainText()
     dialog.close()
 
 
@@ -224,7 +227,7 @@ def test_reparo_visual_real_normaliza_por_porta_e_exibe_prova(tmp_path):
     assert dialog.repair_result.outcome is RepairOutcome.PROVADO
     assert dialog.repair_result.changed is True
     assert port.is_valid(state["preferences"]) is True
-    assert "Precheck: PROVADO" in dialog.details.toPlainText()
+    assert "Verificação inicial: Concluído e verificado" in dialog.details.toPlainText()
     assert audit
     dialog.close()
 
@@ -233,8 +236,22 @@ def test_ui_recusa_catalogo_reordenado_ou_adulterado(tmp_path):
     class Reordered(RepairExecutor):
         @staticmethod
         def catalog(): return tuple(reversed(GREEN_REPAIR_CATALOG))
-    with pytest.raises(TypeError, match="catálogo VERDE publicado"):
+    with pytest.raises(TypeError, match="ações seguras publicadas"):
         HelpCenterDialog(service(tmp_path), repair_service=Reordered())
+
+
+def test_rotulos_amigaveis_nao_expoem_jargao_do_catalogo_interno(tmp_path):
+    dialog = HelpCenterDialog(
+        service(tmp_path), repair_service=RepairExecutor(), worker_pool=Pool(),
+    )
+    visible = " ".join(
+        child.text() for child in dialog.findChildren(QLabel)
+    ) + " " + " ".join(button.text() for button in dialog.repair_buttons)
+    for technical in ("VERDE", "CATÁLOGO FECHADO", "INCONCLUSIVO"):
+        assert technical not in visible.upper()
+    assert "AÇÕES SEGURAS DE SUPORTE" in visible
+    assert {entry.risk.value for entry in dialog._repair_by_button.values()} == {"VERDE"}
+    dialog.close()
 
 
 def test_ui_nao_importa_camadas_operacionais_ou_shell():

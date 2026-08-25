@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import json
 from decimal import Decimal
 
 from commercial.application.product_dto import (
@@ -64,20 +65,38 @@ class NabiCodeProductStockGateway:
             raise ValueError("Código de barras duplicado no catálogo; corrija a integridade dos produtos.")
         return self._details(matches[0]) if matches else None
 
-    @staticmethod
-    def _save_kwargs(command, current=None):
+    def _unit_id(self, unit_code: str) -> int | None:
+        normalized = str(unit_code or "").strip().casefold()
+        if not normalized:
+            return None
+        matches = [
+            item for item in self.products.listar_auxiliares("unidade")
+            if str(item.get("nome") or item.get("sigla") or "").strip().casefold() == normalized
+        ]
+        if len(matches) > 1:
+            raise ValueError("A unidade do XML corresponde a mais de um cadastro auxiliar.")
+        return int(matches[0]["id"]) if matches else None
+
+    def _save_kwargs(self, command, current=None):
         current = current or {}
+        creating = not current
+        unit_id = current.get("unidade_id") if current else self._unit_id(
+            getattr(command, "unit_code", "")
+        )
         return dict(
             codigo=command.code, nome=command.description, preco_venda=command.sale_price,
             categoria_id=command.category_id, tipo_produto=command.product_type,
             marca_id=current.get("marca_id"), fornecedor_id=current.get("fornecedor_id"),
-            unidade_id=current.get("unidade_id"), unidade_compra_id=current.get("unidade_compra_id"),
+            unidade_id=unit_id,
+            unidade_compra_id=(current.get("unidade_compra_id") if current else unit_id),
             fator_conversao=current.get("fator_conversao", Decimal("1")),
             preco_custo=command.cost_price,
             despesas_percentual=current.get("despesas_percentual", Decimal("0")),
             margem_lucro=current.get("margem_lucro", Decimal("0")),
-            codigo_barras=command.barcode, ncm=current.get("ncm", ""),
-            cest=current.get("cest", ""), cfop=current.get("cfop", ""),
+            codigo_barras=command.barcode,
+            ncm=(getattr(command, "ncm", "") if creating else current.get("ncm", "")),
+            cest=(getattr(command, "cest", "") if creating else current.get("cest", "")),
+            cfop=current.get("cfop", ""),
             fiscal_origin=current.get("fiscal_origin", ""),
             fiscal_csosn=current.get("fiscal_csosn", ""),
             fiscal_icms_cst=current.get("fiscal_icms_cst", ""),
@@ -110,6 +129,48 @@ class NabiCodeProductStockGateway:
         kwargs["produto_id"] = command.product_id
         self.products.salvar(**kwargs)
         return self.get_details(command.product_id)
+
+    def create_products_from_xml(
+        self, commands: tuple[ProductCreateCommand, ...], *, actor: str,
+        source_sha256: str, draft_fingerprint: str,
+        resolved_existing_ids: tuple[int, ...] = (),
+        skipped_source_items: tuple[int, ...] = (),
+    ) -> tuple[ProductDetails, ...]:
+        actor = str(actor or "").strip()
+        if not actor:
+            raise PermissionError("A sessão autenticada não possui identidade válida.")
+        if not all(command.current_stock == 0 for command in commands):
+            raise ValueError("Cadastro preparado por XML deve iniciar sem movimentar estoque.")
+        created_ids: list[int] = []
+        occurred_at = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        with self.products.produtos.transaction() as connection:
+            for command in commands:
+                created_ids.append(int(self.products.salvar(
+                    **self._save_kwargs(command), connection=connection,
+                )))
+            details = json.dumps(
+                {
+                    "source_sha256": str(source_sha256),
+                    "draft_fingerprint": str(draft_fingerprint),
+                    "created_product_ids": created_ids,
+                    "resolved_existing_ids": [int(value) for value in resolved_existing_ids],
+                    "skipped_source_items": [int(value) for value in skipped_source_items],
+                    "stock_moved": False,
+                    "financial_created": False,
+                    "fiscal_authorization_imported": False,
+                },
+                ensure_ascii=False, sort_keys=True, separators=(",", ":"),
+            )
+            connection.execute(
+                """INSERT INTO auditoria
+                   (data,usuario,modulo,acao,objeto,detalhes,resultado)
+                   VALUES(?,?,?,?,?,?,?)""",
+                (
+                    occurred_at, actor, "PRODUTOS", "CADASTRAR_POR_XML",
+                    str(draft_fingerprint), details, "SUCESSO",
+                ),
+            )
+        return tuple(self.get_details(product_id) for product_id in created_ids)
 
     def stock(self, product_id: int) -> ProductStockSummary:
         row = self.stock_repository.buscar_produto(int(product_id))
