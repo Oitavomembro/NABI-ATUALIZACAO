@@ -74,7 +74,7 @@ def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios
     database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"));profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal")));security=Mock()
     with patch("ui_qt.administration.composition.CashService"),patch("ui_qt.administration.composition.ReportService"),patch("ui_qt.administration.composition.SettingsApplicationService"),patch("ui_qt.administration.composition.BackupService") as backup:
         modules=build_administrative_modules(container,database,profile,security)
-    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários","Configurações","Ajuda","Auditoria")
+    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Usuários","Configurações","Ajuda","Central de Socorro","Auditoria")
     assert backup.call_args.kwargs["fiscal_directory"] == Path("C:/Teste/fiscal")
 
 def test_composicao_de_clientes_liga_segmento_do_dashboard_ao_filtro_da_janela():

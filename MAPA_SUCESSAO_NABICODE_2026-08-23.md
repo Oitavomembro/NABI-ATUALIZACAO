@@ -3681,3 +3681,47 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   100.000 registros permaneceu abaixo de 300 ms no ensaio local; somente migrar
   para FTS/cache se telemetria real futura comprovar necessidade, preservando a
   busca oficial e sem materializar o catálogo.
+### Central de Socorro — diagnóstico somente leitura
+
+- branch isolada `codex/central-socorro-diagnostico`, base `d7769b0`;
+- catálogo fechado por enums, `HelpEntry` e `DiagnosticResult` imutáveis, estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`;
+- checks iniciais: disco, diretórios persistentes sem escrita, banco por porta
+  read-only, backup diário, impressora e runtime Nabi opcional;
+- serviço não contém SQL, shell, credencial ou autorreparo; portas ausentes e
+  exceções viram resultado seguro sem impedir os demais checks;
+- auditoria recebe apenas estados sanitizados; XML/PII/segredos não são emitidos;
+- testes focados: `6 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma UI, Fiscal/SEFAZ, Caixa, estoque, venda, Qt, licença ou banco real foi alterado.
+
+### Central de Socorro — interface Qt somente diagnóstica
+
+- branch/worktree isolados: `codex/central-socorro-qt` em
+  `NabiCode-QT-CentralSocorroQt-codex`, derivados exatamente de `4a84d90`;
+- implementação: `f4ddd94` — `feat: cria Central de Socorro Qt somente diagnostica`;
+- a janela apresenta os seis checks do catálogo fechado em cartões com estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`; detalhes e identificadores
+  técnicos são sanitizados novamente antes da exibição;
+- execução ocorre em `QThreadPool`, fora da thread gráfica. Reentrada é bloqueada,
+  respostas de geração anterior são descartadas e os workers permanecem vivos
+  até a conclusão;
+- a tela explica separadamente o que foi protegido/testado e o que permanece
+  inconclusivo ou dependente de homologação física. Nenhum estado é apresentado
+  como reparo, autorização ou prova fiscal;
+- o relatório JSON `nabicode.help-center-report.v1` cobre exatamente um resultado
+  por check, repete os limites do diagnóstico, sanitiza todo texto e é gravado por
+  arquivo temporário + `fsync` + substituição atômica. Falha preserva o destino
+  anterior e remove o temporário;
+- Enter avança ou executa uma única ação, Shift+Enter retorna, Esc fecha e invalida
+  resultado tardio, e auto-repeat é consumido sem ação;
+- testes focados finais: `12 passed`; regressão administrativa/Qt e redação:
+  `51 passed`; `compileall` e `git diff --check` aprovados;
+- não há autorreparo, SQL, shell, credencial, gravação operacional ou conexão a
+  `main_qt.py`/shell. Fiscal/SEFAZ, Caixa, estoque, vendas, licença e banco real
+  permaneceram intocados; conexão ao shell exige checkpoint posterior separado.
+### Conexão mínima da Central de Socorro ao hub
+
+- a Central de Socorro diagnóstica passou a aparecer no hub administrativo sob `configs/view`, sem criar atalho oculto ou contornar sessão/permissões;
+- banco usa `quick_check` em conexão SQLite `mode=ro` e `query_only`; pastas e backups são apenas inspecionados; impressoras são consultadas e a Nabi ausente permanece inconclusiva;
+- nenhum diretório, backup, banco ou configuração é criado/alterado pelo novo módulo;
+- validação focada de composição, serviço e Qt: `25 passed`; `compileall` e `git diff --check` aprovados.

@@ -1,3 +1,7 @@
+import sqlite3
+from datetime import datetime
+from pathlib import Path
+
 from administration.dashboard_application_service import DashboardApplicationService
 from administration.product_management_service import ProductManagementService
 from administration.purchase_management_service import PurchaseManagementService
@@ -16,6 +20,7 @@ from services.cash_service import CashService
 from services.report_service import ReportService
 from services.system_diagnostics import SystemDiagnostics
 from services.printing_service import PrintingService
+from services.help_center_service import HelpCenterDiagnosticService
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
 from ui_qt.commercial.financial_dialog import FinancialDialog
@@ -27,11 +32,54 @@ from .module_hub import AdministrativeModule
 from .users_dialog import UsersDialog
 from .settings_dialog import SettingsDialog
 from .help_dialog import HelpDialog
+from .help_center_dialog import HelpCenterDialog
 from .audit_dialog import AuditDialog
 
 def _username(security):
     if security.session is None or security.is_expired():raise PermissionError("Sessão expirada. Entre novamente.")
     return security.session.user.username
+
+def _database_probe(database):
+    path = database.database_path.resolve()
+    if not path.is_file():
+        return {"state": "FALHA", "message": "Banco não encontrado"}
+    connection = sqlite3.connect(f"file:{path.as_posix()}?mode=ro", uri=True)
+    try:
+        connection.execute("PRAGMA query_only=ON")
+        result = str(connection.execute("PRAGMA quick_check").fetchone()[0])
+        return {
+            "state": "SAUDAVEL" if result == "ok" else "FALHA",
+            "message": "Verificação somente leitura concluída" if result == "ok" else "Integridade requer atenção",
+            "technical_id": f"quick_check:{result}",
+        }
+    finally:
+        connection.close()
+
+def _backup_probe(backups):
+    candidates = []
+    for directory in backups.configured_directories():
+        folder = Path(directory)
+        if folder.is_dir():
+            candidates.extend(
+                item for item in folder.iterdir()
+                if item.is_file() and item.suffix.casefold() in {".db", ".nabibackup"}
+            )
+    if not candidates:
+        return {"state": "ALERTA", "message": "Nenhum backup localizado nos destinos configurados"}
+    latest = max(candidates, key=lambda item: item.stat().st_mtime)
+    age = max(0, (datetime.now() - datetime.fromtimestamp(latest.stat().st_mtime)).days)
+    return {
+        "state": "SAUDAVEL" if age <= 1 else "ALERTA",
+        "message": f"Backup mais recente há {age} dia(s)",
+        "technical_id": f"backup_age_days:{age}",
+    }
+
+def _printer_probe(printing):
+    available = len(printing.list_printers()) > 1
+    return {
+        "state": "SAUDAVEL" if available else "ALERTA",
+        "message": "Impressora detectada" if available else "Somente impressora padrão/virtual disponível",
+    }
 
 def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
@@ -96,7 +144,23 @@ def build_administrative_modules(
         "Ajuda", "Atalhos e orientação dos módulos", "Ctrl+H",
         "dashboard", "view", lambda p: HelpDialog(parent=p), "ajuda",
     ))
-    audit = AuditApplicationService(AdminAuditService(database.connect), security)
+    audit_service = AdminAuditService(database.connect)
+    printing = PrintingService(system.get_config)
+    socorro = HelpCenterDiagnosticService(
+        persistent_dirs=(profile.paths.backups, profile.paths.rollback, profile.paths.diagnostics),
+        database_probe=lambda: _database_probe(database),
+        backup_probe=lambda: _backup_probe(backups),
+        printer_probe=lambda: _printer_probe(printing),
+        nabi_probe=None,
+        audit=lambda module, action, object_id, details, result, user: audit_service.record_event(
+            module, action, object_id=object_id, details=details, result=result, user=user,
+        ),
+    )
+    modules.append(AdministrativeModule(
+        "Central de Socorro", "Diagnóstico seguro e relatório para suporte", "Ctrl+F1",
+        "configs", "view", lambda p: HelpCenterDialog(socorro, p), "socorro",
+    ))
+    audit = AuditApplicationService(audit_service, security)
     modules.append(AdministrativeModule(
         "Auditoria", "Histórico de login e segurança", "Ctrl+L",
         "technical", "audit", lambda p: AuditDialog(audit, p), "auditoria",
