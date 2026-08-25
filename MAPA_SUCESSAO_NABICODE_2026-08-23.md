@@ -2881,3 +2881,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Pacote contábil V2 — checkpoint 1 de integridade
+
+- branch isolada: `codex/pacote-contabil-integridade-v2`, derivada de
+  `1cfdfa4`, sem integração com a candidata principal;
+- implementação: `e4816fb` — `fix: endurece integridade do pacote contabil`;
+- o manifesto passou ao layout explícito `nabicode.accounting-package.v2` e
+  cataloga individualmente, com SHA-256, todos os XMLs de saídas, DF-e
+  recebidos, envios e retornos de eventos e o arquivo de instruções;
+- o validador exige correspondência exata entre catálogo e ZIP e rejeita bytes
+  alterados, arquivo ausente ou extra, caminhos duplicados/ambíguos, travessia
+  de diretório, vínculos/hash repetidos e manifesto estruturalmente
+  inconsistente;
+- XMLs são reabertos sem rede ou entidades externas para confrontar, quando o
+  contrato disponível contém o dado, chave de acesso, protocolo, CNPJ do
+  emitente, período de emissão, modelo e status de documento/evento;
+- manifesto V1 é classificado explicitamente como `LEGADO` e insuficiente; ele
+  nunca é apresentado como íntegro no padrão V2;
+- o manifesto não é assinado neste checkpoint. O resultado e o LEIA-ME
+  declaram `non_repudiation=false`: SHA-256 detecta corrupção/divergência, mas
+  não prova autoria nem oferece não-repúdio;
+- testes focados: `17 passed`; regressão de todos os arquivos `test_fiscal*` e
+  adversariais do pacote: `364 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum conteúdo EFD/PGDAS/SPED foi criado e nenhuma transmissão, outbox,
+  retenção, backup, Qt, Nabi, banco real, certificado, segredo ou regra
+  Fiscal/SEFAZ operacional foi alterada;
+- próximo passo: ampliar conteúdo contábil somente em checkpoint separado,
+  preservando este contrato V2 e sem confundir integridade por hash com
+  assinatura ou prova de autoria.
