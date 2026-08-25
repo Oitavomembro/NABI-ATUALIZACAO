@@ -3570,3 +3570,49 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   escopo;
 - próximo passo: homologação visual humana em DPI/telas suportadas e integração
   por merge normal após revisão dos commits. O push desta branch foi autorizado.
+## Correção isolada do PDV Qt após homologação do primeiro uso
+
+- branch: `codex/pdv-qt-correcao-homologacao`, derivada de
+  `codex/homologacao-primeiro-uso` em `2929d19`;
+- `76015dc` — `fix: isola servico do modulo de produtos`;
+- causa comprovada da mensagem
+  `PurchaseManagementService object has no attribute search`: as fábricas Qt de
+  Produtos e Compras capturavam a mesma variável local `service`; a composição
+  posterior de Compras substituía a referência usada pela fábrica de Produtos;
+- cada fábrica agora captura explicitamente sua fachada tipada, e uma regressão
+  adversarial abre Produtos com Compras também presente para impedir retorno do
+  defeito;
+- `b26af3b` — `fix: estabiliza catalogo e pagamentos do pdv`;
+- seta para baixo no campo vazio de produto passa a consultar e abrir a lista
+  rápida; catálogo vazio é informado no próprio PDV, e auto-repeat é consumido
+  sem repetir consultas;
+- Pagamentos foi organizado em três seções visuais — formas, ajustes e condições
+  do crediário — sem mover cálculos para a GUI; desconto e acréscimo identificam
+  explicitamente `R$` ou `%` conforme o tipo selecionado;
+- a auditoria confirmou que desconto em valor e percentual continuam calculados
+  pelo `PDVApplicationService`; testes cobrem os dois tipos, pagamentos mistos,
+  revisão/confirmação separadas, navegação por Enter/Shift+Enter e bloqueio de
+  auto-repeat;
+- `d5cfee0` — `fix: sincroniza ajustes e parcelas no pagamento`;
+- digitação e troca de tipo de desconto ou acréscimo agora recalculam de imediato
+  total final, sugestão editável de pagamento e falta/troco; a regressão inclui o
+  caso explícito de `R$ 21,00` passando a `R$ 19,95`, sem conservar a sugestão
+  anterior;
+- pagamentos já adicionados nunca são reescritos pela mudança de ajuste: a
+  revisão é invalidada, o saldo é atualizado e a GUI orienta revisar, completar
+  ou remover os pagamentos antes de confirmar;
+- para crediário, quantidade, distribuição e total financiado das parcelas são
+  exibidos a partir do `preview_checkout` do núcleo comercial; também foi
+  corrigida a comparação do valor Qt da forma de pagamento que impedia exibir as
+  condições antes de adicionar o crediário;
+- recusa do checkout retorna ao PDV com carrinho, cliente e total preservados,
+  uma única tentativa registrada e foco em Finalizar, agora coberto por teste de
+  interface;
+- validação focada final: `206 passed`, `2 subtests passed`; regressão integral
+  final: `2331 passed`, `1 skipped`, `460 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum arquivo de IA, Fiscal/SEFAZ, licença ou `main_qt.py` foi alterado; não
+  houve mudança de regra fiscal nem de reenvio SEFAZ;
+- próximo passo: homologar visualmente no Windows a abertura de Produtos com
+  Compras habilitado, catálogo por seta para baixo, seções de Pagamentos e retorno
+  após uma recusa comercial controlada.

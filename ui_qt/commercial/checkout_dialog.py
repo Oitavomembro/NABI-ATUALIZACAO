@@ -5,9 +5,9 @@ from decimal import Decimal
 
 from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox, QTableWidget,
-    QTableWidgetItem, QVBoxLayout, QWidget,
+    QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QGridLayout,
+    QGroupBox, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
+    QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
 from commercial.domain.money import MoneyCodec
@@ -30,6 +30,8 @@ class CheckoutDialog(QDialog):
         self._reviewed_input: CheckoutInput | None = None
         self._confirmed_input: CheckoutInput | None = None
         self._confirming = False
+        self._refreshing_totals = False
+        self._payments_require_review = False
         self.setWindowTitle("Pagamentos")
         self.setModal(True)
         self.resize(820, 680)
@@ -38,6 +40,8 @@ class CheckoutDialog(QDialog):
         self.total_label.setStyleSheet("font-size: 20px; font-weight: 700;")
         root.addWidget(self.total_label)
 
+        self.payments_group = QGroupBox("1. Formas de pagamento")
+        payments = QVBoxLayout(self.payments_group)
         form = QFormLayout()
         self.method = QComboBox()
         for label, method in self.METHODS:
@@ -57,15 +61,17 @@ class CheckoutDialog(QDialog):
         form.addRow("Valor", self.amount)
         form.addRow("Autorização POS", self.authorization)
         form.addRow(self.add_payment)
-        root.addLayout(form)
+        payments.addLayout(form)
 
         self.payment_table = QTableWidget(0, 3)
         self.payment_table.setHorizontalHeaderLabels(["Forma", "Valor", "Autorização"])
-        root.addWidget(self.payment_table)
+        payments.addWidget(self.payment_table, 1)
         self.remove_payment = QPushButton("Remover pagamento selecionado")
-        root.addWidget(self.remove_payment)
+        payments.addWidget(self.remove_payment)
+        root.addWidget(self.payments_group, 1)
 
-        adjustments = QHBoxLayout()
+        self.adjustments_group = QGroupBox("2. Ajustes da venda")
+        adjustments = QGridLayout(self.adjustments_group)
         self.discount_type = QComboBox()
         self.discount_type.addItem("Desconto em valor", "VALUE")
         self.discount_type.addItem("Desconto em %", "PERCENT")
@@ -74,12 +80,20 @@ class CheckoutDialog(QDialog):
         self.surcharge_type.addItem("Acréscimo em valor", "VALUE")
         self.surcharge_type.addItem("Acréscimo em %", "PERCENT")
         self.surcharge = MoneyEdit()
-        for widget in (self.discount_type, self.discount, self.surcharge_type, self.surcharge):
-            adjustments.addWidget(widget)
-        root.addLayout(adjustments)
+        self.discount_label = QLabel()
+        self.surcharge_label = QLabel()
+        adjustments.addWidget(self.discount_label, 0, 0)
+        adjustments.addWidget(self.discount_type, 0, 1)
+        adjustments.addWidget(self.discount, 0, 2)
+        adjustments.addWidget(self.surcharge_label, 1, 0)
+        adjustments.addWidget(self.surcharge_type, 1, 1)
+        adjustments.addWidget(self.surcharge, 1, 2)
+        adjustments.setColumnStretch(2, 1)
+        root.addWidget(self.adjustments_group)
 
-        self.credit_box = QWidget()
-        credit = QFormLayout(self.credit_box)
+        self.credit_group = QGroupBox("3. Condições do crediário")
+        self.credit_box = self.credit_group
+        credit = QFormLayout(self.credit_group)
         self.installments = QSpinBox()
         self.installments.setRange(1, 120)
         self.first_due = QDateEdit()
@@ -88,7 +102,10 @@ class CheckoutDialog(QDialog):
         self.first_due.setDate(QDate(due.year, due.month, due.day))
         credit.addRow("Parcelas do crediário", self.installments)
         credit.addRow("Primeiro vencimento", self.first_due)
-        root.addWidget(self.credit_box)
+        self.credit_installment_label = QLabel()
+        self.credit_installment_label.setWordWrap(True)
+        credit.addRow("Parcelas calculadas", self.credit_installment_label)
+        root.addWidget(self.credit_group)
 
         self.balance_label = QLabel()
         self.balance_label.setStyleSheet(
@@ -115,19 +132,21 @@ class CheckoutDialog(QDialog):
         self.review_button.clicked.connect(self._review)
         self.buttons.accepted.connect(self._confirm)
         self.buttons.rejected.connect(self.reject)
-        for widget in (self.amount, self.discount, self.surcharge):
-            widget.textChanged.connect(self._refresh_totals)
+        self.amount.textChanged.connect(self._refresh_totals)
+        for widget in (self.discount, self.surcharge):
+            widget.textChanged.connect(self._adjustments_changed)
         for widget in (self.discount_type, self.surcharge_type):
-            widget.currentIndexChanged.connect(self._refresh_totals)
+            widget.currentIndexChanged.connect(self._adjustments_changed)
         self.method.currentIndexChanged.connect(self._invalidate_review)
+        self.method.currentIndexChanged.connect(self._refresh_totals)
         self.authorization.textChanged.connect(self._invalidate_review)
         self.installments.valueChanged.connect(self._invalidate_review)
+        self.installments.valueChanged.connect(self._refresh_totals)
         self.first_due.dateChanged.connect(self._invalidate_review)
-        for widget in (self.amount, self.discount, self.surcharge):
-            widget.textChanged.connect(self._invalidate_review)
-        for widget in (self.discount_type, self.surcharge_type):
-            widget.currentIndexChanged.connect(self._invalidate_review)
+        self.first_due.dateChanged.connect(self._refresh_totals)
+        self.amount.textChanged.connect(self._invalidate_review)
         self._install_navigation()
+        self._sync_adjustment_labels()
         self._sync_method()
         self._refresh_totals()
         self.method.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -172,9 +191,28 @@ class CheckoutDialog(QDialog):
         if not is_card:
             self.authorization.clear()
         self.authorization.setVisible(is_card)
-        self.credit_box.setVisible(method is PaymentMethod.STORE_CREDIT or any(
+        self.credit_box.setVisible(method == PaymentMethod.STORE_CREDIT or any(
             payment.method is PaymentMethod.STORE_CREDIT for payment in self._payments
         ))
+
+    def _sync_adjustment_labels(self, *_args) -> None:
+        discount_percent = self.discount_type.currentData() == "PERCENT"
+        surcharge_percent = self.surcharge_type.currentData() == "PERCENT"
+        self.discount_label.setText(
+            "Desconto (%)" if discount_percent else "Desconto (R$)"
+        )
+        self.surcharge_label.setText(
+            "Acréscimo (%)" if surcharge_percent else "Acréscimo (R$)"
+        )
+        self.discount.setAccessibleName(self.discount_label.text())
+        self.surcharge.setAccessibleName(self.surcharge_label.text())
+
+    def _adjustments_changed(self, *_args) -> None:
+        self._sync_adjustment_labels()
+        self._invalidate_review()
+        if self._payments:
+            self._payments_require_review = True
+        self._refresh_totals(sync_payment=True)
 
     def _current_payment(self) -> Payment:
         return Payment(self.method.currentData(), self.amount.value(), self.authorization.text())
@@ -199,6 +237,7 @@ class CheckoutDialog(QDialog):
             self.amount.setFocus(Qt.FocusReason.OtherFocusReason)
             self.amount.selectAll()
             return False
+        self._payments_require_review = False
         self.authorization.clear()
         self._invalidate_review()
         self._render_payments()
@@ -215,9 +254,10 @@ class CheckoutDialog(QDialog):
         row = self.payment_table.currentRow()
         if row >= 0:
             self._payments.pop(row)
+            self._payments_require_review = False
             self._invalidate_review()
             self._render_payments()
-            self._refresh_totals()
+            self._refresh_totals(sync_payment=True)
 
     def _render_payments(self) -> None:
         self.payment_table.setRowCount(len(self._payments))
@@ -242,12 +282,60 @@ class CheckoutDialog(QDialog):
             **self._adjustment_data(),
         )
 
-    def _refresh_totals(self) -> None:
+    def _refresh_credit_summary(self) -> None:
+        has_store_credit = (
+            self.method.currentData() == PaymentMethod.STORE_CREDIT
+            or any(
+                payment.method is PaymentMethod.STORE_CREDIT
+                for payment in self._payments
+            )
+        )
+        if not has_store_credit:
+            self.credit_installment_label.clear()
+            return
+        try:
+            terms = self.view_model.preview_checkout(self._candidate_input())[2]
+        except (TypeError, ValueError):
+            self.credit_installment_label.setText(
+                "Corrija os pagamentos para recalcular as parcelas."
+            )
+            return
+        if terms is None:
+            self.credit_installment_label.clear()
+            return
+        amounts = tuple(item.amount for item in terms.installments)
+        if min(amounts) == max(amounts):
+            distribution = f"de R$ {MoneyCodec.format_br(amounts[0])}"
+        else:
+            distribution = (
+                f"entre R$ {MoneyCodec.format_br(min(amounts))} e "
+                f"R$ {MoneyCodec.format_br(max(amounts))}"
+            )
+        self.credit_installment_label.setText(
+            f"{terms.installment_count} parcela(s) {distribution} — "
+            f"financiado R$ {MoneyCodec.format_br(terms.financed_value)}."
+        )
+
+    def _refresh_totals(self, *_args, sync_payment: bool = False) -> None:
+        if self._refreshing_totals:
+            return
+        self._refreshing_totals = True
         try:
             discount, surcharge, final = self.view_model.application.resolve_adjustments(
                 self.view_model.session.items_total, **self._adjustment_data()
             )
-            paid = sum((payment.amount for payment in self._payments), self.amount.value() if not self._payments else Decimal("0"))
+            explicit_paid = sum(
+                (payment.amount for payment in self._payments), Decimal("0")
+            )
+            if sync_payment:
+                suggested = (
+                    max(MoneyCodec.ZERO, final - explicit_paid)
+                    if self._payments
+                    else final
+                )
+                if self.amount.value() != suggested:
+                    self.amount.set_value(suggested)
+            paid = explicit_paid if self._payments else self.amount.value()
             difference = paid - final
             self.balance_label.setText(
                 f"TROCO: R$ {MoneyCodec.format_br(difference)}" if difference >= 0
@@ -258,9 +346,21 @@ class CheckoutDialog(QDialog):
                 f"Desconto R$ {MoneyCodec.format_br(discount)}  •  "
                 f"Acréscimo R$ {MoneyCodec.format_br(surcharge)}  •  Total R$ {MoneyCodec.format_br(final)}"
             )
-            self.error_label.clear()
+            self._refresh_credit_summary()
+            if self._payments_require_review:
+                self.error_label.setText(
+                    "O total mudou. Os pagamentos já adicionados não foram alterados; "
+                    "revise, complete ou remova-os antes de confirmar."
+                )
+            else:
+                self.error_label.clear()
         except ValueError as error:
             self.error_label.setText(str(error))
+            self.credit_installment_label.setText(
+                "Corrija os ajustes para recalcular as parcelas."
+            )
+        finally:
+            self._refreshing_totals = False
 
     def _summary(self, preview) -> str:
         plan, validation, terms, discount, surcharge, final = preview
@@ -300,6 +400,8 @@ class CheckoutDialog(QDialog):
             self.error_label.setText(str(error))
             return
         self._reviewed_input = data
+        self._payments_require_review = False
+        self.error_label.clear()
         self.confirm_button.setEnabled(True)
         QMessageBox.information(self, "Revisão da venda", self._summary(preview))
         self.confirm_button.setFocus(Qt.FocusReason.OtherFocusReason)

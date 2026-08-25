@@ -92,6 +92,36 @@ def test_composicao_de_clientes_liga_segmento_do_dashboard_ao_filtro_da_janela()
     repository_type.return_value.client_segment_ids.assert_called_once_with("owing","ana",limit=25)
     customer_application.list_customers_by_ids.assert_called_once_with((7,9))
 
+def test_fabricas_de_produtos_e_compras_preservam_seus_servicos_isolados():
+    product_management = object()
+    purchase_management = object()
+    container=SimpleNamespace(
+        customer_application=None, product_application=object(), stock_actions=object(),
+        purchase_service=object(), financial_query=None, financial_actions=None,
+    )
+    database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"))
+    profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(
+        pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),
+        rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),
+        config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal"),
+    ))
+    security=Mock()
+    captured=[]
+    with (
+        patch("ui_qt.administration.composition.ProductManagementService", return_value=product_management),
+        patch("ui_qt.administration.composition.PurchaseManagementService", return_value=purchase_management),
+        patch("ui_qt.administration.composition.ProductManagementDialog", side_effect=lambda service,parent: captured.append(service) or QDialog(parent)),
+        patch("ui_qt.administration.composition.CashService"),
+        patch("ui_qt.administration.composition.ReportService"),
+        patch("ui_qt.administration.composition.SettingsApplicationService"),
+        patch("ui_qt.administration.composition.BackupService"),
+    ):
+        modules=build_administrative_modules(container,database,profile,security)
+        products=next(module for module in modules if module.module_id=="produtos")
+        dialog=products.factory(None)
+    assert captured == [product_management]
+    dialog.close()
+
 def test_shell_sem_factory_preserva_funcionamento_anterior():
     with patch.object(qt_app,"PDVWindow",Window),patch.object(qt_app,"PDVViewModel",lambda app:app):
         _qt,window=qt_app.create_application(object(),[])

@@ -405,10 +405,17 @@ class PDVWindow(QMainWindow):
                 self.customer_results.setCurrentRow(max(0, self.customer_results.currentRow()))
                 event.accept()
                 return True
-            if watched is self.product_search and self.product_results.count():
-                self.product_results.setFocus(Qt.FocusReason.ShortcutFocusReason)
-                self.product_results.setCurrentRow(max(0, self.product_results.currentRow()))
+            if watched is self.product_search:
                 event.accept()
+                if event.isAutoRepeat():
+                    return True
+                if not self.product_results.count():
+                    self._show_quick_product_results()
+                if self.product_results.count():
+                    self.product_results.setFocus(Qt.FocusReason.ShortcutFocusReason)
+                    self.product_results.setCurrentRow(
+                        max(0, self.product_results.currentRow())
+                    )
                 return True
         if (
             watched in getattr(self, "_enter_widgets", ())
@@ -798,9 +805,9 @@ class PDVWindow(QMainWindow):
         self.customer_search.clear()
         self.customer_selected.setText("Nenhum cliente selecionado")
 
-    def _search_products(self, term: str) -> None:
+    def _search_products(self, term: str, *, allow_empty: bool = False) -> None:
         self.product_results.clear()
-        if self.loose_item.isChecked() or not term.strip():
+        if self.loose_item.isChecked() or (not term.strip() and not allow_empty):
             self.product_results.hide()
             return
         try:
@@ -820,9 +827,16 @@ class PDVWindow(QMainWindow):
 
     def _show_quick_product_results(self) -> None:
         self.product_search.setFocus(Qt.FocusReason.ShortcutFocusReason)
-        if self.product_search.text().strip():
-            self._search_products(self.product_search.text())
+        term = self.product_search.text()
+        self._search_products(term, allow_empty=True)
         self.product_results.setVisible(self.product_results.count() > 0)
+        if not self.product_results.count():
+            message = (
+                "O catálogo de produtos está vazio."
+                if not term.strip()
+                else "Nenhum produto encontrado para esta busca."
+            )
+            self.statusBar().showMessage(message, 3500)
 
     def _open_expanded_product_search(self) -> None:
         if self._loose_items_only:

@@ -54,9 +54,9 @@ def build_administrative_modules(
             "clientes", filtered_factory=filtered_customers,
         ))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
-        service=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p:ProductManagementDialog(service,p),"produtos"))
+        product_management=ProductManagementService(container.product_application,container.stock_actions,security);modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p, service=product_management:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):
-        service=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p:PurchaseDialog(service,p),"compras"))
+        purchase_management=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p, service=purchase_management:PurchaseDialog(service,p),"compras"))
     cash=CashService(database.connect);modules.append(AdministrativeModule("Caixa","Abertura, movimentos e fechamento","","financeiro","view",lambda p:CashDialog(CashApplicationService(cash,terminal=terminal,user=_username(security)),p),"caixa"))
     if getattr(container,"financial_query",None) and getattr(container,"financial_actions",None):modules.append(AdministrativeModule("Financeiro","Contas a receber, pagar e baixas","","financeiro","view",lambda p:FinancialDialog(container.financial_query,container.financial_actions,user=_username(security),parent=p),"financeiro"))
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
