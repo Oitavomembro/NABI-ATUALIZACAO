@@ -3632,6 +3632,17 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão consolidada depois dos merges: `2355 passed`, `1 skipped`,
   `460 subtests passed`, zero falhas e dois avisos externos conhecidos;
   ensaio de primeiro uso completo também aprovado, sem rede Fiscal/SEFAZ.
+
+#### Consolidação após stress e correção da ordem de imports
+
+- `110d018` integra por merge normal o checkpoint de consultas comerciais sob
+  carga, preservando todas as trilhas anteriores;
+- coleta fresca antes bloqueada pelo ciclo `repositories`/`services` passou em
+  conjunto (`46 passed`), sem depender da ordem de imports;
+- ensaio descartável licença → banco → administrador → login → shell → Vendas
+  foi repetido e aprovado, ainda sem rede Fiscal/SEFAZ;
+- regressão integral consolidada final: `2362 passed`, `1 skipped`,
+  `460 subtests passed`, zero falhas e somente dois avisos externos conhecidos.
 ## Consultas comerciais sob carga — checkpoint isolado
 
 - branch/worktree: `codex/stress-consultas-servicos` em
