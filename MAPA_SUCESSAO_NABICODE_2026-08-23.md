@@ -2919,3 +2919,32 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   adulterada, migração legada sem persistência e separação de licença/Fiscal;
 - nenhum schema, UI, banco real, certificado, segredo, transmissão, outbox,
   regra Fiscal/SEFAZ, licença ou permissão persistida foi alterado.
+
+### Onboarding Qt do perfil empresarial unificado
+
+- branch/worktree isolados: `codex/onboarding-perfil-empresarial-qt` em
+  `NabiCode-QT-OnboardingPerfil-codex`, derivados exatamente de `3d875d5`;
+- implementação: `aa9891f` — `feat: cria onboarding Qt do perfil empresarial`;
+- `CompanyProfileDialog` guia criação ou revisão de CNPJ, razão social, regime,
+  enquadramento, CNAEs, UF/município, IE/IM, operações, documentos, fonte e
+  vigência. A tela não foi conectada ao shell neste checkpoint;
+- licença, permissões e perfil empresarial são explicados como controles
+  independentes. O readiness permanece informativo, exibe explicitamente
+  `enables_fiscal=false` e não habilita Fiscal/SEFAZ;
+- a configuração antiga pode ser carregada somente como rascunho. Ela nunca se
+  autoconfirma ou persiste; campos e obrigações ausentes continuam sem inferência;
+- revisão validada e normalizada é obrigatória e não grava dados. Uma segunda
+  confirmação consciente é exigida antes de chamar a transação oficial; qualquer
+  edição invalida a revisão e uma trava impede reentrada/dupla confirmação;
+- leitura/revisão exige sessão real com `configs/view`; confirmação exige
+  `configs/edit` e registra o ator da sessão. Concorrência otimista bloqueia uma
+  revisão antiga e preserva a versão confirmada por outra sessão;
+- Enter avança uma etapa, Shift+Enter retorna, Esc cancela e auto-repeat é
+  consumido sem ação; cancelamento e falhas de permissão não persistem dados;
+- testes focados finais: `28 passed`; regressão ampliada de perfil, Segurança,
+  Configurações e Fiscal: `220 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum `main_qt.py`, `ui_qt/app.py`, shell, licença, banco real, certificado,
+  regra Fiscal/SEFAZ, transmissão ou endpoint foi alterado. Próximo passo seguro:
+  revisão independente e integração normal; conexão ao shell deve ser checkpoint
+  posterior, separado e explicitamente autorizado.
