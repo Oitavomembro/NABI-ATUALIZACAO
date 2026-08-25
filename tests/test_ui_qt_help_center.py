@@ -97,7 +97,7 @@ def test_nova_execucao_apos_conclusao_nao_reutiliza_resultado(tmp_path):
     assert dialog.reload() and len(pool.workers) == 2
     assert not dialog.report_button.isEnabled()
     complete(pool)
-    assert dialog.results == first and dialog.report_button.isEnabled()
+    assert dialog.results is not first and dialog.report_button.isEnabled()
     dialog.close()
 
 
