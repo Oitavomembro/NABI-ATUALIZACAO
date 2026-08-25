@@ -2881,3 +2881,26 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Redação central de dados sensíveis
+
+- branch/worktree isolados: `codex/redacao-dados-sensiveis` em
+  `NabiCode-QT-RedacaoDados-codex`, derivados exatamente de `1cfdfa4`;
+- implementação: `ec290bf` — `security: centraliza redacao de dados sensiveis`;
+- `core.sensitive_data` concentra sanitização de texto e estruturas aninhadas
+  para senha, tokens/Authorization, certificado/chave privada, XML fiscal
+  reproduzido, CPF/CNPJ, e-mail, telefone e raiz de caminho pessoal;
+- falha de conversão ou sanitização retorna somente marcador técnico fixo; o
+  conteúdo original nunca é usado como fallback;
+- formatter diagnóstico, auditoria administrativa (log, evento, persistência e
+  consulta) e relatório JSON de diagnóstico usam a mesma política antes da
+  saída; IDs técnicos, estados, contagens e hashes continuam disponíveis;
+- documentos XML fiscais canônicos e suas áreas próprias de armazenamento não
+  foram alterados: somente eventual reprodução em log/diagnóstico é omitida;
+- testes adversariais e regressão central: `18 passed`; `compileall` e
+  `git diff --check` aprovados;
+- não houve mudança em Fiscal/SEFAZ operacional, IA, pacote contábil, Qt, schema
+  ou banco real; nenhum dado real ou segredo foi usado;
+- próximo passo seguro: revisão independente e integração normal na consolidada,
+  seguida de expansão gradual somente nos emissores periféricos comprovadamente
+  necessários, sem reescrever regras de negócio.
