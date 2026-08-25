@@ -40,9 +40,10 @@ QTabBar::tab:selected { color:#00d084; border-bottom:2px solid #00d084; }
 class SettingsDialog(QDialog):
     """Configurações não fiscais, com organização equivalente ao Legacy."""
 
-    def __init__(self, service, parent=None):
+    def __init__(self, service, parent=None, *, company_profile_service=None):
         super().__init__(parent)
         self.service = service
+        self.company_profile_service = company_profile_service
         self.setWindowTitle("Configurações do NabiCode")
         self.resize(780, 600)
         self.setMinimumSize(680, 520)
@@ -162,6 +163,10 @@ class SettingsDialog(QDialog):
         self.store_name=QLineEdit(); self.store_name.setMaxLength(120)
         self.receipt_footer=QTextEdit(); self.receipt_footer.setMaximumHeight(130)
         form.addRow("Nome exibido da loja",self.store_name); form.addRow("Rodapé dos comprovantes",self.receipt_footer)
+        self.company_profile_button = QPushButton("Configurações da empresa / Importar dados de XML")
+        self.company_profile_button.clicked.connect(self._open_company_profile)
+        self.company_profile_button.setVisible(self.company_profile_service is not None)
+        form.addRow("", self.company_profile_button)
         note=QLabel("Estes dados são comerciais. CNPJ, certificado e parâmetros fiscais não são alterados aqui."); note.setWordWrap(True); note.setStyleSheet("color:#d29922")
         form.addRow("",note); self.save_store=QPushButton("Salvar identificação comercial"); self.save_store.setObjectName("primary"); self.save_store.clicked.connect(self._save_store_identity); form.addRow("",self.save_store)
         self.tabs.addTab(page,"Loja")
@@ -283,6 +288,13 @@ class SettingsDialog(QDialog):
             QMessageBox.information(self,"Loja","Identificação comercial salva.")
         except Exception as error:
             QMessageBox.warning(self,"Loja",str(error)); self.store_name.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_company_profile(self) -> None:
+        if self.company_profile_service is None:
+            QMessageBox.warning(self, "Empresa", "Configuração empresarial indisponível.")
+            return
+        from ui_qt.administration.company_profile_dialog import CompanyProfileDialog
+        CompanyProfileDialog(self.company_profile_service, self).exec()
 
     def _preview_receipt(self) -> None:
         try: self.receipt_preview.setPlainText(self.service.preview_receipt(self.receipt_model.currentText()))

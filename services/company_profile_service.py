@@ -35,6 +35,15 @@ class CompanyProfileDraft:
     source: str = ""
     source_date: str = ""
     confirmed: bool = False
+    trade_name: str = ""
+    street: str = ""
+    address_number: str = ""
+    address_complement: str = ""
+    district: str = ""
+    city_code: str = ""
+    postal_code: str = ""
+    phone: str = ""
+    email: str = ""
 
 
 @dataclass(frozen=True)
@@ -61,6 +70,15 @@ class CompanyProfileVersion:
     supersedes_version: int | None
     previous_hash: str
     record_hash: str
+    trade_name: str = ""
+    street: str = ""
+    address_number: str = ""
+    address_complement: str = ""
+    district: str = ""
+    city_code: str = ""
+    postal_code: str = ""
+    phone: str = ""
+    email: str = ""
 
 
 @dataclass(frozen=True)
@@ -185,6 +203,10 @@ class CompanyProfileService:
             operation_types=target.operation_types, document_types=target.document_types,
             effective_from=effective_from, source=f"ROLLBACK_DA_VERSAO_{target.version}",
             source_date=self.clock().date().isoformat(), confirmed=True,
+            trade_name=target.trade_name, street=target.street,
+            address_number=target.address_number, address_complement=target.address_complement,
+            district=target.district, city_code=target.city_code, postal_code=target.postal_code,
+            phone=target.phone, email=target.email,
         )
         return self.confirm(
             draft, change_reason=f"Rollback auditável: {str(reason or '').strip()}",
@@ -245,7 +267,29 @@ class CompanyProfileService:
             operation_types=(), document_types=tuple(str(item) for item in fiscal.get("enabled_models") or ()),
             effective_from="", source="CONFIGURACAO_LEGADA_NABICODE",
             source_date=self.clock().date().isoformat(), confirmed=False,
+            trade_name=str(issuer.get("trade_name") or ""), street=str(issuer.get("street") or ""),
+            address_number=str(issuer.get("number") or ""),
+            address_complement=str(issuer.get("complement") or ""),
+            district=str(issuer.get("district") or ""), city_code=str(issuer.get("city_code") or ""),
+            postal_code=str(issuer.get("postal_code") or ""), phone=str(issuer.get("phone") or ""),
+            email=str(issuer.get("email") or ""),
         )
+
+    def known_company_documents(self) -> tuple[str, ...]:
+        """Documentos já afirmados no cadastro/perfil/fiscal, sem abrir certificado."""
+        self._require("view")
+        values: list[str] = []
+        for version in self.history():
+            values.append(version.cnpj)
+        connection = self.connection_factory()
+        try:
+            values.append(self._raw_configuration(connection, "cnpj"))
+            fiscal = self._configuration(connection, "fiscal.config.v1")
+            issuer = fiscal.get("issuer") if isinstance(fiscal.get("issuer"), dict) else {}
+            values.extend((str(fiscal.get("cnpj") or ""), str(issuer.get("cnpj") or "")))
+        finally:
+            connection.close()
+        return tuple(dict.fromkeys(re.sub(r"\D", "", item) for item in values if re.sub(r"\D", "", item)))
 
     def _require(self, action: str) -> str:
         if not self.security_service.require("configs", action):
@@ -290,7 +334,23 @@ class CompanyProfileService:
             cls._registration(draft.municipal_registration),
             cls._tokens(draft.operation_types), cls._tokens(draft.document_types),
             str(draft.effective_from or ""), source, str(draft.source_date), True,
+            cls._plain(draft.trade_name, 180), cls._plain(draft.street, 180),
+            cls._plain(draft.address_number, 30), cls._plain(draft.address_complement, 100),
+            cls._plain(draft.district, 100), re.sub(r"\D", "", draft.city_code)[:7],
+            re.sub(r"\D", "", draft.postal_code)[:8], re.sub(r"[^0-9()+ -]", "", draft.phone)[:30],
+            cls._email(draft.email),
         )
+
+    @staticmethod
+    def _plain(value: str, limit: int) -> str:
+        return " ".join(str(value or "").split())[:limit]
+
+    @staticmethod
+    def _email(value: str) -> str:
+        normalized = str(value or "").strip().lower()
+        if normalized and (len(normalized) > 180 or not re.fullmatch(r"[^\s@]+@[^\s@]+\.[^\s@]+", normalized)):
+            raise ValueError("E-mail empresarial inválido.")
+        return normalized
 
     @staticmethod
     def _tokens(values: Sequence[str]) -> tuple[str, ...]:

@@ -11,6 +11,7 @@ import pytest
 from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QMessageBox
 
 from services.company_profile_service import CompanyProfileService
 from services.security_service import SecurityService
@@ -188,3 +189,34 @@ def test_modulo_nao_importa_shell_ou_ativacao_fiscal():
     source = inspect.getsource(module)
     assert "main_qt" not in source and "ui_qt.app" not in source
     assert "fiscal.enabled" not in source and "enables_fiscal=True" not in source
+
+
+def _company_xml(name="EMPRESA DO XML", document="12345678000195"):
+    key = "1" * 44
+    return f"""<nfeProc xmlns='http://www.portalfiscal.inf.br/nfe'><NFe><infNFe Id='NFe{key}'>
+    <ide><mod>55</mod></ide><emit><CNPJ>{document}</CNPJ><xNome>{name}</xNome><xFant>FANTASIA XML</xFant><IE>9988</IE>
+    <enderEmit><xLgr>RUA XML</xLgr><nro>7</nro><xBairro>CENTRO</xBairro><cMun>2918407</cMun><xMun>JUAZEIRO</xMun><UF>BA</UF><CEP>48900000</CEP></enderEmit></emit>
+    <dest><CNPJ>98765432000198</CNPJ><xNome>CLIENTE</xNome></dest></infNFe></NFe>
+    <protNFe><infProt><chNFe>{key}</chNFe><cStat>100</cStat></infProt></protNFe></nfeProc>"""
+
+
+def test_importacao_mostra_previa_e_so_substitui_apos_confirmacao(environment, tmp_path, monkeypatch):
+    _, _, service, dialog, _ = environment
+    dialog.legal_name.setText("NOME EXISTENTE")
+    path = tmp_path / "autorizada.xml"; path.write_text(_company_xml(), encoding="utf-8")
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Apply)
+    assert dialog.import_xml(path, selected_role="emitente") is True
+    assert dialog.legal_name.text() == "EMPRESA DO XML"
+    assert dialog.trade_name.text() == "FANTASIA XML"
+    assert dialog.tax_regime.currentData() == "MEI"  # XML/CRT nunca decide regime.
+    assert service.history() == ()
+
+
+def test_cancelamento_da_previa_nao_altera_campo_algum(environment, tmp_path, monkeypatch):
+    _, _, service, dialog, _ = environment
+    dialog.legal_name.setText("MANTER ESTE NOME")
+    before = dialog._draft()
+    path = tmp_path / "autorizada.xml"; path.write_text(_company_xml(), encoding="utf-8")
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Cancel)
+    assert dialog.import_xml(path, selected_role="emitente") is False
+    assert dialog._draft() == before and service.history() == ()

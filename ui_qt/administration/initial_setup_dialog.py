@@ -2,8 +2,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QDialog, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
+    QDialog, QFileDialog, QFormLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
 )
+from services.company_xml_import_service import CompanyXMLImportService
 
 
 class InitialSetupDialog(QDialog):
@@ -49,13 +50,17 @@ class InitialSetupDialog(QDialog):
         ):
             form.addRow(label, field)
         root.addLayout(form)
+        self.import_xml_button = QPushButton("Importar dados de XML")
+        self.import_xml_button.clicked.connect(self.import_xml)
+        root.addWidget(self.import_xml_button)
         self.finish = QPushButton("Concluir configuração [Enter]")
         self.finish.setStyleSheet("background:#238636;color:white;min-height:38px;font-weight:800")
         self.finish.clicked.connect(self.complete)
         root.addWidget(self.finish)
         self.fields = (
             self.store_name, self.document, self.email, self.username,
-            self.display_name, self.password, self.password_confirmation, self.finish,
+            self.display_name, self.password, self.password_confirmation,
+            self.import_xml_button, self.finish,
         )
         for field in self.fields:
             field.installEventFilter(self)
@@ -67,10 +72,53 @@ class InitialSetupDialog(QDialog):
             self.display_name: "Informe o nome que aparecerá na auditoria das operações.",
             self.password: "Crie uma senha exclusiva com pelo menos oito caracteres. Eu nunca mostro nem armazeno essa senha em texto aberto.",
             self.password_confirmation: "Repita a senha. Depois desta etapa, o acesso exigirá usuário e senha.",
+            self.import_xml_button: "Escolha um XML fiscal autorizado local. Vou mostrar emitente e destinatário e nada será salvo sem sua confirmação.",
             self.finish: "Vou validar os dados e criar somente o primeiro administrador. Depois ajudarei com caixa, impressão e backup.",
         }
         self._show_guidance(self.store_name)
         self.store_name.setFocus()
+
+    def import_xml(self, path=None, *, selected_role="") -> bool:
+        if path is None:
+            path, _ = QFileDialog.getOpenFileName(self, "Importar dados de XML", "", "XML fiscal (*.xml)")
+            if not path:
+                return False
+        try:
+            service = CompanyXMLImportService()
+            review = service.inspect(path, known_documents=(self.document.text(),))
+            role = selected_role or review.selected_role
+            if not role:
+                labels = [f"{item.role}: {item.legal_name} ({item.document})" for item in review.participants]
+                choice, accepted = QInputDialog.getItem(
+                    self, "Qual participante é sua empresa?", "Confirme o participante:", labels, 0, False,
+                )
+                if not accepted:
+                    return False
+                role = review.participants[labels.index(choice)].role
+            review = service.select(review, role, known_documents=(self.document.text(),))
+            participant = review.selected
+            preview = (
+                f"Origem: XML local autorizado\nParticipante: {participant.role}\n"
+                f"Empresa/loja: {self.store_name.text() or '(vazio)'} → {participant.trade_name or participant.legal_name}\n"
+                f"CNPJ/CPF: {self.document.text() or '(vazio)'} → {participant.document}\n"
+                f"E-mail: {self.email.text() or '(vazio)'} → {participant.email or '(ausente; manter)'}\n\n"
+                "Regime/CRT, CSC, certificado, senha, séries, numeração e credenciamento não serão preenchidos."
+            )
+            answer = QMessageBox.question(
+                self, "Prévia da importação de XML", preview,
+                QMessageBox.StandardButton.Apply | QMessageBox.StandardButton.Cancel,
+                QMessageBox.StandardButton.Cancel,
+            )
+            if answer != QMessageBox.StandardButton.Apply:
+                return False
+            self.store_name.setText(participant.trade_name or participant.legal_name)
+            self.document.setText(participant.document)
+            if participant.email:
+                self.email.setText(participant.email)
+            return True
+        except Exception as error:
+            QMessageBox.warning(self, "Importar dados de XML", str(error))
+            return False
 
     def _show_guidance(self, field) -> None:
         message = self._guidance.get(field)
@@ -91,6 +139,8 @@ class InitialSetupDialog(QDialog):
                 self.fields[max(0, index - 1)].setFocus()
             elif watched is self.finish:
                 self.complete()
+            elif watched is self.import_xml_button:
+                self.import_xml()
             else:
                 self.fields[index + 1].setFocus()
             return True
