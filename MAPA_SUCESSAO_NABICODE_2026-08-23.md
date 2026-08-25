@@ -3037,3 +3037,160 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - `main_qt.py`, shell, Fiscal/SEFAZ, Nabi, licenciamento, banco real e instalador
   não foram alterados. Integração e homologação visual no Windows permanecem
   checkpoints separados.
+### Pacote contábil V2 — checkpoint 1 de integridade
+
+- branch isolada: `codex/pacote-contabil-integridade-v2`, derivada de
+  `1cfdfa4`, sem integração com a candidata principal;
+- implementação: `e4816fb` — `fix: endurece integridade do pacote contabil`;
+- o manifesto passou ao layout explícito `nabicode.accounting-package.v2` e
+  cataloga individualmente, com SHA-256, todos os XMLs de saídas, DF-e
+  recebidos, envios e retornos de eventos e o arquivo de instruções;
+- o validador exige correspondência exata entre catálogo e ZIP e rejeita bytes
+  alterados, arquivo ausente ou extra, caminhos duplicados/ambíguos, travessia
+  de diretório, vínculos/hash repetidos e manifesto estruturalmente
+  inconsistente;
+- XMLs são reabertos sem rede ou entidades externas para confrontar, quando o
+  contrato disponível contém o dado, chave de acesso, protocolo, CNPJ do
+  emitente, período de emissão, modelo e status de documento/evento;
+- manifesto V1 é classificado explicitamente como `LEGADO` e insuficiente; ele
+  nunca é apresentado como íntegro no padrão V2;
+- o manifesto não é assinado neste checkpoint. O resultado e o LEIA-ME
+  declaram `non_repudiation=false`: SHA-256 detecta corrupção/divergência, mas
+  não prova autoria nem oferece não-repúdio;
+- testes focados: `17 passed`; regressão de todos os arquivos `test_fiscal*` e
+  adversariais do pacote: `364 passed`, `10 subtests passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhum conteúdo EFD/PGDAS/SPED foi criado e nenhuma transmissão, outbox,
+  retenção, backup, Qt, Nabi, banco real, certificado, segredo ou regra
+  Fiscal/SEFAZ operacional foi alterada;
+- próximo passo: ampliar conteúdo contábil somente em checkpoint separado,
+  preservando este contrato V2 e sem confundir integridade por hash com
+  assinatura ou prova de autoria.
+
+### Pacote contábil — checkpoint 2 de fontes e reconciliação
+
+- branch isolada: `codex/contabil-fontes-reconciliacao`, derivada de
+  `9af32ef`, sem integração com a principal;
+- correção de fonte: `7db7d8e` — `fix: usa titulos financeiros nos relatorios`;
+  `ReportService` passou a consultar exclusivamente a tabela canônica
+  `titulos_financeiros` em indicadores e relatório. Não existe fallback
+  silencioso para a tabela antiga `financeiro_titulos`; 25 testes de relatório
+  provam títulos reais a pagar/receber e preservam precisão decimal;
+- implementação: `3519be6` — `feat: cria reconciliacao contabil somente leitura`;
+- `AccountingReconciliationService` abre a conexão em modo `query_only`, não
+  cria tabela ou lançamento e produz DTO imutável e CSV versionado
+  `nabicode.accounting-reconciliation.v1`, com resumo por classificação e
+  totais separados por relação para não somar o mesmo fato repetidamente;
+- relações diagnosticadas por IDs/chaves/origens existentes: venda↔documento
+  fiscal, venda↔JSON de pagamentos, venda↔título/parcelas,
+  compra↔recebimento parcial↔estoque↔título, pagamentos↔títulos, documento
+  fiscal órfão, origem financeira/estoque inválida, cancelamento↔estorno e
+  DF-e↔compra;
+- classificações: `CONCILIADO`, `PENDENTE_DADO_EXTERNO`, `DIVERGENTE`,
+  `LEGADO_NAO_PROVAVEL` e `NAO_APLICAVEL`. Correspondência textual ambígua não
+  é criada;
+- competência e caixa permanecem explicitamente separados. O relatório avisa
+  que pagamento de venda está em JSON, vendas/recebimentos não possuem
+  `cash_session_id`, itens antigos podem ser somente texto e NF-e importada não
+  possui vínculo inequívoco com pedido/recebimento;
+- testes focados de reconciliação/relatório: `33 passed`; regressão combinada de
+  Report, Financeiro, PDV, Compras e Fiscal: `366 passed`, `13 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- teste de 1.001 vendas prova ausência de truncamento silencioso. Casos
+  adversariais cobrem JSON inválido, duplicidade, origem inválida, venda fiscal
+  sem documento, documento sem venda, crediário, compra parcial, pagamento
+  órfão, cancelamento, competência/caixa e DF-e sem vínculo canônico;
+- nenhuma tabela contábil, lançamento, DRE oficial, EFD/SPED ou regra de negócio
+  foi criada. Fiscal operacional, transmissão, Qt, Nabi, backup, despesas de
+  Caixa, licenciamento e banco real permaneceram intocados.
+
+### Pacote do contador — checkpoint 3 em camadas
+
+- branch isolada: `codex/pacote-contador-em-camadas`, derivada de `2076a49`,
+  sem integração com a principal;
+- implementação: `7dd382d` — `feat: exporta pacote mensal para contador`;
+- endurecimento de escala/identidade: `dc11995` — `fix: filtra fontes
+  contabeis na competencia`;
+- `AccountantMonthlyPackageService` exporta por CNPJ e competência, em modo
+  SQLite `query_only`, as camadas `00` a `11` e `99`: resumo/pendências,
+  empresa, vendas/recebimentos, XMLs de saída/entrada, caixa, contas,
+  compras/fornecedores, estoque/inventário, limitações tributárias, externos,
+  intercâmbio universal e evidências;
+- perfis `ESSENCIAL`, `COMPLETO` e `AUDITORIA` preservam os mesmos totais e toda
+  movimentação real no resumo, manifesto e CSVs canônicos. O Completo adiciona
+  JSON/XLSX auxiliares; Auditoria adiciona a trilha existente; Essencial mantém
+  a entrega curta;
+- `LEIA-ME_CONTADOR.txt` na raiz orienta início, semáforo, perfis, CNPJ,
+  competência, totais e pendências externas. Toda seção sem registro recebe
+  declaração explícita; isso nunca é apresentado como prova automática de
+  ausência econômica;
+- cadastro da empresa exporta apenas campos contábeis/fiscais permitidos e
+  transforma ausência de razão/nome, CNPJ, IE, IM, UF/município/endereço,
+  regime/CRT ou CNAE em pendência. Certificado, senha, endpoints e demais
+  segredos não entram no pacote;
+- XMLs originais vêm exclusivamente do pacote fiscal V2 validado. Saídas,
+  entradas e eventos ficam separados, e o manifesto fiscal preserva a marcação
+  `RESUMO` versus `XML_COMPLETO`;
+- a pasta `11_INTERCAMBIO_UNIVERSAL` contém CSV UTF-8-BOM, `layout.json`
+  versionado e, nos perfis completos, XLSX de conveniência. Lote e linhas têm
+  identidades SHA-256 separadas: `source_key` permanece estável por
+  CNPJ/fonte/ID; `row_hash` detecta mudança de conteúdo; `row_id` identifica a
+  versão exata para evitar reimportação duplicada. Não são gerados
+  débito, crédito, plano de contas, centro de custo ou lançamento inferido;
+- o pacote externo possui ZIP determinístico, catálogo individual de tamanho e
+  SHA-256 e validador estrito contra adulteração, arquivo extra, duplicidade,
+  caminho inseguro e manifesto inconsistente. Hash não é assinatura e
+  `non_repudiation=false` permanece explícito;
+- bancos, adquirentes/cartões, folha, contratos e despesas estruturadas sem
+  fonte canônica são pendências externas ou
+  `CAPACIDADE_PENDENTE_INTEGRACAO`, com impacto, responsável e prazo quando
+  disponível. Competência e caixa permanecem separados;
+- CNPJ é validado com dígitos verificadores pelo utilitário fiscal existente.
+  Fontes periódicas usam consultas SQL parametrizadas: datas ISO seguem ramo
+  apto a índice e datas DD/MM/AAAA usam compatibilidade separada, sem carregar
+  todo o histórico em memória;
+- testes focados pacote/reconciliação: `21 passed`; regressão combinada de
+  pacote V2, Report, Financeiro, PDV, Compras e Fiscal: `379 passed`, `13
+  subtests passed`; `compileall` e `git diff --check` aprovados;
+- testes cobrem todos os perfis, CNPJ/competência, pacote vazio, cadastro
+  ausente, divergência, 1.002 movimentações sem truncamento, determinismo byte a
+  byte, privacidade, intercâmbio idempotente, XML original e rejeição de
+  adulteração/arquivo extra. Teste adicional com 5.000 linhas fora da
+  competência comprova, pelo SQL observado, que o histórico não é materializado;
+- o material é chamado de pacote de fontes, nunca de EFD, PGDAS, SPED ou DRE
+  contábil, e não apura imposto. Nenhum schema, regra de negócio, Fiscal
+  operacional/SEFAZ, Qt, Nabi, backup, Caixa, licença ou banco real foi alterado.
+
+### Central do Contador Qt — preparação e exportação segura
+
+- branch/worktree isolados: `codex/central-contador-qt` em
+  `NabiCode-QT-CentralContador-codex`, derivados exatamente do pacote em camadas
+  `885cd75` e sem conexão ao shell ou `main_qt.py`;
+- implementação: `74f3539` — `feat: adiciona Central do Contador Qt`;
+- a tela apresenta competência, CNPJ confirmado e destino, com Essencial e
+  Completo como caminhos principais e Auditoria somente em opção avançada;
+- os três perfis usam exclusivamente `AccountantMonthlyPackageService` e não
+  oferecem filtros para omitir movimentos. A interface explica conteúdos,
+  pendências externas, separação entre competência/caixa e que o pacote não é
+  EFD, PGDAS, SPED, DRE contábil nem apuração tributária;
+- revisão e geração são ações separadas. A revisão produz plano imutável com
+  SHA-256 vinculado a CNPJ, competência, perfil, destino e operador; qualquer
+  alteração invalida a geração. Sessão e `relatorios/generate` são revalidadas
+  nas duas ações, e troca de operador falha fechada;
+- exportação roda por `QThreadPool`, bloqueia reentrada, descarta resultado
+  atrasado e preserva Enter, Shift+Enter, Esc e consumo de auto-repeat;
+- o semáforo mostra somente estados reais `CONCILIADO`, `PENDENTE` ou
+  `DIVERGENTE`, além de quantidade de arquivos, movimentos e pendências. Nunca
+  antecipa sucesso nem substitui a revisão do contador;
+- defeito histórico de determinismo corrigido: o `openpyxl` atualizava o campo
+  interno `modified` do XLSX durante `save()`, alterando ZIP/hash conforme o
+  segundo do relógio. O metadado agora é normalizado e o teste atravessa um
+  segundo entre duas exportações idênticas;
+- validação focada da Central/pacote/reconciliação: `35 passed`; regressão
+  ampliada de pacote, relatórios, segurança e Qt: `86 passed`; `compileall` e
+  `git diff --check` aprovados;
+- não foram alterados Fiscal/SEFAZ operacional, IA, banco real, shell,
+  `main_qt.py` ou regras contábeis/tributárias;
+- próximo passo: revisão cruzada, merge normal na consolidada e somente depois
+  composição explícita no menu autorizado. Homologação visual Windows e geração
+  em banco TESTE continuam obrigatórias antes de promoção.

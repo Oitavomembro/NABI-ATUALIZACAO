@@ -1485,7 +1485,13 @@ class FiscalService:
         accounting_config = self.load_config()
         manifest: dict[str, Any] = {
             "product": "NabiCode", "purpose": "Pacote fiscal para contabilidade",
-            "version": 1,
+            "version": 2,
+            "layout": "nabicode.accounting-package.v2",
+            "integrity": {
+                "algorithm": "SHA-256",
+                "scope": "Todos os arquivos do ZIP, exceto o próprio manifesto",
+                "non_repudiation": False,
+            },
             "issuer": {
                 "cnpj": str(accounting_config.get("cnpj") or ""),
                 "name": str((accounting_config.get("issuer") or {}).get("name") or ""),
@@ -1494,7 +1500,7 @@ class FiscalService:
             "period": {"start": start.isoformat(), "end": end.isoformat()},
             "includes_homologation": bool(include_homologation),
             "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
-            "documents": [], "received_documents": [], "events": [],
+            "documents": [], "received_documents": [], "events": [], "files": [],
         }
         temp_path: Path | None = None
         try:
@@ -1509,11 +1515,13 @@ class FiscalService:
                     name = f"{str(row['environment']).lower()}/{label}/{label}{key}.xml"
                     data = Path(str(row["processed_path"])).read_bytes()
                     archive.writestr(name, data)
+                    digest = hashlib.sha256(data).hexdigest()
+                    manifest["files"].append({"file": name, "sha256": digest, "kind": "SAIDA_FISCAL"})
                     manifest["documents"].append({
                         "access_key": key, "model": model, "environment": row["environment"],
                         "status": row.get("status", ""),
                         "protocol": row.get("protocol", ""), "created_at": row.get("created_at", ""),
-                        "file": name, "sha256": hashlib.sha256(data).hexdigest(),
+                        "file": name, "sha256": digest,
                     })
                 for index, row in enumerate(received_documents, 1):
                     path = Path(str(row.get("path") or ""))
@@ -1537,6 +1545,7 @@ class FiscalService:
                     key = str(row.get("access_key") or "sem_chave")
                     name = f"entradas_DFe/{received_date:%Y-%m}/{index:04d}_{schema}_{key}.xml"
                     archive.writestr(name, data)
+                    manifest["files"].append({"file": name, "sha256": digest, "kind": "ENTRADA_DFE"})
                     manifest["received_documents"].append({
                         "nsu": str(row.get("nsu") or ""), "access_key": key,
                         "schema": str(row.get("schema") or ""),
@@ -1548,7 +1557,7 @@ class FiscalService:
                     key = str(row["access_key"])
                     kind = str(row.get("event_type") or "EVENTO").upper()
                     base = f"eventos/{key}/{index:03d}_{kind}"
-                    exported: list[str] = []
+                    exported: list[dict[str, str]] = []
                     for suffix, field in (("envio", "request_path"), ("retorno", "response_path")):
                         path = Path(str(row.get(field) or ""))
                         if path.is_file():
@@ -1558,7 +1567,9 @@ class FiscalService:
                                 raise ValueError(f"Evento fiscal {kind} da chave {key} falhou na verificação de integridade.")
                             name = f"{base}_{suffix}.xml"
                             archive.writestr(name, data)
-                            exported.append(name)
+                            digest = hashlib.sha256(data).hexdigest()
+                            exported.append({"role": suffix.upper(), "file": name, "sha256": digest})
+                            manifest["files"].append({"file": name, "sha256": digest, "kind": "EVENTO_FISCAL"})
                     manifest["events"].append({
                         "access_key": key, "type": kind, "protocol": row.get("protocol", ""),
                         "status_code": row.get("status_code", ""), "created_at": row.get("created_at", ""),
@@ -1571,11 +1582,18 @@ class FiscalService:
                     "entradas_DFe: documentos recebidos da SEFAZ; consulte o manifesto para saber "
                     "se o conteúdo é XML_COMPLETO ou apenas RESUMO.\n"
                     "eventos: cancelamentos, cartas de correção e inutilizações aceitos.\n"
-                    "manifesto.json: relação de arquivos e hashes SHA-256 para validação.\n\n"
+                    "manifesto.json: relação completa de arquivos e hashes SHA-256 para validação.\n"
+                    "LIMITAÇÃO: o manifesto v2 não possui assinatura digital. Os hashes detectam "
+                    "corrupção e divergências, mas não fornecem não-repúdio nem provam autoria.\n\n"
                     "Este pacote de XMLs não substitui a EFD ICMS/IPI nem outras declarações "
                     "exigidas conforme o regime e a UF da empresa.\n"
                 )
-                archive.writestr("LEIA-ME.txt", readme.encode("utf-8"))
+                readme_data = readme.encode("utf-8")
+                archive.writestr("LEIA-ME.txt", readme_data)
+                manifest["files"].append({
+                    "file": "LEIA-ME.txt", "sha256": hashlib.sha256(readme_data).hexdigest(),
+                    "kind": "INSTRUCOES",
+                })
                 archive.writestr("manifesto.json", json.dumps(manifest, ensure_ascii=False, indent=2, sort_keys=True))
             os.replace(temp_path, destination)
             temp_path = None
@@ -1592,7 +1610,7 @@ class FiscalService:
         }
 
     def validate_accounting_package(self, archive_path: str | Path) -> dict[str, Any]:
-        """Valida estrutura, caminhos e SHA-256 de um pacote contábil exportado."""
+        """Valida estrutura, conteúdo e SHA-256 do pacote contábil v2."""
         path = Path(archive_path)
         if not path.is_file() or path.suffix.casefold() != ".zip":
             raise ValueError("Selecione um pacote contábil ZIP gerado pelo NabiCode.")
@@ -1600,7 +1618,10 @@ class FiscalService:
             raise ValueError("O pacote contábil excede o limite seguro de 2 GB.")
         try:
             with zipfile.ZipFile(path) as archive:
-                names = set(archive.namelist())
+                raw_names = archive.namelist()
+                names = set(raw_names)
+                if len(raw_names) != len(names):
+                    raise ValueError("Pacote contém caminho duplicado.")
                 if "manifesto.json" not in names:
                     raise ValueError("Pacote sem manifesto fiscal.")
                 infos = archive.infolist()
@@ -1608,42 +1629,189 @@ class FiscalService:
                     raise ValueError("Pacote contém arquivo interno acima do limite seguro.")
                 if sum(info.file_size for info in infos) > 4 * 1024 * 1024 * 1024:
                     raise ValueError("Conteúdo descompactado do pacote excede o limite seguro.")
+                normalized_names: set[str] = set()
                 for name in names:
                     normalized = name.replace("\\", "/")
-                    if normalized.startswith("/") or ".." in normalized.split("/"):
+                    if (
+                        normalized.startswith("/") or ".." in normalized.split("/")
+                        or not normalized or normalized.endswith("/")
+                    ):
                         raise ValueError("Pacote contém caminho interno inseguro.")
+                    folded = normalized.casefold()
+                    if folded in normalized_names:
+                        raise ValueError("Pacote contém caminho repetido ou ambíguo.")
+                    normalized_names.add(folded)
                 try:
                     manifest = json.loads(archive.read("manifesto.json").decode("utf-8"))
                 except (UnicodeDecodeError, json.JSONDecodeError) as exc:
                     raise ValueError("Manifesto fiscal inválido.") from exc
-                if manifest.get("product") != "NabiCode" or manifest.get("version") != 1:
+                if manifest.get("product") != "NabiCode":
                     raise ValueError("Pacote contábil incompatível com esta versão do NabiCode.")
-                checked = 0
-                entries = list(manifest.get("documents") or []) + list(
-                    manifest.get("received_documents") or []
-                )
-                for event in manifest.get("events") or []:
-                    entries.extend(
-                        {"file": item, "sha256": ""} for item in (event.get("files") or [])
+                if manifest.get("version") == 1:
+                    raise ValueError(
+                        "Pacote LEGADO: o manifesto v1 não prova a integridade de todos os arquivos. "
+                        "Gere novamente no layout v2."
                     )
-                by_name = {
-                    str(item.get("file") or ""): str(item.get("sha256") or "").casefold()
-                    for item in entries if item.get("file")
-                }
+                if (
+                    manifest.get("version") != 2
+                    or manifest.get("layout") != "nabicode.accounting-package.v2"
+                    or (manifest.get("integrity") or {}).get("algorithm") != "SHA-256"
+                ):
+                    raise ValueError("Manifesto contábil v2 incompatível ou inconsistente.")
+                period = manifest.get("period")
+                issuer = manifest.get("issuer")
+                if not isinstance(period, dict) or not isinstance(issuer, dict):
+                    raise ValueError("Manifesto contábil v2 não informa período ou emitente válidos.")
+                try:
+                    period_start = datetime.fromisoformat(str(period.get("start") or "")).date()
+                    period_end = datetime.fromisoformat(str(period.get("end") or "")).date()
+                except ValueError as exc:
+                    raise ValueError("Período do manifesto contábil é inválido.") from exc
+                if period_start > period_end:
+                    raise ValueError("Período do manifesto contábil está invertido.")
+
+                file_entries = manifest.get("files")
+                if not isinstance(file_entries, list):
+                    raise ValueError("Manifesto v2 não contém catálogo de arquivos.")
+                by_name: dict[str, str] = {}
+                for item in file_entries:
+                    if not isinstance(item, dict):
+                        raise ValueError("Catálogo de arquivos do manifesto é inválido.")
+                    name = str(item.get("file") or "")
+                    expected = str(item.get("sha256") or "").casefold()
+                    if not re.fullmatch(r"[0-9a-f]{64}", expected):
+                        raise ValueError(f"Hash ausente ou inválido no manifesto: {name or '<sem caminho>'}")
+                    if name in by_name:
+                        raise ValueError(f"Manifesto contém caminho duplicado: {name}")
+                    by_name[name] = expected
+                expected_names = set(by_name) | {"manifesto.json"}
+                if names != expected_names:
+                    missing = sorted(expected_names - names)
+                    extra = sorted(names - expected_names)
+                    detail = f" ausentes={missing}" if missing else ""
+                    detail += f" extras={extra}" if extra else ""
+                    raise ValueError(f"Conteúdo do pacote diverge do manifesto.{detail}")
                 for name, expected in by_name.items():
                     if name not in names:
                         raise ValueError(f"Arquivo fiscal ausente no pacote: {name}")
                     data = archive.read(name)
-                    if expected and hashlib.sha256(data).hexdigest() != expected:
+                    if hashlib.sha256(data).hexdigest() != expected:
                         raise ValueError(f"Arquivo fiscal alterado ou corrompido: {name}")
-                    checked += 1
+                references: dict[str, tuple[str, dict[str, Any]]] = {}
+                for section in ("documents", "received_documents"):
+                    rows = manifest.get(section)
+                    if not isinstance(rows, list):
+                        raise ValueError(f"Seção {section} do manifesto é inválida.")
+                    for item in rows:
+                        if not isinstance(item, dict):
+                            raise ValueError(f"Registro inválido na seção {section}.")
+                        name = str(item.get("file") or "")
+                        self._accounting_reference(references, name, section, item, by_name)
+                        if str(item.get("sha256") or "").casefold() != by_name.get(name):
+                            raise ValueError(f"Hash divergente entre seções do manifesto: {name}")
+                events = manifest.get("events")
+                if not isinstance(events, list):
+                    raise ValueError("Seção events do manifesto é inválida.")
+                for event in events:
+                    if not isinstance(event, dict) or not isinstance(event.get("files"), list):
+                        raise ValueError("Registro de evento do manifesto é inválido.")
+                    for item in event["files"]:
+                        if not isinstance(item, dict) or item.get("role") not in {"ENVIO", "RETORNO"}:
+                            raise ValueError("Arquivo de evento não informa função válida.")
+                        name = str(item.get("file") or "")
+                        self._accounting_reference(references, name, "events", event, by_name)
+                        if str(item.get("sha256") or "").casefold() != by_name.get(name):
+                            raise ValueError(f"Hash de evento diverge do catálogo: {name}")
+                unreferenced = set(by_name) - set(references) - {"LEIA-ME.txt"}
+                if unreferenced:
+                    raise ValueError(f"Manifesto contém arquivo fiscal sem vínculo: {sorted(unreferenced)}")
+                if "LEIA-ME.txt" not in by_name:
+                    raise ValueError("Pacote v2 não contém instruções íntegras.")
+
+                for name, (section, item) in references.items():
+                    data = archive.read(name)
+                    self._validate_accounting_xml_semantics(
+                        data, section=section, item=item, issuer=issuer,
+                        period_start=period_start, period_end=period_end,
+                    )
         except zipfile.BadZipFile as exc:
             raise ValueError("O arquivo não é um pacote ZIP válido.") from exc
         return {
-            "valid": True, "files_checked": checked,
-            "period_start": str((manifest.get("period") or {}).get("start") or ""),
-            "period_end": str((manifest.get("period") or {}).get("end") or ""),
+            "valid": True, "layout": "V2", "integrity": "SHA256_COMPLETA_SEM_ASSINATURA",
+            "non_repudiation": False, "files_checked": len(by_name),
+            "period_start": str(period_start), "period_end": str(period_end),
         }
+
+    @staticmethod
+    def _accounting_reference(
+        references: dict[str, tuple[str, dict[str, Any]]], name: str,
+        section: str, item: dict[str, Any], catalog: Mapping[str, str],
+    ) -> None:
+        if not name or name not in catalog:
+            raise ValueError(f"Arquivo listado fora do catálogo v2: {name or '<sem caminho>'}")
+        if name in references:
+            raise ValueError(f"Arquivo fiscal possui vínculo duplicado: {name}")
+        references[name] = (section, item)
+
+    @classmethod
+    def _validate_accounting_xml_semantics(
+        cls, data: bytes, *, section: str, item: Mapping[str, Any],
+        issuer: Mapping[str, Any], period_start: Any, period_end: Any,
+    ) -> None:
+        if etree is None:
+            raise RuntimeError("A validação semântica do pacote exige lxml.")
+        try:
+            root = etree.fromstring(data, parser=etree.XMLParser(resolve_entities=False, no_network=True))
+        except etree.XMLSyntaxError as exc:
+            raise ValueError("Pacote contém XML fiscal inválido.") from exc
+        text = lambda path: str(root.xpath(f"string({path})") or "").strip()
+        xml_key = cls._normalize_access_key(
+            text("(//*[local-name()='chNFe'])[1]")
+            or text("(//*[local-name()='infNFe'])[1]/@Id").removeprefix("NFe")
+        )
+        expected_key = cls._normalize_access_key(item.get("access_key"))
+        # Respostas de evento podem omitir chNFe; quando a chave existir no XML,
+        # contudo, ela precisa coincidir com a referência do manifesto.
+        if len(expected_key) == 44 and (
+            (section != "events" and xml_key != expected_key)
+            or (section == "events" and bool(xml_key) and xml_key != expected_key)
+        ):
+            raise ValueError(f"Chave do XML diverge do manifesto: {expected_key}")
+        if section == "documents":
+            status = str(item.get("status") or "").upper()
+            if status not in {"AUTORIZADO", "CANCELADO"}:
+                raise ValueError("Status de documento fiscal inválido no manifesto.")
+            model = text("(//*[local-name()='ide']/*[local-name()='mod'])[1]")
+            if model and model != str(item.get("model") or ""):
+                raise ValueError(f"Modelo fiscal diverge do manifesto: {expected_key}")
+            protocol = text("(//*[local-name()='protNFe']//*[local-name()='nProt'])[1]")
+            if protocol != str(item.get("protocol") or ""):
+                raise ValueError(f"Protocolo fiscal diverge do manifesto: {expected_key}")
+            configured_cnpj = cls._normalize_cnpj(issuer.get("cnpj"))
+            xml_cnpj = cls._normalize_cnpj(text("(//*[local-name()='emit']/*[local-name()='CNPJ'])[1]"))
+            if configured_cnpj and xml_cnpj and configured_cnpj != xml_cnpj:
+                raise ValueError(f"CNPJ emitente diverge do manifesto: {expected_key}")
+        if section in {"documents", "received_documents"}:
+            issued = text(
+                "(//*[local-name()='ide']/*[local-name()='dhEmi'] | "
+                "//*[local-name()='ide']/*[local-name()='dEmi'] | //*[local-name()='dhEmi'])[1]"
+            )
+            if issued:
+                try:
+                    issued_date = datetime.fromisoformat(issued.replace("Z", "+00:00")).date()
+                except ValueError as exc:
+                    raise ValueError(f"Data de emissão inválida no XML: {expected_key}") from exc
+                if not period_start <= issued_date <= period_end:
+                    raise ValueError(f"XML fora do período declarado: {expected_key}")
+        if section == "events":
+            protocol = text("(//*[local-name()='nProt'])[1]")
+            expected_protocol = str(item.get("protocol") or "")
+            if protocol and expected_protocol and protocol != expected_protocol:
+                raise ValueError(f"Protocolo de evento diverge do manifesto: {expected_key}")
+            status_code = text("(//*[local-name()='cStat'])[1]")
+            expected_status = str(item.get("status_code") or "")
+            if status_code and expected_status and status_code != expected_status:
+                raise ValueError(f"Status de evento diverge do manifesto: {expected_key}")
 
     def export_fiscal_report_csv(
         self, *, start_date: str | datetime, end_date: str | datetime,

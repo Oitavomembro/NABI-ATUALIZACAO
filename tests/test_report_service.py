@@ -23,7 +23,7 @@ class ReportServiceTests(unittest.TestCase):
                 id INTEGER PRIMARY KEY, data TEXT, tipo TEXT, cliente TEXT,
                 valor_total REAL, forma_pagamento TEXT, status TEXT, usuario TEXT
             );
-            CREATE TABLE financeiro_titulos(
+            CREATE TABLE titulos_financeiros(
                 id INTEGER PRIMARY KEY, tipo TEXT, pessoa_nome TEXT, descricao TEXT,
                 data_emissao TEXT, data_vencimento TEXT, valor_original REAL,
                 valor_pago REAL, saldo_aberto REAL, status TEXT, origem TEXT, origem_id TEXT
@@ -52,10 +52,10 @@ class ReportServiceTests(unittest.TestCase):
             "INSERT INTO movimentacoes VALUES(5,'04/08/2026 10:00:00','VENDA','BIA',30,'DINHEIRO','PAGO','admin')"
         )
         connection.execute(
-            "INSERT INTO financeiro_titulos VALUES(1,'RECEBER','ANA','Venda','2026-08-01','2026-08-10',200,50,150,'PARCIAL','VENDA','1')"
+            "INSERT INTO titulos_financeiros VALUES(1,'RECEBER','ANA','Venda','2026-08-01','2026-08-10',200,50,150,'PARCIAL','VENDA','1')"
         )
         connection.execute(
-            "INSERT INTO financeiro_titulos VALUES(2,'PAGAR','FORNECEDOR','Compra','2026-08-01','2026-08-15',300,0,300,'ABERTO','COMPRA','4')"
+            "INSERT INTO titulos_financeiros VALUES(2,'PAGAR','FORNECEDOR','Compra','2026-08-01','2026-08-15',300,0,300,'ABERTO','COMPRA','4')"
         )
         connection.execute(
             "INSERT INTO produtos VALUES(1,'P1','PRODUTO',10,20,2,5,1,1,'2026-08-01')"
@@ -368,9 +368,9 @@ class ReportDecimalPrecisionTests(unittest.TestCase):
             conn = sqlite3.connect(path)
             conn.executescript("""
                 CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY, data TEXT, tipo TEXT, valor_total REAL);
-                CREATE TABLE financeiro_titulos(id INTEGER PRIMARY KEY, tipo TEXT, status TEXT, valor_original REAL, valor_pago REAL);
+                CREATE TABLE titulos_financeiros(id INTEGER PRIMARY KEY, tipo TEXT, status TEXT, valor_original REAL, valor_pago REAL);
                 INSERT INTO movimentacoes VALUES(1,'2026-08-01 10:00:00','VENDA',0.1);
-                INSERT INTO financeiro_titulos VALUES(1,'RECEBER','ABERTO',0.3,0.1);
+                INSERT INTO titulos_financeiros VALUES(1,'RECEBER','ABERTO',0.3,0.1);
             """)
             conn.commit(); conn.close()
             service = ReportService(lambda: sqlite3.connect(path), output_dir=Path(tmp) / "out")

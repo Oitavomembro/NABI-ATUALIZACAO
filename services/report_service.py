@@ -148,12 +148,12 @@ class ReportService:
                 row = connection.execute(f"SELECT COUNT(*), COALESCE(SUM({value_expr}),0) FROM movimentacoes{sql_where}", params).fetchone()
                 indicators["vendas_quantidade"] = int(row[0] or 0)
                 indicators["vendas_total"] = DecimalStorage.to_decimal(row[1] or 0, field="total de vendas")
-            if self._table_exists(connection, "financeiro_titulos"):
-                cols = self._columns(connection, "financeiro_titulos")
+            if self._table_exists(connection, "titulos_financeiros"):
+                cols = self._columns(connection, "titulos_financeiros")
                 if {"tipo", "status", "valor_original", "valor_pago"}.issubset(cols):
                     for tipo, key in (("RECEBER", "receber_aberto"), ("PAGAR", "pagar_aberto")):
                         row = connection.execute(
-                            "SELECT COALESCE(SUM(valor_original-valor_pago),0) FROM financeiro_titulos WHERE tipo=? AND status NOT IN ('PAGO','CANCELADO')",
+                            "SELECT COALESCE(SUM(valor_original-valor_pago),0) FROM titulos_financeiros WHERE tipo=? AND status NOT IN ('PAGO','CANCELADO')",
                             (tipo,),
                         ).fetchone()
                         indicators[key] = DecimalStorage.to_decimal(row[0] or 0, field=key)
@@ -546,7 +546,7 @@ class ReportService:
         return self._generic_report(connection, "clientes", kwargs, preferred=("id", "nome", "cpf_cnpj", "telefone", "email", "saldo_devedor", "ativo", "data_cadastro", "atualizado_em"))
 
     def _report_financeiro(self, connection, **kwargs):
-        return self._generic_report(connection, "financeiro_titulos", kwargs, preferred=("id", "tipo", "pessoa_nome", "descricao", "data_emissao", "data_vencimento", "valor_original", "valor_pago", "saldo_aberto", "status", "origem", "origem_id"))
+        return self._generic_report(connection, "titulos_financeiros", kwargs, preferred=("id", "tipo", "pessoa_nome", "descricao", "data_emissao", "data_vencimento", "valor_original", "valor_pago", "saldo_aberto", "status", "origem", "origem_id"))
 
     def _report_compras(self, connection, **kwargs):
         return self._generic_report(connection, "pedidos_compra", kwargs, preferred=("id", "fornecedor_id", "status", "observacao", "valor_total", "data_pedido", "data_recebimento", "criado_em"))
