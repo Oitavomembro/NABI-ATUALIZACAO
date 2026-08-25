@@ -3858,3 +3858,21 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   licença, `main_qt.py`, regras de negócio ou reparos amarelos/vermelhos. O
   próximo passo é homologação visual do fluxo explícito de preferências e dos
   três retornos inconclusivos, ainda sem promover esta branch na estável.
+
+## Candidata integrada de primeiro uso — 25/08/2026
+
+- branch: `codex/integracao-primeiro-uso-completa`, criada da base estável
+  `a179e791a82bc0a58c4ccccc1bccf357b6008fa8`;
+- merges normais preservam Fiscal OFFLINE estrito (`283069e`), entrega contábil
+  confiável (`212c726`) e Central de Socorro/reparos VERDES (`d012a13`);
+- conflitos limitaram-se a documentação e expectativa aditiva da composição;
+  Central do Contador e Central de Socorro permanecem simultaneamente presentes,
+  cada uma com sessão, permissão e ação humana próprias;
+- validação combinada focada: `81 passed`; regressão integral final:
+  `2456 passed`, `1 skipped`, `492 subtests passed`, zero falhas e apenas dois
+  avisos externos conhecidos;
+- `compileall` e `git diff --check` aprovados; ensaio descartável completo de
+  primeiro uso repetido com licença temporária, banco novo, administrador,
+  login, shell e Vendas, sem comunicação Fiscal/SEFAZ;
+- isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
+  certificado real e rede permanecem bloqueados até a cerimônia manual.
