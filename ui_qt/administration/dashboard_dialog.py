@@ -9,10 +9,13 @@ from PySide6.QtWidgets import (
 
 
 STYLE = """
-QDialog{background:#161b22;color:#f0f6fc;font-size:14px} QLabel{color:#f0f6fc}
-QPushButton{background:#30363d;color:#f0f6fc;border:0;border-radius:6px;min-height:40px;padding:0 14px;font-weight:800}
-QPushButton:focus{border:2px solid #58a6ff} QTableWidget{background:#0d1117;color:#f0f6fc;border:1px solid #30363d;selection-background-color:#1f6feb}
-QHeaderView::section{background:#21262d;color:#f0f6fc;padding:9px;border:0;border-right:1px solid #30363d;font-weight:800}
+QDialog{background:#111418;color:#edf0f2;font-size:14px} QLabel{color:#e8ebee}
+QPushButton{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #626a72,stop:.45 #41474d,stop:1 #272c31);color:#f6f7f8;border:1px solid #7a838b;border-radius:7px;min-height:40px;padding:0 14px;font-weight:800}
+QPushButton:hover{border-color:#a8b0b7;background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #737c84,stop:1 #343a40)}
+QPushButton:focus{border:2px solid #73c7dc} QPushButton:disabled{color:#7f878e;background:#25292d;border-color:#3c4248}
+QTableWidget{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #20252a,stop:1 #111418);color:#f4f6f7;border:1px solid #555d65;gridline-color:#3e454c;alternate-background-color:#20252a;selection-background-color:#386b7b;selection-color:#fff}
+QTableWidget:focus{border:1px solid #73c7dc}
+QHeaderView::section{background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #555d65,stop:1 #292e33);color:#fff;padding:9px;border:0;border-right:1px solid #687078;border-bottom:1px solid #73c7dc;font-weight:800}
 """
 
 
@@ -53,23 +56,23 @@ class DashboardDialog(QDialog):
         self.setWindowTitle("Início"); self.resize(1180, 740); self.setMinimumSize(900, 600)
         self.setStyleSheet(STYLE); root = QVBoxLayout(self)
         heading = QHBoxLayout(); title = QLabel("INÍCIO")
-        title.setStyleSheet("font-size:26px;font-weight:900;color:#00d084")
-        self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#8b949e")
+        title.setStyleSheet("font-size:26px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
+        self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#aeb5bb")
         heading.addWidget(title); heading.addStretch(); heading.addWidget(self.loading); root.addLayout(heading)
         cards = QGridLayout(); cards.setSpacing(12); self.cards = {}
         for index, (key, label, color) in enumerate((
-            ("sales", "VENDAS REALIZADAS HOJE", "#00ff88"),
-            ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff"),
-            ("overdue", "COBRANÇAS VENCIDAS", "#f2cc60"),
-            ("products", "PRODUTOS ATIVOS", "#a371f7"),
+            ("sales", "VENDAS REALIZADAS HOJE", "#8b939a"),
+            ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#8b939a"),
+            ("overdue", "COBRANÇAS VENCIDAS", "#b4474e"),
+            ("products", "PRODUTOS ATIVOS", "#8b939a"),
         )):
             card = QLabel(f"{label}\n—"); card.setAccessibleName(label)
             card.setMinimumHeight(82)
             card.setStyleSheet(
                 "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
-                "stop:0 #21262d,stop:1 #0d1117);"
-                f"border:1px solid #30363d;border-bottom:5px solid {color};"
-                f"border-radius:12px;padding:16px;color:{color};"
+                "stop:0 #454b51,stop:.35 #2b3035,stop:1 #171a1e);"
+                f"border:1px solid #687078;border-left:5px solid {color};"
+                "border-radius:12px;padding:16px;color:#f0f2f4;"
                 "font-size:17px;font-weight:900"
             )
             cards.addWidget(card, index // 2, index % 2); self.cards[key] = (label, card)

@@ -13,7 +13,7 @@ from PySide6.QtGui import QKeyEvent
 from PySide6.QtWidgets import QApplication
 
 from repositories.dashboard_repository import DayHistoryPage, DayMovement, DashboardIndicators
-from ui_qt.administration.dashboard_dialog import DashboardDialog
+from ui_qt.administration.dashboard_dialog import STYLE, DashboardDialog
 
 
 class Pool:
@@ -50,10 +50,18 @@ def test_worker_preenche_cartoes_e_historico_legacy():
     assert "2 • R$ 80,00" in dialog.cards["overdue"][1].text()
     assert dialog.cards["products"][1].minimumHeight() >= 82
     assert "qlineargradient" in dialog.cards["products"][1].styleSheet()
-    assert "border-bottom:5px" in dialog.cards["products"][1].styleSheet()
+    assert "border-left:5px solid #8b939a" in dialog.cards["products"][1].styleSheet()
+    assert "border-left:5px solid #b4474e" in dialog.cards["overdue"][1].styleSheet()
     assert dialog.table.item(0, 0).text() == "7"
     assert dialog.table.item(0, 4).text() == "MESA"
     dialog.close()
+
+
+def test_acabamento_metalico_nao_reintroduz_paleta_multicolorida():
+    assert "qlineargradient" in STYLE
+    assert "#73c7dc" in STYLE
+    assert "#00ff88" not in STYLE
+    assert "#a371f7" not in STYLE
 
 
 def test_paginacao_dispara_nova_carga_limitada():
