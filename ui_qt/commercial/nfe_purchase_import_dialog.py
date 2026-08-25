@@ -10,6 +10,8 @@ from PySide6.QtWidgets import (
     QTableWidget, QTableWidgetItem, QTextEdit, QVBoxLayout, QWidget,
 )
 
+from administration.nfe_purchase_import_service import suggest_purchase_factor
+
 
 WHITE_TABLE = """
 QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#f3f4f6;
@@ -45,6 +47,8 @@ class NFePurchaseImportDialog(QDialog):
         self.result_data = None
         self._busy = False
         self._loading = False
+        self._columns_fitted = False
+        self._price_columns_fitted = False
         self._rows = []
         self.setWindowTitle("Importar NF-e de compra por XML")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint |
@@ -76,42 +80,64 @@ class NFePurchaseImportDialog(QDialog):
 
     def _build_review_page(self):
         page = QWidget(); layout = QVBoxLayout(page)
+        tools = QHBoxLayout(); tools.addWidget(QLabel("Visualização"))
+        self.review_view_mode = QComboBox(); self.review_view_mode.addItem("Detalhes", "DETAILS"); self.review_view_mode.addItem("Compacto", "COMPACT")
+        self.review_font_size = QComboBox()
+        for size in (11, 12, 13, 14, 16, 18): self.review_font_size.addItem(f"Fonte {size}", size)
+        self.review_font_size.setCurrentIndex(self.review_font_size.findData(13))
+        self.review_view_mode.currentIndexChanged.connect(self._apply_review_view)
+        self.review_font_size.currentIndexChanged.connect(self._apply_review_view)
+        tools.addWidget(self.review_view_mode); tools.addWidget(self.review_font_size); tools.addStretch(); layout.addLayout(tools)
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.table = QTableWidget(0, 11)
+        self.table = QTableWidget(0, 10)
         self.table.setHorizontalHeaderLabels((
-            "Vínculo", "Item", "Código", "Descrição", "CFOP", "Qtd. embalagens",
-            "Un. XML", "Fator", "Un. estoque", "Qtd. estoque", "Custo unitário",
+            "Código", "Nome do produto", "CFOP", "Qtd. compra", "Un. XML",
+            "Fator", "Un. estoque", "Qtd. estoque", "Custo unitário", "Vínculo",
         ))
         self.table.setStyleSheet(WHITE_TABLE); self.table.setAlternatingRowColors(True)
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.table.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.table.verticalHeader().setVisible(False); self.table.verticalHeader().setDefaultSectionSize(30)
-        self.table.horizontalHeader().setStretchLastSection(False)
-        self.table.horizontalHeader().setSectionResizeMode(3, self.table.horizontalHeader().ResizeMode.Stretch)
+        header = self.table.horizontalHeader(); header.setStretchLastSection(False)
+        header.setSectionsMovable(True); header.setMinimumSectionSize(45)
+        for column in range(self.table.columnCount()):
+            header.setSectionResizeMode(column, header.ResizeMode.Interactive)
+        header.resizeSection(0, 90); header.resizeSection(1, 430); header.resizeSection(2, 65)
+        header.resizeSection(3, 105); header.resizeSection(4, 75); header.resizeSection(5, 75)
+        header.resizeSection(6, 95); header.resizeSection(7, 105); header.resizeSection(8, 105)
+        header.resizeSection(9, 130)
         self.table.currentCellChanged.connect(self._selection_changed)
         splitter.addWidget(self.table)
-        details = QWidget(); form = QFormLayout(details)
-        self.status = QLabel(); self.linked_product = QLabel(); self.name = QLineEdit(); self.barcode = QLineEdit()
+        details = QWidget(); details.setMinimumWidth(380); details.setMaximumWidth(440)
+        form = QFormLayout(details); form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapLongRows)
+        self.status = QLabel(); self.status.setWordWrap(True)
+        self.linked_product = QLabel(); self.linked_product.setWordWrap(True)
+        self.name = QLineEdit(); self.barcode = QLineEdit()
         self.unlink = QPushButton("Desvincular e cadastrar como novo")
         self.unlink.clicked.connect(self._unlink_selected)
+        self.restore_link = QPushButton("Desfazer desvínculo")
+        self.restore_link.clicked.connect(self._restore_selected_link)
         self.factor_kind = QComboBox(); self.factor_kind.addItem("Multiplicar", "MULTIPLICAR")
         self.factor_kind.addItem("Dividir", "DIVIDIR")
-        self.factor = QLineEdit("1"); self.stock_unit = QComboBox()
+        self.factor = QLineEdit("1"); self.suggest_factor = QPushButton("Nabi sugerir fator")
+        self.suggest_factor.clicked.connect(self._suggest_factor); self.stock_unit = QComboBox()
         for code, description in self.application.units():
             self.stock_unit.addItem(f"{code} — {description}", code)
         self.conversion = QLabel(); self.save_item = QPushButton("Salvar edição deste item")
         self.save_item.setObjectName("primary"); self.save_item.clicked.connect(self._save_selected)
-        for label, widget in (("Situação automática", self.status),
+        for label, widget in (("Situação", self.status),
                               ("Nome do produto", self.name), ("Vínculo", self.linked_product),
                               ("", self.unlink),
+                              ("", self.restore_link),
                               ("Código de barras", self.barcode), ("Tipo de fator", self.factor_kind),
-                              ("Fator informado", self.factor), ("Unidade de estoque/venda", self.stock_unit),
+                              ("Fator informado", self.factor), ("", self.suggest_factor),
+                              ("Unidade de venda", self.stock_unit),
                               ("Resultado", self.conversion), ("", self.save_item)):
             form.addRow(label, widget)
         self.factor.textEdited.connect(self._preview_conversion)
         self.factor_kind.currentIndexChanged.connect(self._preview_conversion)
-        splitter.addWidget(details); splitter.setSizes((1030, 380)); layout.addWidget(splitter, 1)
+        splitter.addWidget(details); splitter.setSizes((1050, 390)); layout.addWidget(splitter, 1)
         nav = QHBoxLayout(); cancel = QPushButton("Cancelar [Esc]"); self.to_prices = QPushButton("Avançar para preços")
         self.to_prices.setObjectName("primary"); cancel.clicked.connect(self.reject); self.to_prices.clicked.connect(self._show_prices)
         nav.addStretch(); nav.addWidget(cancel); nav.addWidget(self.to_prices); layout.addLayout(nav)
@@ -121,15 +147,21 @@ class NFePurchaseImportDialog(QDialog):
         page = QWidget(); layout = QVBoxLayout(page)
         line = QHBoxLayout(); line.addWidget(QLabel("Margem para todos (%)")); self.bulk_margin = QLineEdit("0")
         apply_all = QPushButton("Aplicar a todos"); apply_all.clicked.connect(self._apply_bulk_margin)
-        line.addWidget(self.bulk_margin); line.addWidget(apply_all); line.addStretch(); layout.addLayout(line)
+        line.addWidget(self.bulk_margin); line.addWidget(apply_all); line.addStretch()
+        line.addWidget(QLabel("Visualização")); self.price_view_mode = QComboBox(); self.price_view_mode.addItem("Detalhes", "DETAILS"); self.price_view_mode.addItem("Compacto", "COMPACT")
+        self.price_font_size = QComboBox()
+        for size in (11, 12, 13, 14, 16, 18): self.price_font_size.addItem(f"Fonte {size}", size)
+        self.price_font_size.setCurrentIndex(self.price_font_size.findData(13))
+        self.price_view_mode.currentIndexChanged.connect(self._apply_price_view); self.price_font_size.currentIndexChanged.connect(self._apply_price_view)
+        line.addWidget(self.price_view_mode); line.addWidget(self.price_font_size); layout.addLayout(line)
         self.price_table = QTableWidget(0, 6)
         self.price_table.setHorizontalHeaderLabels((
             "Item", "Produto", "Custo unitário", "Margem %", "Preço de venda", "Alerta",
         ))
         self.price_table.setStyleSheet(WHITE_TABLE); self.price_table.setAlternatingRowColors(True)
         self.price_table.verticalHeader().setVisible(False); self.price_table.verticalHeader().setDefaultSectionSize(36)
-        self.price_table.horizontalHeader().setSectionResizeMode(1, self.price_table.horizontalHeader().ResizeMode.Stretch)
-        self.price_table.horizontalHeader().setSectionResizeMode(5, self.price_table.horizontalHeader().ResizeMode.Stretch)
+        price_header = self.price_table.horizontalHeader(); price_header.setSectionsMovable(True); price_header.setStretchLastSection(False); price_header.setMinimumSectionSize(45)
+        for column in range(self.price_table.columnCount()): price_header.setSectionResizeMode(column, price_header.ResizeMode.Interactive)
         layout.addWidget(self.price_table, 1)
         self.final_summary = QLabel(); self.final_summary.setWordWrap(True); layout.addWidget(self.final_summary)
         nav = QHBoxLayout(); self.back_to_items = QPushButton("Voltar sem perder alterações"); self.review = QPushButton("Revisar entrada")
@@ -140,9 +172,17 @@ class NFePurchaseImportDialog(QDialog):
     def _build_confirmation_page(self):
         page = QWidget(); layout = QVBoxLayout(page)
         layout.addWidget(QLabel("REVISÃO FINAL — NENHUM DADO FOI GRAVADO AINDA"))
-        self.confirmation_text = QTextEdit(); self.confirmation_text.setReadOnly(True)
-        self.confirmation_text.setStyleSheet("background:#ffffff;color:#111827;border:1px solid #cbd5e1;padding:10px")
-        layout.addWidget(self.confirmation_text, 1)
+        self.confirmation_supplier = QLabel(); self.confirmation_supplier.setWordWrap(True); layout.addWidget(self.confirmation_supplier)
+        self.confirmation_table = QTableWidget(0, 8); self.confirmation_table.setHorizontalHeaderLabels((
+            "Produto", "Ação", "Fator", "Conversão", "Unidade", "Custo", "Margem", "Preço",
+        ))
+        self.confirmation_table.setStyleSheet(WHITE_TABLE); self.confirmation_table.setAlternatingRowColors(True)
+        self.confirmation_table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.confirmation_table.verticalHeader().setVisible(False)
+        confirmation_header = self.confirmation_table.horizontalHeader(); confirmation_header.setSectionsMovable(True); confirmation_header.setStretchLastSection(False)
+        for column in range(self.confirmation_table.columnCount()): confirmation_header.setSectionResizeMode(column, confirmation_header.ResizeMode.Interactive)
+        layout.addWidget(self.confirmation_table, 1)
+        self.confirmation_notes = QLabel(); self.confirmation_notes.setWordWrap(True); layout.addWidget(self.confirmation_notes)
+        self.confirmation_text = QTextEdit(); self.confirmation_text.setVisible(False); self.confirmation_text.setReadOnly(True)
         nav = QHBoxLayout(); self.back_to_prices = QPushButton("Voltar aos preços")
         self.confirm = QPushButton("Confirmar entrada da nota")
         self.confirm.setObjectName("primary"); self.back_to_prices.clicked.connect(lambda: self.pages.setCurrentIndex(1)); self.confirm.clicked.connect(self._commit)
@@ -173,6 +213,7 @@ class NFePurchaseImportDialog(QDialog):
                 "tipo_fator": "MULTIPLICAR", "fator": factor, "unidade": unit,
                 "margem": Decimal("0"), "preco": Decimal("0"), "status": status,
                 "candidates": candidates, "saved": saved, "saved_ok": True,
+                "unlinked_snapshot": None,
             })
             self._recalculate(index)
 
@@ -190,21 +231,33 @@ class NFePurchaseImportDialog(QDialog):
     def _render_rows(self):
         self.table.blockSignals(True)
         self.table.setRowCount(len(self._rows))
-        for index, row in enumerate(self._rows):
-            item = self.document.itens[index]
-            mark = "● SALVO" if row["status"] == "SALVO" else "● EXATO" if row["status"] == "EXATO_NOVO" else "⚠ REVISAR" if row["produto_id"] else "NOVO"
-            values = (mark, index + 1, item.codigo, row["descricao"], item.cfop,
-                      _number(item.quantidade), item.unidade, row["fator"], row["unidade"],
-                      _number(row["stock_quantity"]), _number(row["unit_cost"], 2))
-            for column, value in enumerate(values):
-                cell = QTableWidgetItem(str(value)); cell.setToolTip(str(value))
-                if column == 0:
-                    cell.setForeground(QColor("#15803d" if row["status"] == "SALVO" else "#1d4ed8" if row["status"] == "EXATO_NOVO" else "#b45309"))
-                self.table.setItem(index, column, cell)
+        for index in range(len(self._rows)):
+            self._update_row_cells(index)
         if self.table.rowCount() and self.table.currentRow() < 0: self.table.selectRow(0)
         self.table.blockSignals(False)
+        if not self._columns_fitted:
+            self._fit_columns_to_content(); self._columns_fitted = True
         if self.table.currentRow() >= 0:
             self._load_selected()
+
+    def _fit_columns_to_content(self):
+        caps = (110, 360, 65, 95, 70, 70, 90, 95, 100, 120)
+        minimums = (65, 210, 50, 75, 55, 55, 70, 75, 80, 85)
+        for column, (minimum, maximum) in enumerate(zip(minimums, caps)):
+            content = self.table.sizeHintForColumn(column) + 12
+            self.table.setColumnWidth(column, max(minimum, min(content, maximum)))
+
+    def _update_row_cells(self, index):
+        row = self._rows[index]; item = self.document.itens[index]
+        mark = "● SALVO" if row["status"] == "SALVO" else "● EXATO" if row["status"] == "EXATO_NOVO" else "⚠ REVISAR" if row["produto_id"] else "NOVO"
+        values = (item.codigo, row["descricao"], item.cfop, _number(item.quantidade),
+                  item.unidade, row["fator"], row["unidade"],
+                  _number(row["stock_quantity"]), _number(row["unit_cost"], 2), mark)
+        for column, value in enumerate(values):
+            cell = QTableWidgetItem(str(value)); cell.setToolTip(str(value))
+            if column == 9:
+                cell.setForeground(QColor("#15803d" if row["status"] == "SALVO" else "#1d4ed8" if row["status"] == "EXATO_NOVO" else "#b45309"))
+            self.table.setItem(index, column, cell)
 
     def _load_selected(self):
         index = self.table.currentRow()
@@ -222,6 +275,7 @@ class NFePurchaseImportDialog(QDialog):
             if row["produto_id"] else "Sem vínculo: será cadastrado como produto novo"
         )
         self.unlink.setEnabled(bool(row["produto_id"]))
+        self.restore_link.setEnabled(row.get("unlinked_snapshot") is not None)
         self.name.setText(row["descricao"]); self.barcode.setText(row["codigo_barras"])
         self.factor_kind.setCurrentIndex(max(0, self.factor_kind.findData(row["tipo_fator"])))
         self.factor.setText(str(row["fator"]).replace(".", ",")); self.stock_unit.setCurrentIndex(max(0, self.stock_unit.findData(row["unidade"])))
@@ -241,8 +295,32 @@ class NFePurchaseImportDialog(QDialog):
         if index < 0:
             return
         row = self._rows[index]
+        if row.get("unlinked_snapshot") is None:
+            row["unlinked_snapshot"] = {key: row.get(key) for key in ("acao", "produto_id", "saved", "status", "saved_ok")}
         row.update({"acao": "CRIAR", "produto_id": None, "saved": None, "status": "NOVO", "saved_ok": True})
-        self._render_rows(); self.table.selectRow(index); self._load_selected()
+        self.table.blockSignals(True); self._update_row_cells(index); self.table.blockSignals(False)
+        self._load_selected()
+
+    def _restore_selected_link(self):
+        index = self.table.currentRow()
+        if index < 0: return
+        row = self._rows[index]; snapshot = row.get("unlinked_snapshot")
+        if snapshot is None: return
+        row.update(snapshot); row["unlinked_snapshot"] = None
+        self.table.blockSignals(True); self._update_row_cells(index); self.table.blockSignals(False)
+        self._load_selected()
+
+    def _apply_review_view(self):
+        if not hasattr(self, "table"): return
+        size = int(self.review_font_size.currentData() or 13); self.table.setStyleSheet(WHITE_TABLE + f"QTableWidget{{font-size:{size}px}}")
+        compact = self.review_view_mode.currentData() == "COMPACT"
+        self.table.verticalHeader().setDefaultSectionSize(max(24, size + (11 if compact else 19)))
+
+    def _apply_price_view(self):
+        if not hasattr(self, "price_table"): return
+        size = int(self.price_font_size.currentData() or 13); self.price_table.setStyleSheet(WHITE_TABLE + f"QTableWidget{{font-size:{size}px}} QLineEdit{{font-size:{size}px}}")
+        compact = self.price_view_mode.currentData() == "COMPACT"
+        self.price_table.verticalHeader().setDefaultSectionSize(max(26, size + (12 if compact else 23)))
 
     def _preview_conversion(self):
         if self._loading or self.table.currentRow() < 0: return
@@ -253,6 +331,29 @@ class NFePurchaseImportDialog(QDialog):
             self.conversion.setText(f"{_number(qty)} {self.stock_unit.currentData() or 'UN'} entrarão no estoque")
         except ValueError:
             self.conversion.setText("Informe um fator positivo")
+
+    def _suggest_factor(self):
+        suggestion = suggest_purchase_factor(self.name.text())
+        if suggestion is None:
+            QMessageBox.information(
+                self, "Sugestão da Nabi",
+                "Não encontrei no nome uma quantidade de embalagem explícita e segura. "
+                "Confira a embalagem e informe o fator manualmente.",
+            )
+            return
+        answer = QMessageBox.question(
+            self, "Sugestão da Nabi",
+            f"O nome informa “{suggestion.evidence}”.\n\n"
+            f"Sugestão: multiplicar por {_number(suggestion.factor)}.\n"
+            "Deseja preencher esse fator para você revisar?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            return
+        self.factor_kind.setCurrentIndex(self.factor_kind.findData("MULTIPLICAR"))
+        self.factor.setText(_number(suggestion.factor))
+        self._preview_conversion()
 
     def _save_selected(self, index=None, *, show_error=True):
         index = self.table.currentRow() if index is None else index
@@ -270,7 +371,8 @@ class NFePurchaseImportDialog(QDialog):
             "codigo_barras": self.barcode.text().strip(), "tipo_fator": self.factor_kind.currentData(),
             "fator": format(factor, "f"), "unidade": self.stock_unit.currentData(), "saved_ok": True,
         })
-        self._recalculate(index); self._render_rows(); self.table.selectRow(index)
+        self._recalculate(index)
+        self.table.blockSignals(True); self._update_row_cells(index); self.table.blockSignals(False)
         return True
 
     def _show_prices(self):
@@ -294,7 +396,14 @@ class NFePurchaseImportDialog(QDialog):
             price.textEdited.connect(lambda _text, i=index: self._price_changed(i))
             self.price_table.setCellWidget(index, 3, margin); self.price_table.setCellWidget(index, 4, price)
             self.price_table.setItem(index, 5, QTableWidgetItem(""))
+        if not self._price_columns_fitted:
+            self._fit_price_columns(); self._price_columns_fitted = True
         self._refresh_summary()
+
+    def _fit_price_columns(self):
+        minimums = (50, 180, 85, 75, 95, 80); caps = (75, 460, 125, 105, 135, 260)
+        for column, (minimum, maximum) in enumerate(zip(minimums, caps)):
+            self.price_table.setColumnWidth(column, max(minimum, min(self.price_table.sizeHintForColumn(column) + 14, maximum)))
 
     def _margin_changed(self, index):
         if self._loading: return
@@ -358,7 +467,26 @@ class NFePurchaseImportDialog(QDialog):
         lines.extend(("", f"Financeiro: {len(duplicates)} título(s) comprovado(s) no XML." if duplicates else
                       "Financeiro: nenhum título será inventado; o XML não contém duplicatas."))
         lines.append("Nenhuma comunicação com a SEFAZ será realizada nesta entrada local.")
-        self.confirmation_text.setPlainText("\n".join(lines)); self.pages.setCurrentIndex(2)
+        self.confirmation_text.setPlainText("\n".join(lines))
+        self.confirmation_supplier.setText(
+            f"Fornecedor: {self.draft.supplier_name} • CNPJ: {self.draft.supplier_document} • "
+            f"NF-e {self.draft.number or '—'} • Total do XML: R$ {self.draft.document_total}"
+        )
+        self.confirmation_table.setRowCount(len(self._rows))
+        for index, row in enumerate(self._rows):
+            action = "ATUALIZAR E VINCULAR" if row["produto_id"] else "CADASTRAR E VINCULAR"
+            values = (row["descricao"], action, f"{row['tipo_fator'].lower()} {row['fator']}",
+                      _number(row["stock_quantity"]), row["unidade"], f"R$ {_number(row['unit_cost'], 2)}",
+                      f"{_number(row['margem'], 2)}%", f"R$ {_number(row['preco'], 2)}")
+            for column, value in enumerate(values): self.confirmation_table.setItem(index, column, QTableWidgetItem(str(value)))
+        confirmation_caps = (420, 190, 140, 110, 90, 110, 95, 110)
+        for column, cap in enumerate(confirmation_caps): self.confirmation_table.setColumnWidth(column, min(self.confirmation_table.sizeHintForColumn(column) + 14, cap))
+        self.confirmation_notes.setText(
+            (f"Financeiro: {len(duplicates)} título(s) comprovado(s) no XML." if duplicates else
+             "Financeiro: nenhum título será inventado; o XML não contém duplicatas.") +
+            " Nenhuma comunicação com a SEFAZ será realizada nesta entrada local."
+        )
+        self.pages.setCurrentIndex(2)
 
     def _commit(self):
         if self._busy: return

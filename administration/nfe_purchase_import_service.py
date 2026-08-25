@@ -1,9 +1,13 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from enum import Enum
 import hashlib
 import json
 from pathlib import Path
+import re
+import unicodedata
 
 from assistant_nabi import NFeEntryDraftService
 
@@ -15,6 +19,56 @@ STANDARD_UNITS = (
     ("L", "Litro"), ("ML", "Mililitro"), ("M", "Metro"),
     ("M2", "Metro quadrado"), ("M3", "Metro cúbico"),
 )
+
+
+class FactorSuggestionConfidence(str, Enum):
+    """Confiança limitada à evidência textual determinística encontrada."""
+
+    HIGH = "ALTA"
+
+
+@dataclass(frozen=True, slots=True)
+class PurchaseFactorSuggestion:
+    """Sugestão informativa; não representa decisão nem autorização de gravação."""
+
+    factor: Decimal
+    evidence: str
+    confidence: FactorSuggestionConfidence
+
+
+_EXPLICIT_PACKAGE_PATTERNS = (
+    re.compile(r"\bCAIXA\s+(?:COM|C/)\s*(?P<count>\d+)\s*UN(?:IDADE)?S?\b"),
+    re.compile(r"\bCX\s+(?:COM|C/)\s*(?P<count>\d+)(?:\s*UN(?:IDADE)?S?)?\b"),
+    re.compile(r"\bPACK\s+(?P<count>\d+)(?:\s*UN(?:IDADE)?S?)?\b"),
+)
+
+
+def suggest_purchase_factor(description: str) -> PurchaseFactorSuggestion | None:
+    """Extrai somente quantidades de embalagem declaradas explicitamente.
+
+    O retorno é deliberadamente passivo: consumidores podem exibir a sugestão,
+    mas o fator continua dependendo de revisão e confirmação humanas no fluxo de
+    importação. Ausência, quantidade inválida ou mais de uma evidência não gera
+    palpite.
+    """
+
+    normalized = unicodedata.normalize("NFKD", str(description or "").upper())
+    normalized = "".join(character for character in normalized if not unicodedata.combining(character))
+    normalized = " ".join(normalized.split())
+    matches: list[tuple[Decimal, str]] = []
+    for pattern in _EXPLICIT_PACKAGE_PATTERNS:
+        for match in pattern.finditer(normalized):
+            count = Decimal(match.group("count"))
+            if count > 1:
+                matches.append((count, match.group(0)))
+    if len(matches) != 1:
+        return None
+    factor, evidence = matches[0]
+    return PurchaseFactorSuggestion(
+        factor=factor,
+        evidence=evidence,
+        confidence=FactorSuggestionConfidence.HIGH,
+    )
 
 
 class NFePurchaseImportManagementService:

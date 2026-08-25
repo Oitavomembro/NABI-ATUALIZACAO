@@ -3,10 +3,11 @@ from __future__ import annotations
 from decimal import Decimal
 import os
 from types import SimpleNamespace
+from unittest.mock import Mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from ui_qt.commercial.nfe_purchase_import_dialog import NFePurchaseImportDialog
 
@@ -60,11 +61,17 @@ def test_grade_branca_compacta_recupera_vinculo_e_converte_caixa_para_unidade():
     dialog = NFePurchaseImportDialog(Application(), draft())
     assert "background:#ffffff" in dialog.table.styleSheet()
     assert dialog.table.rowHeight(0) <= 30
-    assert "SALVO" in dialog.table.item(0, 0).text()
-    assert dialog.table.item(0, 7).text() == "20"
-    assert dialog.table.item(0, 8).text() == "UN"
-    assert dialog.table.item(0, 9).text() == "40"
-    assert dialog.table.item(0, 10).text() == "5"
+    assert dialog.table.horizontalHeaderItem(0).text() == "Código"
+    assert dialog.table.horizontalHeaderItem(1).text() == "Nome do produto"
+    assert dialog.table.horizontalHeaderItem(9).text() == "Vínculo"
+    assert dialog.table.horizontalHeader().sectionsMovable() is True
+    assert dialog.table.columnWidth(1) <= 420
+    assert dialog.table.columnWidth(0) <= 120
+    assert "SALVO" in dialog.table.item(0, 9).text()
+    assert dialog.table.item(0, 5).text() == "20"
+    assert dialog.table.item(0, 6).text() == "UN"
+    assert dialog.table.item(0, 7).text() == "40"
+    assert dialog.table.item(0, 8).text() == "5"
     dialog.close()
 
 
@@ -107,4 +114,99 @@ def test_segunda_etapa_nao_expoe_quantidade_e_revisao_e_separada():
     assert dialog.pages.currentIndex() == 2
     assert "ATUALIZAR E VINCULAR" in dialog.confirmation_text.toPlainText()
     assert "Nenhuma comunicação com a SEFAZ" in dialog.confirmation_text.toPlainText()
+    dialog.close()
+
+
+def test_troca_de_linha_atualiza_painel_sem_reconstruir_tabela():
+    second = SimpleNamespace(
+        supplier_code="XYZ", description="SEGUNDO PRODUTO CAIXA 6 UN",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft()
+    two_items.items = two_items.items + (second,)
+
+    class TwoItemsApplication(Application):
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="XYZ", descricao=second.description, cfop="5102",
+                quantidade=Decimal("3"), unidade="CX", valor_unitario=Decimal("60"),
+                codigo_barras="790", ncm="34025000", cest="",
+            )))
+
+        def saved_link(self, _draft, index):
+            return super().saved_link(_draft, index) if index == 0 else None
+
+    dialog = NFePurchaseImportDialog(TwoItemsApplication(), two_items)
+    dialog._render_rows = Mock()
+    dialog.table.selectRow(1); APP.processEvents()
+    assert dialog.name.text() == "SEGUNDO PRODUTO CAIXA 6 UN"
+    assert "produto novo" in dialog.linked_product.text()
+    dialog._render_rows.assert_not_called()
+    dialog.close()
+
+
+def test_desfazer_desvinculo_restaura_exatamente_o_vinculo_anterior():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    original = dict(dialog._rows[0])
+    dialog._unlink_selected()
+    assert dialog._rows[0]["produto_id"] is None
+    assert dialog.restore_link.isEnabled()
+    dialog._restore_selected_link()
+    assert dialog._rows[0]["produto_id"] == original["produto_id"]
+    assert dialog._rows[0]["acao"] == original["acao"]
+    assert dialog._rows[0]["status"] == original["status"]
+    assert dialog._rows[0]["saved"] == original["saved"]
+    assert not dialog.restore_link.isEnabled()
+    dialog.close()
+
+
+def test_fontes_modos_e_colunas_da_tabela_de_precos_sao_ajustaveis():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    assert [dialog.review_view_mode.itemText(i) for i in range(dialog.review_view_mode.count())] == ["Detalhes", "Compacto"]
+    assert [dialog.price_view_mode.itemText(i) for i in range(dialog.price_view_mode.count())] == ["Detalhes", "Compacto"]
+    dialog.review_font_size.setCurrentIndex(dialog.review_font_size.findData(16))
+    dialog.price_font_size.setCurrentIndex(dialog.price_font_size.findData(18))
+    assert "font-size:16px" in dialog.table.styleSheet()
+    assert "font-size:18px" in dialog.price_table.styleSheet()
+    dialog._show_prices()
+    assert dialog.price_table.horizontalHeader().sectionsMovable() is True
+    assert all(dialog.price_table.columnWidth(i) <= cap for i, cap in enumerate((75, 460, 125, 105, 135, 260)))
+    dialog.close()
+
+
+def test_confirmacao_exibe_tabela_branca_organizada_e_resumos():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog._show_prices(); dialog._show_confirmation()
+    headers = [dialog.confirmation_table.horizontalHeaderItem(i).text() for i in range(8)]
+    assert headers == ["Produto", "Ação", "Fator", "Conversão", "Unidade", "Custo", "Margem", "Preço"]
+    assert "background:#ffffff" in dialog.confirmation_table.styleSheet()
+    assert dialog.confirmation_table.horizontalHeader().sectionsMovable() is True
+    assert "Fornecedor: Fornecedor" in dialog.confirmation_supplier.text()
+    assert "Nenhuma comunicação com a SEFAZ" in dialog.confirmation_notes.text()
+    dialog.close()
+
+
+def test_nabi_sugere_fator_explicito_mas_so_aplica_apos_confirmacao(monkeypatch):
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog.name.setText("PRODUTO CAIXA COM 12 UN")
+    monkeypatch.setattr(
+        QMessageBox, "question",
+        lambda *args, **kwargs: QMessageBox.StandardButton.Yes,
+    )
+    dialog.suggest_factor.click()
+    assert dialog.factor_kind.currentData() == "MULTIPLICAR"
+    assert dialog.factor.text() == "12"
+    assert "24 UN" in dialog.conversion.text()
+    dialog.close()
+
+
+def test_nabi_nao_inventa_fator_sem_evidencia(monkeypatch):
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog.name.setText("PRODUTO SEM QUANTIDADE DECLARADA")
+    shown = []
+    monkeypatch.setattr(QMessageBox, "information", lambda *args, **kwargs: shown.append(args[2]))
+    dialog.suggest_factor.click()
+    assert dialog.factor.text() == "20"
+    assert shown and "não encontrei" in shown[0].lower()
     dialog.close()
