@@ -2881,3 +2881,28 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Nabi flutuante global e coordenação segura
+
+- implementação: `94ce5af` — `feat: torna Nabi flutuante global e segura`;
+- a mascote pode ser arrastada dentro da área útil do NabiCode; clique e arraste
+  são distinguidos por limiar explícito, portanto mover não abre a conversa e um
+  clique produz somente uma transição;
+- a posição é persistida pelo `QSettings` somente como coordenada de interface,
+  sem sessão, credencial, dado comercial ou conteúdo de conversa; restauração,
+  redimensionamento e mudança de tela sempre limitam a posição ao retângulo
+  visível;
+- um coordenador mantém exatamente uma instância ao trocar módulos e pode
+  transferi-la para diálogos normais não modais. Ao fechar um diálogo destrutível,
+  a instância retorna ao shell antes da destruição;
+- qualquer diálogo modal pertencente ao sistema oculta a Nabi e preserva a
+  modalidade Qt. Classificações explícitas de login, licença/ativação, Fiscal,
+  destrutivo, crítico ou sensível também ocultam a apresentação, inclusive em
+  janela não modal; não há clique livre, contorno de confirmação ou nova
+  capacidade da IA;
+- validação focada: `61 passed`; regressão ampliada de Nabi, shell, dashboard,
+  clientes, caixa, financeiro, relatórios e usuários: `89 passed`;
+  `compileall` e `git diff --check` aprovados, sem exceções tardias do Qt;
+- não foram alterados serviços da IA, PDV, Fiscal/SEFAZ, licenciamento, banco,
+  `main_qt.py` ou `ui_qt/assistant_nabi/panel.py`; homologação visual/manual do
+  arraste em múltiplos monitores permanece física e separada.
