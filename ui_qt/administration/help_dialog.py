@@ -8,17 +8,9 @@ from PySide6.QtWidgets import (
 )
 
 from core.context_help import ContextHelpRegistry
+from .login_dialog import ADMIN_METALLIC_STYLE
 
-
-STYLE = """
-QDialog { background:#0d1117;color:#f0f6fc;font-size:14px; }
-QLabel { color:#f0f6fc; } QLineEdit,QComboBox,QTableWidget { background:#161b22;
- color:#f0f6fc;border:1px solid #30363d;min-height:30px; }
-QHeaderView::section { background:#21262d;color:#f0f6fc;padding:7px;font-weight:800; }
-QPushButton { background:#21262d;color:#f0f6fc;border:1px solid #30363d;
- border-radius:7px;min-height:34px;padding:4px 12px;font-weight:700; }
-QPushButton:focus { border:2px solid #58a6ff; }
-"""
+STYLE = ADMIN_METALLIC_STYLE + "QDialog { font-size:14px; }"
 
 
 class HelpDialog(QDialog):
@@ -30,15 +22,15 @@ class HelpDialog(QDialog):
         self.setWindowTitle("Central de Ajuda NabiCode")
         self.resize(820, 600); self.setMinimumSize(660, 460); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
-        title = QLabel("CENTRAL DE AJUDA"); title.setStyleSheet("font-size:24px;font-weight:900;color:#00d084")
+        title = QLabel("CENTRAL DE AJUDA"); title.setStyleSheet("font-size:24px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
         row = QHBoxLayout(); self.topic = QComboBox(); self.search = QLineEdit(); self.search.setPlaceholderText("Pesquisar tecla ou ação")
         row.addWidget(QLabel("Assunto")); row.addWidget(self.topic, 1); row.addWidget(self.search, 2); root.addLayout(row)
-        self.description = QLabel(); self.description.setWordWrap(True); self.description.setStyleSheet("color:#c9d1d9")
+        self.description = QLabel(); self.description.setWordWrap(True); self.description.setStyleSheet("color:#d9dee2")
         root.addWidget(self.description)
         self.table = QTableWidget(0, 2); self.table.setHorizontalHeaderLabels(("Tecla", "Ação")); self.table.horizontalHeader().setStretchLastSection(True)
         self.table.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers); self.table.installEventFilter(self); root.addWidget(self.table, 1)
-        self.notes = QLabel(); self.notes.setWordWrap(True); self.notes.setStyleSheet("color:#8b949e"); root.addWidget(self.notes)
+        self.notes = QLabel(); self.notes.setWordWrap(True); self.notes.setStyleSheet("color:#aeb5bb"); root.addWidget(self.notes)
         close = QPushButton("Fechar [Esc]"); close.clicked.connect(self.reject); root.addWidget(close, 0, Qt.AlignmentFlag.AlignRight)
         self._contexts = self.registry.contexts()
         for key in self._contexts: self.topic.addItem(self.registry.get(key).title, key)

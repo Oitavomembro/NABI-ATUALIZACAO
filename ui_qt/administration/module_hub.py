@@ -8,17 +8,9 @@ from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QGridLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout, QWidget,
 )
+from .login_dialog import ADMIN_METALLIC_STYLE
 
-
-STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; font-size:14px; }
-QLabel { color:#f0f6fc; }
-QPushButton { background:#21262d; color:#f0f6fc; border:1px solid #30363d;
- border-radius:8px; min-height:74px; padding:8px 14px; font-size:15px;
- font-weight:800; text-align:left; }
-QPushButton:focus { border:2px solid #58a6ff; background:#1f2937; }
-QPushButton:hover { background:#30363d; }
-"""
+STYLE = ADMIN_METALLIC_STYLE + "QDialog { font-size:14px; } QPushButton { min-height:74px; font-size:15px; text-align:left; }"
 
 
 @dataclass(frozen=True, slots=True)
@@ -50,10 +42,10 @@ class AdministrativeModuleHub(QDialog):
 
         root = QVBoxLayout(self)
         title = QLabel("MÓDULOS DO NABICODE")
-        title.setStyleSheet("font-size:25px;font-weight:900;color:#00d084")
+        title.setStyleSheet("font-size:25px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
         self.identity = QLabel()
-        self.identity.setStyleSheet("color:#8b949e;font-size:13px")
+        self.identity.setStyleSheet("color:#aeb5bb;font-size:13px")
         root.addWidget(self.identity)
 
         grid = QGridLayout()

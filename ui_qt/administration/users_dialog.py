@@ -9,17 +9,9 @@ from PySide6.QtWidgets import (
 )
 
 from administration.user_application_service import UserDraft
+from .login_dialog import ADMIN_METALLIC_STYLE
 
-
-STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; font-size:14px; }
-QLabel { color:#f0f6fc; }
-QLineEdit,QComboBox,QTableWidget { background:#161b22;color:#f0f6fc;
- border:1px solid #30363d;border-radius:6px;min-height:38px; }
-QPushButton { background:#30363d;color:#f0f6fc;border:0;border-radius:6px;
- min-height:40px;padding:0 14px;font-weight:700; }
-QPushButton#primary { background:#238636; }
-"""
+STYLE = ADMIN_METALLIC_STYLE + "QDialog { font-size:14px; } QLineEdit,QComboBox { min-height:38px; } QPushButton { min-height:40px; }"
 
 
 class UserEditorDialog(QDialog):
@@ -85,7 +77,7 @@ class UsersDialog(QDialog):
         self.setWindowTitle("Usuários e acessos"); self.resize(860, 620); self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel("USUÁRIOS E ACESSOS")
-        title.setStyleSheet("font-size:24px;font-weight:900;color:#58a6ff")
+        title.setStyleSheet("font-size:24px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
         guidance = QLabel("Crie usuários individuais. Perfis e permissões permanecem sob o serviço de segurança.")
         guidance.setWordWrap(True); root.addWidget(guidance)
@@ -99,6 +91,7 @@ class UsersDialog(QDialog):
         buttons = QHBoxLayout()
         new = QPushButton("Novo usuário  [F3]"); edit = QPushButton("Editar  [F4]")
         toggle = QPushButton("Ativar / Desativar"); close = QPushButton("Fechar  [Esc]")
+        toggle.setObjectName("destructive")
         new.clicked.connect(self.new_user); edit.clicked.connect(self.edit_user)
         toggle.clicked.connect(self.toggle_active); close.clicked.connect(self.reject)
         for button in (new, edit, toggle): buttons.addWidget(button)

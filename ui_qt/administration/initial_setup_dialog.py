@@ -4,6 +4,7 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QDialog, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
 )
+from .login_dialog import ADMIN_METALLIC_STYLE
 
 
 class InitialSetupDialog(QDialog):
@@ -15,9 +16,10 @@ class InitialSetupDialog(QDialog):
         self.setWindowTitle("Configuração inicial do NabiCode")
         self.setModal(True)
         self.setMinimumWidth(560)
+        self.setStyleSheet(ADMIN_METALLIC_STYLE)
         root = QVBoxLayout(self)
         title = QLabel("PRIMEIRO ACESSO")
-        title.setStyleSheet("font-size:22px;font-weight:900;color:#00d084")
+        title.setStyleSheet("font-size:22px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
         note = QLabel(
             "Configure a empresa e crie o primeiro administrador. "
@@ -42,7 +44,7 @@ class InitialSetupDialog(QDialog):
             form.addRow(label, field)
         root.addLayout(form)
         self.finish = QPushButton("Concluir configuração [Enter]")
-        self.finish.setStyleSheet("background:#238636;color:white;min-height:38px;font-weight:800")
+        self.finish.setObjectName("primary")
         self.finish.clicked.connect(self.complete)
         root.addWidget(self.finish)
         self.fields = (

@@ -20,21 +20,9 @@ from PySide6.QtWidgets import (
 )
 
 from services.ui_preferences import UIPreferencesService
+from .login_dialog import ADMIN_METALLIC_STYLE
 
-
-STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; font-size:14px; }
-QLabel, QCheckBox { color:#f0f6fc; }
-QLineEdit, QComboBox, QTextEdit { background:#161b22; color:#f0f6fc;
- border:1px solid #30363d; border-radius:6px; min-height:30px; padding:4px 8px; }
-QPushButton { background:#21262d; color:#f0f6fc; border:1px solid #30363d;
- border-radius:7px; min-height:34px; padding:5px 12px; font-weight:700; }
-QPushButton:focus { border:2px solid #58a6ff; }
-QPushButton#primary { background:#238636; }
-QTabWidget::pane { border:1px solid #30363d; }
-QTabBar::tab { background:#161b22; color:#c9d1d9; padding:9px 16px; }
-QTabBar::tab:selected { color:#00d084; border-bottom:2px solid #00d084; }
-"""
+STYLE = ADMIN_METALLIC_STYLE + "QDialog { font-size:14px; } QCheckBox { color:#e8ebee; }"
 
 
 class SettingsDialog(QDialog):
@@ -50,10 +38,10 @@ class SettingsDialog(QDialog):
 
         root = QVBoxLayout(self)
         title = QLabel("CONFIGURAÇÕES E PERSONALIZAÇÃO")
-        title.setStyleSheet("font-size:22px;font-weight:900;color:#00d084")
+        title.setStyleSheet("font-size:22px;font-weight:900;color:#e4e8eb;border-bottom:1px solid #73c7dc")
         root.addWidget(title)
         self.identity = QLabel()
-        self.identity.setStyleSheet("color:#8b949e")
+        self.identity.setStyleSheet("color:#aeb5bb")
         root.addWidget(self.identity)
 
         self.tabs = QTabWidget()

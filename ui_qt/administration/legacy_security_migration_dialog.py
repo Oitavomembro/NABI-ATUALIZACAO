@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QDialog, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout
+from .login_dialog import ADMIN_METALLIC_STYLE
 
 
 class LegacySecurityMigrationDialog(QDialog):
@@ -13,6 +14,7 @@ class LegacySecurityMigrationDialog(QDialog):
         self.setWindowTitle("Atualização de segurança do NabiCode")
         self.setModal(True)
         self.setMinimumWidth(560)
+        self.setStyleSheet(ADMIN_METALLIC_STYLE)
         root = QVBoxLayout(self)
         title = QLabel("PROTEJA O ACESSO EXISTENTE")
         title.setStyleSheet("font-size:21px;font-weight:900;color:#d29922")
@@ -36,6 +38,7 @@ class LegacySecurityMigrationDialog(QDialog):
         form.addRow("Repita a nova senha*", self.confirmation)
         root.addLayout(form)
         self.finish = QPushButton("Atualizar segurança [Enter]")
+        self.finish.setObjectName("primary")
         self.finish.clicked.connect(self.complete)
         root.addWidget(self.finish)
         self.fields = (self.username, self.current_password, self.new_password, self.confirmation, self.finish)
