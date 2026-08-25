@@ -2933,7 +2933,8 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   100 linhas materializadas, respectivamente, com totais integrais e paginação
   estável. Respostas fora de ordem, erro de worker e fechamento durante carga
   possuem regressão automatizada;
-- validação focada: `47 passed`; regressão ampliada Financeiro/Relatórios/
+- validação focada final: `50 passed`, incluindo exportação integral autorizada;
+  regressão ampliada Financeiro/Relatórios/
   Segurança/Qt: `151 passed`; `compileall` e `git diff --check` aprovados;
 - não foram alterados Fiscal/SEFAZ, Nabi, PDV, Caixa, backup, pacote contábil,
   licenciamento, estilos globais ou banco real;
