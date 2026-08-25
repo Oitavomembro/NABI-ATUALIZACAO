@@ -10,7 +10,7 @@ from commercial.application.pdv_application_service import PDVApplicationService
 
 from .commercial.pdv_view_model import PDVViewModel
 from .commercial.pdv_window import PDVWindow
-from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant
+from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant, NabiFloatingCoordinator
 from .shell import NabiCodeShellWindow
 
 
@@ -82,6 +82,7 @@ def create_application(
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating
+        window.nabi_assistant_coordinator = NabiFloatingCoordinator(qt_application, window, floating)
     return qt_application, window
 
 
@@ -183,6 +184,7 @@ def create_shell_application(
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating
+        window.nabi_assistant_coordinator = NabiFloatingCoordinator(qt_application, window, floating)
     return qt_application, window
 
 
