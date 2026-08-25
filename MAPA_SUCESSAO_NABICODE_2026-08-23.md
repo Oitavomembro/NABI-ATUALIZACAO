@@ -3397,3 +3397,13 @@ Critério de retirada/proibição:
 - lançamento contábil, regra tributária ou alegação de conformidade inventados.
 
 O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compartilháveis podem ser reaproveitadas após auditoria; regras exclusivas do Fichário não entram incidentalmente no NabiCode oficial.
+## Integração resiliente/contábil — validação de abertura e regressão
+
+- branch: `codex/integracao-resiliencia-contabil`;
+- foram preservados por merges normais os históricos de supply chain fechada V2, auditoria crítica fail-closed, backup criptografado Qt, Central do Contador Qt, onboarding do perfil empresarial, redação de dados sensíveis, portão fiscal fail-closed e radar MEI 2027;
+- o caminho mínimo licença → banco → primeiro acesso/login → shell Qt → módulos principais foi validado com `105 passed` e `3 subtests passed`;
+- a primeira regressão integral encontrou seis testes antigos cujos fakes/schemas não declaravam a auditoria estrita agora obrigatória; somente as estruturas de teste foram alinhadas, sem reintroduzir fallback no produto;
+- validação focada após o alinhamento: `12 passed`, `3 subtests passed`;
+- regressão integral final: `2313 passed`, `1 skipped`, `460 subtests passed`, zero falhas e dois avisos externos/conhecidos;
+- `git diff --check` aprovado; nenhum banco, certificado, XML real, chave ou segredo foi usado;
+- novas interfaces permanecem desacopladas do shell até checkpoint próprio de composição e homologação visual.
