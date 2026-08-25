@@ -2904,3 +2904,16 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - próximo passo seguro: revisão independente e integração normal na consolidada,
   seguida de expansão gradual somente nos emissores periféricos comprovadamente
   necessários, sem reescrever regras de negócio.
+
+### Central de Socorro — diagnóstico somente leitura
+
+- branch isolada `codex/central-socorro-diagnostico`, base `d7769b0`;
+- catálogo fechado por enums, `HelpEntry` e `DiagnosticResult` imutáveis, estados
+  `SAUDAVEL`, `ALERTA`, `FALHA` e `INCONCLUSIVO`;
+- checks iniciais: disco, diretórios persistentes sem escrita, banco por porta
+  read-only, backup diário, impressora e runtime Nabi opcional;
+- serviço não contém SQL, shell, credencial ou autorreparo; portas ausentes e
+  exceções viram resultado seguro sem impedir os demais checks;
+- auditoria recebe apenas estados sanitizados; XML/PII/segredos não são emitidos;
+- testes focados: `6 passed`; `compileall` e `git diff --check` aprovados;
+- nenhuma UI, Fiscal/SEFAZ, Caixa, estoque, venda, Qt, licença ou banco real foi alterado.
