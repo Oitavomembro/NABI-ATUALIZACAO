@@ -128,6 +128,7 @@ def _repair_audit(audit_service, security, event):
 def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
     app_version="2.5.1", schema_version=21, fiscal_service=None,
+    fiscal_catalog_service=None,
 ):
     modules=[];dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
@@ -171,7 +172,9 @@ def build_administrative_modules(
     reports=ReportApplicationService(NabiCodeReportGateway(ReportService(database.connect,output_dir=profile.paths.pdfs/"relatorios",authorize=lambda _a,_r:security.require("relatorios","generate"))))
     modules.append(AdministrativeModule("Relatórios","Indicadores, consultas e exportações","","relatorios","view",lambda p:ReportDialog(reports,_username(security),p),"relatorios"))
     if fiscal_service is not None:
-        fiscal_readiness = FiscalReadinessApplicationService(fiscal_service, security)
+        fiscal_readiness = FiscalReadinessApplicationService(
+            fiscal_service, security, fiscal_catalog_service,
+        )
         modules.append(AdministrativeModule(
             "Central Fiscal", "Configuração e prontidão local segura", "",
             "fiscal", "view",

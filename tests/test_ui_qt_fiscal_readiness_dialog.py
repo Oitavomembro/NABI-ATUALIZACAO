@@ -61,6 +61,34 @@ def test_clique_atualizar_recarrega_e_fechar_encerra():
     assert dialog.result() == QDialog.DialogCode.Rejected
 
 
+def test_pre_voo_por_clique_exibe_aprovacao_sem_transmitir():
+    application = Mock(); application.snapshot.return_value = snapshot()
+    application.run_local_preflight.return_value = SimpleNamespace(
+        success=True, validated_models=("55", "65"),
+        catalog_ready=2, catalog_total=2, problems=(),
+    )
+    dialog = FiscalReadinessDialog(application)
+    with patch("ui_qt.administration.fiscal_readiness_dialog.QMessageBox.information") as info:
+        QTest.mouseClick(dialog.preflight_button, Qt.MouseButton.LeftButton)
+    application.run_local_preflight.assert_called_once_with()
+    assert "Nenhuma comunicação" in info.call_args.args[2]
+    dialog.close()
+
+
+def test_pre_voo_bloqueado_mostra_todas_as_pendencias():
+    application = Mock(); application.snapshot.return_value = snapshot()
+    application.run_local_preflight.return_value = SimpleNamespace(
+        success=False, validated_models=(), catalog_ready=0,
+        catalog_total=0, problems=("Catálogo vazio", "Numeração ausente"),
+    )
+    dialog = FiscalReadinessDialog(application)
+    with patch("ui_qt.administration.fiscal_readiness_dialog.QMessageBox.warning") as warning:
+        QTest.mouseClick(dialog.preflight_button, Qt.MouseButton.LeftButton)
+    message = warning.call_args.args[2]
+    assert "Catálogo vazio" in message and "Numeração ausente" in message
+    dialog.close()
+
+
 def test_atualizacoes_repetidas_substituem_conteudo_sem_sobrepor_rotulos():
     application = Mock(); application.snapshot.return_value = snapshot()
     dialog = FiscalReadinessDialog(application)
@@ -98,7 +126,7 @@ def test_shift_enter_apenas_move_foco_sem_executar():
     )
     assert dialog.eventFilter(dialog.refresh_button, event) is True
     APP.processEvents()
-    assert dialog.focusWidget() is dialog.configure_button
+    assert dialog.focusWidget() is dialog.preflight_button
     dialog.configure.assert_not_called(); dialog.close()
 
 

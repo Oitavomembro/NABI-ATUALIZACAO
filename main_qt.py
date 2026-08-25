@@ -343,7 +343,7 @@ def main(argv=None) -> int:
                     return 5
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
-        fiscal_service = None
+        fiscal_service = fiscal_catalog_service = None
         if license_gate.allows(Capability.FISCAL_WRITE):
             fiscal_service = FiscalService(
                 database.connect,
@@ -357,15 +357,15 @@ def main(argv=None) -> int:
                 ),
                 authorization_provider=lambda action: module_security.require("fiscal", action),
             )
-            fiscal_service.bind_readiness_catalog(
-                FiscalCatalogReadinessService(database.connect)
-            )
+            fiscal_catalog_service = FiscalCatalogReadinessService(database.connect)
+            fiscal_service.bind_readiness_catalog(fiscal_catalog_service)
         module_actions = build_administrative_modules(
             container, database, profile, module_security,
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
             app_version=load_app_version("2.5.1", source_file=__file__),
             schema_version=SCHEMA_VERSION,
             fiscal_service=fiscal_service,
+            fiscal_catalog_service=fiscal_catalog_service,
         )
         daily_backup = BackupService(
             database_path=database.database_path,

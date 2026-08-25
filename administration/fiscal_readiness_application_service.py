@@ -3,6 +3,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from pathlib import Path
 
+from services.fiscal_preflight_service import FiscalPreflightService
+
 
 @dataclass(frozen=True, slots=True)
 class FiscalModelReadiness:
@@ -31,11 +33,15 @@ class FiscalReadinessSnapshot:
 class FiscalReadinessApplicationService:
     """Consulta local da Central Fiscal; não recebe senha nem expõe transmissão."""
 
-    def __init__(self, fiscal_service, security) -> None:
+    def __init__(self, fiscal_service, security, catalog_service=None) -> None:
         if fiscal_service is None or security is None:
             raise ValueError("FiscalService e segurança são obrigatórios.")
         self._fiscal = fiscal_service
         self._security = security
+        self._preflight = (
+            FiscalPreflightService(fiscal_service, catalog_service)
+            if catalog_service is not None else None
+        )
 
     def _require_view(self) -> None:
         session = getattr(self._security, "session", None)
@@ -106,6 +112,18 @@ class FiscalReadinessApplicationService:
         })
         self._fiscal.cache_certificate_password(secret)
         return saved
+
+    def run_local_preflight(self):
+        self._require_configure()
+        if self._preflight is None:
+            raise RuntimeError("O auditor de catálogo fiscal não está conectado.")
+        password = self._fiscal.session_certificate_password()
+        if not password:
+            raise ValueError(
+                "A senha do A1 não está na sessão. Abra Configurar Fiscal, "
+                "revise os dados e digite a senha novamente."
+            )
+        return self._preflight.run(password=password)
 
     @staticmethod
     def _masked_document(value: object) -> str:

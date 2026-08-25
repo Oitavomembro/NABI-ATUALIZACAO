@@ -49,6 +49,7 @@ class Fiscal:
         assert "password" not in values and "senha" not in values
         self.saved = dict(values); self.config.update(values); return dict(self.config)
     def cache_certificate_password(self, password): self.cached = password
+    def session_certificate_password(self): return self.cached
 
 
 def values():
@@ -97,3 +98,12 @@ def test_leitor_prioriza_cnpj_oficial_icp_brasil_sobre_numeros_do_responsavel():
     ])
     certificate.extensions.get_extension_for_class.return_value.value = san
     assert FiscalService._document_from_certificate(certificate) == "47584215000160"
+
+
+def test_pre_voo_usa_senha_somente_da_sessao_e_nao_recebe_segredo_da_gui():
+    fiscal = Fiscal(); fiscal.cached = "segredo-em-memoria"
+    service = FiscalReadinessApplicationService(fiscal, Security())
+    service._preflight = Mock(); service._preflight.run.return_value = object()
+    result = service.run_local_preflight()
+    assert result is service._preflight.run.return_value
+    service._preflight.run.assert_called_once_with(password="segredo-em-memoria")

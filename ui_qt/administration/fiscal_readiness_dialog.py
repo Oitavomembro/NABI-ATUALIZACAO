@@ -58,14 +58,16 @@ class FiscalReadinessDialog(QDialog):
         scroll.setWidget(body); root.addWidget(scroll, 1)
         actions = QHBoxLayout(); actions.addStretch()
         self.configure_button = QPushButton("Configurar Fiscal")
+        self.preflight_button = QPushButton("Executar pré-voo local")
         self.refresh_button = QPushButton("Atualizar leitura  [F5]")
         self.close_button = QPushButton("Fechar  [Esc]")
         self.configure_button.clicked.connect(self.configure)
+        self.preflight_button.clicked.connect(self.run_preflight)
         self.refresh_button.clicked.connect(self.reload)
         self.close_button.clicked.connect(self.reject)
-        actions.addWidget(self.configure_button); actions.addWidget(self.refresh_button); actions.addWidget(self.close_button)
+        actions.addWidget(self.configure_button); actions.addWidget(self.preflight_button); actions.addWidget(self.refresh_button); actions.addWidget(self.close_button)
         root.addLayout(actions)
-        for widget in (self.configure_button, self.refresh_button, self.close_button):
+        for widget in (self.configure_button, self.preflight_button, self.refresh_button, self.close_button):
             widget.installEventFilter(self)
         self._f5 = QShortcut(QKeySequence("F5"), self)
         self._f5.setAutoRepeat(False); self._f5.activated.connect(self.reload)
@@ -78,6 +80,29 @@ class FiscalReadinessDialog(QDialog):
         if dialog.exec() != QDialog.DialogCode.Accepted:
             return False
         return self.reload()
+
+    def run_preflight(self) -> bool:
+        try:
+            result = self.application.run_local_preflight()
+        except Exception as error:
+            QMessageBox.warning(self, "Pré-voo fiscal", str(error))
+            return False
+        models = ", ".join(result.validated_models) or "nenhum"
+        if result.success:
+            QMessageBox.information(
+                self, "Pré-voo fiscal aprovado",
+                "Validação exclusivamente local aprovada.\n"
+                f"Modelos validados: {models}\n"
+                f"Produtos prontos: {result.catalog_ready}/{result.catalog_total}\n"
+                "Nenhuma comunicação com a SEFAZ foi realizada.",
+            )
+            return True
+        QMessageBox.warning(
+            self, "Pré-voo fiscal bloqueado",
+            "A emissão continua bloqueada:\n\n"
+            + "\n".join(f"• {problem}" for problem in result.problems),
+        )
+        return False
 
     def _clear(self) -> None:
         def discard(item) -> None:
@@ -143,7 +168,10 @@ class FiscalReadinessDialog(QDialog):
         return True
 
     def eventFilter(self, watched, event) -> bool:
-        operational = (self.configure_button, self.refresh_button, self.close_button)
+        operational = (
+            self.configure_button, self.preflight_button,
+            self.refresh_button, self.close_button,
+        )
         if watched in operational and event.type() == QEvent.Type.KeyPress:
             if event.key() not in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
                 return super().eventFilter(watched, event)
@@ -153,13 +181,16 @@ class FiscalReadinessDialog(QDialog):
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
                 previous = {
                     self.configure_button: self.close_button,
-                    self.refresh_button: self.configure_button,
+                    self.preflight_button: self.configure_button,
+                    self.refresh_button: self.preflight_button,
                     self.close_button: self.refresh_button,
                 }
                 target = previous[watched]
                 target.setFocus(Qt.FocusReason.BacktabFocusReason)
             elif watched is self.configure_button:
                 self.configure()
+            elif watched is self.preflight_button:
+                self.run_preflight()
             elif watched is self.refresh_button:
                 self.reload()
             else:
