@@ -57,6 +57,9 @@ def test_abertura_valida_permissao_toca_sessao_e_abre_uma_vez():
     security.require.assert_called_once_with("clientes", "view")
     security.touch.assert_called_once_with()
     dialog.exec.assert_called_once_with()
+    assert hub.windowFlags() & Qt.WindowType.WindowMinimizeButtonHint
+    assert hub.windowFlags() & Qt.WindowType.WindowMaximizeButtonHint
+    assert hub.windowFlags() & Qt.WindowType.WindowCloseButtonHint
     hub.close()
 
 
@@ -129,5 +132,16 @@ def test_factory_deve_retornar_dialogo_qt():
     hub = AdministrativeModuleHub(_security(), (_module(lambda _parent: object()),))
     with patch("ui_qt.administration.module_hub.QMessageBox.warning") as warning:
         assert hub.open_module(hub.modules[0]) is False
-    assert "janela Qt" in str(warning.call_args.args[2])
+    assert "não pôde abrir" in str(warning.call_args.args[2])
+    hub.close()
+
+
+def test_modulo_sem_atalho_nao_mostra_colchetes_vazios_nem_cria_shortcut():
+    module = AdministrativeModule(
+        "Central de Socorro", "Diagnóstico e suporte", "", "configs", "view",
+        lambda parent: QDialog(parent),
+    )
+    hub = AdministrativeModuleHub(_security(), (module,))
+    assert "[]" not in hub.buttons[0].text()
+    assert hub._shortcuts == []
     hub.close()

@@ -7,10 +7,12 @@ from PySide6.QtCore import QEvent, QObject, QRunnable, QThreadPool, Qt, Signal, 
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
-    QMessageBox, QPushButton, QStackedWidget, QVBoxLayout, QWidget, QInputDialog,
+    QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
+    QVBoxLayout, QWidget, QInputDialog,
 )
 
 from commercial.domain.money import MoneyCodec
+from ui_qt.windowing import enable_primary_window_controls
 
 
 def _create_administrative_hub(security, modules, parent, **kwargs):
@@ -39,13 +41,14 @@ LEGACY_NAVIGATION = (
     LegacyNavigationItem("caixa", "Caixa", "", "#a16207", "#854d0e", "▤"),
     LegacyNavigationItem("fiscal", "Central Fiscal", "", "#7c3aed", "#6d28d9", "▧"),
     LegacyNavigationItem("relatorios", "Relatórios", "", "#0369a1", "#075985", "▥"),
-    LegacyNavigationItem("configs", "Configs", "F5", "#da3633", "#b62324", "⚙"),
+    LegacyNavigationItem("configs", "Configurações", "F5", "#da3633", "#b62324", "⚙"),
 )
 
 
 SHELL_STYLE = """
 QMainWindow, QWidget#shellRoot { background:#0d1117; color:#f0f6fc; }
 QFrame#sideMenu { background:#161b22; border:0; }
+QScrollArea#sideMenuScroll { background:#161b22; border:0; }
 QLabel { color:#f0f6fc; }
 QPushButton { color:#f0f6fc; border:0; border-radius:12px; min-height:44px;
  font-size:14px; font-weight:800; padding:0 12px; }
@@ -147,6 +150,7 @@ class NabiCodeShellWindow(QMainWindow):
         self.worker_pool.setMaxThreadCount(2)
         self._active_module = "dashboard"
         self.setWindowTitle(f"NabiCode — {store_name}")
+        enable_primary_window_controls(self)
         self.resize(1360, 820)
         self.setMinimumSize(1024, 680)
         self.setStyleSheet(SHELL_STYLE)
@@ -163,8 +167,24 @@ class NabiCodeShellWindow(QMainWindow):
         self._install_shortcuts(); self.show_module("dashboard")
 
     def _build_side_menu(self):
-        frame = QFrame(objectName="sideMenu"); frame.setFixedWidth(300)
-        root = QVBoxLayout(frame); root.setContentsMargins(14, 20, 14, 16); root.setSpacing(10)
+        frame = QFrame(objectName="sideMenu")
+        frame.setMinimumWidth(250); frame.setMaximumWidth(320)
+        frame.setSizePolicy(QSizePolicy.Policy.Preferred, QSizePolicy.Policy.Expanding)
+        outer = QVBoxLayout(frame); outer.setContentsMargins(0, 0, 0, 0)
+        self.side_menu_scroll = QScrollArea(objectName="sideMenuScroll")
+        self.side_menu_scroll.setWidgetResizable(True)
+        self.side_menu_scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff
+        )
+        self.side_menu_scroll.setVerticalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAsNeeded
+        )
+        content = QWidget(); content.setObjectName("sideMenuContent")
+        content.setStyleSheet("background:#161b22")
+        content.setMinimumWidth(230)
+        root = QVBoxLayout(content)
+        root.setContentsMargins(14, 20, 14, 16); root.setSpacing(10)
+        self.side_menu_scroll.setWidget(content); outer.addWidget(self.side_menu_scroll)
         self.logo = QLabel("NABICODE"); self.logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.logo.setAccessibleName("NabiCode")
         self.logo.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -186,7 +206,8 @@ class NabiCodeShellWindow(QMainWindow):
                 lambda _checked=False, selected=key: self.open_customer_segment(selected)
             )
             root.addWidget(label); self.summary_labels[key] = label
-        shortcuts = QLabel("ATALHOS RÁPIDOS\n\n[F1]  Início\n[F2]  Vendas\n[F3]  Clientes\n[F4]  Produtos\n[F5]  Configs\n[Ctrl+Shift+P]  Pânico")
+        shortcuts = QLabel("ATALHOS RÁPIDOS\n\n[F1]  Início\n[F2]  Vendas\n[F3]  Clientes\n[F4]  Produtos\n[F5]  Configurações\n[Ctrl+Shift+P]  Pânico")
+        shortcuts.setWordWrap(True)
         shortcuts.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:12px;font-size:13px;font-weight:700;color:#c9d1d9")
         root.addWidget(shortcuts)
         favorites = QLabel("FAVORITOS"); favorites.setStyleSheet("background:#0d1117;border:1px solid #30363d;border-radius:10px;padding:11px;font-size:14px;font-weight:800")
@@ -194,10 +215,16 @@ class NabiCodeShellWindow(QMainWindow):
         self.favorite_buttons = {}
         canonical = {item.module_id for item in LEGACY_NAVIGATION}
         for module in self.modules:
-            if module.module_id in canonical or module.module_id in {"ajuda"}:
+            if (
+                module.module_id in canonical
+                or module.module_id in {"ajuda"}
+                or module.permission_module == "technical"
+            ):
                 continue
             button = QPushButton(module.label)
             button.setAccessibleName(module.label)
+            button.setToolTip(module.label)
+            button.setMinimumHeight(42)
             button.setStyleSheet("background:#21262d;text-align:left;min-height:34px")
             button.clicked.connect(
                 lambda _checked=False, selected=module.module_id: self.open_module(selected)
@@ -222,8 +249,6 @@ class NabiCodeShellWindow(QMainWindow):
         title = QLabel(str(store_name).upper()); title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("color:#00d084;font-size:25px;font-weight:900;letter-spacing:1px"); row.addWidget(title, 1)
         profile = QLabel(profile_label); profile.setStyleSheet("color:#8b949e;font-size:12px;font-weight:700"); row.addWidget(profile)
-        self.history_button = QPushButton("Histórico"); self.history_button.setStyleSheet("background:#161b22")
-        self.history_button.clicked.connect(lambda: self.open_module("auditoria")); row.addWidget(self.history_button)
         return row
 
     def _build_navigation(self):
@@ -246,7 +271,7 @@ class NabiCodeShellWindow(QMainWindow):
             button.setEnabled(module_id in available)
             if module_id not in available:
                 tooltip = (
-                    "Disponível somente no NabiCode oficial Legacy; migração Qt pendente"
+                    "Central Fiscal indisponível nesta versão"
                     if module_id == "fiscal" else "Módulo indisponível nesta edição"
                 )
                 button.setToolTip(tooltip)
@@ -353,7 +378,7 @@ class NabiCodeShellWindow(QMainWindow):
             if page is None:
                 page = module.factory(self.pages)
                 if not isinstance(page, QDialog):
-                    raise TypeError("O módulo deve fornecer uma tela Qt.")
+                    raise TypeError("O módulo não pôde abrir sua janela.")
                 page.setModal(False)
                 page.setWindowFlags(Qt.WindowType.Widget)
                 page.finished.connect(
@@ -379,7 +404,7 @@ class NabiCodeShellWindow(QMainWindow):
             current.close()
         dialog = factory(self)
         if not isinstance(dialog, QDialog):
-            raise TypeError("O módulo deve fornecer uma janela Qt.")
+            raise TypeError("O módulo não pôde abrir sua janela.")
         dialog.setModal(False)
         dialog.setProperty("customerSegment", segment)
         self._wide_windows[module_id] = dialog
@@ -442,7 +467,7 @@ class NabiCodeShellWindow(QMainWindow):
             QMessageBox.warning(self, "Acesso negado", "Senha administrativa incorreta.")
             return False
         technical_modules = tuple(
-            module for module in self.modules if module.permission_module == "technical"
+            module for module in self.modules if module.restricted_menu
         )
         if not technical_modules:
             QMessageBox.information(
@@ -467,7 +492,7 @@ class NabiCodeShellWindow(QMainWindow):
         if module_id in self._open_dialogs: return False
         try:
             self._authorized(module); dialog = module.factory(self)
-            if not isinstance(dialog, QDialog): raise TypeError("O módulo deve abrir uma janela Qt.")
+            if not isinstance(dialog, QDialog): raise TypeError("O módulo não pôde abrir sua janela.")
             self._open_dialogs[module_id] = dialog; self._mark_active(module_id); dialog.exec(); return True
         except Exception as error:
             QMessageBox.warning(self, module.label, str(error)); return False
@@ -479,7 +504,7 @@ class NabiCodeShellWindow(QMainWindow):
             self._pdv_window.raise_(); self._pdv_window.activateWindow(); return False
         try:
             window = self.pdv_factory()
-            if not isinstance(window, QMainWindow): raise TypeError("A tela de Vendas deve ser uma janela Qt.")
+            if not isinstance(window, QMainWindow): raise TypeError("A tela de Vendas não pôde ser aberta.")
             self._pdv_window = window; window.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
             window.destroyed.connect(self._pdv_closed); self._mark_active("vendas"); window.showMaximized(); return True
         except Exception as error:
