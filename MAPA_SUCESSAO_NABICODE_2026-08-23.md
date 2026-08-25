@@ -2933,7 +2933,7 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
 - Qt oferece fluxo por teclado, bloqueia auto-repeat, revisa explicitamente os
   dados e alerta quando a documentação está pendente;
 - validação focada final: `56 passed`; regressão ampliada Caixa/Qt:
-  `126 passed`; `compileall` e `git diff --check` aprovados;
+  `127 passed`; `compileall` e `git diff --check` aprovados;
 - não houve alteração em Fiscal/SEFAZ, Nabi, pacote contábil, backup,
   licenciamento, banco real, `main_qt.py` ou `ui_qt/app.py`;
 - pendência manual: homologação visual do diálogo no Windows e definição futura
