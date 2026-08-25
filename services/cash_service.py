@@ -8,6 +8,7 @@ from typing import Any, Callable, Optional
 import hashlib
 import json
 import re
+from pathlib import Path
 
 from repositories.decimal_storage import DecimalStorage
 
@@ -46,6 +47,11 @@ class CashService:
         "SUPRIMENTO": "SUPRIMENTO_CAIXA",
         "PAGAMENTO DE CONTA": "PAGAMENTO_CONTA",
     }
+    OUTFLOW_TYPES = frozenset({"DESPESA_EMPRESARIAL", "RETIRADA_SOCIO", "ADIANTAMENTO", "PAGAMENTO_FORNECEDOR", "OUTRA_SAIDA"})
+    OUTFLOW_CATEGORIES = frozenset({"LIMPEZA", "AGUA", "ENERGIA", "ALUGUEL", "MANUTENCAO", "FRETE", "MATERIAL", "TAXAS", "IMPOSTOS", "SALARIOS_PRO_LABORE", "FORNECEDOR", "OUTROS"})
+    PAYMENT_METHODS = frozenset({"DINHEIRO", "PIX", "DEBITO", "CREDITO", "TRANSFERENCIA", "BOLETO", "OUTROS"})
+    OUTFLOW_SOURCES = frozenset({"CAIXA", "CONTA_BANCARIA", "CARTAO", "OUTRA_ORIGEM"})
+    RECEIPT_EXTENSIONS = frozenset({".pdf", ".png", ".jpg", ".jpeg", ".xml"})
 
     def __init__(self, connection_factory: ConnectionFactory):
         self._connection_factory = connection_factory
@@ -159,6 +165,94 @@ class CashService:
         finally:
             conn.close()
 
+    def register_documented_outflow(
+        self, terminal: str, payload: dict[str, Any], *, user: str,
+        idempotency_key: str, fingerprint: str, occurred_at: Optional[str] = None,
+    ) -> int:
+        """Registra saída real e diário idempotente na mesma transação do Caixa."""
+        terminal = str(terminal or "").strip(); actor = str(user or "").strip()
+        key = str(idempotency_key or "").strip(); supplied_fp = str(fingerprint or "").strip().lower()
+        if not terminal or not actor:
+            raise PermissionError("Terminal e operador autenticado são obrigatórios.")
+        if not key or len(key) > 128 or not re.fullmatch(r"[A-Za-z0-9:._-]+", key):
+            raise ValueError("Chave idempotente inválida.")
+        normalized = self.normalize_documented_outflow(payload)
+        expected_fp = self.documented_outflow_fingerprint(normalized)
+        if supplied_fp != expected_fp:
+            raise PermissionError("A saída confirmada foi alterada após a revisão.")
+        now = occurred_at or datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            session = conn.execute("SELECT id FROM cash_sessions WHERE terminal=? AND status='ABERTO'", (terminal,)).fetchone()
+            if not session:
+                raise RuntimeError("Não existe caixa aberto neste terminal.")
+            prior = conn.execute("SELECT fingerprint,status,outflow_id FROM cash_outflow_journal WHERE idempotency_key=?", (key,)).fetchone()
+            if prior:
+                if str(prior[0]).lower() != supplied_fp:
+                    raise PermissionError("A chave idempotente já pertence a outra saída.")
+                if str(prior[1]).upper() != "COMMITTED" or prior[2] is None:
+                    raise RuntimeError("A saída possui estado persistente desconhecido.")
+                conn.commit(); return int(prior[2])
+            beneficiary_id = normalized["beneficiary_id"]
+            beneficiary_name = normalized["beneficiary_name"]
+            if beneficiary_id is not None:
+                supplier = conn.execute("SELECT nome_fantasia,razao_social FROM fornecedores WHERE id=?", (beneficiary_id,)).fetchone()
+                if not supplier:
+                    raise ValueError("Fornecedor/beneficiário não encontrado.")
+                beneficiary_name = str(supplier[0] or supplier[1] or "").strip()
+            conn.execute("INSERT INTO cash_outflow_journal(idempotency_key,fingerprint,status,username,created_at) VALUES(?,?,'PENDING',?,?)", (key,supplied_fp,actor,now))
+            cur = conn.execute("""INSERT INTO cash_documented_outflows
+                (cash_session_id,outflow_type,amount,occurred_on,competence,category,beneficiary_id,beneficiary_name,
+                 document_type,document_number,payment_method,source,note,receipt_path,documentation_pending,user_id,created_at)
+                VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                (int(session[0]),normalized["outflow_type"],normalized["amount"],normalized["occurred_on"],normalized["competence"],normalized["category"],beneficiary_id,beneficiary_name,
+                 normalized["document_type"],normalized["document_number"],normalized["payment_method"],normalized["source"],normalized["note"],normalized["receipt_path"],int(normalized["documentation_pending"]),actor,now))
+            outflow_id = int(cur.lastrowid)
+            self._audit(conn, actor, "SAIDA_DOCUMENTADA", int(session[0]), f"saida={outflow_id}; tipo={normalized['outflow_type']}; categoria={normalized['category']}; valor={normalized['amount']}; documentacao_pendente={int(normalized['documentation_pending'])}", now, required=True)
+            updated=conn.execute("UPDATE cash_outflow_journal SET status='COMMITTED',outflow_id=?,committed_at=? WHERE idempotency_key=? AND status='PENDING'",(outflow_id,now,key))
+            if updated.rowcount != 1: raise RuntimeError("Não foi possível confirmar o diário da saída.")
+            conn.commit(); return outflow_id
+        except Exception:
+            conn.rollback(); raise
+        finally:
+            conn.close()
+
+    @classmethod
+    def normalize_documented_outflow(cls, payload: dict[str, Any]) -> dict[str, Any]:
+        kind=str(payload.get("outflow_type") or "").strip().upper(); category=str(payload.get("category") or "").strip().upper()
+        method=str(payload.get("payment_method") or "").strip().upper(); source=str(payload.get("source") or "CAIXA").strip().upper()
+        if kind not in cls.OUTFLOW_TYPES: raise ValueError("Tipo de saída inválido.")
+        if category not in cls.OUTFLOW_CATEGORIES: raise ValueError("Categoria de saída inválida.")
+        if method not in cls.PAYMENT_METHODS: raise ValueError("Forma de pagamento inválida.")
+        if source not in cls.OUTFLOW_SOURCES: raise ValueError("Origem do pagamento inválida.")
+        amount=cls._money(payload.get("amount"),"valor da saída")
+        if amount <= 0: raise ValueError("O valor da saída deve ser maior que zero.")
+        occurred=str(payload.get("occurred_on") or "").strip()
+        try: datetime.strptime(occurred,"%Y-%m-%d")
+        except ValueError as exc: raise ValueError("Data da saída inválida.") from exc
+        competence=str(payload.get("competence") or occurred[:7]).strip()
+        try: datetime.strptime(competence,"%Y-%m")
+        except ValueError as exc: raise ValueError("Competência inválida. Use AAAA-MM.") from exc
+        receipt=str(payload.get("receipt_path") or "").strip()
+        if receipt:
+            path=Path(receipt).expanduser().resolve()
+            if path.suffix.casefold() not in cls.RECEIPT_EXTENSIONS or not path.is_file():
+                raise ValueError("Comprovante inválido ou não localizado.")
+            receipt=str(path)
+        pending=bool(payload.get("documentation_pending",not bool(receipt)))
+        if not receipt: pending=True
+        beneficiary_id=payload.get("beneficiary_id")
+        beneficiary_id=None if beneficiary_id in (None,"") else int(beneficiary_id)
+        return {"outflow_type":kind,"amount":DecimalStorage.canonical(amount,field="valor da saída"),"occurred_on":occurred,"competence":competence,"category":category,
+                "beneficiary_id":beneficiary_id,"beneficiary_name":str(payload.get("beneficiary_name") or "").strip()[:200],"document_type":str(payload.get("document_type") or "").strip().upper()[:30],
+                "document_number":str(payload.get("document_number") or "").strip()[:60],"payment_method":method,"source":source[:40],"note":str(payload.get("note") or "").strip()[:500],
+                "receipt_path":receipt,"documentation_pending":pending,"accounting_review":"A_REVISAR_PELO_CONTADOR"}
+
+    @staticmethod
+    def documented_outflow_fingerprint(normalized: dict[str, Any]) -> str:
+        return hashlib.sha256(json.dumps(normalized,ensure_ascii=False,sort_keys=True,separators=(",",":"),default=str).encode("utf-8")).hexdigest()
+
     @classmethod
     def _payment_parts(cls, description: str, total: Decimal) -> dict[str, Decimal]:
         text = str(description or "").upper()
@@ -198,9 +292,11 @@ class CashService:
                 movement_params.extend(f"{prefix} *" for prefix in date_prefixes)
             movements = conn.execute(movement_sql, movement_params).fetchall()
             own = conn.execute("SELECT type,amount,user_id,note,created_at FROM cash_movements WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
+            outflows = (conn.execute("SELECT outflow_type,amount,user_id,note,created_at,category,documentation_pending,payment_method,source FROM cash_documented_outflows WHERE cash_session_id=? ORDER BY id", (session.id,)).fetchall()
+                        if self._columns(conn, "cash_documented_outflows") else [])
         finally:
             conn.close()
-        totals = {key: Decimal("0.00") for key in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "sangrias", "suprimentos")}
+        totals = {key: Decimal("0.00") for key in ("dinheiro", "pix", "cartao", "outros", "recebimentos_dinheiro", "recebimentos_eletronicos", "sangrias", "suprimentos", "documented_outflows", "documented_cash_outflows")}
         def parsed(value: str):
             try: return datetime.strptime(value, "%d/%m/%Y %H:%M:%S")
             except (TypeError, ValueError): return None
@@ -228,8 +324,13 @@ class CashService:
             value = Decimal(str(amount))
             totals["sangrias" if kind == "SANGRIA" else "suprimentos"] += value
             history.append({"tipo": kind, "valor": value, "usuario": user, "observacao": note, "data": created, "origem": "CAIXA", "sinal": -1 if kind == "SANGRIA" else 1})
+        for kind, amount, user, note, created, category, pending, payment_method, source in outflows:
+            value=Decimal(str(amount)); totals["documented_outflows"] += value
+            if str(payment_method).upper() == "DINHEIRO" and str(source).upper() == "CAIXA": totals["documented_cash_outflows"] += value
+            suffix=" • DOCUMENTAÇÃO PENDENTE" if pending else ""
+            history.append({"tipo":kind,"valor":value,"usuario":user,"observacao":f"{category}{suffix} • {note}".strip(" •"),"data":created,"origem":"SAÍDA DOCUMENTADA","sinal":-1})
         history.sort(key=lambda item: parsed(item["data"]) or datetime.min)
-        expected = session.opening_balance + totals["dinheiro"] + totals["recebimentos_dinheiro"] + totals["suprimentos"] - totals["sangrias"]
+        expected = session.opening_balance + totals["dinheiro"] + totals["recebimentos_dinheiro"] + totals["suprimentos"] - totals["sangrias"] - totals["documented_cash_outflows"]
         movement_total = sum(
             (totals[key] for key in ("dinheiro", "pix", "cartao", "outros")),
             Decimal("0"),
@@ -378,6 +479,10 @@ class CashService:
             "SELECT type,amount FROM cash_movements WHERE cash_session_id=?",
             (session.id,),
         ).fetchall()
+        outflows = (conn.execute(
+            "SELECT amount FROM cash_documented_outflows WHERE cash_session_id=? AND payment_method='DINHEIRO' AND source='CAIXA'",
+            (session.id,),
+        ).fetchall() if self._columns(conn, "cash_documented_outflows") else [])
 
         def parsed(value):
             try:
@@ -411,7 +516,8 @@ class CashService:
             (Decimal(str(amount)) for kind, amount in own if kind == "SANGRIA"),
             Decimal("0"),
         )
-        return session.opening_balance + cash_sales + cash_receipts + supplies - withdrawals
+        documented = sum((Decimal(str(row[0])) for row in outflows), Decimal("0"))
+        return session.opening_balance + cash_sales + cash_receipts + supplies - withdrawals - documented
 
     def history(
         self,

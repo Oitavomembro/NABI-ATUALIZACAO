@@ -7,10 +7,10 @@ import pytest
 pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication
+from PySide6.QtWidgets import QApplication, QMessageBox
 
 from commercial.application.cash_application_service import CashApplicationService, CashSessionView
-from ui_qt.commercial.cash_dialog import CashDialog, CashValueDialog
+from ui_qt.commercial.cash_dialog import CashDialog, CashValueDialog, DocumentedOutflowDialog
 
 
 class Backend:
@@ -75,6 +75,19 @@ def test_enter_shift_e_auto_repeat_sao_deterministicos(app):
 
 def test_gui_nao_importa_banco_repositorio_fiscal_ou_ia():
     from pathlib import Path
-    source=(Path(__file__).parents[1]/"ui_qt/commercial/cash_dialog.py").read_text().lower()
+    source=(Path(__file__).parents[1]/"ui_qt/commercial/cash_dialog.py").read_text(encoding="utf-8").lower()
     for forbidden in ("sqlite3","database","repositories","fiscal","sefaz","assistant_nabi"):
         assert forbidden not in source
+
+
+def test_saida_documentada_consumes_auto_repeat_and_reviews_once(app, monkeypatch):
+    calls=[]
+    draft=SimpleNamespace(payload={"outflow_type":"DESPESA_EMPRESARIAL","category":"LIMPEZA","amount":"10.00","competence":"2026-08","documentation_pending":True})
+    service=SimpleNamespace(
+        prepare_documented_outflow=lambda **fields: calls.append(("prepare",fields)) or draft,
+        confirm_documented_outflow=lambda value: calls.append(("confirm",value)),
+    )
+    monkeypatch.setattr("ui_qt.commercial.cash_dialog.QMessageBox.question",lambda *args: QMessageBox.StandardButton.Yes)
+    dialog=DocumentedOutflowDialog(service); dialog.amount.set_value(Decimal("10")); dialog.show(); app.processEvents()
+    dialog.confirm.setFocus(); key(dialog.confirm,auto=True); assert calls==[]
+    key(dialog.confirm); assert [entry[0] for entry in calls]==["prepare","confirm"]

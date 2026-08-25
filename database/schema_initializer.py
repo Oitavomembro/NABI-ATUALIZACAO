@@ -813,6 +813,47 @@ def initialize_database(
     """)
     cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_movements_session ON cash_movements(cash_session_id,created_at)")
     cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cash_documented_outflows (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            cash_session_id INTEGER NOT NULL,
+            outflow_type TEXT NOT NULL CHECK(outflow_type IN
+                ('DESPESA_EMPRESARIAL','RETIRADA_SOCIO','ADIANTAMENTO','PAGAMENTO_FORNECEDOR','OUTRA_SAIDA')),
+            amount TEXT NOT NULL,
+            occurred_on TEXT NOT NULL,
+            competence TEXT NOT NULL,
+            category TEXT NOT NULL CHECK(category IN
+                ('LIMPEZA','AGUA','ENERGIA','ALUGUEL','MANUTENCAO','FRETE','MATERIAL','TAXAS','IMPOSTOS','SALARIOS_PRO_LABORE','FORNECEDOR','OUTROS')),
+            beneficiary_id INTEGER,
+            beneficiary_name TEXT NOT NULL DEFAULT '',
+            document_type TEXT NOT NULL DEFAULT '',
+            document_number TEXT NOT NULL DEFAULT '',
+            payment_method TEXT NOT NULL,
+            source TEXT NOT NULL,
+            note TEXT NOT NULL DEFAULT '',
+            receipt_path TEXT NOT NULL DEFAULT '',
+            documentation_pending INTEGER NOT NULL DEFAULT 0 CHECK(documentation_pending IN (0,1)),
+            accounting_review TEXT NOT NULL DEFAULT 'A_REVISAR_PELO_CONTADOR',
+            user_id TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            FOREIGN KEY(cash_session_id) REFERENCES cash_sessions(id),
+            FOREIGN KEY(beneficiary_id) REFERENCES fornecedores(id)
+        )
+    """)
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_outflows_session ON cash_documented_outflows(cash_session_id,created_at)")
+    cursor.execute("CREATE INDEX IF NOT EXISTS idx_cash_outflows_competence ON cash_documented_outflows(competence,category)")
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS cash_outflow_journal (
+            idempotency_key TEXT PRIMARY KEY,
+            fingerprint TEXT NOT NULL,
+            status TEXT NOT NULL CHECK(status IN ('PENDING','COMMITTED')),
+            outflow_id INTEGER,
+            username TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            committed_at TEXT NOT NULL DEFAULT '',
+            FOREIGN KEY(outflow_id) REFERENCES cash_documented_outflows(id)
+        )
+    """)
+    cursor.execute("""
         CREATE TABLE IF NOT EXISTS fiscal_sale_documents (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             sale_id INTEGER NOT NULL UNIQUE,
