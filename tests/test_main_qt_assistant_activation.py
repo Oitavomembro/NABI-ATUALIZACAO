@@ -16,7 +16,7 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         gate.allows.side_effect = lambda capability: capability in allowed
         return gate
 
-    def test_licenca_sem_assistente_nao_compoe_nabi_nem_nfe(self):
+    def test_licenca_fiscal_compoe_nabi_mesmo_sem_recurso_assistant(self):
         database = object()
         profile = object()
         container = object()
@@ -30,10 +30,46 @@ class MainQtAssistantActivationTests(unittest.TestCase):
             result = main_qt._create_licensed_assistant(
                 database, profile, container, gate
             )
-        self.assertEqual(result, (None, None, None))
+        self.assertIsInstance(result[0], main_qt.UnavailableAssistantService)
+        self.assertIs(result[1], activation.return_value)
+        self.assertIs(result[2], drafts.return_value)
+        repository.assert_called_once_with(database)
+        importer.assert_called_once_with(repository.return_value)
+        drafts.assert_called_once_with(importer.return_value)
+        activation.assert_called_once_with(
+            database, profile, container, drafts.return_value, importer.return_value
+        )
+
+    def test_licenca_comercial_compoe_nabi_desde_o_shell_sem_fiscal(self):
+        gate = self.gate(Capability.QT, Capability.COMMERCIAL_WRITE)
+        with (
+            patch.object(main_qt, "NFeImportRepository") as repository,
+            patch.object(main_qt, "NFeImportService") as importer,
+            patch.object(main_qt, "NFeEntryDraftService") as drafts,
+            patch.object(
+                main_qt, "_create_assistant_activation", return_value="ativação"
+            ) as activation,
+        ):
+            service, actual_activation, nfe = main_qt._create_licensed_assistant(
+                "banco", "perfil", "container", gate
+            )
+        self.assertIsInstance(service, main_qt.UnavailableAssistantService)
+        self.assertEqual(actual_activation, "ativação")
+        self.assertIsNone(nfe)
+        activation.assert_called_once_with(
+            "banco", "perfil", "container", None, None
+        )
         repository.assert_not_called()
         importer.assert_not_called()
         drafts.assert_not_called()
+
+    def test_licenca_sem_comercial_fiscal_ou_assistente_nao_compoe_nabi(self):
+        gate = self.gate(Capability.QT)
+        with patch.object(main_qt, "_create_assistant_activation") as activation:
+            result = main_qt._create_licensed_assistant(
+                "banco", "perfil", "container", gate
+            )
+        self.assertEqual(result, (None, None, None))
         activation.assert_not_called()
 
     def test_assistente_sem_fiscal_nao_compoe_importacao_nfe(self):

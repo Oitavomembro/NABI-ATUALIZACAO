@@ -205,9 +205,17 @@ def _create_assistant_activation(
 def _create_licensed_assistant(
     database, profile, container, license_gate, security=None
 ):
-    """Compõe a Nabi e o apoio de NF-e somente quando assinados na licença."""
+    """Compõe a Nabi para edições operacionais e isola o apoio fiscal."""
 
-    if not license_gate.allows(Capability.ASSISTANT):
+    assistant_enabled = any(
+        license_gate.allows(capability)
+        for capability in (
+            Capability.ASSISTANT,
+            Capability.COMMERCIAL_WRITE,
+            Capability.FISCAL_WRITE,
+        )
+    )
+    if not assistant_enabled:
         return None, None, None
     nfe_import_service = nfe_entry_service = None
     if license_gate.allows(Capability.FISCAL_WRITE):
@@ -400,6 +408,7 @@ def main(argv=None) -> int:
             qt.aboutToQuit.connect(assistant_activation.stop)
         initial_entitlements = (
             license_gate.allows(Capability.ASSISTANT),
+            license_gate.allows(Capability.COMMERCIAL_WRITE),
             license_gate.allows(Capability.FISCAL_WRITE),
         )
         license_timer = QTimer(qt)
@@ -409,6 +418,7 @@ def main(argv=None) -> int:
             current_gate = evaluate_runtime_gate(profile.app_dir)
             current_entitlements = (
                 current_gate.allows(Capability.ASSISTANT),
+                current_gate.allows(Capability.COMMERCIAL_WRITE),
                 current_gate.allows(Capability.FISCAL_WRITE),
             )
             if (
