@@ -2881,3 +2881,33 @@ Checkpoint em `2026-08-23`, branch `codex/emissor-facil-fichario`:
   permaneceram intactos. A apresentação não copia personagem, relógio, voz ou
   arte de terceiros; 63 testes de Nabi/painel/shell foram aprovados, além de
   `compileall` e `git diff --check`.
+
+### Backup diário Qt confiável e restauração comprovável
+
+- branch isolada `codex/backup-diario-qt-confiavel`, derivada de `1cfdfa4`;
+- núcleo `2bce948` — `fix: torna backup diario confiavel por destino`;
+- startup/UI `f019630` — `feat: executa backup diario no startup Qt`;
+- o backup configurado inicia em worker somente depois de licença, perfil,
+  banco, migração/primeiro acesso e login estarem prontos e depois de o shell
+  ser exibido; a interface não espera a cópia SQLite;
+- principal e pasta sincronizada possuem estado diário independente por caminho
+  normalizado. Sucesso local não marca o secundário com falha; nova tentativa no
+  mesmo dia executa somente destinos pendentes;
+- o lock único do serviço e a marca por destino impedem duplicação concorrente.
+  SQLite Backup API, nomes exclusivos, `integrity_check`, `foreign_key_check`,
+  documentos fiscais permitidos e retenção existente foram preservados;
+- resultado visível distingue concluído, parcial, falha, desativado e já
+  concluído. Backup manual parcial também deixou de alegar sucesso integral;
+- a verificação operacional restaura exclusivamente para diretório TEMP,
+  revalida integridade/FK e compara schema com o banco ativo sem modificá-lo.
+  A restauração real continua manual, reforçada e com snapshot de segurança no
+  serviço oficial de manutenção; nenhum botão perigoso foi criado;
+- corrigido o mojibake `Backup invÃ¡lido`; Configurações avisa que os backups
+  contêm dados pessoais e não recebem criptografia neste checkpoint;
+- validação final relacionada: `99 passed`, `3 subtests passed`; bloco focado:
+  `38 passed`; `compileall` completo e `git diff --check` aprovados;
+- não houve alteração em Fiscal/SEFAZ, Nabi, PDV, Caixa, licenciamento,
+  usuários, banco real, instalador, retenção ou regras de negócio;
+- próximo passo: revisão independente e integração normal na consolidada. O
+  pacote mensal do contador permanece fora deste checkpoint até contrato
+  oficial delimitado pela trilha arquiteta.
