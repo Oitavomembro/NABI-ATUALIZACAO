@@ -12,7 +12,7 @@ from PySide6.QtWidgets import (
 
 from core.sensitive_data import sanitize_text
 from services.help_center_repair_service import (
-    GREEN_REPAIR_CATALOG, GreenRepairEntry, RepairRequest, RepairResult,
+    GREEN_REPAIR_CATALOG, GreenRepairEntry, RepairOutcome, RepairRequest, RepairResult,
 )
 from services.help_center_service import DiagnosticResult, DiagnosticState
 
@@ -31,6 +31,20 @@ STATE_COLORS = {
     DiagnosticState.ALERTA: "#d29922",
     DiagnosticState.FALHA: "#f85149",
     DiagnosticState.INCONCLUSIVO: "#8b949e",
+}
+
+STATE_LABELS = {
+    DiagnosticState.SAUDAVEL: "Tudo certo",
+    DiagnosticState.ALERTA: "Atenção",
+    DiagnosticState.FALHA: "Precisa de suporte",
+    DiagnosticState.INCONCLUSIVO: "Não foi possível verificar",
+}
+
+OUTCOME_LABELS = {
+    RepairOutcome.PROVADO: "Concluído e verificado",
+    RepairOutcome.FALHOU: "Não foi concluído",
+    RepairOutcome.REVERTIDO: "Desfeito com segurança",
+    RepairOutcome.INCONCLUSIVO: "Não foi possível concluir",
 }
 
 
@@ -63,7 +77,7 @@ class RepairWorker(QRunnable):
 
 
 class HelpCenterDialog(QDialog):
-    """Diagnóstico e catálogo fechado de autorreparos exclusivamente VERDES."""
+    """Diagnóstico e ações seguras; enums técnicos permanecem no serviço."""
 
     def __init__(
         self, service, parent=None, *, repair_service=None, worker_pool=None,
@@ -114,12 +128,12 @@ class HelpCenterDialog(QDialog):
         self.details = QPlainTextEdit(); self.details.setReadOnly(True)
         self.details.setPlainText("Execute o diagnóstico para ver detalhes seguros.")
         self.details.installEventFilter(self); root.addWidget(self.details, 1)
-        repair_title = QLabel("AUTORREPAROS VERDES — CATÁLOGO FECHADO")
+        repair_title = QLabel("AÇÕES SEGURAS DE SUPORTE")
         repair_title.setStyleSheet("font-size:17px;font-weight:900;color:#2ea043")
         root.addWidget(repair_title)
         repair_notice = QLabel(
-            "Nenhum diagnóstico inicia reparo. Cada ação exige confirmação e aceita "
-            "somente RepairRequest tipado; portas indisponíveis ficam INCONCLUSIVAS."
+            "Nenhum diagnóstico inicia uma ação. Cada ação exige confirmação; quando "
+            "a função necessária não está disponível, nada é alterado."
         )
         repair_notice.setWordWrap(True); repair_notice.setStyleSheet("color:#8b949e")
         root.addWidget(repair_notice)
@@ -127,12 +141,12 @@ class HelpCenterDialog(QDialog):
         self._repair_by_button: dict[QPushButton, GreenRepairEntry] = {}
         entries = tuple(repair_service.catalog()) if repair_service is not None else ()
         if entries and entries != GREEN_REPAIR_CATALOG:
-            raise TypeError("A interface aceita somente o catálogo VERDE publicado.")
+            raise TypeError("A interface aceita somente as ações seguras publicadas.")
         for index, entry in enumerate(entries):
             if type(entry) is not GreenRepairEntry or entry.risk.value != "VERDE":
-                raise TypeError("A interface aceita somente o catálogo tipado VERDE.")
-            button = QPushButton(f"VERDE — {entry.title}")
-            button.setAccessibleName(f"Autorreparo verde: {entry.title}")
+                raise TypeError("A interface aceita somente ações seguras reconhecidas.")
+            button = QPushButton(entry.title)
+            button.setAccessibleName(f"Ação segura de suporte: {entry.title}")
             button.clicked.connect(
                 lambda _checked=False, selected=entry: self.run_repair(selected)
             )
@@ -171,11 +185,10 @@ class HelpCenterDialog(QDialog):
     def _confirm_green_repair(self, entry: GreenRepairEntry) -> bool:
         answer = QMessageBox.question(
             self,
-            "Confirmar autorreparo VERDE",
+            "Confirmar ação de suporte",
             f"Executar “{entry.title}”?\n\n"
-            "A ação usa somente a porta tipada publicada, com precheck, postcheck, "
-            "auditoria estrita e rollback quando aplicável. Nenhum reparo AMARELO "
-            "ou VERMELHO será executado.",
+            "A ação usa somente a função segura publicada, verifica antes e depois, "
+            "registra a execução e desfaz a mudança quando isso for necessário.",
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
             QMessageBox.StandardButton.No,
         )
@@ -196,7 +209,7 @@ class HelpCenterDialog(QDialog):
         self._repair_generation += 1; generation = self._repair_generation
         self._repair_running = True; self.repair_result = None
         for button in self.repair_buttons: button.setEnabled(False)
-        self.progress.setText("Executando autorreparo VERDE...")
+        self.progress.setText("Executando ação segura...")
         request = RepairRequest(registered.repair, f"qt-{uuid.uuid4().hex}")
         worker = RepairWorker(generation, self.repair_service, request)
         worker.signals.completed.connect(self._repair_loaded)
@@ -213,25 +226,27 @@ class HelpCenterDialog(QDialog):
         self._repair_running = False
         for button in self.repair_buttons: button.setEnabled(True)
         if error is not None:
-            self.progress.setText("Autorreparo bloqueado")
+            self.progress.setText("Ação bloqueada com segurança")
             self._notifier(
                 "error", sanitize_text(f"Falha segura: {type(error).__name__}")
             )
             return
         if type(result) is not RepairResult or result.entry not in GREEN_REPAIR_CATALOG:
-            self.progress.setText("Autorreparo inconclusivo")
+            self.progress.setText("Não foi possível concluir a ação")
             self._notifier("error", "A porta retornou um resultado não tipado.")
             return
         self.repair_result = result
-        self.progress.setText(f"Autorreparo {result.outcome.value}")
-        rollback = result.rollback.value if result.rollback is not None else "NÃO APLICÁVEL"
+        self.progress.setText(OUTCOME_LABELS[result.outcome])
+        rollback = (
+            OUTCOME_LABELS[result.rollback]
+            if result.rollback is not None else "Não foi necessário"
+        )
         self.details.setPlainText(
             f"{sanitize_text(result.entry.title)}\n"
-            f"Risco: {result.entry.risk.value}\n"
-            f"Resultado: {result.outcome.value}\n"
-            f"Precheck: {result.precheck.value}\n"
-            f"Postcheck: {result.postcheck.value}\n"
-            f"Rollback: {rollback}\n"
+            f"Resultado: {OUTCOME_LABELS[result.outcome]}\n"
+            f"Verificação inicial: {OUTCOME_LABELS[result.precheck]}\n"
+            f"Verificação final: {OUTCOME_LABELS[result.postcheck]}\n"
+            f"Desfazer: {rollback}\n"
             f"Alteração comprovada: {'sim' if result.changed else 'não'}\n"
             f"Identificador: {sanitize_text(result.operation_fingerprint)}\n\n"
             f"{sanitize_text(result.message)}"
@@ -244,7 +259,7 @@ class HelpCenterDialog(QDialog):
             None,
         )
         if button is not None:
-            button.setText(f"{result.outcome.value} — {result.entry.title}")
+            button.setText(f"{OUTCOME_LABELS[result.outcome]} — {result.entry.title}")
 
     def reload(self) -> bool:
         if self._running:
@@ -263,7 +278,7 @@ class HelpCenterDialog(QDialog):
             return
         self._running = False; self.run_button.setEnabled(True)
         if error is not None:
-            self.results = (); self.progress.setText("Diagnóstico inconclusivo")
+            self.results = (); self.progress.setText("Não foi possível concluir o diagnóstico")
             self._notifier("error", sanitize_text(f"Falha segura: {type(error).__name__}"))
             return
         self.results = tuple(results)
@@ -271,10 +286,10 @@ class HelpCenterDialog(QDialog):
         self.report_button.setEnabled(bool(self.results))
         for index, card in enumerate(self.cards):
             if index >= len(self.results):
-                card.setText("INCONCLUSIVO\nResultado ausente"); continue
+                card.setText("Não foi possível verificar\nResultado ausente"); continue
             result = self.results[index]; color = STATE_COLORS[result.state]
-            card.setText(f"{result.state.value}\n{sanitize_text(result.entry.title)}")
-            card.setAccessibleName(f"{result.entry.title}: {result.state.value}")
+            card.setText(f"{STATE_LABELS[result.state]}\n{sanitize_text(result.entry.title)}")
+            card.setAccessibleName(f"{result.entry.title}: {STATE_LABELS[result.state]}")
             card.setStyleSheet(
                 f"border:2px solid {color};border-left:7px solid {color};"
                 "font-size:15px;min-height:92px"
@@ -288,7 +303,7 @@ class HelpCenterDialog(QDialog):
         technical = sanitize_text(result.technical_id) or "não fornecido"
         self.details.setPlainText(
             f"{sanitize_text(result.entry.title)}\n"
-            f"Estado: {result.state.value}\n"
+            f"Estado: {STATE_LABELS[result.state]}\n"
             f"Resultado: {sanitize_text(result.message)}\n"
             f"Identificador técnico: {technical}\n\n"
             "Este resultado é diagnóstico e não executou reparo."
