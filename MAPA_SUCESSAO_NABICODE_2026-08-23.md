@@ -3725,3 +3725,50 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - banco usa `quick_check` em conexão SQLite `mode=ro` e `query_only`; pastas e backups são apenas inspecionados; impressoras são consultadas e a Nabi ausente permanece inconclusiva;
 - nenhum diretório, backup, banco ou configuração é criado/alterado pelo novo módulo;
 - validação focada de composição, serviço e Qt: `25 passed`; `compileall` e `git diff --check` aprovados.
+
+### Central de Socorro — catálogo de autorreparo VERDE
+
+- branch/worktree isolados: `codex/central-socorro-autorreparo-verde` em
+  `NabiCode-QT-SocorroAutorreparoVerde-codex`, derivados exatamente de
+  `ea1ffd3`;
+- implementação: `3bd4b46` — `feat: adiciona autorreparo verde tipado ao
+  socorro`;
+- catálogo fechado e imutável aceita somente quatro operações VERDE:
+  normalizar preferências visuais inválidas, limpar cache/temporário registrado,
+  reiniciar o runtime local da Nabi e regenerar cache de relatórios;
+- `RepairRequest` exige enum e chave opaca; texto livre, nome de ferramenta ou
+  comando produzido pela IA não atravessa a fronteira. Repetição da mesma chave
+  devolve o mesmo resultado e colisão com outro reparo falha fechada;
+- resultados tipados são exclusivamente `PROVADO`, `FALHOU`, `REVERTIDO` ou
+  `INCONCLUSIVO`, com precheck, postcheck, snapshot e rollback verificável;
+- preferências visuais preservam cópia integral em memória, aplicam somente a
+  normalização fornecida pela porta e restauram exatamente o snapshot quando a
+  pós-checagem ou a auditoria estrita falha;
+- limpeza aceita apenas tupla registrada de raiz absoluta explícita + caminho
+  relativo. Raiz de volume, escape `..`, ADS, alvo duplicado/sobreposto,
+  symlink, junction/reparse point e tipo especial são recusados antes da
+  alteração; alvos passam por quarentena confinada e o rollback compara SHA-256
+  de nomes/conteúdo sem registrar os dados;
+- reinício da Nabi usa exclusivamente callbacks tipados de snapshot, restart e
+  rollback; não recebe PID, processo, operação em andamento, shell ou comando;
+- cache de relatórios é regenerado exclusivamente por porta tipada, com geração
+  anterior, validade posterior e restauração da geração original quando não há
+  prova de sucesso;
+- toda mutação exige auditoria estrita antes de começar. A auditoria recebe
+  apenas enum, fase, resultado, indicador de mudança, ID técnico fechado e hash
+  da chave; falha de persistência bloqueia a ação ou força a restauração;
+- 13 testes adversariais novos cobrem catálogo fechado, imutabilidade, replay,
+  colisão de escopo, normalização, rollback, containment, raiz ampla, ADS,
+  duplicidade, sobreposição, reparse, quarentena, callbacks e falha da auditoria;
+- regressão relacionada final: `73 passed`; suíte integral anterior ao último
+  endurecimento de caminho: `2208 passed`, `1 skipped`, `444 subtests passed`,
+  com somente a depreciação externa já conhecida do `BrazilFiscalReport`;
+  `compileall` completo e `git diff --check` aprovados após o endurecimento;
+- não houve ligação à interface/composição e `main_qt.py` permaneceu intocado.
+  Banco, backup/restauração, atualização, licença, usuários, vendas, Caixa,
+  estoque, Financeiro, Fiscal/SEFAZ e reparos de sistema operacional ficaram
+  fora do catálogo e não foram acessados ou alterados;
+- próximo passo seguro: revisão independente do contrato e, somente em
+  checkpoint coordenado posterior, composição explícita das quatro portas e da
+  auditoria oficial; não promover texto da Nabi a comando nem ampliar o catálogo
+  sem novo desenho, testes e autorização.
