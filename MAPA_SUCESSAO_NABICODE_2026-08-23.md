@@ -2913,6 +2913,10 @@ Checkpoint futuro obrigatório antes de release fiscal 2027:
 
 Estratégia de produto para aproveitar a transição sem reduzir conformidade:
 
+- manter um único NabiCode oficial completo e atualizável, sem binários diferentes por regime tributário; o perfil confirmado da empresa controla módulos, obrigações, campos, assistentes e conectores aplicáveis;
+- não inferir enquadramento somente pelo número do CNPJ: onboarding deve confirmar dados oficiais, regime, atividade, UF, município, inscrições e documentos, com rastreabilidade da fonte e da confirmação humana;
+- separar três conceitos: licença comercial define o direito de uso; perfil empresarial define o que se aplica; permissões do usuário definem quem pode executar. Nenhum deles pode contornar os outros;
+- permitir mudança futura de MEI para ME/EPP ou outro regime por migração de configuração versionada, preservando histórico, documentos e evidências sem reinstalar ou trocar de banco;
 - oferecer entrada simples para MEI, sem exigir conhecimento contábil: cadastro guiado, importação de clientes/produtos, vendas, recebimentos, despesas documentadas e pacote mensal Essencial;
 - permitir evolução para o pacote Completo/Auditoria e para contador sem nova digitação ou troca de banco;
 - usar a Nabi como orientadora e preparadora de rascunhos, nunca como autoridade fiscal ou fonte de regra;
