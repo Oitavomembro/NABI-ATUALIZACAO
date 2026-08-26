@@ -4387,3 +4387,32 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - portátil reconstruído integralmente, sem instalador e sem dados/segredos,
   substituindo o ZIP e a pasta extraída de mesmo nome. SHA-256 do ZIP:
   `ECE3EE8C4F592FE508EE7029BA95514FF57983630A5487A9A8E455B930DEFC53`.
+
+### Auditoria global de botões, atalhos e tema — 26/08/2026
+
+- inventário automático cobre 206 botões Qt: 201 conexões diretas, cinco
+  exceções estruturais declaradas e justificadas e nenhum botão silencioso;
+  a matriz é gerada em `build_output/audits/qt_button_matrix.csv` e separa
+  honestamente presença de ligação de comprovação operacional (`abriu`,
+  `executou`, `bloqueou corretamente`, `preservou dados` e `retornou foco`);
+- F6 e F9 ficam reservados ao PDV. A movimentação de estoque foi transferida
+  para F11 e o recebimento de compra para F8, evitando disputa global entre
+  módulos sem alterar as ações oficiais;
+- o isolamento dos testes do PDV fecha janelas Qt residuais e ativa a janela
+  correta antes dos atalhos, sem alterar o comportamento do aplicativo;
+- preferências visuais passam a alcançar janelas existentes e futuras pelo
+  controlador global do Qt. Fundo, texto e botões comuns acompanham a prévia;
+  cores semânticas de alerta, bloqueio, exclusão e confirmação permanecem
+  protegidas, e prévias sucessivas substituem a anterior sem acumular regras;
+- validação completa: `2696 passed`, `492 subtests passed`, zero falhas e um
+  teste condicionado a pacote NabiMig real externo não fornecido; validações
+  focadas: `144 passed`, `2 subtests passed`; `compileall`, matriz e
+  `git diff --check` aprovados;
+- o ensaio condicionado `test_nabimig_real_package.py` não deve ser removido ou
+  fingido: ele será executado quando uma cópia real autorizada for indicada pela
+  variável prevista, sempre em ambiente descartável;
+- evolução futura, fora deste checkpoint: catálogo local versionado de NCM a
+  partir de fonte oficial. O NCM comprovado no XML autorizado continua sendo o
+  caminho preferencial; quando faltar, a Nabi poderá sugerir relação com fonte,
+  versão e confiança explícitas, nunca preencher ou alterar tributação em
+  silêncio. Catálogos comerciais como Cosmos são apenas evidência auxiliar.
