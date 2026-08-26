@@ -113,6 +113,40 @@ def test_distribution_validation_rejects_database_and_cache() -> None:
         assert any("__pycache__" in error for error in errors)
 
 
+def test_distribution_rejects_foreign_icu_runtime_from_tool_path() -> None:
+    with tempfile.TemporaryDirectory() as temporary:
+        root = Path(temporary)
+        (root / "NabiCode_v2_5_1.exe").write_bytes(b"MZ")
+        (root / "NabiCode.ico").write_bytes(b"icon")
+        internal = root / "_internal"
+        internal.mkdir()
+        (internal / "VERSAO.txt").write_text("2.5.1\n", encoding="utf-8")
+        (internal / "PERFIL_NABICODE.txt").write_text("PRODUCAO\n", encoding="utf-8")
+        (internal / "REVISAO.txt").write_text("6\n", encoding="utf-8")
+        (internal / "icuuc.dll").write_bytes(b"foreign-poppler-icu")
+
+        errors = build_windows.validate_distribution(root, version="2.5.1")
+
+    assert any("Runtime ICU externo" in error for error in errors)
+
+
+def test_build_path_keeps_only_windows_and_selected_python(monkeypatch) -> None:
+    python_root = Path(build_windows.sys.base_prefix).resolve()
+    system_root = Path(build_windows.os.environ.get("SystemRoot", r"C:\Windows")).resolve()
+    foreign = Path(r"C:\tools\poppler\bin").resolve()
+    candidate = build_windows.os.pathsep.join(
+        (str(foreign), str(python_root), str(system_root / "System32"))
+    )
+
+    result = build_windows.isolated_windows_build_path(candidate).split(
+        build_windows.os.pathsep
+    )
+
+    assert str(foreign) not in result
+    assert str(python_root) in result
+    assert str(system_root / "System32") in result
+
+
 def test_distribution_manifest_has_hashes_and_relative_paths() -> None:
     with tempfile.TemporaryDirectory() as temporary:
         build_root = Path(temporary) / "build_output"

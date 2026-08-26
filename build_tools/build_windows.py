@@ -235,6 +235,30 @@ def prepare_tcl_tk_build_environment(
     return environment
 
 
+def isolated_windows_build_path(path_value: str | None = None) -> str:
+    """Remove runtimes externos do PATH usado pela análise do PyInstaller.
+
+    Bibliotecas nativas encontradas em ferramentas auxiliares (por exemplo,
+    Poppler) não pertencem ao NabiCode e podem substituir DLLs do Windows/Qt.
+    O build precisa enxergar apenas o runtime Python selecionado e o Windows.
+    """
+
+    system_root = Path(os.environ.get("SystemRoot", r"C:\Windows")).resolve()
+    python_root = Path(sys.base_prefix).resolve()
+    allowed_roots = (system_root, python_root)
+    retained: list[str] = []
+    for raw_entry in (path_value if path_value is not None else os.environ.get("PATH", "")).split(os.pathsep):
+        if not raw_entry.strip():
+            continue
+        try:
+            resolved = Path(raw_entry).resolve()
+        except OSError:
+            continue
+        if any(resolved == root or root in resolved.parents for root in allowed_roots):
+            retained.append(str(resolved))
+    return os.pathsep.join(dict.fromkeys(retained))
+
+
 def forbidden_distribution_files(root: Path) -> list[str]:
     findings: list[str] = []
     for path in root.rglob("*"):
@@ -280,6 +304,16 @@ def validate_distribution(root: Path, *, version: str) -> list[str]:
     findings = forbidden_distribution_files(root)
     if findings:
         errors.append("Arquivos proibidos: " + ", ".join(findings))
+    foreign_icu = sorted(
+        path.relative_to(root).as_posix()
+        for pattern in ("icuuc.dll", "icudt*.dll", "icuin*.dll")
+        for path in (root / PYINSTALLER_CONTENTS_DIR).glob(pattern)
+    )
+    if foreign_icu:
+        errors.append(
+            "Runtime ICU externo indevidamente incorporado: "
+            + ", ".join(foreign_icu)
+        )
     return errors
 
 
@@ -430,6 +464,7 @@ def build_windows() -> Path:
         raise RuntimeError("\n".join(errors))
     clean_output()
     tcl_tk_environment = prepare_tcl_tk_build_environment()
+    tcl_tk_environment["PATH"] = isolated_windows_build_path()
     version = read_version()
     distribution_name_value = distribution_name()
     dist_root = BUILD_ROOT / "dist"
