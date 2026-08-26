@@ -4134,6 +4134,26 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   revisão adicional, 53 testes focados aprovados, cobrindo reinício, corrupção, isolamento
   por usuário/empresa, XML alterado, falha final, conclusão e idempotência, junto
   da regressão de UI e importação atômica relacionada;
+
+## Motor visual global para widgets Qt comuns — 25/08/2026
+
+- branch/worktree isolados: `codex/tema-global-widgets` em
+  `.worktrees/NabiCode-QT-TemaGlobal-codex`, derivados exatamente de
+  `codex/integracao-fiscal-dashboard-final@34a7c1c`;
+- implementação: `cd09090` — `fix: aplica preferencias visuais aos widgets Qt comuns`;
+- a paleta nativa do `QApplication` passa a receber fundo, botão comum, texto e
+  foco validados, alcançando controles já abertos e controles criados depois da
+  mudança; a prévia continua imediata e o cancelamento reaplica os valores
+  originais pelo fluxo já existente, sem persistência automática;
+- QSS local explícito mantém precedência sobre a paleta, preservando cores
+  semânticas de perigo, bloqueio, alerta e estados fiscais; o teste focado fixa
+  esse contrato com um botão vermelho independente da personalização;
+- nenhuma regra comercial, `assistant_nabi`, migração/restauração, Fiscal/SEFAZ,
+  instalador ou empacotamento foi alterado;
+- validação: `73 passed` em shell/configurações/preferências, execução Qt
+  `offscreen`; `compileall` e `git diff --check` aprovados;
+- nenhum build, ZIP ou push foi realizado. Homologação visual física no Windows
+  permanece para o fechamento integrado.
 - nenhuma rede, certificado, SEFAZ, banco operacional ou Nabi foi acessado; nenhum
   push foi realizado. Próximo passo: homologação
   visual do catálogo/retomada antes de integrar.
