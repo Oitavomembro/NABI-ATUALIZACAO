@@ -4134,6 +4134,9 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   revisão adicional, 53 testes focados aprovados, cobrindo reinício, corrupção, isolamento
   por usuário/empresa, XML alterado, falha final, conclusão e idempotência, junto
   da regressão de UI e importação atômica relacionada;
+- nenhuma rede, certificado, SEFAZ, banco operacional ou Nabi foi acessado; nenhum
+  push foi realizado. Próximo passo: homologação
+  visual do catálogo/retomada antes de integrar.
 
 ## Motor visual global para widgets Qt comuns — 25/08/2026
 
@@ -4154,9 +4157,6 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `offscreen`; `compileall` e `git diff --check` aprovados;
 - nenhum build, ZIP ou push foi realizado. Homologação visual física no Windows
   permanece para o fechamento integrado.
-- nenhuma rede, certificado, SEFAZ, banco operacional ou Nabi foi acessado; nenhum
-  push foi realizado. Próximo passo: homologação
-  visual do catálogo/retomada antes de integrar.
 
 ## Homologação real NabiMig e suíte sem testes ignorados — 25/08/2026
 
