@@ -4372,3 +4372,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - pendência: homologação visual da sugestão no assistente Legacy e no painel
   Nabi, além de auditoria independente dos contadores do ensaio. Produção fiscal
   continua bloqueada.
+
+### Correção do importador XML no primeiro acesso — portátil 2.5.1
+
+- causa corrigida na raiz: o sinal `clicked(bool)` dos botões de importação era
+  interpretado como caminho de arquivo nas telas de primeiro uso e perfil da
+  empresa;
+- as duas conexões agora descartam explicitamente o estado booleano e as duas
+  entradas também recusam defensivamente booleanos como caminho;
+- validação: 33 testes diretos e 86 testes ampliados de primeiro uso, perfil,
+  XML e empacotamento aprovados; `compileall`, `git diff --check`, smoke do
+  executável, plugin `qwindows.dll` e ausência de ICU estrangeiro aprovados;
+- implementação `3c501e2` publicada em `codex/fechamento-zero-pendencias`;
+- portátil reconstruído integralmente, sem instalador e sem dados/segredos,
+  substituindo o ZIP e a pasta extraída de mesmo nome. SHA-256 do ZIP:
+  `ECE3EE8C4F592FE508EE7029BA95514FF57983630A5487A9A8E455B930DEFC53`.
