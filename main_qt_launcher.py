@@ -7,15 +7,23 @@ sem reativar a interface Legacy como tela principal.
 from __future__ import annotations
 
 import logging
+import sys
 
 from main import (
     _acquire_installer_app_mutex,
     _release_installer_app_mutex,
     _run_update_helper,
+    main as run_startup_entry,
 )
 
 
 def main() -> int:
+    # O smoke do artefato precisa seguir a entrada canônica antes de carregar a
+    # aplicação Qt. Isso mantém a validação do pacote rápida e sem criar janela,
+    # banco, perfil ou outros dados do cliente.
+    if "--startup-smoke-test" in sys.argv:
+        return run_startup_entry()
+
     update_result = _run_update_helper()
     if update_result is not None:
         return update_result

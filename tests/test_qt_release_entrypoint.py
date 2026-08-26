@@ -63,6 +63,19 @@ def test_atualizador_encerra_antes_de_importar_aplicacao_qt():
     mutex.assert_not_called()
 
 
+def test_smoke_empacotado_usa_entrada_canônica_sem_atualizador_ou_mutex():
+    with (
+        patch.object(sys, "argv", ["NabiCode.exe", "--startup-smoke-test"]),
+        patch.object(main_qt_launcher, "run_startup_entry", return_value=0) as smoke,
+        patch.object(main_qt_launcher, "_run_update_helper") as updater,
+        patch.object(main_qt_launcher, "_acquire_installer_app_mutex") as mutex,
+    ):
+        assert main_qt_launcher.main() == 0
+    smoke.assert_called_once_with()
+    updater.assert_not_called()
+    mutex.assert_not_called()
+
+
 def test_execucao_qt_mantem_mutex_ate_encerrar():
     run_qt = Mock(return_value=0)
     fake_module = SimpleNamespace(main=run_qt)
