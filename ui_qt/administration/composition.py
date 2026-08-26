@@ -7,6 +7,7 @@ from administration.product_management_service import ProductManagementService
 from administration.purchase_management_service import PurchaseManagementService
 from administration.settings_application_service import SettingsApplicationService
 from administration.audit_application_service import AuditApplicationService
+from administration.data_maintenance_application_service import DataMaintenanceApplicationService
 from administration.user_application_service import UserAdministrationService
 from administration.fiscal_readiness_application_service import FiscalReadinessApplicationService
 from commercial.application.cash_application_service import CashApplicationService
@@ -21,6 +22,7 @@ from repositories.dashboard_repository import DashboardRepository
 from repositories.fornecedor_repository import FornecedorRepository
 from repositories.system_repository import SystemRepository
 from services.backup_service import BackupService
+from services.nabimig_import_service import NabiMigImportService
 from services.admin_audit_service import AdminAuditService
 from services.cash_service import CashService
 from services.report_service import ReportService
@@ -33,6 +35,7 @@ from services.help_center_repair_service import (
 )
 from services.ui_preferences import UIPreferencesService
 from services.company_profile_service import CompanyProfileService
+from database.sqlite_connection import backup_database
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
 from ui_qt.commercial.financial_dialog import FinancialDialog
@@ -48,6 +51,7 @@ from .help_dialog import HelpDialog
 from .help_center_dialog import HelpCenterDialog
 from .audit_dialog import AuditDialog
 from .fiscal_readiness_dialog import FiscalReadinessDialog
+from .data_maintenance_dialog import DataMaintenanceDialog
 
 def _username(security):
     if security.session is None or security.is_expired():raise PermissionError("Sessão expirada. Entre novamente.")
@@ -170,6 +174,7 @@ def build_administrative_modules(
     app_version="2.5.1", schema_version=21, fiscal_service=None,
     fiscal_catalog_service=None,
     nfe_purchase_import=None,
+    restore_helper_command=None,
 ):
     modules=[]; system=SystemRepository(database.connect)
     dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
@@ -291,6 +296,23 @@ def build_administrative_modules(
         restricted_menu=True,
     ))
     audit_service = AdminAuditService(database.connect)
+    data_maintenance = DataMaintenanceApplicationService(
+        security=security,
+        audit=audit_service,
+        migration=NabiMigImportService(),
+        backup=backups,
+        database_path=database.database_path,
+        backup_directory=profile.paths.backups,
+        staging_directory=profile.paths.rollback / "restauracao_pendente",
+        connect=database.connect,
+        backup_database=backup_database,
+        restore_helper_command=restore_helper_command,
+    )
+    modules.append(AdministrativeModule(
+        "Migração e Restauração", "Importação NabiMig e restauração com encerramento seguro", "",
+        "technical", "view", lambda p: DataMaintenanceDialog(data_maintenance, p),
+        "migracao_restauracao", restricted_menu=True,
+    ))
     printing = PrintingService(system.get_config)
     socorro = HelpCenterDiagnosticService(
         persistent_dirs=(profile.paths.backups, profile.paths.rollback, profile.paths.diagnostics),

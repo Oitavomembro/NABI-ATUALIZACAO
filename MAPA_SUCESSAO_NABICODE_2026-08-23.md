@@ -4155,3 +4155,33 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   de homologação fiscal física;
 - nenhum banco ativo, XML fiscal real, certificado, senha, rede ou SEFAZ foi
   acessado nessa validação e nenhum push foi realizado.
+
+## Migração e restauração ativa no menu técnico — 25/08/2026
+
+- branch/worktree isolados: `codex/migracao-restauracao-menu-tecnico` em
+  `.worktrees/NabiCode-QT-MigracaoRestauracao-codex`, derivados exatamente de
+  `codex/integracao-fiscal-dashboard-final@34a7c1c`;
+- `6b15a5b` conecta a janela pronta de manutenção ao menu técnico pela composição
+  oficial, usando as instâncias únicas de `NabiMigImportService`, `BackupService`,
+  `AdminAuditService`, conexão do perfil e cópia SQLite consistente;
+- acesso exige sessão válida, `technical/view` e `configs/backup`. A importação
+  NabiMig mantém análise anterior, confirmação pelo hash, pré-backup, transação,
+  rollback e auditoria estrita já existentes;
+- backup para restauração continua verificado exclusivamente em TEMP. A preparação
+  exige frase derivada do SHA-256, descriptografa somente na área confinada,
+  verifica novamente, cria pré-backup e grava solicitação com hashes do banco ativo,
+  banco preparado, origem e pré-backup;
+- após nova confirmação humana, o aplicativo inicia helper oficial restrito e
+  encerra. O helper espera o processo liberar o lock, revalida contrato, caminhos e
+  hashes, recusa banco ativo alterado, preserva arquivos WAL/SHM, substitui somente
+  o banco exato do perfil e executa `integrity_check`/`foreign_key_check`;
+- falha na cópia, validação final ou auditoria estrita restaura o banco anterior.
+  Sucesso registra `RESTAURACAO_APLICADA` no banco restaurado e consome a solicitação;
+- validação focada: `59 passed`; regressão ampliada de NabiMig, backup, restauração,
+  configurações, composição e shell técnico: `111 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma prévia ou teste usou banco ativo: os cenários utilizaram somente TEMP.
+  Não houve build, ZIP, instalador, push, acesso Fiscal/SEFAZ, certificado, XML real,
+  alteração da Nabi contextual ou do tema global;
+- pendência manual: homologar visualmente o encerramento e a reabertura após uma
+  restauração descartável no perfil TESTE antes do release final.

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -303,7 +304,12 @@ def _initialize(database: DatabaseManager, profile, network_mode: bool, network_
 
 
 def main(argv=None) -> int:
-    qt = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
+    effective_argv = list(argv if argv is not None else sys.argv)
+    if "--apply-prepared-restore" in effective_argv:
+        from services.database_restore_helper import main as restore_main
+        index = effective_argv.index("--apply-prepared-restore")
+        return restore_main(effective_argv[index + 1:])
+    qt = QApplication.instance() or QApplication(effective_argv)
     profile = configure_profile_environment("PRODUCAO")
     from licensing.restricted_commands import handle_restricted_command
 
@@ -390,6 +396,15 @@ def main(argv=None) -> int:
             fiscal_service=fiscal_service,
             fiscal_catalog_service=fiscal_catalog_service,
             nfe_purchase_import=nfe_purchase_import,
+            restore_helper_command=lambda request, active, staging: (
+                sys.executable,
+                *(tuple() if getattr(sys, "frozen", False) else (str(Path(__file__).resolve()),)),
+                "--apply-prepared-restore",
+                "--request", str(request),
+                "--database", str(active),
+                "--staging-root", str(staging),
+                "--parent-pid", str(os.getpid()),
+            ),
         )
         daily_backup = BackupService(
             database_path=database.database_path,
