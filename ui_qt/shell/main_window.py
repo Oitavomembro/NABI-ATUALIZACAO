@@ -5,9 +5,9 @@ import time
 from pathlib import Path
 
 from PySide6.QtCore import QEvent, QObject, QRunnable, QSize, QThreadPool, Qt, Signal, Slot
-from PySide6.QtGui import QColor, QKeySequence, QPainter, QPixmap, QShortcut
+from PySide6.QtGui import QColor, QKeySequence, QPainter, QPalette, QPixmap, QShortcut
 from PySide6.QtWidgets import (
-    QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
+    QApplication, QDialog, QFrame, QGridLayout, QHBoxLayout, QLabel, QLineEdit, QMainWindow,
     QMessageBox, QPushButton, QScrollArea, QSizePolicy, QStackedWidget,
     QVBoxLayout, QWidget, QInputDialog,
 )
@@ -210,6 +210,35 @@ class NabiCodeShellWindow(QMainWindow):
     def apply_visual_preferences(self, values) -> None:
         from services.ui_preferences import UIPreferencesService
         safe = UIPreferencesService.validate_visual(values)
+        application = QApplication.instance()
+        if application is not None:
+            # A paleta alcança controles Qt comuns, inclusive janelas filhas que
+            # não possuem QSS próprio. Estilos locais continuam com precedência,
+            # preservando vermelho/amarelo e demais estados semânticos.
+            palette = QPalette(application.palette())
+            background = QColor(safe["window_background"])
+            button = QColor(safe["common_button_background"])
+            text = QColor(safe["text_color"])
+            focus = QColor(safe["focus_color"])
+            for group in (
+                QPalette.ColorGroup.Active,
+                QPalette.ColorGroup.Inactive,
+            ):
+                palette.setColor(group, QPalette.ColorRole.Window, background)
+                palette.setColor(group, QPalette.ColorRole.Base, background)
+                palette.setColor(group, QPalette.ColorRole.AlternateBase, button)
+                palette.setColor(group, QPalette.ColorRole.Button, button)
+                palette.setColor(group, QPalette.ColorRole.WindowText, text)
+                palette.setColor(group, QPalette.ColorRole.Text, text)
+                palette.setColor(group, QPalette.ColorRole.ButtonText, text)
+                palette.setColor(group, QPalette.ColorRole.Highlight, focus)
+                palette.setColor(group, QPalette.ColorRole.HighlightedText, text)
+            application.setPalette(palette)
+            # Widgets já construídos podem reter uma cópia da paleta anterior.
+            # Atualizá-los é necessário para que a prévia seja realmente imediata;
+            # QSS semântico explícito continua vencendo a paleta na renderização.
+            for widget in application.allWidgets():
+                widget.setPalette(palette)
         self.shell_root.apply_visual(safe)
         self.setStyleSheet(SHELL_STYLE + f"""
             QWidget#shellRoot {{ background:transparent; color:{safe['text_color']}; }}
