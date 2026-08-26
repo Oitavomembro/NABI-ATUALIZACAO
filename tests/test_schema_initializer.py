@@ -73,6 +73,7 @@ class SchemaInitializerTests(unittest.TestCase):
             self.assertIn("movimentacoes", tables)
             self.assertIn("configuracoes", tables)
             self.assertIn("fiscal_outbox", tables)
+            self.assertIn("cash_closing_journal", tables)
             product_columns = {
                 row[1] for row in connection.execute("PRAGMA table_info(produtos)")
             }

@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
 from decimal import Decimal
 from enum import Enum
 from math import ceil
-from typing import Callable
+from types import MappingProxyType
+from typing import Any, Callable, Mapping
+from uuid import uuid4
 
 from commercial.domain.money import MoneyCodec
 from services.cash_service import CashSession
@@ -33,6 +36,7 @@ class CashSessionView:
     cash_receipts: Decimal
     supplies: Decimal
     withdrawals: Decimal
+    documented_outflows: Decimal
     movements: tuple[CashMovementView, ...]
 
     @property
@@ -47,6 +51,7 @@ class CashDetailKind(str, Enum):
     CARD_SALES = "card"
     SUPPLIES = "supplies"
     WITHDRAWALS = "withdrawals"
+    DOCUMENTED_OUTFLOWS = "documented"
 
 
 _DETAIL_LABELS = {
@@ -56,6 +61,7 @@ _DETAIL_LABELS = {
     CashDetailKind.CARD_SALES: "CARTÃO",
     CashDetailKind.SUPPLIES: "SUPRIMENTOS",
     CashDetailKind.WITHDRAWALS: "SANGRIAS",
+    CashDetailKind.DOCUMENTED_OUTFLOWS: "SAÍDAS DOCUMENTADAS",
 }
 
 
@@ -125,21 +131,41 @@ class CashDetailSnapshot:
         )
 
 
+@dataclass(frozen=True, slots=True)
+class DocumentedOutflowDraft:
+    payload: Mapping[str, Any]
+    fingerprint: str
+
+
 class CashApplicationService:
     """Porta operacional do Caixa: fixa terminal/ator fora da GUI."""
 
     def __init__(
-        self, cash_service, *, terminal: str, user: str,
+        self, cash_service, *, terminal: str, user: str = "",
         actor_provider: Callable[[str], str] | None = None,
+        security=None,
     ) -> None:
         self._cash = cash_service
+        self._security = security
         self.terminal = str(terminal or "").strip()
         self.user = str(user or "").strip()
         self._actor_provider = actor_provider
-        if not self.terminal or not self.user:
+        if not self.terminal or (not self.user and security is None and actor_provider is None):
             raise ValueError("Terminal e usuário do caixa são obrigatórios.")
 
     def _authorized_actor(self, action: str) -> str:
+        if self._security is not None:
+            session = getattr(self._security, "session", None)
+            if session is None or self._security.is_expired():
+                raise PermissionError("Sessão ativa e permissão do Caixa são obrigatórias.")
+            required_action = "view" if action == "reconcile" else action
+            if not self._security.require("financeiro", required_action):
+                raise PermissionError("Sessão ativa e permissão do Caixa são obrigatórias.")
+            actor = str(getattr(getattr(session, "user", None), "username", "") or "").strip()
+            if not actor:
+                raise PermissionError("A sessão não possui operador identificado.")
+            self._security.touch()
+            return actor
         if self._actor_provider is None:
             return self.user
         actor = str(self._actor_provider(action) or "").strip()
@@ -151,7 +177,7 @@ class CashApplicationService:
         session = self._cash.get_open_session(self.terminal)
         if session is None:
             return CashSessionView(
-                None, *(MoneyCodec.ZERO for _ in range(8)), movements=()
+                None, *(MoneyCodec.ZERO for _ in range(9)), movements=()
             )
         summary = self._cash.session_summary(session.id)
         movements = tuple(CashMovementView(
@@ -171,7 +197,9 @@ class CashApplicationService:
             other_sales=MoneyCodec.parse(summary["outros"]),
             cash_receipts=MoneyCodec.parse(summary["recebimentos_dinheiro"]),
             supplies=MoneyCodec.parse(summary["suprimentos"]),
-            withdrawals=MoneyCodec.parse(summary["sangrias"]), movements=movements,
+            withdrawals=MoneyCodec.parse(summary["sangrias"]),
+            documented_outflows=MoneyCodec.parse(summary.get("documented_outflows", 0)),
+            movements=movements,
         )
 
     def current(self) -> CashSessionView:
@@ -220,6 +248,10 @@ class CashApplicationService:
             CashDetailKind.CARD_SALES: {"VENDA CARTAO", "VENDA CARTÃO"},
             CashDetailKind.SUPPLIES: {"SUPRIMENTO"},
             CashDetailKind.WITHDRAWALS: {"SANGRIA"},
+            CashDetailKind.DOCUMENTED_OUTFLOWS: {
+                "DESPESA_EMPRESARIAL", "RETIRADA_SOCIO", "ADIANTAMENTO",
+                "PAGAMENTO_FORNECEDOR", "OUTRA_SAIDA",
+            },
         }[selected]
         for movement in state.movements:
             if movement.movement_type.strip().upper() in accepted_types:
@@ -234,6 +266,7 @@ class CashApplicationService:
             CashDetailKind.CARD_SALES: state.card_sales,
             CashDetailKind.SUPPLIES: state.supplies,
             CashDetailKind.WITHDRAWALS: state.withdrawals,
+            CashDetailKind.DOCUMENTED_OUTFLOWS: state.documented_outflows,
         }[selected]
         detail_total = sum((row.amount for row in rows), MoneyCodec.ZERO)
         card_total = MoneyCodec.parse(card_total)
@@ -259,6 +292,27 @@ class CashApplicationService:
             self.terminal, movement_type, amount, actor, note
         )
         return self._current()
+
+    def prepare_documented_outflow(self, **fields: Any) -> DocumentedOutflowDraft:
+        fields.setdefault("occurred_on", date.today().isoformat())
+        fields.setdefault("competence", str(fields["occurred_on"])[:7])
+        normalized = self._cash.normalize_documented_outflow(fields)
+        return DocumentedOutflowDraft(
+            MappingProxyType(dict(normalized)),
+            self._cash.documented_outflow_fingerprint(normalized),
+        )
+
+    def confirm_documented_outflow(
+        self, draft: DocumentedOutflowDraft, *, idempotency_key: str = "",
+    ) -> int:
+        if not isinstance(draft, DocumentedOutflowDraft):
+            raise TypeError("A saída deve ser confirmada a partir da revisão imutável.")
+        actor = self._authorized_actor("create")
+        key = str(idempotency_key or f"cash-outflow:{uuid4().hex}")
+        return self._cash.register_documented_outflow(
+            self.terminal, dict(draft.payload), user=actor,
+            idempotency_key=key, fingerprint=draft.fingerprint,
+        )
 
     def close(self, counted_cash, note: str = "") -> CashSession:
         actor = self._authorized_actor("reconcile")
