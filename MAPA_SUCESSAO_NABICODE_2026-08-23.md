@@ -3943,6 +3943,30 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
 
+## Checkpoint isolado — Nabi contextual em configuração e XML (25/08/2026)
+
+- branch isolada: `codex/nabi-contextual-config-xml`, criada exatamente de
+  `codex/integracao-fiscal-dashboard-final@34a7c1caacaa1d2c4df0bb730acd9b785006f2bf`;
+- implementação: `309ae3a` — `feat: conecta Nabi contextual ao shell Qt`;
+- quando a licença operacional inclui `assistant`, a Nabi inicia em segundo
+  plano usando somente a sessão Qt já autenticada, sem novo clique ou senha;
+- sessão ausente, expirada/inativa, modelo/runtime ausente ou falha da porta
+  permanecem fechados e não iniciam modelo nem improvisam navegação;
+- as intenções tipadas existentes agora chegam à Central Fiscal, ao importador
+  empresarial por XML e ao importador de produtos por XML pelas portas do shell;
+- arquivo, participante empresarial, vínculos, fatores, cadastro e confirmação
+  continuam exclusivamente nas telas oficiais e dependem de ação humana;
+- a Nabi não recebe senha, caminho de XML, confirmação, acesso ao banco ou
+  capacidade de liberar/transmitir Fiscal/SEFAZ;
+- validação focada: `54 passed`; regressão ampliada de shell, configuração,
+  XML, licenciamento e ativação: `65 passed`; verificação final do início
+  automático/permissões/portas: `35 passed`; `compileall` e
+  `git diff --check` aprovados;
+- nenhuma alteração em migração/restauração, tema, regras Fiscal/SEFAZ
+  ou instalador; build/ZIP não foi gerado por determinação do proprietário;
+- pendência: homologação visual/manual no Windows com licença real contendo
+  `assistant` e artefatos locais instalados; nenhum push realizado.
+
 ## Checkpoint integrado identidade/entrada XML/Dashboard — 25/08/2026
 
 - branch: `codex/integracao-fiscal-dashboard-final`;
