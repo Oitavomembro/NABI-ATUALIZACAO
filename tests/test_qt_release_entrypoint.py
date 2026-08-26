@@ -1,0 +1,84 @@
+from pathlib import Path
+import sys
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+import main_qt_launcher
+
+
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def test_spec_empacota_lancador_qt_sem_apagar_legacy():
+    spec = (ROOT / "build_tools" / "pyinstaller" / "nabicode.spec").read_text(
+        encoding="utf-8"
+    )
+    assert 'project_root / "main_qt_launcher.py"' in spec
+    assert 'project_root / "main.py")],' not in spec
+    assert (ROOT / "main.py").is_file()
+
+
+def test_lancador_preserva_atualizador_mutex_e_entrada_qt():
+    source = (ROOT / "main_qt_launcher.py").read_text(encoding="utf-8")
+    assert "_run_update_helper()" in source
+    assert "_acquire_installer_app_mutex()" in source
+    assert "_release_installer_app_mutex(installer_mutex)" in source
+    assert "from main_qt import main as run_qt" in source
+
+
+def test_auditoria_exige_fontes_e_runtime_qt():
+    source = (ROOT / "build_tools" / "build_windows.py").read_text(encoding="utf-8")
+    for required in (
+        '"main_qt.py"',
+        '"main_qt_launcher.py"',
+        '"PySide6"',
+        '"PySide6_Addons"',
+        '"PySide6_Essentials"',
+        '"shiboken6"',
+    ):
+        assert required in source
+
+
+def test_atualizador_encerra_antes_de_importar_aplicacao_qt():
+    with (
+        patch.object(main_qt_launcher, "_run_update_helper", return_value=7),
+        patch.object(main_qt_launcher, "_acquire_installer_app_mutex") as mutex,
+    ):
+        assert main_qt_launcher.main() == 7
+    mutex.assert_not_called()
+
+
+def test_execucao_qt_mantem_mutex_ate_encerrar():
+    run_qt = Mock(return_value=0)
+    fake_module = SimpleNamespace(main=run_qt)
+    with (
+        patch.object(main_qt_launcher, "_run_update_helper", return_value=None),
+        patch.object(
+            main_qt_launcher, "_acquire_installer_app_mutex", return_value=123
+        ) as acquire,
+        patch.object(main_qt_launcher, "_release_installer_app_mutex") as release,
+        patch.dict(sys.modules, {"main_qt": fake_module}),
+    ):
+        assert main_qt_launcher.main() == 0
+    acquire.assert_called_once_with()
+    run_qt.assert_called_once_with()
+    release.assert_called_once_with(123)
+
+
+def test_falha_da_aplicacao_qt_ainda_libera_mutex():
+    run_qt = Mock(side_effect=RuntimeError("falha controlada"))
+    with (
+        patch.object(main_qt_launcher, "_run_update_helper", return_value=None),
+        patch.object(
+            main_qt_launcher, "_acquire_installer_app_mutex", return_value=456
+        ),
+        patch.object(main_qt_launcher, "_release_installer_app_mutex") as release,
+        patch.dict(sys.modules, {"main_qt": SimpleNamespace(main=run_qt)}),
+    ):
+        try:
+            main_qt_launcher.main()
+        except RuntimeError as error:
+            assert str(error) == "falha controlada"
+        else:
+            raise AssertionError("A falha da aplicação deveria ser propagada.")
+    release.assert_called_once_with(456)

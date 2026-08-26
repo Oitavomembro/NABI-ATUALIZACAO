@@ -26,6 +26,8 @@ INNO_SCRIPT = PROJECT_ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss"
 LOCK_FILE = PROJECT_ROOT / "build_tools" / "requirements-windows.lock"
 REQUIRED_SOURCE_FILES = (
     "main.py",
+    "main_qt.py",
+    "main_qt_launcher.py",
     "splash_deep_trust_engine.py",
     "VERSAO.txt",
     "REVISAO.txt",
@@ -37,6 +39,10 @@ REQUIRED_SOURCE_FILES = (
     "licensing/trusted_public_keys.json",
 )
 REQUIRED_DISTRIBUTIONS = (
+    "PySide6",
+    "PySide6_Addons",
+    "PySide6_Essentials",
+    "shiboken6",
     "customtkinter",
     "Pillow",
     "pygame-ce",

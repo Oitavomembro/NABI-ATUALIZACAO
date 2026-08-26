@@ -68,7 +68,7 @@ hiddenimports.extend(collect_submodules("barcode"))
 hiddenimports = list(dict.fromkeys(hiddenimports))
 
 a = Analysis(
-    [str(project_root / "main.py")],
+    [str(project_root / "main_qt_launcher.py")],
     pathex=[str(project_root)],
     binaries=binaries,
     datas=datas,
