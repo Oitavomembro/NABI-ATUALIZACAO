@@ -3,6 +3,15 @@
 Data de referência: 23/08/2026  
 Finalidade: permitir que futuras conversas continuem o trabalho sem reiniciar o projeto, perder decisões ou confundir o NabiCode Legacy com a migração Qt.
 
+## Candidata de fechamento ampliado — 26/08/2026
+
+- branch `codex/fechamento-zero-pendencias`, derivada da candidata publicada `444cecc`;
+- integrados: Nabi global/arrastável e Caixa assistido; despesas/retiradas documentadas e fechamento idempotente; vários códigos de barras, catálogo de unidades e fracionamento; estabilização de embalagens/GTIN/ordem da NF-e; fundação auditável de projeção tributária gerencial;
+- a primeira regressão integral revelou 22 incompatibilidades com bancos e doubles legados; todas foram corrigidas sem exigir migração prévia para leitura e sem afrouxar a política nova dos bancos migrados;
+- regressão final: `2683 passed`, `492 subtests passed`, zero falhas. O único `skip` foi o teste condicional do pacote real NabiMig sem variável de ambiente nesta execução; sua homologação anterior com o pacote autorizado e zero skips permanece registrada abaixo;
+- `compileall` e `git diff --check` aprovados. Nenhum banco ativo, certificado, senha, chave privada, XML real, impressora, rede ou SEFAZ foi acessado;
+- pendências que não podem ser fabricadas por automação continuam: homologação física/manual, SEFAZ em HOMOLOGAÇÃO acompanhada, impressora, segunda máquina/licenciamento e decisão final de empacotamento do modelo Nabi. Voz permanece adiada e o splash com mascote permanece cancelado.
+
 ## Fechamento — identificadores e unidades de produtos
 
 - produtos passam a aceitar vários códigos de barras reais (por exemplo caixa e unidade), mantendo um único produto e recusando conflito entre cadastros;
