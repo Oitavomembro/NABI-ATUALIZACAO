@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+import warnings
 from datetime import date
 from decimal import Decimal
 from unittest.mock import patch
@@ -993,13 +994,31 @@ class PDVQtTests(unittest.TestCase):
         cls.qt = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        # A WindowShortcut is meaningful only with one active operational
+        # window. Tests from other modules must not leave a visible top-level
+        # competing with the PDV under audit.
+        for widget in QApplication.topLevelWidgets():
+            if widget.isVisible():
+                widget.close()
+        QApplication.processEvents()
         self.view_model, self.gateway = make_view_model()
         self.window = PDVWindow(self.view_model)
         self.window.show()
+        self.window.raise_()
+        self.window.activateWindow()
+        # The offscreen Qt platform can retain an unrelated active top-level
+        # window from a previous test module. WindowShortcut then routes F6/F9
+        # away from this PDV. Explicit activation is test isolation only; put
+        # the operational focus back where the real window constructor leaves it.
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            QApplication.setActiveWindow(self.window)
+        self.window.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
         QApplication.processEvents()
 
     def tearDown(self):
         self.window.close()
+        QApplication.processEvents()
 
     def _select_customer(self):
         self.window.customer_search.setText("sete")
@@ -1010,6 +1029,16 @@ class PDVQtTests(unittest.TestCase):
         self._select_customer()
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
         self.window.refresh_cart()
+
+    def _key_window_shortcut(self, key):
+        """Route a WindowShortcut to this window, independent of prior Qt tests."""
+        focused = QApplication.focusWidget()
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", DeprecationWarning)
+            QApplication.setActiveWindow(self.window)
+        if focused is not None and self.window.isAncestorOf(focused):
+            focused.setFocus(Qt.FocusReason.OtherFocusReason)
+        QTest.keyClick(self.window, key)
 
     def test_window_opens_and_customer_id_is_source_of_truth(self):
         self.assertTrue(self.window.isVisible())
@@ -1060,7 +1089,7 @@ class PDVQtTests(unittest.TestCase):
     def test_f6_suspende_sem_cliente_sem_checkout_e_limpa_sessao(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
         self.window.refresh_cart()
-        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        self._key_window_shortcut(Qt.Key.Key_F6)
         suspended = self.view_model.application.suspended_sales.open
         self.assertEqual(len(suspended), 1)
         self.assertIsNone(suspended[0].customer_id)
@@ -1082,7 +1111,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.gateway.commands, [])
 
     def test_carrinho_vazio_bloqueia_suspensao_e_foca_item(self):
-        QTest.keyClick(self.window, Qt.Key.Key_F6)
+        self._key_window_shortcut(Qt.Key.Key_F6)
         self.assertEqual(self.view_model.application.suspended_sales.open, [])
         self.assertTrue(self.window.product_search.hasFocus())
 
@@ -1196,7 +1225,7 @@ class PDVQtTests(unittest.TestCase):
         self.window._toggle_budget_mode()
         FakeBudgetPreviewDialog.calls = []
         with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
-            QTest.keyClick(self.window, Qt.Key.Key_F9)
+            self._key_window_shortcut(Qt.Key.Key_F9)
         self.assertEqual(len(self.view_model.application.budgets.open), 1)
         self.assertEqual(len(FakeBudgetPreviewDialog.calls), 2)
         self.assertEqual(self.gateway.commands, [])
@@ -1599,7 +1628,7 @@ class PDVQtTests(unittest.TestCase):
         self._cart_with_customer()
         FakeCheckoutDialog.exec_calls = 0
         with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
-            QTest.keyClick(self.window, Qt.Key.Key_F9)
+            self._key_window_shortcut(Qt.Key.Key_F9)
             QApplication.processEvents()
         self.assertEqual(FakeCheckoutDialog.exec_calls, 1)
         self.assertEqual(self.gateway.commands, [])

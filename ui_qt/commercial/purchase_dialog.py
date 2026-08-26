@@ -125,11 +125,11 @@ class PurchaseDialog(QDialog):
         super().__init__(parent);self.app=app;self.setWindowTitle("Compras");self.resize(1150,720);self.setStyleSheet(STYLE);root=QVBoxLayout(self);title=QLabel("COMPRAS");title.setStyleSheet("font-size:25px;font-weight:900");root.addWidget(title)
         row=QHBoxLayout();self.status=QComboBox();self.status.addItems(("TODOS","ABERTO","PARCIAL","RECEBIDO"));refresh=QPushButton("Atualizar [F5]");refresh.clicked.connect(self.reload);row.addWidget(QLabel("Status"));row.addWidget(self.status);row.addWidget(refresh);row.addStretch();root.addLayout(row)
         self.table=QTableWidget(0,7);self.table.setHorizontalHeaderLabels(("ID","Status","Fornecedor","Criado em","Valor","Qtd. pendente","Usuário"));self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows);self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers);self.table.horizontalHeader().setSectionResizeMode(2,QHeaderView.ResizeMode.Stretch);self.table.installEventFilter(self);root.addWidget(self.table,1)
-        buttons=QHBoxLayout();new=QPushButton("Novo pedido [F3]");supplier=QPushButton("Fornecedores [F4]");receive=QPushButton("Receber [F6]");details=QPushButton("Detalhes [Enter]");close=QPushButton("Fechar [Esc]");new.clicked.connect(self.new_order);supplier.clicked.connect(self.new_supplier);receive.clicked.connect(self.receive);details.clicked.connect(self.details);close.clicked.connect(self.reject)
+        buttons=QHBoxLayout();new=QPushButton("Novo pedido [F3]");supplier=QPushButton("Fornecedores [F4]");receive=QPushButton("Receber [F8]");details=QPushButton("Detalhes [Enter]");close=QPushButton("Fechar [Esc]");new.clicked.connect(self.new_order);supplier.clicked.connect(self.new_supplier);receive.clicked.connect(self.receive);details.clicked.connect(self.details);close.clicked.connect(self.reject)
         for b in (new,supplier,receive,details):buttons.addWidget(b)
         buttons.addStretch();buttons.addWidget(close);root.addLayout(buttons)
         self._shortcuts=[]
-        for key,cb in (("F3",self.new_order),("F4",self.new_supplier),("F5",self.reload),("F6",self.receive),("Esc",self.reject)):
+        for key,cb in (("F3",self.new_order),("F4",self.new_supplier),("F5",self.reload),("F8",self.receive),("Esc",self.reject)):
             s=QShortcut(QKeySequence(key),self);s.setAutoRepeat(False);s.activated.connect(cb);self._shortcuts.append(s)
         self.reload()
     def eventFilter(self,w,e):

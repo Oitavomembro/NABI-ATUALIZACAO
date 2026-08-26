@@ -469,7 +469,7 @@ class ProductManagementDialog(QDialog):
         buttons = QHBoxLayout(); self.new = QPushButton("Novo  [F3]"); self.edit = QPushButton("Editar  [F4]")
         self.xml_import = QPushButton("Preparar por XML  [F8]")
         self.pending_xml = QPushButton("Notas pendentes")
-        self.move = QPushButton("Movimentar estoque  [F6]"); self.history = QPushButton("Histórico  [F7]")
+        self.move = QPushButton("Movimentar estoque  [F11]"); self.history = QPushButton("Histórico  [F7]")
         close = QPushButton("Fechar  [Esc]"); self.new.setObjectName("primary"); self.move.setObjectName("warning")
         self.new.clicked.connect(self.new_product); self.edit.clicked.connect(self.edit_product)
         self.xml_import.clicked.connect(self.open_xml_import)
@@ -479,7 +479,7 @@ class ProductManagementDialog(QDialog):
         buttons.addStretch(); buttons.addWidget(close); root.addLayout(buttons)
         self._shortcuts = []
         for key, callback in (("F3", self.new_product), ("F4", self.edit_product), ("F5", self.reload),
-                              ("F6", self.move_stock), ("F7", self.show_history),
+                              ("F11", self.move_stock), ("F7", self.show_history),
                               ("F8", self.open_xml_import), ("Esc", self.reject)):
             shortcut = QShortcut(QKeySequence(key), self); shortcut.setAutoRepeat(False)
             shortcut.activated.connect(callback); self._shortcuts.append(shortcut)
