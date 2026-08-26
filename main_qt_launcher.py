@@ -18,10 +18,10 @@ from main import (
 
 
 def main() -> int:
-    # O smoke do artefato precisa seguir a entrada canônica antes de carregar a
-    # aplicação Qt. Isso mantém a validação do pacote rápida e sem criar janela,
-    # banco, perfil ou outros dados do cliente.
-    if "--startup-smoke-test" in sys.argv:
+    # Os modos auxiliares do executável precisam seguir a entrada canônica antes
+    # de carregar a aplicação Qt. O helper da splash, em especial, reutiliza o
+    # próprio executável; tratá-lo como uma nova aplicação criaria uma cascata.
+    if any(flag in sys.argv for flag in ("--startup-smoke-test", "--splash-helper")):
         return run_startup_entry()
 
     update_result = _run_update_helper()
