@@ -55,6 +55,7 @@ class ProdutoRepository:
                         COALESCE(m.nome, 'Sem marca') AS marca,
                         COALESCE(f.nome_fantasia, 'Sem fornecedor') AS fornecedor,
                         COALESCE(u.sigla, 'UN') AS unidade,
+                        COALESCE(p.permite_fracionado,u.permite_fracionado,0) AS permite_fracionado,
                         COALESCE(uc.sigla, COALESCE(u.sigla, 'UN')) AS unidade_compra,
                         p.preco_custo_decimal AS preco_custo_canonico, p.preco_custo AS preco_custo_legado, p.despesas_percentual_decimal AS despesas_percentual_canonico, p.despesas_percentual AS despesas_percentual_legado, p.margem_lucro_decimal AS margem_lucro_canonico, p.margem_lucro AS margem_lucro_legado, p.fator_conversao_decimal AS fator_conversao_canonico, p.fator_conversao AS fator_conversao_legado,
                         p.codigo_barras, p.ncm, p.cest, p.cfop,
@@ -91,11 +92,14 @@ class ProdutoRepository:
             p.codigo LIKE ? COLLATE NOCASE OR
             p.nome LIKE ? COLLATE NOCASE OR
             p.codigo_barras LIKE ? COLLATE NOCASE OR
+            EXISTS(SELECT 1 FROM produto_codigos_barras pb
+                   WHERE pb.produto_id=p.id AND pb.ativo=1
+                     AND pb.codigo LIKE ? COLLATE NOCASE) OR
             c.nome LIKE ? COLLATE NOCASE OR
             m.nome LIKE ? COLLATE NOCASE OR
             f.nome_fantasia LIKE ? COLLATE NOCASE
         )"""
-        fast_params = params + [like] * 6
+        fast_params = params + [like] * 7
         sql = searchable_sql + order_sql
         if safe_limit is not None:
             sql += " LIMIT ?"
@@ -136,7 +140,83 @@ class ProdutoRepository:
                  FROM produtos WHERE id=?"""
         row = (connection.execute(sql, (int(produto_id),)).fetchone()
                if connection is not None else self.database.fetch_one(sql, (int(produto_id),)))
-        return self._decimalizar_produto(dict(row)) if row else None
+        if not row:
+            return None
+        result = self._decimalizar_produto(dict(row))
+        aliases = self.listar_codigos_barras(int(produto_id), connection=connection)
+        result["codigos_barras"] = tuple(item["codigo"] for item in aliases)
+        unit = (connection.execute(
+            "SELECT sigla,permite_fracionado FROM unidades_medida WHERE id=?",
+            (result.get("unidade_id"),),
+        ).fetchone() if connection is not None else self.database.fetch_one(
+            "SELECT sigla,permite_fracionado FROM unidades_medida WHERE id=?",
+            (result.get("unidade_id"),),
+        ))
+        result["unidade"] = str(unit["sigla"] if unit else "UN")
+        configured = result.get("permite_fracionado")
+        result["permite_fracionado"] = bool(
+            unit["permite_fracionado"] if configured is None and unit else configured
+        )
+        return result
+
+    def listar_codigos_barras(self, produto_id: int, *, connection=None) -> list[dict[str, Any]]:
+        sql = """SELECT codigo,tipo,principal,ativo FROM produto_codigos_barras
+                 WHERE produto_id=? ORDER BY principal DESC,id"""
+        rows = (connection.execute(sql, (int(produto_id),)).fetchall()
+                if connection is not None else self.database.fetch_all(sql, (int(produto_id),)))
+        return [dict(row) for row in rows]
+
+    def substituir_codigos_barras(
+        self, produto_id: int, codigos: list[tuple[str, str]], *, connection
+    ) -> None:
+        normalized: list[tuple[str, str]] = []
+        seen: set[str] = set()
+        for raw_code, raw_kind in codigos:
+            code = str(raw_code or "").strip()
+            kind = str(raw_kind or "OUTRO").strip().upper()
+            if not code:
+                continue
+            key = code.casefold()
+            if key in seen:
+                raise ValueError("O mesmo código de barras foi informado mais de uma vez.")
+            if kind not in {"UNIDADE", "CAIXA", "FORNECEDOR", "OUTRO"}:
+                raise ValueError("Tipo de código de barras inválido.")
+            seen.add(key); normalized.append((code, kind))
+        for code, _kind in normalized:
+            conflict = connection.execute(
+                "SELECT produto_id FROM produto_codigos_barras WHERE codigo=? COLLATE NOCASE AND produto_id<>?",
+                (code, int(produto_id)),
+            ).fetchone()
+            legacy = connection.execute(
+                "SELECT id FROM produtos WHERE codigo_barras=? COLLATE NOCASE AND id<>? LIMIT 1",
+                (code, int(produto_id)),
+            ).fetchone()
+            if conflict or legacy:
+                raise ValueError(f"O código de barras {code} já pertence a outro produto.")
+        connection.execute("DELETE FROM produto_codigos_barras WHERE produto_id=?", (int(produto_id),))
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        for index, (code, kind) in enumerate(normalized):
+            connection.execute(
+                """INSERT INTO produto_codigos_barras
+                   (produto_id,codigo,tipo,principal,ativo,criado_em) VALUES(?,?,?,?,1,?)""",
+                (int(produto_id), code, kind, int(index == 0), now),
+            )
+        connection.execute(
+            "UPDATE produtos SET codigo_barras=? WHERE id=?",
+            (normalized[0][0] if normalized else "", int(produto_id)),
+        )
+
+    def buscar_por_codigo_barras(self, codigo: str) -> list[dict[str, Any]]:
+        code = str(codigo or "").strip()
+        if not code:
+            return []
+        rows = self.database.fetch_all(
+            """SELECT DISTINCT p.id FROM produtos p
+               LEFT JOIN produto_codigos_barras pb ON pb.produto_id=p.id AND pb.ativo=1
+               WHERE p.ativo=1 AND (p.codigo_barras=? COLLATE NOCASE OR pb.codigo=? COLLATE NOCASE)
+               ORDER BY p.id""", (code, code),
+        )
+        return [self.buscar_por_id(int(row["id"])) for row in rows]
 
     def proximo_codigo(self) -> str:
         """Gera o menor código numérico livre; a UNIQUE do banco é a garantia final."""
@@ -184,6 +264,10 @@ class ProdutoRepository:
             dados.get("estoque_minimo", 0),
             int(bool(dados.get("permite_estoque_negativo", False))), agora,
         ]
+        if self._produto_tem_coluna("permite_fracionado", connection):
+            campos.insert(-1, "permite_fracionado")
+            override = dados.get("permite_fracionado")
+            valores.insert(-1, None if override is None else int(bool(override)))
         if self._produto_tem_coluna("descricao", connection):
             campos.insert(2, "descricao")
             valores.insert(2,dados["nome"])

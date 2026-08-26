@@ -86,6 +86,44 @@ class CommercialProductStockServicesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicado"):
             gateway.get_by_barcode("789")
 
+    def test_multiplos_codigos_identificam_o_mesmo_produto(self):
+        created = self.products.create_product(ProductCreateCommand(
+            "P200", "PRODUTO CAIXA E UNIDADE", Decimal("12.00"),
+            barcode="7892000000001",
+            barcodes=("7892000000001", "7892000000002"),
+            unit_code="UN", allow_fractional_quantity=False,
+        ))
+
+        by_unit = self.products.get_product_by_barcode("7892000000001")
+        by_box = self.products.get_product_by_barcode("7892000000002")
+
+        self.assertEqual(by_unit.product_id, created.product_id)
+        self.assertEqual(by_box.product_id, created.product_id)
+        self.assertEqual(
+            set(self.products.get_product(created.product_id).barcodes),
+            {"7892000000001", "7892000000002"},
+        )
+
+    def test_codigo_alternativo_nao_pode_pertencer_a_dois_produtos(self):
+        self.products.create_product(ProductCreateCommand(
+            "P201", "PRIMEIRO", Decimal("10.00"),
+            barcode="7892010000001", barcodes=("7892010000001", "7899999999999"),
+        ))
+
+        with self.assertRaisesRegex(ValueError, "outro produto|já pertence"):
+            self.products.create_product(ProductCreateCommand(
+                "P202", "SEGUNDO", Decimal("11.00"),
+                barcode="7892020000001", barcodes=("7892020000001", "7899999999999"),
+            ))
+
+    def test_catalogo_canonico_define_fracionamento_padrao(self):
+        units = {str(item.get("sigla") or item.get("nome")): item for item in self.products.list_units()}
+        self.assertFalse(bool(units["UN"]["permite_fracionado"]))
+        self.assertFalse(bool(units["CX"]["permite_fracionado"]))
+        self.assertTrue(bool(units["KG"]["permite_fracionado"]))
+        self.assertTrue(bool(units["L"]["permite_fracionado"]))
+        self.assertTrue(bool(units["M"]["permite_fracionado"]))
+
     def test_entrada_saida_ajuste_historico_minimo_e_rollback(self):
         product = self._create(stock="10", minimum="3")
         stock = self.products.product_stock(product.product_id)

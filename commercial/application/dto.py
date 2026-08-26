@@ -47,6 +47,9 @@ class ProductRecord:
     unit_price: Decimal
     active: bool = True
     current_stock: Decimal | None = None
+    unit_code: str = "UN"
+    barcodes: tuple[str, ...] = ()
+    allows_fractional_quantity: bool = True
 
     def __post_init__(self) -> None:
         if isinstance(self.product_id, bool) or int(self.product_id) <= 0:
@@ -66,6 +69,9 @@ class ProductRecord:
         object.__setattr__(self, "description", description)
         object.__setattr__(self, "unit_price", price)
         object.__setattr__(self, "active", bool(self.active))
+        object.__setattr__(self, "unit_code", str(self.unit_code or "UN").strip().upper())
+        object.__setattr__(self, "barcodes", tuple(str(code).strip() for code in self.barcodes if str(code).strip()))
+        object.__setattr__(self, "allows_fractional_quantity", bool(self.allows_fractional_quantity))
         if self.current_stock is not None:
             object.__setattr__(
                 self, "current_stock",

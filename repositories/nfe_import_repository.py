@@ -7,9 +7,32 @@ from typing import Any
 from database import DatabaseManager
 from database.sqlite_introspection import table_exists
 from repositories.decimal_storage import DecimalStorage
+from product_identifiers import normalize_gtin
 
 
 class NFeImportRepository:
+    @staticmethod
+    def _vincular_codigo_barras(connection, produto_id: int, codigo: str, agora: str, *, principal: bool) -> None:
+        code = normalize_gtin(codigo)
+        if not code:
+            return
+        if not table_exists(connection, "produto_codigos_barras"):
+            return
+        conflict = connection.execute(
+            "SELECT produto_id FROM produto_codigos_barras WHERE codigo=? COLLATE NOCASE AND produto_id<>?",
+            (code, int(produto_id)),
+        ).fetchone()
+        legacy = connection.execute(
+            "SELECT id FROM produtos WHERE codigo_barras=? COLLATE NOCASE AND id<>? LIMIT 1",
+            (code, int(produto_id)),
+        ).fetchone()
+        if conflict or legacy:
+            raise ValueError(f"O código de barras {code} pertence a outro produto; escolha o vínculo explicitamente.")
+        connection.execute(
+            """INSERT OR IGNORE INTO produto_codigos_barras
+               (produto_id,codigo,tipo,principal,ativo,criado_em) VALUES(?,?,'FORNECEDOR',?,1,?)""",
+            (int(produto_id), code, int(bool(principal)), agora),
+        )
     """Persistência de histórico de NF-e e vínculos produto-fornecedor."""
 
     def __init__(self, database: DatabaseManager) -> None:
@@ -104,9 +127,9 @@ class NFeImportRepository:
         margem_real, margem_decimal = DecimalStorage.pair(preparado["margem"], field="margem")
         fator_real, fator_decimal = DecimalStorage.pair(preparado["fator"], field="fator de conversão")
         product_name = str(preparado.get("descricao") or item.descricao or "").strip().upper()
-        product_barcode = str(
-            preparado.get("codigo_barras") or item.codigo_barras or ""
-        ).strip()
+        product_barcode = normalize_gtin(
+            preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras
+        )
         product_ncm = str(preparado.get("ncm") or item.ncm or "").strip()
         product_cest = str(preparado.get("cest") or item.cest or "").strip()
         product_columns = {
@@ -128,6 +151,7 @@ class NFeImportRepository:
              product_cest, "", agora, agora),
         )
         produto_id = int(cursor.lastrowid)
+        self._vincular_codigo_barras(connection, produto_id, product_barcode, agora, principal=True)
         self._salvar_tributacao_rtc(connection, produto_id=produto_id, item=item, preparado=preparado)
         connection.execute(
             """INSERT INTO historico_precos_produtos
@@ -190,9 +214,15 @@ class NFeImportRepository:
                atualizado_em=? WHERE id=?""",
             (fornecedor_id, unidade_id, unidade_compra_id, fator_real, fator_decimal, custo_real, custo_decimal,
              margem_real, margem_decimal, preco_real, preco_decimal,
-             str(preparado.get("codigo_barras") or item.codigo_barras or ""), str(preparado.get("codigo_barras") or item.codigo_barras or ""),
+             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
+             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
              str(preparado.get("ncm") or item.ncm or ""), str(preparado.get("ncm") or item.ncm or ""),
              str(preparado.get("cest") or item.cest or ""), str(preparado.get("cest") or item.cest or ""), agora, int(produto_id)),
+        )
+        self._vincular_codigo_barras(
+            connection, int(produto_id),
+            preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras,
+            agora, principal=False,
         )
         self._salvar_tributacao_rtc(connection, produto_id=int(produto_id), item=item, preparado=preparado)
         preco_anterior = DecimalStorage.to_decimal(atual["preco_venda"], field="preço anterior")

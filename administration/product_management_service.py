@@ -37,6 +37,11 @@ class ProductManagementService:
         self._require("view")
         return self.products.get_product(int(product_id))
 
+    def units(self):
+        self._require("view")
+        method = getattr(self.products, "list_units", None)
+        return tuple(method() if method else ())
+
     def create(self, command):
         self._require("create")
         return self.products.create_product(command)

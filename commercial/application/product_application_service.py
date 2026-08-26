@@ -35,6 +35,10 @@ class ProductApplicationService:
     def get_product_by_barcode(self, barcode: str):
         return self._catalog.get_by_barcode(barcode)
 
+    def list_units(self):
+        operation = getattr(self._catalog, "list_units", None)
+        return tuple(operation() if operation else ())
+
     def product_stock(self, product_id: int):
         return self._stock.stock(product_id)
 
