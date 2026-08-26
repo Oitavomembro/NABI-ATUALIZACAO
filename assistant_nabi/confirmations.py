@@ -99,6 +99,7 @@ class DraftConfirmationService:
                     "PRODUCT_NCM_CORRECTION", "FISCAL_RECONCILE_UNKNOWN",
                     "FISCAL_CHECK_RECEIPT",
                 } or draft.operation_kind.startswith("FINANCIAL_")
+                or draft.operation_kind.startswith("CASH_")
                 else CapabilityLevel.SIMPLE_CONFIRMATION
             ),
         )
@@ -183,6 +184,7 @@ class DraftConfirmationService:
                 "PRODUCT_NCM_CORRECTION", "FISCAL_RECONCILE_UNKNOWN",
                 "FISCAL_CHECK_RECEIPT",
             } or operation.startswith("FINANCIAL_")
+            or operation.startswith("CASH_")
             else CapabilityLevel.SIMPLE_CONFIRMATION
         )
         if record.capability is not required:

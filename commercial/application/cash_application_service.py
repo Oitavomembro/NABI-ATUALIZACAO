@@ -269,3 +269,33 @@ class CashApplicationService:
     def history(self) -> tuple[CashSession, ...]:
         self._authorized_actor("view")
         return tuple(self._cash.history(self.terminal))
+
+    def open_assisted(self, opening_balance, opening_mode, *, username,
+                      idempotency_key, operation_fingerprint):
+        if str(username or "").strip() != self.user:
+            raise PermissionError("O operador confirmado não corresponde à sessão do caixa.")
+        return self._cash.open_session_assisted(
+            self.terminal, self.user, opening_balance, opening_mode,
+            idempotency_key=idempotency_key,
+            operation_fingerprint=operation_fingerprint,
+        )
+
+    def movement_assisted(self, movement_type, amount, note, *, username,
+                          idempotency_key, operation_fingerprint):
+        if str(username or "").strip() != self.user:
+            raise PermissionError("O operador confirmado não corresponde à sessão do caixa.")
+        return self._cash.register_session_movement_assisted(
+            self.terminal, movement_type, amount, self.user, note,
+            idempotency_key=idempotency_key,
+            operation_fingerprint=operation_fingerprint,
+        )
+
+    def close_assisted(self, counted_cash, note, *, username,
+                       idempotency_key, operation_fingerprint):
+        if str(username or "").strip() != self.user:
+            raise PermissionError("O operador confirmado não corresponde à sessão do caixa.")
+        return self._cash.close_session_assisted(
+            self.terminal, counted_cash, self.user, note,
+            idempotency_key=idempotency_key,
+            operation_fingerprint=operation_fingerprint,
+        )

@@ -5,8 +5,10 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
 from typing import Any, Callable, Optional
+import json
 import re
 
+from repositories.assistant_operation_journal_repository import AssistantOperationJournalRepository
 from repositories.decimal_storage import DecimalStorage
 from services.critical_audit_policy import is_critical_event, record_in_transaction
 
@@ -48,6 +50,125 @@ class CashService:
 
     def __init__(self, connection_factory: ConnectionFactory):
         self._connection_factory = connection_factory
+        self._operation_journal = AssistantOperationJournalRepository()
+
+    @staticmethod
+    def _assisted_identity(idempotency_key: str, operation_fingerprint: str, user: str):
+        key = str(idempotency_key or "").strip()
+        fingerprint = str(operation_fingerprint or "").strip().lower()
+        actor = str(user or "").strip()
+        if not key or len(key) > 160 or not re.fullmatch(r"[0-9a-f]{64}", fingerprint):
+            raise ValueError("Identificação idempotente do caixa inválida.")
+        if not actor:
+            raise PermissionError("Operador autenticado é obrigatório no caixa assistido.")
+        return key, fingerprint, actor
+
+    def _begin_assisted(self, conn, *, key, fingerprint, kind, actor):
+        previous = self._operation_journal.get(conn, key)
+        if previous:
+            if self._operation_journal.operation_kind(conn, key) != kind:
+                raise PermissionError("A chave idempotente pertence a outra operação.")
+            if previous["fingerprint"].lower() != fingerprint:
+                raise PermissionError("A chave idempotente já pertence a outro conteúdo.")
+            if previous["status"] != "COMMITTED":
+                raise RuntimeError("A operação assistida anterior não foi concluída.")
+            return json.loads(previous["result_json"])
+        self._operation_journal.begin(
+            conn, idempotency_key=key, operation_kind=kind,
+            fingerprint=fingerprint, username=actor,
+        )
+        return None
+
+    def open_session_assisted(self, terminal: str, user: str, opening_balance: Any,
+                              opening_mode: str, *, idempotency_key: str,
+                              operation_fingerprint: str) -> dict[str, Any]:
+        key, fingerprint, actor = self._assisted_identity(
+            idempotency_key, operation_fingerprint, user
+        )
+        terminal = str(terminal or "").strip()
+        mode = str(opening_mode or "").strip().upper()
+        balance = self._money(opening_balance, "saldo inicial")
+        if not terminal or mode not in {"VALOR_INFORMADO", "SEM_VALOR_INFORMADO"}:
+            raise ValueError("Terminal ou modo de abertura inválido.")
+        if balance < 0:
+            raise ValueError("O saldo inicial não pode ser negativo.")
+        if mode == "SEM_VALOR_INFORMADO":
+            balance = Decimal("0.00")
+        now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            replay = self._begin_assisted(
+                conn, key=key, fingerprint=fingerprint, kind="CASH_OPEN", actor=actor
+            )
+            if replay is not None:
+                conn.commit(); return {**replay, "idempotent_replay": True}
+            if conn.execute("SELECT 1 FROM cash_sessions WHERE terminal=? AND status='ABERTO'", (terminal,)).fetchone():
+                raise FileExistsError("Já existe um caixa aberto neste terminal.")
+            cursor = conn.execute(
+                "INSERT INTO cash_sessions(terminal,opened_by,opened_at,opening_balance,opening_mode,status) VALUES(?,?,?,?,?,'ABERTO')",
+                (terminal, actor, now, DecimalStorage.canonical(balance, field="saldo inicial"), mode),
+            )
+            session_id = int(cursor.lastrowid)
+            self._audit(conn, actor, "CAIXA_ABERTO", session_id,
+                        f"terminal={terminal}; saldo={balance:.2f}; modo={mode}", now)
+            result = {"session_id": session_id, "terminal": terminal, "status": "ABERTO"}
+            self._operation_journal.commit(conn, idempotency_key=key,
+                                           result_json=json.dumps(result, sort_keys=True))
+            conn.commit(); return {**result, "idempotent_replay": False}
+        except Exception:
+            conn.rollback(); raise
+        finally:
+            conn.close()
+
+    def register_session_movement_assisted(
+        self, terminal: str, movement_type: str, amount: Any, user: str, note: str,
+        *, idempotency_key: str, operation_fingerprint: str,
+    ) -> dict[str, Any]:
+        key, fingerprint, actor = self._assisted_identity(
+            idempotency_key, operation_fingerprint, user
+        )
+        terminal = str(terminal or "").strip(); kind = str(movement_type or "").strip().upper()
+        value = self._money(amount, "valor do movimento")
+        if kind not in {"SANGRIA", "SUPRIMENTO"} or value <= 0:
+            raise ValueError("Movimento assistido do caixa inválido.")
+        now = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
+        conn = self._connection_factory()
+        try:
+            conn.execute("BEGIN IMMEDIATE")
+            replay = self._begin_assisted(
+                conn, key=key, fingerprint=fingerprint, kind=f"CASH_{kind}", actor=actor
+            )
+            if replay is not None:
+                conn.commit(); return {**replay, "idempotent_replay": True}
+            row = conn.execute(
+                "SELECT id FROM cash_sessions WHERE terminal=? AND status='ABERTO' ORDER BY id DESC LIMIT 1",
+                (terminal,),
+            ).fetchone()
+            if row is None:
+                raise RuntimeError("Não existe caixa aberto neste terminal.")
+            session_id = int(row[0])
+            cursor = conn.execute(
+                "INSERT INTO cash_movements(cash_session_id,type,amount,user_id,note,created_at) VALUES(?,?,?,?,?,?)",
+                (session_id, kind, DecimalStorage.canonical(value, field="valor do movimento"), actor, str(note or "").strip(), now),
+            )
+            movement_id = int(cursor.lastrowid)
+            self._audit(conn, actor, kind, session_id,
+                        f"valor={value:.2f}; motivo={str(note or '').strip()}", now)
+            result = {"session_id": session_id, "movement_id": movement_id,
+                      "movement_type": kind, "amount": format(value, ".2f")}
+            self._operation_journal.commit(conn, idempotency_key=key,
+                                           result_json=json.dumps(result, sort_keys=True))
+            conn.commit(); return {**result, "idempotent_replay": False}
+        except Exception:
+            conn.rollback(); raise
+        finally:
+            conn.close()
+
+    def close_session_assisted(self, *_args, **_kwargs):
+        raise RuntimeError(
+            "Fechamento assistido permanece bloqueado: o cálculo e o diário ainda não compartilham uma transação atômica."
+        )
 
     @staticmethod
     def _money(value: Any, field: str = "valor") -> Decimal:

@@ -68,6 +68,24 @@ class AuthenticatedAssistantActivationTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, "já está ativa"):
             activation.activate("operador", "segredo")
 
+    def test_factory_de_tres_argumentos_recebe_a_sessao_autenticada(self):
+        security = Security()
+        runtime = Runtime()
+        received = []
+
+        def assistant_factory(model, session_id, authenticated_session):
+            received.append((model, session_id, authenticated_session))
+            return "assistente"
+
+        activation = AuthenticatedAssistantActivation(
+            security_service=security,
+            runtime_factory=lambda: runtime,
+            assistant_factory=assistant_factory,
+        )
+        activation.activate("operador", "segredo")
+        self.assertEqual(received[0][0], "modelo-local")
+        self.assertIsNotNone(received[0][2])
+
     def test_credencial_invalida_nao_inicia_runtime(self):
         activation, _, runtime, calls = self.create(accepted=False)
         with self.assertRaisesRegex(PermissionError, "inválidos"):

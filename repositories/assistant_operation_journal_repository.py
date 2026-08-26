@@ -20,6 +20,15 @@ class AssistantOperationJournalRepository:
         }
 
     @staticmethod
+    def operation_kind(connection, idempotency_key: str) -> str | None:
+        row = connection.execute(
+            "SELECT operation_kind FROM assistant_operation_journal "
+            "WHERE idempotency_key=?",
+            (idempotency_key,),
+        ).fetchone()
+        return None if row is None else str(row[0])
+
+    @staticmethod
     def begin(
         connection, *, idempotency_key: str, operation_kind: str,
         fingerprint: str, username: str,
