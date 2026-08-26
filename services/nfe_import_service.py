@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import json
 import re
+import unicodedata
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Callable, Iterable
@@ -15,6 +16,7 @@ from .nfe_matching_service import (
     NFeProductCandidate as NFeProductCandidate,
 )
 from .nfe_xml_service import NFeDocument
+from .nfe_packaging_factor_service import normalize_gtin
 
 
 class NFeImportService:
@@ -87,6 +89,25 @@ class NFeImportService:
 
     validar_decisao = staticmethod(NFeImportValidator.decision)
 
+    @staticmethod
+    def _document_item_identity(item: Any, prepared: dict[str, Any]) -> tuple[str, ...] | None:
+        barcode = normalize_gtin(
+            prepared.get("codigo_barras") if "codigo_barras" in prepared else item.codigo_barras
+        ).casefold()
+        code = str(prepared.get("codigo") or item.codigo or "").strip().casefold()
+        description = unicodedata.normalize(
+            "NFKD", str(prepared.get("descricao") or item.descricao or "").casefold()
+        )
+        description = " ".join(
+            "".join(ch for ch in description if not unicodedata.combining(ch)).split()
+        )
+        unit = str(item.unidade or "").strip().upper()
+        ncm = str(prepared.get("ncm") or item.ncm or "").strip()
+        cest = str(prepared.get("cest") or item.cest or "").strip()
+        if not code or not description:
+            return None
+        return barcode, code, description, unit, ncm, cest
+
 
     def importar_atomicamente(
         self,
@@ -125,6 +146,7 @@ class NFeImportService:
         agora = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         criados = vinculados = 0
         resultados: list[dict[str, Any]] = []
+        products_created_in_document: dict[tuple[str, ...], int] = {}
 
         with self.repository.database.session(write=True) as connection:
             if key:
@@ -158,6 +180,11 @@ class NFeImportService:
             for indice, (item_xml, preparado) in enumerate(zip(documento.itens, itens)):
                 acao = str(preparado.get("acao") or "").upper()
                 produto_id = preparado.get("produto_id")
+                identity = self._document_item_identity(item_xml, preparado)
+                repeated_product_id = products_created_in_document.get(identity) if identity else None
+                if acao == "CRIAR" and repeated_product_id is not None:
+                    acao = "VINCULAR"
+                    produto_id = repeated_product_id
                 acao = self.validar_decisao(acao, produto_id)
                 unidade_estoque_id = self.repository.obter_ou_criar_unidade_transacao(
                     connection, preparado.get("unidade") or "UN", agora
@@ -172,6 +199,8 @@ class NFeImportService:
                     )
                     criados += 1
                     status = "criado"
+                    if identity:
+                        products_created_in_document[identity] = int(produto_id)
                 else:
                     produto_id = int(produto_id)
                     produto = connection.execute("SELECT * FROM produtos WHERE id=?", (produto_id,)).fetchone()

@@ -273,6 +273,9 @@ class NFeXMLService:
 
         if not itens:
             raise ValueError("Nenhum produto foi encontrado no XML.")
+        # ``nItem`` é a ordem fiscal oficial. A ordenação é estável, então um
+        # XML legado com números ausentes/duplicados conserva a ordem física.
+        itens.sort(key=lambda item: item.item_numero)
         return NFeDocument(
             chave=chave,
             numero=numero,

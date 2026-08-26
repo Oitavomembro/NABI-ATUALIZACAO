@@ -4331,3 +4331,35 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   ação e card próprios para saídas documentadas, sem decidir dedutibilidade ou
   apuração tributária;
 - Fiscal/SEFAZ, Nabi, licenciamento e banco real permanecem fora desta etapa.
+### Entrada de NF-e — embalagens, GTIN ausente e ordem fiscal
+
+- branch isolada `codex/nfe-importacao-embalagens`, derivada da candidata
+  auditada `7147c32`; implementação `f5ea02c` — `fix: estabiliza importacao de
+  embalagens da NFe`;
+- sentinelas `SEM GTIN`, `SEMGTIN`, `NO GTIN` e `NOGTIN` passam a representar
+  ausência de código de barras. Elas não são persistidas como identidade nem
+  colidem no índice de códigos reais;
+- linhas da mesma NF-e somente reutilizam o produto criado na própria transação
+  quando código, descrição normalizada, unidade, NCM, CEST e GTIN normalizado
+  coincidem. CFOPs diferentes são preservados por linha; produtos distintos não
+  são unidos apenas por semelhança;
+- o `nItem` do XML é a ordem oficial da revisão e da importação. A ordenação é
+  estável para XML legado com numeração ausente ou duplicada;
+- a Nabi faz sugestão determinística de embalagem para padrões comprováveis
+  como `27X200ML`, `6X2L` e `CAIXA COM 12 UN`. A sugestão informa confiança e
+  evidência, nunca é aplicada automaticamente e exige ação explícita do
+  operador. A entrada assistida permanece rascunho até confirmação;
+- pesquisa externa por EAN/nome não foi ligada: falta provedor autorizado,
+  contrato/licença e política de privacidade. Quando houver, deve enviar somente
+  EAN ou descrição sanitizada, nunca XML, chave, CNPJ, preço ou dados fiscais, e
+  continuar sendo evidência auxiliar sujeita à confirmação humana;
+- ensaio descartável com cópias dos seis XMLs autorizados pelo proprietário:
+  seis notas e 61 linhas importadas, cinco fornecedores, 48 produtos, 61
+  movimentos de estoque, seis títulos financeiros e zero sentinelas de GTIN
+  persistidas. A linha repetida de venda/bonificação reutilizou um único produto;
+- validação automatizada relacionada: `156 passed`; `compileall` e
+  `git diff --check` aprovados. Nenhum PFX, senha, CSC, banco real, XML ou segredo
+  foi versionado e nenhuma rede/SEFAZ foi acessada;
+- pendência: homologação visual da sugestão no assistente Legacy e no painel
+  Nabi, além de auditoria independente dos contadores do ensaio. Produção fiscal
+  continua bloqueada.

@@ -4,6 +4,8 @@ from dataclasses import dataclass
 from decimal import Decimal
 import re
 
+from product_identifiers import normalize_gtin
+
 
 @dataclass(frozen=True, slots=True)
 class PackagingFactorSuggestion:
@@ -16,11 +18,13 @@ class PackagingFactorSuggestion:
 
 
 class NFePackagingFactorService:
-    """Sugere embalagem pela descrição; nunca confirma nem inventa vínculo."""
+    """Sugere embalagem pela descrição; nunca confirma nem pesquisa sozinho."""
 
     _MULTIPACK = re.compile(
-        r"(?<!\d)(?P<factor>\d{1,4})\s*[X×]\s*(?P<content>\d+(?:[.,]\d+)?)\s*"
-        r"(?P<unit>ML|L|KG|G|UN|UND|PC|PCT)(?![A-Z])", re.IGNORECASE,
+        r"(?<!\d)(?P<factor>\d{1,4})\s*[X×]\s*"
+        r"(?P<content>\d+(?:[.,]\d+)?)\s*"
+        r"(?P<unit>ML|L|KG|G|UN|UND|PC|PCT)(?![A-Z])",
+        re.IGNORECASE,
     )
     _COUNT = re.compile(
         r"(?:CX|CAIXA|PCT|PACOTE|FD|FARDO)\s*(?:C/|COM)?\s*(?P<factor>\d{1,4})\s*(?:UN|UND|PC)?\b",
@@ -32,17 +36,20 @@ class NFePackagingFactorService:
         text = " ".join(str(description or "").upper().split())
         match = cls._MULTIPACK.search(text)
         if match:
-            factor = Decimal(match.group("factor")); content = Decimal(match.group("content").replace(",", "."))
+            factor = Decimal(match.group("factor"))
+            content = Decimal(match.group("content").replace(",", "."))
             if factor > 1 and content > 0:
+                token = match.group(0)
                 return PackagingFactorSuggestion(
                     factor, content, match.group("unit").upper(), "ALTA",
-                    f"Descrição do XML contém {match.group(0)}.",
+                    f"Descrição do XML contém {token}.",
                 )
         match = cls._COUNT.search(text)
-        if match and Decimal(match.group("factor")) > 1:
+        if match:
             factor = Decimal(match.group("factor"))
-            return PackagingFactorSuggestion(
-                factor, None, "UN", "MÉDIA",
-                f"Descrição do XML indica embalagem com {factor} unidades.",
-            )
+            if factor > 1:
+                return PackagingFactorSuggestion(
+                    factor, None, "UN", "MÉDIA",
+                    f"Descrição do XML indica embalagem com {factor} unidades.",
+                )
         return None

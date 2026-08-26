@@ -17,6 +17,23 @@ XML = '''<?xml version="1.0" encoding="UTF-8"?>
 
 
 class NFeXMLServiceTests(unittest.TestCase):
+    def test_itens_seguem_nitem_da_nota_mesmo_se_xml_estiver_fora_de_ordem(self):
+        xml = XML.replace(
+            '<det nItem="1">',
+            '<det nItem="2">',
+        ).replace(
+            '</infNFe>',
+            '<det nItem="1"><prod><cProd>PRIMEIRO</cProd><xProd>Primeiro</xProd>'
+            '<qCom>1</qCom><uCom>UN</uCom><vUnCom>1</vUnCom><vProd>1</vProd>'
+            '</prod></det></infNFe>',
+        )
+        with tempfile.TemporaryDirectory() as temp:
+            arquivo = Path(temp) / "fora-de-ordem.xml"
+            arquivo.write_text(xml, encoding="utf-8")
+            document = NFeXMLService().ler(arquivo)
+        self.assertEqual([item.item_numero for item in document.itens], [1, 2])
+        self.assertEqual([item.codigo for item in document.itens], ["PRIMEIRO", "ABC1"])
+
     def test_le_nfe_com_namespace(self):
         with tempfile.TemporaryDirectory() as pasta:
             arquivo = Path(pasta) / "nfe.xml"

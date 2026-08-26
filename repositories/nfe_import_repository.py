@@ -128,7 +128,8 @@ class NFeImportRepository:
         fator_real, fator_decimal = DecimalStorage.pair(preparado["fator"], field="fator de conversão")
         product_name = str(preparado.get("descricao") or item.descricao or "").strip().upper()
         product_barcode = normalize_gtin(
-            preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras
+            preparado.get("codigo_barras")
+            if "codigo_barras" in preparado else item.codigo_barras
         )
         product_ncm = str(preparado.get("ncm") or item.ncm or "").strip()
         product_cest = str(preparado.get("cest") or item.cest or "").strip()

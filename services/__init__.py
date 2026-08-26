@@ -2,6 +2,11 @@ from .produto_service import ProdutoService
 from .system_diagnostics import DiagnosticCheck, SystemDiagnostics
 from .nfe_xml_service import NFeDocument, NFeItem, NFeXMLService
 from .nfe_import_service import NFeImportService, NFeItemAnalysis, NFeProductCandidate
+from .nfe_packaging_factor_service import (
+    NFePackagingFactorService,
+    PackagingFactorSuggestion,
+    normalize_gtin,
+)
 from .nfe_devolucao_service import NFeDevolucaoService, DevolucaoItemDisponivel
 from .cobranca_service import CobrancaService, ResumoCobranca
 from .pricing_service import PricingResult, PricingService
@@ -23,6 +28,9 @@ __all__ = [
     "NFeImportService",
     "NFeItemAnalysis",
     "NFeProductCandidate",
+    "NFePackagingFactorService",
+    "PackagingFactorSuggestion",
+    "normalize_gtin",
     "NFeDevolucaoService",
     "DevolucaoItemDisponivel",
     "EstoqueService",
