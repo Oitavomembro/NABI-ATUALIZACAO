@@ -4223,7 +4223,9 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão combinada após os merges: `124 passed`; regressão integral:
   `2608 passed`, `492 subtests passed`, zero skips e zero falhas. Os dois avisos
   conhecidos foram depois tratados estritamente em seus testes específicos,
-  que passam também com avisos elevados a erro;
+  que passam também com avisos elevados a erro. A repetição integral posterior
+  encerrou em `2608 passed`, `492 subtests passed`, zero skips, zero falhas e
+  zero avisos em 259,37 segundos;
 - nenhum build, ZIP ou instalador foi gerado. O pacote portátil só será criado
   após a auditoria final e homologações descartáveis; nunca conterá banco ativo,
   certificado, senha, chave privada ou XML real;
