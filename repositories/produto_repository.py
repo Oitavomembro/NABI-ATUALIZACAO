@@ -23,6 +23,18 @@ class ProdutoRepository:
     def __init__(self, database: DatabaseManager) -> None:
         self.database = database
 
+    def _table_exists(self, name: str, connection=None) -> bool:
+        sql = "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?"
+        row = (connection.execute(sql, (name,)).fetchone() if connection is not None
+               else self.database.fetch_one(sql, (name,)))
+        return row is not None
+
+    def _columns(self, table: str) -> set[str]:
+        if not self._table_exists(table):
+            return set()
+        with self.database.session() as connection:
+            return {str(row[1]) for row in connection.execute(f'PRAGMA table_info("{table}")')}
+
     @contextmanager
     def transaction(self):
         """Mantém validação, persistência e histórico na mesma transação."""
@@ -50,12 +62,16 @@ class ProdutoRepository:
         self, termo: str = "", tipo: str = "TODOS", *, limit: int | None = None
     ) -> list[dict[str, Any]]:
         safe_limit = None if limit is None else max(1, min(int(limit), 2000))
-        base_sql = """SELECT p.id, p.codigo, p.nome, p.preco_venda_decimal AS preco_venda_canonico, p.preco_venda AS preco_venda_legado,
+        product_columns = self._columns("produtos")
+        unit_columns = self._columns("unidades_medida")
+        product_fraction = "p.permite_fracionado" if "permite_fracionado" in product_columns else "NULL"
+        unit_fraction = "u.permite_fracionado" if "permite_fracionado" in unit_columns else "1"
+        base_sql = f"""SELECT p.id, p.codigo, p.nome, p.preco_venda_decimal AS preco_venda_canonico, p.preco_venda AS preco_venda_legado,
                         COALESCE(c.nome, 'Sem categoria') AS categoria,
                         COALESCE(m.nome, 'Sem marca') AS marca,
                         COALESCE(f.nome_fantasia, 'Sem fornecedor') AS fornecedor,
                         COALESCE(u.sigla, 'UN') AS unidade,
-                        COALESCE(p.permite_fracionado,u.permite_fracionado,0) AS permite_fracionado,
+                        COALESCE({product_fraction},{unit_fraction},1) AS permite_fracionado,
                         COALESCE(uc.sigla, COALESCE(u.sigla, 'UN')) AS unidade_compra,
                         p.preco_custo_decimal AS preco_custo_canonico, p.preco_custo AS preco_custo_legado, p.despesas_percentual_decimal AS despesas_percentual_canonico, p.despesas_percentual AS despesas_percentual_legado, p.margem_lucro_decimal AS margem_lucro_canonico, p.margem_lucro AS margem_lucro_legado, p.fator_conversao_decimal AS fator_conversao_canonico, p.fator_conversao AS fator_conversao_legado,
                         p.codigo_barras, p.ncm, p.cest, p.cfop,
@@ -88,18 +104,20 @@ class ProdutoRepository:
         # Caminho rápido para as pesquisas comuns. Evita carregar todo o catálogo
         # em memória a cada tecla digitada no PDV e no cadastro de produtos.
         like = f"%{termo_limpo}%"
-        searchable_sql = base_sql + """ AND (
+        alias_search = (
+            "EXISTS(SELECT 1 FROM produto_codigos_barras pb WHERE pb.produto_id=p.id AND pb.ativo=1 AND pb.codigo LIKE ? COLLATE NOCASE) OR"
+            if self._table_exists("produto_codigos_barras") else ""
+        )
+        searchable_sql = base_sql + f""" AND (
             p.codigo LIKE ? COLLATE NOCASE OR
             p.nome LIKE ? COLLATE NOCASE OR
             p.codigo_barras LIKE ? COLLATE NOCASE OR
-            EXISTS(SELECT 1 FROM produto_codigos_barras pb
-                   WHERE pb.produto_id=p.id AND pb.ativo=1
-                     AND pb.codigo LIKE ? COLLATE NOCASE) OR
+            {alias_search}
             c.nome LIKE ? COLLATE NOCASE OR
             m.nome LIKE ? COLLATE NOCASE OR
             f.nome_fantasia LIKE ? COLLATE NOCASE
         )"""
-        fast_params = params + [like] * 7
+        fast_params = params + [like] * (7 if alias_search else 6)
         sql = searchable_sql + order_sql
         if safe_limit is not None:
             sql += " LIMIT ?"
@@ -145,11 +163,13 @@ class ProdutoRepository:
         result = self._decimalizar_produto(dict(row))
         aliases = self.listar_codigos_barras(int(produto_id), connection=connection)
         result["codigos_barras"] = tuple(item["codigo"] for item in aliases)
+        unit_has_fraction = "permite_fracionado" in self._columns("unidades_medida")
+        fraction_select = "permite_fracionado" if unit_has_fraction else "1 AS permite_fracionado"
         unit = (connection.execute(
-            "SELECT sigla,permite_fracionado FROM unidades_medida WHERE id=?",
+            f"SELECT sigla,{fraction_select} FROM unidades_medida WHERE id=?",
             (result.get("unidade_id"),),
         ).fetchone() if connection is not None else self.database.fetch_one(
-            "SELECT sigla,permite_fracionado FROM unidades_medida WHERE id=?",
+            f"SELECT sigla,{fraction_select} FROM unidades_medida WHERE id=?",
             (result.get("unidade_id"),),
         ))
         result["unidade"] = str(unit["sigla"] if unit else "UN")
@@ -160,6 +180,8 @@ class ProdutoRepository:
         return result
 
     def listar_codigos_barras(self, produto_id: int, *, connection=None) -> list[dict[str, Any]]:
+        if not self._table_exists("produto_codigos_barras", connection):
+            return []
         sql = """SELECT codigo,tipo,principal,ativo FROM produto_codigos_barras
                  WHERE produto_id=? ORDER BY principal DESC,id"""
         rows = (connection.execute(sql, (int(produto_id),)).fetchall()
@@ -169,6 +191,8 @@ class ProdutoRepository:
     def substituir_codigos_barras(
         self, produto_id: int, codigos: list[tuple[str, str]], *, connection
     ) -> None:
+        if not self._table_exists("produto_codigos_barras", connection):
+            return
         normalized: list[tuple[str, str]] = []
         seen: set[str] = set()
         for raw_code, raw_kind in codigos:
@@ -210,6 +234,12 @@ class ProdutoRepository:
         code = str(codigo or "").strip()
         if not code:
             return []
+        if not self._table_exists("produto_codigos_barras"):
+            rows = self.database.fetch_all(
+                "SELECT id FROM produtos WHERE ativo=1 AND codigo_barras=? COLLATE NOCASE ORDER BY id",
+                (code,),
+            )
+            return [self.buscar_por_id(int(row["id"])) for row in rows]
         rows = self.database.fetch_all(
             """SELECT DISTINCT p.id FROM produtos p
                LEFT JOIN produto_codigos_barras pb ON pb.produto_id=p.id AND pb.ativo=1

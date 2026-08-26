@@ -24,7 +24,9 @@ class NabiCodeProductGateway:
             current_stock=Decimal(str(data.get("estoque_atual") or 0)),
             unit_code=str(data.get("unidade") or "UN"),
             barcodes=tuple(data.get("codigos_barras") or ()),
-            allows_fractional_quantity=bool(data.get("permite_fracionado", False)),
+            # Bancos legados não possuíam esta política e historicamente
+            # aceitavam quantidades decimais. A migração define o padrão novo.
+            allows_fractional_quantity=bool(data.get("permite_fracionado", True)),
         )
 
     def search(self, term: str, *, limit: int = 30) -> tuple[ProductRecord, ...]:

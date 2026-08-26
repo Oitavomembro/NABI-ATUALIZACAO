@@ -114,6 +114,7 @@ class CommercialSQLiteIntegrationTests(unittest.TestCase):
             categoria_id=None,
             tipo_produto="MERCADORIA",
             estoque_atual=10,
+            permite_fracionado=True,
         )
 
     def tearDown(self) -> None:

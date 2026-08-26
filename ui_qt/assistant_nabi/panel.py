@@ -713,7 +713,8 @@ class NabiAssistantPanel(QWidget):
             + (
                 f" — fator sugerido {item.suggested_conversion_factor} "
                 f"(confiança {item.factor_confidence.lower()}; exige confirmação)"
-                if item.suggested_conversion_factor else " — fator sem sugestão segura"
+                if getattr(item, "suggested_conversion_factor", None)
+                else " — fator sem sugestão segura"
             )
             for item in draft.items
         )
