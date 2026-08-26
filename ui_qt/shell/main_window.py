@@ -418,6 +418,34 @@ class NabiCodeShellWindow(QMainWindow):
             return self.open_primary_module(module_id)
         return self.open_module(module_id)
 
+    def open_fiscal_configuration(self):
+        """Porta da Nabi: abre somente a Central Fiscal oficial autorizada."""
+        if not self.show_module("fiscal"):
+            raise RuntimeError("A configuração Fiscal não está disponível nesta edição.")
+        return True
+
+    def open_company_xml_import(self):
+        """Porta da Nabi: conduz ao importador empresarial com decisão humana."""
+        if not self.show_module("configs"):
+            raise RuntimeError("A configuração empresarial não está disponível.")
+        page = self._module_pages.get("configs")
+        opener = getattr(page, "open_company_xml_import", None)
+        if opener is None:
+            raise RuntimeError("A importação de XML empresarial não está disponível.")
+        opener()
+        return True
+
+    def open_product_xml_import(self):
+        """Porta da Nabi: conduz ao importador oficial de produtos."""
+        if not self.show_module("produtos"):
+            raise RuntimeError("A importação de produtos não está disponível.")
+        page = self._wide_windows.get("produtos")
+        opener = getattr(page, "open_xml_import", None)
+        if opener is None:
+            raise RuntimeError("A importação de XML de produtos não está disponível.")
+        opener()
+        return True
+
     def open_primary_module(self, module_id):
         """Exibe módulos principais dentro do shell, como as telas do Legacy."""
 

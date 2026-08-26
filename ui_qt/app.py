@@ -26,6 +26,7 @@ def create_application(
     nfe_entry_service=None,
     assistant_panel_factory=None,
     administrative_hub_factory=None,
+    auto_activate_assistant=False,
 ) -> tuple[QApplication, PDVWindow]:
     qt_application = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qt_application.setApplicationName("NabiCode")
@@ -80,6 +81,7 @@ def create_application(
                     window, "open_assistant_product_search", None
                 ),
                 module_hub_opener=getattr(window, "open_administrative_hub", None),
+                auto_activate=auto_activate_assistant,
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating
@@ -129,6 +131,7 @@ def create_shell_application(
     reauthenticate=None,
     daily_backup_service=None,
     visual_preferences=None,
+    auto_activate_assistant=False,
 ):
     """Cria o shell Legacy; o PDV só nasce quando Vendas/F2 for acionado."""
 
@@ -184,6 +187,10 @@ def create_shell_application(
                 nfe_entry_service=nfe_entry_service,
                 product_search_opener=open_product_search,
                 module_hub_opener=lambda: window.show_module("dashboard"),
+                fiscal_configuration_opener=window.open_fiscal_configuration,
+                company_xml_import_opener=window.open_company_xml_import,
+                product_xml_import_opener=window.open_product_xml_import,
+                auto_activate=auto_activate_assistant,
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating

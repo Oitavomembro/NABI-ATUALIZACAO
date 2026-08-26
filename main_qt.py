@@ -495,6 +495,7 @@ def main(argv=None) -> int:
             ),
             daily_backup_service=daily_backup,
             visual_preferences=UIPreferencesService.normalize(visual_values),
+            auto_activate_assistant=license_gate.allows(Capability.ASSISTANT),
         )
     except Exception as error:
         splash.close()

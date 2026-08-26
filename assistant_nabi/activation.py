@@ -68,6 +68,48 @@ class AuthenticatedAssistantActivation:
             raise
         return service
 
+    def activate_current_session(self):
+        """Inicia a Nabi usando somente a sessão já autenticada pelo shell."""
+
+        session = getattr(self._security, "session", None)
+        if (
+            session is None
+            or self._security.is_expired()
+            or not getattr(session.user, "active", False)
+        ):
+            raise PermissionError("A sessão atual não autoriza a ativação da Nabi.")
+        return self._activate_runtime()
+
+    def _activate_runtime(self):
+        with self._lock:
+            if self._service is not None or self._activating:
+                raise RuntimeError("A Nabi já está ativa ou em ativação nesta sessão.")
+            self._activating = True
+            self._cancel_requested = False
+
+        runtime = None
+        try:
+            runtime = self._runtime_factory()
+            runtime.start()
+            model = runtime.create_model_adapter()
+            session_id = uuid.uuid4().hex
+            service = self._assistant_factory(model, session_id)
+            with self._lock:
+                if self._cancel_requested:
+                    raise RuntimeError("A ativação da Nabi foi cancelada pelo operador.")
+                self._runtime = runtime
+                self._service = service
+                self._activating = False
+        except Exception:
+            if runtime is not None:
+                runtime.stop()
+            if self._logout_on_stop:
+                self._security.logout("IA_NABI_ATIVACAO_FALHOU")
+            with self._lock:
+                self._activating = False
+            raise
+        return service
+
     def stop(self) -> None:
         with self._lock:
             self._cancel_requested = True

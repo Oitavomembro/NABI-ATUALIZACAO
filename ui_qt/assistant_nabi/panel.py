@@ -38,7 +38,7 @@ class _ActivationSignals(QObject):
 
 
 class _ActivationWorker(QRunnable):
-    def __init__(self, generation: int, manager, username: str, password: str) -> None:
+    def __init__(self, generation: int, manager, username=None, password=None) -> None:
         super().__init__()
         self.generation = generation
         self.manager = manager
@@ -49,7 +49,10 @@ class _ActivationWorker(QRunnable):
     def run(self) -> None:
         error = None
         try:
-            service = self.manager.activate(self.username, self.password)
+            if self.username is None:
+                service = self.manager.activate_current_session()
+            else:
+                service = self.manager.activate(self.username, self.password)
         except Exception as exc:
             service = None
             error = exc
@@ -110,6 +113,7 @@ class NabiAssistantPanel(QWidget):
         fiscal_configuration_opener=None,
         company_xml_import_opener=None,
         product_xml_import_opener=None,
+        auto_activate=False,
     ) -> None:
         super().__init__(parent)
         self._service = service
@@ -219,6 +223,9 @@ class NabiAssistantPanel(QWidget):
                     "A Nabi ainda nao esta disponivel neste ambiente.",
                 )
             )
+        if auto_activate and activation_manager is not None:
+            self.activate_button.setVisible(False)
+            self._start_activation()
 
     def _apply_style(self) -> None:
         self.setStyleSheet("""
@@ -317,7 +324,7 @@ class NabiAssistantPanel(QWidget):
             return
         self._start_activation(*credentials)
 
-    def _start_activation(self, username: str, password: str) -> None:
+    def _start_activation(self, username=None, password=None) -> None:
         self._generation += 1
         generation = self._generation
         self._busy = True
@@ -446,7 +453,13 @@ class NabiAssistantPanel(QWidget):
                 if opener is None:
                     self.history.append(f"<b>Nabi:</b> {self._escape(unavailable)}")
                 else:
-                    opener()
+                    try:
+                        opener()
+                    except Exception:
+                        self._set_state("blocked", "Abertura bloqueada")
+                        self.history.append(
+                            "<b>Nabi:</b> A tela oficial não pôde ser aberta com segurança."
+                        )
         self.message.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def review_draft(self) -> None:

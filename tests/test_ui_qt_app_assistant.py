@@ -145,6 +145,38 @@ class QtApplicationAssistantTests(unittest.TestCase):
         self.assertEqual(window.module_hub_calls, 1)
         window.close()
 
+    def test_shell_entrega_portas_contextuais_tipadas_ao_painel(self):
+        class Service:
+            available = True
+
+        class Shell(QMainWindow):
+            def __init__(self, *args, **kwargs):
+                super().__init__()
+                self.calls = []
+            def open_fiscal_configuration(self): self.calls.append("fiscal")
+            def open_company_xml_import(self): self.calls.append("empresa")
+            def open_product_xml_import(self): self.calls.append("produtos")
+            def show_module(self, module): self.calls.append(module)
+
+        modules = ()
+        with patch.object(qt_app, "NabiCodeShellWindow", Shell):
+            _, window = qt_app.create_shell_application(
+                object(), object(), modules, [], assistant_service=Service()
+            )
+        panel = window.nabi_assistant.widget()
+        expected = (
+            ("interface.abrir_configuracao_fiscal", "fiscal"),
+            ("interface.abrir_importacao_xml_empresa", "empresa"),
+            ("interface.abrir_importacao_xml_produtos", "produtos"),
+        )
+        for index, (tool_name, call) in enumerate(expected, 20):
+            panel._generation = index
+            panel._complete(index, AssistantTurn("Abrindo.", (ToolResult(
+                f"request-{index}", tool_name, True, {"action": "OPEN"},
+            ),)))
+            self.assertEqual(window.calls[-1], call)
+        window.close()
+
 
 if __name__ == "__main__":
     unittest.main()

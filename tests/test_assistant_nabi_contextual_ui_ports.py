@@ -140,3 +140,50 @@ def test_painel_sem_porta_nao_improvisa_clique_ou_abertura():
         assert "não está disponível nesta tela" in panel.history.toPlainText()
     finally:
         panel.close()
+
+
+def test_falha_da_porta_fecha_sem_escapar_para_a_interface():
+    app = _application()
+    panel = NabiAssistantPanel(
+        _Service(), fiscal_configuration_opener=lambda: (_ for _ in ()).throw(
+            PermissionError("recusada")
+        ),
+    )
+    try:
+        panel._generation = 3
+        panel._complete(3, AssistantTurn("Tentativa.", (ToolResult(
+            "1", "interface.abrir_configuracao_fiscal", True,
+            {"action": "OPEN_FISCAL_CONFIGURATION"},
+        ),)))
+        assert panel.status.property("nabiState") == "blocked"
+        assert "não pôde ser aberta com segurança" in panel.history.toPlainText()
+        assert "recusada" not in panel.history.toPlainText()
+    finally:
+        panel.close()
+
+
+def test_inicio_automatico_usa_sessao_existente_sem_expor_senha():
+    app = _application()
+
+    class Activation:
+        def __init__(self): self.calls = 0
+        def activate_current_session(self):
+            self.calls += 1
+            return _Service()
+
+    class InlinePool:
+        @staticmethod
+        def start(worker): worker.run()
+
+    activation = Activation()
+    panel = NabiAssistantPanel(
+        _Service(), activation_manager=activation, thread_pool=InlinePool(),
+        auto_activate=True,
+    )
+    try:
+        assert activation.calls == 1
+        assert panel.activate_button.isHidden()
+        assert panel.send.isEnabled()
+        assert "Sessão autenticada" in panel.history.toPlainText()
+    finally:
+        panel.close()
