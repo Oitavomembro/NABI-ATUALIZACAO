@@ -4011,12 +4011,13 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - [x] cartões do Início acionáveis e paginados;
 - [x] entrada XML com fator/unidade/preço e financeiro somente comprovado;
 - [x] importação local de dados empresariais por XML;
-- [~] aplicar o motor visual de forma global a todos os widgets comuns sem
-  alterar vermelho/amarelo/estados fiscais; prévia local já concluída;
-- [ ] expor Migração e restauração ativa no menu técnico com pré-backup,
+- [x] motor visual aplicado globalmente aos widgets comuns sem alterar
+  vermelho/amarelo/estados fiscais; prévia local e atualização de widgets
+  abertos/futuros concluídas na candidata de fechamento;
+- [x] Migração e restauração ativa expostas no menu técnico com pré-backup,
   encerramento, helper externo, rollback e auditoria; nunca sobrescrever banco
   aberto;
-- [ ] ligar a Nabi contextual às novas portas tipadas de configuração e XML,
+- [x] Nabi contextual ligada às novas portas tipadas de configuração e XML,
   sem banco direto, clique livre, invenção de dados ou liberação fiscal;
 - [!] produção Fiscal/SEFAZ continua bloqueada até homologação física adversarial.
 
