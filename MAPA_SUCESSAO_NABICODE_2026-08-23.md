@@ -3,6 +3,14 @@
 Data de referência: 23/08/2026  
 Finalidade: permitir que futuras conversas continuem o trabalho sem reiniciar o projeto, perder decisões ou confundir o NabiCode Legacy com a migração Qt.
 
+## Fechamento — identificadores e unidades de produtos
+
+- produtos passam a aceitar vários códigos de barras reais (por exemplo caixa e unidade), mantendo um único produto e recusando conflito entre cadastros;
+- o catálogo canônico nasce com UN, CX, KG, L e M, aceita aliases conhecidos do fornecedor e permite configuração consciente da política de fracionamento;
+- UN e CX exigem quantidade inteira por padrão; KG, L e M aceitam quantidade decimal, com override explícito por produto;
+- o PDV resolve código exato sem escolher resultado ambíguo e aplica a política antes de alterar o carrinho;
+- 116 testes focados aprovados, além de `compileall` e `git diff --check`; Fiscal/SEFAZ não foi alterado e nenhum código de barras foi inferido.
+
 ## Painel de acompanhamento
 
 Legenda:

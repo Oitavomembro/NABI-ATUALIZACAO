@@ -54,6 +54,9 @@ class ProductEditorDialog(QDialog):
         root = QVBoxLayout(self); form = QFormLayout()
         self.code = QLineEdit(product.code if product else "")
         self.barcode = QLineEdit(product.barcode if product else "")
+        existing_codes = tuple(getattr(product, "barcodes", ()) or ()) if product else ()
+        self.additional_barcodes = QLineEdit("; ".join(existing_codes[1:]))
+        self.additional_barcodes.setPlaceholderText("Um ou mais códigos separados por ponto e vírgula")
         self.description = QLineEdit(product.description if product else "")
         self.product_type = QComboBox(); self.product_type.addItems(("MERCADORIA", "SERVICO"))
         if product: self.product_type.setCurrentText(product.product_type)
@@ -64,12 +67,34 @@ class ProductEditorDialog(QDialog):
         self.minimum_stock = QLineEdit(_quantity_text(product.minimum_stock) if product else "0")
         self.allow_negative = QCheckBox("Permitir estoque negativo")
         self.allow_negative.setChecked(bool(product.allow_negative_stock) if product else False)
+        self.unit = QComboBox()
+        try:
+            units = tuple(application.units())
+        except Exception:
+            units = ()
+        if not units:
+            units = ({"nome": "UN", "descricao": "Unidade", "permite_fracionado": 0},)
+        for item in units:
+            code = str(item.get("sigla") or item.get("nome") or "UN").upper()
+            self.unit.addItem(f"{code} — {item.get('descricao') or code}", code)
+        wanted_unit = str(getattr(product, "unit_code", "UN") or "UN").upper()
+        for index in range(self.unit.count()):
+            if self.unit.itemData(index) == wanted_unit:
+                self.unit.setCurrentIndex(index); break
+        self.fraction_policy = QComboBox()
+        self.fraction_policy.addItem("Usar padrão da unidade", None)
+        self.fraction_policy.addItem("Permitir venda fracionada", True)
+        self.fraction_policy.addItem("Exigir quantidade inteira", False)
+        if product:
+            self.fraction_policy.setCurrentIndex(1 if product.allows_fractional_quantity else 2)
         if product:
             self.current_stock.setEnabled(False)
             self.current_stock.setToolTip("Use Movimentar estoque para alterar o saldo.")
         for label, widget in (
-            ("Código", self.code), ("Código de barras", self.barcode),
+            ("Código", self.code), ("Código principal", self.barcode),
+            ("Códigos adicionais", self.additional_barcodes),
             ("Nome / descrição*", self.description), ("Tipo", self.product_type),
+            ("Unidade de venda", self.unit), ("Venda fracionada", self.fraction_policy),
             ("Preço de venda", self.sale_price), ("Preço de custo", self.cost_price),
             ("Estoque inicial" if not product else "Estoque atual", self.current_stock),
             ("Estoque mínimo", self.minimum_stock), ("", self.allow_negative),
@@ -81,7 +106,8 @@ class ProductEditorDialog(QDialog):
         self.save.clicked.connect(self._save); row.addWidget(cancel); row.addWidget(self.save)
         root.addLayout(row)
         self._fields = (
-            self.code, self.barcode, self.description, self.product_type,
+            self.code, self.barcode, self.additional_barcodes, self.description, self.product_type,
+            self.unit, self.fraction_policy,
             self.sale_price, self.cost_price, self.current_stock,
             self.minimum_stock, self.allow_negative, self.save,
         )
@@ -115,6 +141,11 @@ class ProductEditorDialog(QDialog):
             current_stock=(self.product.current_stock if self.product else _decimal(self.current_stock.text(), "Estoque inicial")),
             minimum_stock=_decimal(self.minimum_stock.text(), "Estoque mínimo"),
             allow_negative_stock=self.allow_negative.isChecked(),
+            unit_code=str(self.unit.currentData() or "UN"),
+            barcodes=tuple(
+                code.strip() for code in self.additional_barcodes.text().split(";") if code.strip()
+            ),
+            allow_fractional_quantity=self.fraction_policy.currentData(),
         )
         return ProductUpdateCommand(**values, product_id=self.product.product_id) if self.product else ProductCreateCommand(**values)
 

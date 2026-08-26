@@ -246,11 +246,16 @@ class PDVApplicationService:
         product = self.get_product(product_id)
         if product is None or not product.active:
             raise ValueError("Produto não encontrado ou inativo.")
+        normalized_quantity = Decimal(str(quantity))
+        if not product.allows_fractional_quantity and normalized_quantity != normalized_quantity.to_integral_value():
+            raise ValueError(
+                f"{product.unit_code} aceita somente quantidade inteira para este produto."
+            )
         return session.add_item(
             CartItem(
                 product_id=product.product_id,
                 description=product.description,
-                quantity=quantity,
+                quantity=normalized_quantity,
                 unit_price=product.unit_price,
                 discount_percent=discount_percent,
             )

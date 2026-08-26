@@ -39,7 +39,8 @@ class NabiCodeProductStockGateway:
             row.get("preco_venda") or Decimal("0"), row.get("preco_custo") or Decimal("0"),
             _decimal(row.get("estoque_atual")), _decimal(row.get("estoque_minimo")),
             bool(row.get("permite_estoque_negativo")), str(row.get("tipo_produto") or ""),
-            bool(row.get("ativo", True)),
+            bool(row.get("ativo", True)), str(row.get("unidade") or "UN"),
+            tuple(row.get("codigos_barras") or ()), bool(row.get("permite_fracionado", False)),
         )
 
     def get_details(self, product_id: int) -> ProductDetails | None:
@@ -57,13 +58,23 @@ class NabiCodeProductStockGateway:
         normalized = str(barcode or "").strip()
         if not normalized:
             return None
-        matches = [
-            row for row in self._limited_rows(normalized, 2)
-            if str(row.get("codigo_barras") or "").strip() == normalized
-        ]
+        repository = getattr(self.products, "produtos", None)
+        if repository is not None and hasattr(repository, "buscar_por_codigo_barras"):
+            matches = repository.buscar_por_codigo_barras(normalized)
+        else:
+            matches = [
+                row for row in self._limited_rows(normalized, 200)
+                if normalized.casefold() in {
+                    str(row.get("codigo_barras") or "").strip().casefold(),
+                    *(str(code).strip().casefold() for code in row.get("codigos_barras", ())),
+                }
+            ]
         if len(matches) > 1:
             raise ValueError("Código de barras duplicado no catálogo; corrija a integridade dos produtos.")
         return self._details(matches[0]) if matches else None
+
+    def list_units(self) -> tuple[dict, ...]:
+        return tuple(self.products.listar_auxiliares("unidade"))
 
     def _unit_id(self, unit_code: str) -> int | None:
         normalized = str(unit_code or "").strip().casefold()
@@ -73,6 +84,13 @@ class NabiCodeProductStockGateway:
             item for item in self.products.listar_auxiliares("unidade")
             if str(item.get("nome") or item.get("sigla") or "").strip().casefold() == normalized
         ]
+        if not matches:
+            alias = self.products.produtos.database.fetch_one(
+                """SELECT u.id,u.sigla AS nome,u.sigla,u.descricao,u.permite_fracionado
+                   FROM unidade_fornecedor_aliases a JOIN unidades_medida u ON u.id=a.unidade_id
+                   WHERE a.alias=? COLLATE NOCASE AND u.ativo=1""", (str(unit_code).strip(),),
+            )
+            matches = [dict(alias)] if alias else []
         if len(matches) > 1:
             raise ValueError("A unidade do XML corresponde a mais de um cadastro auxiliar.")
         return int(matches[0]["id"]) if matches else None
@@ -94,6 +112,8 @@ class NabiCodeProductStockGateway:
             despesas_percentual=current.get("despesas_percentual", Decimal("0")),
             margem_lucro=current.get("margem_lucro", Decimal("0")),
             codigo_barras=command.barcode,
+            codigos_barras=tuple(getattr(command, "barcodes", ()) or ()),
+            permite_fracionado=getattr(command, "allow_fractional_quantity", None),
             ncm=(getattr(command, "ncm", "") if creating else current.get("ncm", "")),
             cest=(getattr(command, "cest", "") if creating else current.get("cest", "")),
             cfop=current.get("cfop", ""),

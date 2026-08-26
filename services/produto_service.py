@@ -91,6 +91,8 @@ class ProdutoService:
         despesas_percentual: Decimal | float = Decimal("0"),
         margem_lucro: Decimal | float = Decimal("0"),
         codigo_barras: str = "",
+        codigos_barras: tuple[str, ...] = (),
+        permite_fracionado: bool | None = None,
         ncm: str = "",
         cest: str = "",
         cfop: str = "",
@@ -113,6 +115,7 @@ class ProdutoService:
             "unidade_compra_id": unidade_compra_id, "fator_conversao": fator_conversao,
             "preco_custo": preco_custo, "despesas_percentual": despesas_percentual,
             "margem_lucro": margem_lucro, "codigo_barras": codigo_barras, "ncm": ncm,
+            "codigos_barras": codigos_barras, "permite_fracionado": permite_fracionado,
             "cest": cest, "cfop": cfop, "estoque_atual": estoque_atual,
             "fiscal_origin": fiscal_origin, "fiscal_csosn": fiscal_csosn,
             "fiscal_icms_cst": fiscal_icms_cst, "fiscal_icms_rate": fiscal_icms_rate,
@@ -138,6 +141,7 @@ class ProdutoService:
         fator_conversao: Decimal | float, preco_custo: Decimal | float,
         despesas_percentual: Decimal | float, margem_lucro: Decimal | float,
         codigo_barras: str, ncm: str, cest: str, cfop: str, estoque_atual: float,
+        codigos_barras: tuple[str, ...], permite_fracionado: bool | None,
         fiscal_origin: str, fiscal_csosn: str, fiscal_icms_cst: str, fiscal_icms_rate: str,
         fiscal_pis_cst: str, fiscal_pis_rate: str, fiscal_cofins_cst: str,
         fiscal_cofins_rate: str, fiscal_profile_source: str, ibs_cbs_cst: str,
@@ -158,6 +162,12 @@ class ProdutoService:
         tipo = ProductValidator.normalize_type(tipo_produto)
         fator_validado = UnitConversionService.validar_fator(fator_conversao)
         codigo_barras_limpo = str(codigo_barras or "").strip()
+        todos_codigos = tuple(
+            dict.fromkeys(
+                code for code in (codigo_barras_limpo, *(str(value or "").strip() for value in codigos_barras))
+                if code
+            )
+        )
         conflitos = self.produtos.localizar_conflitos_identificadores(
             codigo, codigo_barras_limpo, produto_id, connection
         )
@@ -189,6 +199,7 @@ class ProdutoService:
             "unidade_compra_id": unidade_compra_id or unidade_id,
             "fator_conversao": fator_validado,
             "codigo_barras": codigo_barras_limpo,
+            "permite_fracionado": permite_fracionado,
             "ncm": str(ncm or "").strip(),
             "cest": str(cest or "").strip(),
             "cfop": str(cfop or "").strip(),
@@ -212,6 +223,10 @@ class ProdutoService:
             self.produtos.atualizar(int(produto_id), dados, connection)
             produto_id = int(produto_id)
             acao = "ATUALIZAR"
+        self.produtos.substituir_codigos_barras(
+            int(produto_id), [(code, "UNIDADE" if index == 0 else "OUTRO") for index, code in enumerate(todos_codigos)],
+            connection=connection,
+        )
         novo_preco = Decimal(str(preco_venda))
         tolerancia = Decimal("0.00001")
         if (abs(preco_anterior - novo_preco) > tolerancia

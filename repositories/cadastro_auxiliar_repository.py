@@ -27,9 +27,15 @@ class CadastroAuxiliarRepository:
         if str(tipo or "").strip().lower() == "fornecedor":
             return self.fornecedores.listar_ativos()
         tabela, campo = self._resolver(tipo)
-        rows = self.database.fetch_all(
-            f"SELECT id, {campo} AS nome FROM {tabela} WHERE ativo=1 ORDER BY {campo} COLLATE NOCASE"
-        )
+        if str(tipo or "").strip().lower() == "unidade":
+            rows = self.database.fetch_all(
+                """SELECT id,sigla AS nome,sigla,descricao,permite_fracionado
+                   FROM unidades_medida WHERE ativo=1 ORDER BY sigla COLLATE NOCASE"""
+            )
+        else:
+            rows = self.database.fetch_all(
+                f"SELECT id, {campo} AS nome FROM {tabela} WHERE ativo=1 ORDER BY {campo} COLLATE NOCASE"
+            )
         return [dict(row) for row in rows]
 
     def criar(self, tipo: str, nome: str, **extras: Any) -> int:

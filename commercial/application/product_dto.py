@@ -39,6 +39,8 @@ class ProductCreateCommand:
     ncm: str = ""
     cest: str = ""
     unit_code: str = ""
+    barcodes: tuple[str, ...] = ()
+    allow_fractional_quantity: bool | None = None
 
     def __post_init__(self) -> None:
         if not str(self.description or "").strip():
@@ -47,6 +49,12 @@ class ProductCreateCommand:
         object.__setattr__(self, "cost_price", MoneyCodec.parse(self.cost_price, field="preço de custo"))
         object.__setattr__(self, "current_stock", quantity(self.current_stock, field_name="estoque atual", allow_negative=self.allow_negative_stock))
         object.__setattr__(self, "minimum_stock", quantity(self.minimum_stock, field_name="estoque mínimo"))
+        normalized = tuple(str(code or "").strip() for code in self.barcodes if str(code or "").strip())
+        if self.barcode and self.barcode not in normalized:
+            normalized = (str(self.barcode).strip(),) + normalized
+        if len({code.casefold() for code in normalized}) != len(normalized):
+            raise ValueError("Códigos de barras repetidos no mesmo produto.")
+        object.__setattr__(self, "barcodes", normalized)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +81,9 @@ class ProductDetails:
     allow_negative_stock: bool
     product_type: str
     active: bool
+    unit_code: str = "UN"
+    barcodes: tuple[str, ...] = ()
+    allows_fractional_quantity: bool = False
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "sale_price", MoneyCodec.parse(self.sale_price, field="preço de venda"))

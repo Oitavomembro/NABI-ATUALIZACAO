@@ -188,6 +188,39 @@ def prepared_cash_session(application):
 
 
 class PDVApplicationSessionTests(unittest.TestCase):
+    def test_produto_inteiro_recusa_quantidade_fracionada(self):
+        products = FakeProducts()
+        products.records[10] = ProductRecord(
+            10, "P10", "78910", "PRODUTO UNIDADE", Decimal("50.00"),
+            unit_code="UN", allows_fractional_quantity=False,
+        )
+        application = PDVApplicationService(
+            customers=FakeCustomers(), products=products,
+            checkout_gateway=FakeCheckoutGateway(),
+        )
+        session = application.new_session()
+
+        with self.assertRaisesRegex(ValueError, "quantidade inteira"):
+            application.add_product(session, 10, quantity=Decimal("1.5"))
+
+        self.assertTrue(session.cart.is_empty)
+
+    def test_produto_kg_aceita_quantidade_fracionada(self):
+        products = FakeProducts()
+        products.records[10] = ProductRecord(
+            10, "P10", "78910", "PRODUTO PESADO", Decimal("50.00"),
+            unit_code="KG", allows_fractional_quantity=True,
+        )
+        application = PDVApplicationService(
+            customers=FakeCustomers(), products=products,
+            checkout_gateway=FakeCheckoutGateway(),
+        )
+        session = application.new_session()
+
+        application.add_product(session, 10, quantity=Decimal("1.250"))
+
+        self.assertEqual(session.cart.items[0].quantity, Decimal("1.250"))
+
     def test_suspender_sem_cliente_preserva_carrinho_sem_criar_identidade(self):
         suspended_sales = FakeSuspendedSales()
         checkout = FakeCheckoutGateway()
