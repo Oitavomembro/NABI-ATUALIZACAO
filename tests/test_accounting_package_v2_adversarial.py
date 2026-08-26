@@ -125,7 +125,8 @@ def test_v2_rejeita_nome_duplicado_e_ambiguo(package_v2):
     with zipfile.ZipFile(package) as archive:
         name = next(item for item in archive.namelist() if item.endswith(".xml"))
         data = archive.read(name)
-    duplicated = _rewrite(package, lambda rows: rows, duplicate=(name, data))
+    with pytest.warns(UserWarning, match="Duplicate name"):
+        duplicated = _rewrite(package, lambda rows: rows, duplicate=(name, data))
     with pytest.raises(ValueError, match="duplicado"):
         service.validate_accounting_package(duplicated)
     ambiguous = _rewrite(package, lambda rows: rows + [("leia-me.TXT", b"duplicado")])

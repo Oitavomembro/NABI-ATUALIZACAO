@@ -7,6 +7,7 @@ import json
 import sqlite3
 import tempfile
 import unittest
+import warnings
 import zipfile
 from unittest.mock import Mock, patch
 from datetime import datetime, timedelta, timezone
@@ -1351,9 +1352,17 @@ class FiscalServiceTests(unittest.TestCase):
             '<nProt>123456789012345</nProt></infProt></protNFe></retEnviNFe>'
         )
         processed = self.service.merge_authorization_protocol(signed, response)
-        output = self.service.generate_official_danfe_pdf(
-            authorized_xml=processed, output_path=Path(self.tmp.name) / "danfe-oficial.pdf",
-        )
+        with warnings.catch_warnings():
+            warnings.filterwarnings(
+                "ignore",
+                message="Testing an element's truth value.*",
+                category=DeprecationWarning,
+                module=r"brazilfiscalreport\.danfe\.danfe",
+            )
+            output = self.service.generate_official_danfe_pdf(
+                authorized_xml=processed,
+                output_path=Path(self.tmp.name) / "danfe-oficial.pdf",
+            )
         self.assertEqual(output.read_bytes()[:5], b"%PDF-")
         self.assertGreater(output.stat().st_size, 3_000)
 
