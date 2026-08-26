@@ -5,7 +5,7 @@ from pathlib import Path
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
     QCheckBox, QDialog, QFileDialog, QGridLayout, QGroupBox, QHBoxLayout,
-    QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
+    QApplication, QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
 )
 
 from services.nabimig_ui_service import preview_text
@@ -153,11 +153,27 @@ class DataMaintenanceDialog(QDialog):
         finally:
             self.backup_password.clear()
         self.output.setPlainText(
-            "RESTAURAÇÃO PREPARADA, MAS NÃO APLICADA\n"
+            "RESTAURAÇÃO PREPARADA E AINDA NÃO APLICADA\n"
             f"Pré-backup: {result.safety_backup}\nSolicitação: {result.request_file}\n"
-            "Feche o NabiCode. A aplicação continuará bloqueada até existir helper oficial restrito ao perfil."
+            "Para aplicar, o NabiCode precisa encerrar completamente."
         )
         self.prepare_button.setEnabled(False); self.restore_confirmation.clear()
+        decision = QMessageBox.question(
+            self, "Encerrar e restaurar",
+            "O NabiCode será encerrado agora. O helper verificará novamente os hashes, "
+            "aplicará o banco preparado e restaurará o banco anterior se algo falhar.\n\n"
+            "Deseja encerrar e aplicar a restauração?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if decision != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.application.launch_prepared_restore(result)
+        except Exception as error:
+            self.output.append(f"\nNão foi possível iniciar o helper: {error}")
+            return
+        QApplication.instance().quit()
 
     def reject(self):
         self.backup_password.clear(); super().reject()

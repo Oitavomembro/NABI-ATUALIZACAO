@@ -46,7 +46,7 @@ class Backup:
         shutil.copy2(self.active, target); return str(target)
 
 
-def make_service(tmp_path, allowed=True):
+def make_service(tmp_path, allowed=True, **overrides):
     active = tmp_path / "active.db"; active.write_bytes(b"sqlite-active")
     audit, migration = Audit(), Migration()
     service = DataMaintenanceApplicationService(
@@ -54,6 +54,7 @@ def make_service(tmp_path, allowed=True):
         backup=Backup(active, tmp_path), database_path=active,
         backup_directory=tmp_path / "backups", staging_directory=tmp_path / "staging",
         connect=lambda: None, backup_database=lambda source, target: shutil.copy2(source, target),
+        **overrides,
     )
     return service, audit, migration, active
 
@@ -101,4 +102,25 @@ def test_confirmacao_errada_nao_cria_staging_ou_prebackup(tmp_path):
     with pytest.raises(ValueError): service.prepare_restore(source, confirmation="RESTAURAR")
     assert not (tmp_path / "staging").exists()
     assert not (tmp_path / "backups").exists()
+
+
+def test_helper_so_e_lancado_para_solicitacao_preparada_na_area_autorizada(tmp_path):
+    calls = []
+    service, *_ = make_service(
+        tmp_path,
+        restore_helper_command=lambda request, active, staging: (
+            "helper", str(request), str(active), str(staging),
+        ),
+        process_launcher=lambda command, **kwargs: calls.append((command, kwargs)),
+    )
+    source = tmp_path / "source.db"; source.write_bytes(b"sqlite-restored")
+    verification = service.verify_backup(source)
+    prepared = service.prepare_restore(
+        source, confirmation=service.restore_confirmation(verification.sha256)
+    )
+    service.launch_prepared_restore(prepared)
+    assert calls and calls[0][0][0] == "helper"
+    forged = type(prepared)(str(tmp_path / "forged.json"), "x", "y", "admin")
+    with pytest.raises(ValueError, match="fora da área"):
+        service.launch_prepared_restore(forged)
 

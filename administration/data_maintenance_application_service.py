@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import uuid
 from dataclasses import dataclass
 from pathlib import Path
@@ -25,6 +26,7 @@ class DataMaintenanceApplicationService:
     def __init__(
         self, *, security, audit, migration, backup, database_path,
         backup_directory, staging_directory, connect, backup_database,
+        restore_helper_command=None, process_launcher=None,
     ) -> None:
         self.security, self.audit = security, audit
         self.migration, self.backup = migration, backup
@@ -32,6 +34,8 @@ class DataMaintenanceApplicationService:
         self.backup_directory = Path(backup_directory).resolve()
         self.staging_directory = Path(staging_directory).resolve()
         self.connect, self.backup_database = connect, backup_database
+        self.restore_helper_command = restore_helper_command
+        self.process_launcher = process_launcher or subprocess.Popen
 
     def _require(self) -> str:
         session = self.security.current_session()
@@ -125,6 +129,7 @@ class DataMaintenanceApplicationService:
                 "staged_sha256": sha256_file(staged),
                 "source_sha256": str(verification.sha256),
                 "safety_backup": str(safety),
+                "safety_backup_sha256": sha256_file(safety),
                 "status": "AGUARDANDO_HELPER_OFICIAL",
             }
             temporary = request.with_suffix(".tmp")
@@ -141,4 +146,28 @@ class DataMaintenanceApplicationService:
         except Exception:
             shutil.rmtree(operation, ignore_errors=True)
             raise
+
+    def launch_prepared_restore(self, prepared: PreparedRestore) -> None:
+        """Inicia o helper restrito; ele aguarda este processo liberar o banco."""
+        self._require()
+        request = Path(prepared.request_file).resolve()
+        try:
+            request.relative_to(self.staging_directory)
+        except ValueError as exc:
+            raise ValueError("Solicitação de restauração fora da área autorizada.") from exc
+        if request.name != "restore-request.json" or not request.is_file():
+            raise ValueError("Solicitação de restauração inválida ou ausente.")
+        if not callable(self.restore_helper_command):
+            raise RuntimeError("Helper oficial de restauração não foi configurado.")
+        command = tuple(self.restore_helper_command(request, self.database_path, self.staging_directory))
+        if not command:
+            raise RuntimeError("Comando do helper de restauração está vazio.")
+        self.process_launcher(
+            command,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            close_fds=True,
+            creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
+        )
 

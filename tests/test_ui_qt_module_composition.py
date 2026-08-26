@@ -78,15 +78,15 @@ def test_composicao_omite_opcionais_ausentes_sem_impedir_inicio_caixa_relatorios
     database=SimpleNamespace(connect=Mock(),database_path=Path("C:/Teste/banco.db"));profile=SimpleNamespace(app_dir=Path("C:/Teste"),paths=SimpleNamespace(pdfs=Path("C:/Teste/PDF"),backups=Path("C:/Teste/backups"),rollback=Path("C:/Teste/rollback"),diagnostics=Path("C:/Teste/diagnosticos"),config=Path("C:/Teste/config"),fiscal=Path("C:/Teste/fiscal")));security=Mock()
     with patch("ui_qt.administration.composition.CashService"),patch("ui_qt.administration.composition.ReportService"),patch("ui_qt.administration.composition.SettingsApplicationService"),patch("ui_qt.administration.composition.BackupService") as backup:
         modules=build_administrative_modules(container,database,profile,security)
-    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Central do Contador","Usuários","Configurações","Ajuda","Central de Socorro","Auditoria")
+    assert tuple(m.label for m in modules)==("Início","Caixa","Relatórios","Central do Contador","Usuários","Configurações","Ajuda","Migração e Restauração","Central de Socorro","Auditoria")
     accountant=next(module for module in modules if module.module_id=="contador")
     assert (accountant.permission_module,accountant.permission_action)==("relatorios","generate")
     restricted=tuple(module for module in modules if module.restricted_menu)
     assert tuple(module.module_id for module in restricted)==(
-        "usuarios","configs","ajuda","socorro","auditoria",
+        "usuarios","configs","ajuda","migracao_restauracao","socorro","auditoria",
     )
     assert tuple((module.permission_module,module.permission_action) for module in restricted)==(
-        ("technical","users"),("configs","view"),("dashboard","view"),
+        ("technical","users"),("configs","view"),("dashboard","view"),("technical","view"),
         ("configs","view"),("technical","audit"),
     )
     assert backup.call_args.kwargs["fiscal_directory"] == Path("C:/Teste/fiscal")
