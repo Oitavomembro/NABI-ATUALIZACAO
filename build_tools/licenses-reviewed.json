@@ -239,6 +239,21 @@
     "license": "Apache-2.0 OR GPL-2.0-only",
     "artifact": "pyinstaller_hooks_contrib-2026.6-py3-none-any.whl"
   },
+  "pyside6": {
+    "version": "6.11.2",
+    "license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+    "artifact": "pyside6-6.11.2-cp310-abi3-win_amd64.whl"
+  },
+  "pyside6-addons": {
+    "version": "6.11.2",
+    "license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+    "artifact": "pyside6_addons-6.11.2-cp310-abi3-win_amd64.whl"
+  },
+  "pyside6-essentials": {
+    "version": "6.11.2",
+    "license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+    "artifact": "pyside6_essentials-6.11.2-cp310-abi3-win_amd64.whl"
+  },
   "pyparsing": {
     "version": "3.3.2",
     "license": "MIT",
@@ -308,6 +323,11 @@
     "version": "84.0.0",
     "license": "MIT",
     "artifact": "setuptools-84.0.0-py3-none-any.whl"
+  },
+  "shiboken6": {
+    "version": "6.11.2",
+    "license": "LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only",
+    "artifact": "shiboken6-6.11.2-cp310-abi3-win_amd64.whl"
   },
   "six": {
     "version": "1.17.0",

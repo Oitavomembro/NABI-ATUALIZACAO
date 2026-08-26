@@ -145,6 +145,15 @@ pyinstaller==6.21.0 \
 # artifact: pyinstaller_hooks_contrib-2026.6-py3-none-any.whl
 pyinstaller-hooks-contrib==2026.6 \
     --hash=sha256:fd13b8ac126b35361175edacd41a0d97080b75dd5f4b594ecefefff969509dd3
+# artifact: pyside6-6.11.2-cp310-abi3-win_amd64.whl
+pyside6==6.11.2 \
+    --hash=sha256:3201d67e3c10be2eaedd3910ff0f02351eca7e88c95a291cde5e7f2f55ef207f
+# artifact: pyside6_addons-6.11.2-cp310-abi3-win_amd64.whl
+pyside6-addons==6.11.2 \
+    --hash=sha256:f449ea4431da20e7b86752cca8d166f93434516fe417f981c27e5f8e1b554407
+# artifact: pyside6_essentials-6.11.2-cp310-abi3-win_amd64.whl
+pyside6-essentials==6.11.2 \
+    --hash=sha256:c8a29def77032773a30879f7f24415b5395ad08592d147c170824ef4c735dfc1
 # artifact: pyparsing-3.3.2-py3-none-any.whl
 pyparsing==3.3.2 \
     --hash=sha256:850ba148bd908d7e2411587e247a1e4f0327839c40e2e5e6d05a007ecc69911d
@@ -187,6 +196,9 @@ rpds-py==2026.6.3 \
 # artifact: setuptools-84.0.0-py3-none-any.whl
 setuptools==84.0.0 \
     --hash=sha256:51a52592b3b99e102b609654876bd65f19f999935166d1352678931132b0c670
+# artifact: shiboken6-6.11.2-cp310-abi3-win_amd64.whl
+shiboken6==6.11.2 \
+    --hash=sha256:6ab0eba1c904455df621f9a6df3ca2bb896bab8670572d2bc4e37804ae91f19a
 # artifact: six-1.17.0-py2.py3-none-any.whl
 six==1.17.0 \
     --hash=sha256:4721f391ed90541fddacab5acf947aa0d3dc7d27b2e1e8eda2be8970586c3274

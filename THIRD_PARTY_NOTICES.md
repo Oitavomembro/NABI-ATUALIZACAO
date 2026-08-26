@@ -54,6 +54,9 @@
 | pygments | 2.21.0 | BSD-2-Clause | `pygments-2.21.0-py3-none-any.whl` |
 | pyinstaller | 6.21.0 | GPL-2.0-or-later WITH Bootloader-exception | `pyinstaller-6.21.0-py3-none-win_amd64.whl` |
 | pyinstaller-hooks-contrib | 2026.6 | Apache-2.0 OR GPL-2.0-only | `pyinstaller_hooks_contrib-2026.6-py3-none-any.whl` |
+| pyside6 | 6.11.2 | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | `pyside6-6.11.2-cp310-abi3-win_amd64.whl` |
+| pyside6-addons | 6.11.2 | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | `pyside6_addons-6.11.2-cp310-abi3-win_amd64.whl` |
+| pyside6-essentials | 6.11.2 | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | `pyside6_essentials-6.11.2-cp310-abi3-win_amd64.whl` |
 | pyparsing | 3.3.2 | MIT | `pyparsing-3.3.2-py3-none-any.whl` |
 | pytest | 9.1.1 | MIT | `pytest-9.1.1-py3-none-any.whl` |
 | python-barcode | 0.16.1 | MIT | `python_barcode-0.16.1-py3-none-any.whl` |
@@ -68,6 +71,7 @@
 | rfc3987-syntax | 1.1.0 | MIT | `rfc3987_syntax-1.1.0-py3-none-any.whl` |
 | rpds-py | 2026.6.3 | MIT | `rpds_py-2026.6.3-cp314-cp314-win_amd64.whl` |
 | setuptools | 84.0.0 | MIT | `setuptools-84.0.0-py3-none-any.whl` |
+| shiboken6 | 6.11.2 | LGPL-3.0-only OR GPL-2.0-only OR GPL-3.0-only | `shiboken6-6.11.2-cp310-abi3-win_amd64.whl` |
 | six | 1.17.0 | MIT | `six-1.17.0-py2.py3-none-any.whl` |
 | sortedcontainers | 2.4.0 | Apache-2.0 | `sortedcontainers-2.4.0-py2.py3-none-any.whl` |
 | tzdata | 2026.3 | Apache-2.0 | `tzdata-2026.3-py2.py3-none-any.whl` |

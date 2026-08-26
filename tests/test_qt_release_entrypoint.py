@@ -39,6 +39,21 @@ def test_auditoria_exige_fontes_e_runtime_qt():
         assert required in source
 
 
+def test_lock_fixa_wheels_qt_windows_com_hashes_oficiais():
+    lock = (ROOT / "build_tools" / "requirements-windows.lock").read_text(
+        encoding="utf-8"
+    )
+    expected = {
+        "pyside6==6.11.2": "3201d67e3c10be2eaedd3910ff0f02351eca7e88c95a291cde5e7f2f55ef207f",
+        "pyside6-addons==6.11.2": "f449ea4431da20e7b86752cca8d166f93434516fe417f981c27e5f8e1b554407",
+        "pyside6-essentials==6.11.2": "c8a29def77032773a30879f7f24415b5395ad08592d147c170824ef4c735dfc1",
+        "shiboken6==6.11.2": "6ab0eba1c904455df621f9a6df3ca2bb896bab8670572d2bc4e37804ae91f19a",
+    }
+    for package, digest in expected.items():
+        assert package in lock
+        assert f"--hash=sha256:{digest}" in lock
+
+
 def test_atualizador_encerra_antes_de_importar_aplicacao_qt():
     with (
         patch.object(main_qt_launcher, "_run_update_helper", return_value=7),

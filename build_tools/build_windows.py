@@ -16,10 +16,12 @@ from importlib import metadata
 from pathlib import Path
 from typing import Iterable
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
+from packaging.utils import canonicalize_name
+
+from build_tools.supply_chain import SupplyChainError, read_locked_artifacts
 BUILD_ROOT = PROJECT_ROOT / "build_output"
 SPEC_FILE = PROJECT_ROOT / "build_tools" / "pyinstaller" / "nabicode.spec"
 INNO_SCRIPT = PROJECT_ROOT / "build_tools" / "inno" / "NabiCode_Offline.iss"
@@ -147,11 +149,28 @@ def validate_build_environment() -> list[str]:
         errors.extend(validate_windows_build_path())
     if sys.version_info[:2] != (3, 14):
         errors.append(f"Python 3.14.x obrigatório; encontrado {platform.python_version()}.")
+    try:
+        locked_versions = {
+            item.name: item.version for item in read_locked_artifacts(LOCK_FILE)
+        }
+    except (OSError, UnicodeError, SupplyChainError) as error:
+        errors.append(f"Lock de dependências inválido: {error}")
+        locked_versions = {}
     for package in REQUIRED_DISTRIBUTIONS:
+        canonical = canonicalize_name(package)
+        locked = locked_versions.get(canonical)
+        if locked is None:
+            errors.append(f"Dependência de build ausente do lock: {package}")
         try:
-            metadata.version(package)
+            installed = metadata.version(package)
         except metadata.PackageNotFoundError:
             errors.append(f"Dependência de build ausente: {package}")
+        else:
+            if locked is not None and installed != locked:
+                errors.append(
+                    f"Dependência de build divergente: {package} "
+                    f"instalado={installed}, lock={locked}"
+                )
     return errors
 
 
