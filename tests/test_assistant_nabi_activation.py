@@ -18,6 +18,9 @@ class Security:
     def logout(self, reason):
         self.calls.append(("logout", reason))
 
+    def is_expired(self):
+        return False
+
 
 class Runtime:
     def __init__(self, *, fail_start=False):
@@ -72,6 +75,23 @@ class AuthenticatedAssistantActivationTests(unittest.TestCase):
         self.assertEqual(runtime.started, 0)
         self.assertEqual(calls, [])
         self.assertFalse(activation.active)
+
+    def test_sessao_atual_ativa_inicia_sem_solicitar_nova_senha(self):
+        activation, security, runtime, calls = self.create()
+        user = type("User", (), {"active": True})()
+        security.session = type("Session", (), {"user": user})()
+        self.assertEqual(activation.activate_current_session(), "assistente")
+        self.assertEqual(security.calls, [])
+        self.assertEqual(runtime.started, 1)
+        self.assertEqual(calls[0][0], "modelo-local")
+
+    def test_sessao_ausente_falha_fechada_sem_iniciar_modelo(self):
+        activation, security, runtime, calls = self.create()
+        security.session = None
+        with self.assertRaisesRegex(PermissionError, "sessão atual"):
+            activation.activate_current_session()
+        self.assertEqual(runtime.started, 0)
+        self.assertEqual(calls, [])
 
     def test_falha_do_runtime_encerra_e_invalida_sessao(self):
         activation, security, runtime, calls = self.create(fail_start=True)

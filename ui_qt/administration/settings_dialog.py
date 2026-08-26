@@ -299,6 +299,15 @@ class SettingsDialog(QDialog):
         from ui_qt.administration.company_profile_dialog import CompanyProfileDialog
         CompanyProfileDialog(self.company_profile_service, self).exec()
 
+    def open_company_xml_import(self) -> None:
+        if self.company_profile_service is None:
+            raise RuntimeError("Configuração empresarial indisponível.")
+        from PySide6.QtCore import QTimer
+        from ui_qt.administration.company_profile_dialog import CompanyProfileDialog
+        dialog = CompanyProfileDialog(self.company_profile_service, self)
+        QTimer.singleShot(0, dialog.import_xml)
+        dialog.exec()
+
     def _preview_receipt(self) -> None:
         try: self.receipt_preview.setPlainText(self.service.preview_receipt(self.receipt_model.currentText()))
         except Exception as error: self.receipt_preview.setPlainText(str(error))
