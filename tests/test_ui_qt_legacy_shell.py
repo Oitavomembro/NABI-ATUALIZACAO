@@ -9,8 +9,8 @@ import pytest
 
 pytest.importorskip("PySide6")
 from PySide6.QtCore import QEvent, Qt
-from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QWidget
+from PySide6.QtGui import QColor, QKeyEvent, QPalette
+from PySide6.QtWidgets import QApplication, QDialog, QMainWindow, QPushButton, QWidget
 
 from ui_qt.administration.login_dialog import ApplicationLoginDialog
 from ui_qt.administration.module_hub import AdministrativeModule
@@ -78,6 +78,32 @@ def test_shell_starts_on_dashboard_without_creating_pdv(qt_application):
         assert shell.windowFlags() & Qt.WindowType.WindowCloseButtonHint
         pdv_factory.assert_not_called()
     finally:
+        shell.close()
+
+
+def test_visual_preferences_reach_common_qt_widgets_and_preserve_semantic_qss(qt_application):
+    shell = NabiCodeShellWindow(Security(), (dashboard_module(),), Mock())
+    common = QPushButton("Comum")
+    danger = QPushButton("Perigo")
+    danger.setStyleSheet("background:#da3633;color:#ffffff")
+    values = {
+        "window_background": "#102030",
+        "common_button_background": "#304050",
+        "text_color": "#f1f2f3",
+        "focus_color": "#607080",
+    }
+    try:
+        shell.apply_visual_preferences(values)
+        palette = common.palette()
+        assert palette.color(QPalette.ColorRole.Window) == QColor("#102030")
+        assert palette.color(QPalette.ColorRole.Button) == QColor("#304050")
+        assert palette.color(QPalette.ColorRole.ButtonText) == QColor("#f1f2f3")
+        assert palette.color(QPalette.ColorRole.Highlight) == QColor("#607080")
+        assert "#da3633" in danger.styleSheet()
+        assert "#ffffff" in danger.styleSheet()
+    finally:
+        common.close()
+        danger.close()
         shell.close()
 
 
