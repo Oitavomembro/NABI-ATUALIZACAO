@@ -59,6 +59,16 @@ def test_nabi_orienta_primeiro_acesso_sem_modelo_local():
     assert "oito caracteres" in dialog.nabi_guidance.text()
     dialog.close()
 
+def test_botao_importar_xml_do_primeiro_acesso_abre_seletor_sem_tratar_checked_como_caminho():
+    dialog = InitialSetupDialog(Mock())
+    with patch(
+        "ui_qt.administration.initial_setup_dialog.QFileDialog.getOpenFileName",
+        return_value=("", ""),
+    ) as chooser:
+        dialog.import_xml_button.click()
+    chooser.assert_called_once()
+    dialog.close()
+
 def test_migracao_legada_exige_confirmacao_e_consumo_unico():
     security=Mock();dialog=LegacySecurityMigrationDialog(security);dialog.current_password.setText("antiga");dialog.new_password.setText("nova-segura");dialog.confirmation.setText("diferente")
     with patch("ui_qt.administration.legacy_security_migration_dialog.QMessageBox.warning"):dialog.complete()

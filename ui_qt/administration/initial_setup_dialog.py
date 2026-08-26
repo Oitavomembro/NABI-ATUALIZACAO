@@ -51,7 +51,7 @@ class InitialSetupDialog(QDialog):
             form.addRow(label, field)
         root.addLayout(form)
         self.import_xml_button = QPushButton("Importar dados de XML")
-        self.import_xml_button.clicked.connect(self.import_xml)
+        self.import_xml_button.clicked.connect(lambda _checked=False: self.import_xml())
         root.addWidget(self.import_xml_button)
         self.finish = QPushButton("Concluir configuração [Enter]")
         self.finish.setStyleSheet("background:#238636;color:white;min-height:38px;font-weight:800")
@@ -79,6 +79,10 @@ class InitialSetupDialog(QDialog):
         self.store_name.setFocus()
 
     def import_xml(self, path=None, *, selected_role="") -> bool:
+        # QPushButton.clicked emits a boolean.  Keep this public entry point
+        # defensive as it is also used directly by tests and integrations.
+        if isinstance(path, bool):
+            path = None
         if path is None:
             path, _ = QFileDialog.getOpenFileName(self, "Importar dados de XML", "", "XML fiscal (*.xml)")
             if not path:

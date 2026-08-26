@@ -150,7 +150,7 @@ class CompanyProfileDialog(QDialog):
         bottom.addWidget(self.back_button); bottom.addWidget(self.confirm_button)
         root.addLayout(bottom)
 
-        self.xml_button.clicked.connect(self.import_xml)
+        self.xml_button.clicked.connect(lambda _checked=False: self.import_xml())
         self.legacy_button.clicked.connect(self.load_legacy_draft)
         self.review_button.clicked.connect(self.review)
         self.back_button.clicked.connect(self._back_to_form)
@@ -252,6 +252,10 @@ class CompanyProfileDialog(QDialog):
         return tuple(value for value in values if value.strip())
 
     def import_xml(self, path: str | Path | None = None, *, selected_role: str = "") -> bool:
+        # QPushButton.clicked emits a boolean.  It must never reach pathlib or
+        # the XML parser as though it were a filesystem path.
+        if isinstance(path, bool):
+            path = None
         if path is None:
             chosen, _ = QFileDialog.getOpenFileName(self, "Importar dados de XML", "", "XML fiscal (*.xml)")
             if not chosen:

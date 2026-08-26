@@ -220,3 +220,14 @@ def test_cancelamento_da_previa_nao_altera_campo_algum(environment, tmp_path, mo
     monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Cancel)
     assert dialog.import_xml(path, selected_role="emitente") is False
     assert dialog._draft() == before and service.history() == ()
+
+
+def test_botao_importar_xml_abre_seletor_sem_tratar_checked_como_caminho(environment, monkeypatch):
+    _, _, _, dialog, _ = environment
+    calls = []
+    monkeypatch.setattr(
+        "ui_qt.administration.company_profile_dialog.QFileDialog.getOpenFileName",
+        lambda *args, **kwargs: (calls.append((args, kwargs)) or ("", "")),
+    )
+    dialog.xml_button.click()
+    assert len(calls) == 1
