@@ -4200,6 +4200,38 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - nenhum banco ativo, XML fiscal real, certificado, senha, rede ou SEFAZ foi
   acessado nessa validação e nenhum push foi realizado.
 
+## Candidata de fechamento Qt — manutenção, Nabi e tema — 25/08/2026
+
+- branch integrada de fechamento: `codex/release-qt-portatil`, derivada de
+  `34a7c1c`, preservando por merges normais os históricos das três trilhas;
+- Migração NabiMig e restauração ativa foram ligadas ao menu técnico usando os
+  serviços oficiais. Restauração verifica em TEMP, exige confirmação/hash,
+  cria pré-backup, encerra o aplicativo e usa helper externo que aguarda o lock,
+  revalida caminhos/hashes, trata WAL/SHM, audita e executa rollback em falha;
+- Nabi contextual foi ligada ao shell Qt somente por intenções tipadas para
+  configuração Fiscal, XML empresarial e Produtos. Sessão, licença, runtime e
+  portas falham fechados; senha, banco direto, confirmação pelo usuário e
+  liberação/transmissão Fiscal permanecem fora do contrato;
+- a paleta visual global passou a alcançar widgets comuns abertos e futuros,
+  mantendo QSS explícito e cores semânticas de perigo, alerta, bloqueio e Fiscal;
+- o empacotamento futuro deixou de apontar para a tela Legacy: o lançador
+  distribuível preserva atualização e mutex do instalador, mas inicia o Qt. O
+  Legacy continua no código como caminho preservado, não como interface padrão;
+- PySide6, Addons, Essentials e shiboken6 6.11.2 foram fixados no lock Windows
+  por artefato `win_amd64`, SHA-256 oficial e licença revisada. A auditoria do
+  construtor exige que versões instaladas coincidam exatamente com o lock;
+- regressão combinada após os merges: `124 passed`; regressão integral:
+  `2608 passed`, `492 subtests passed`, zero skips e zero falhas. Os dois avisos
+  conhecidos foram depois tratados estritamente em seus testes específicos,
+  que passam também com avisos elevados a erro;
+- nenhum build, ZIP ou instalador foi gerado. O pacote portátil só será criado
+  após a auditoria final e homologações descartáveis; nunca conterá banco ativo,
+  certificado, senha, chave privada ou XML real;
+- pendências materiais antes do release: homologação visual da manutenção e da
+  Nabi com licença/modelo reais, teste de restauração somente com cópia
+  descartável, smoke test do executável extraído e homologação fiscal adversarial
+  acompanhada. Produção Fiscal/SEFAZ continua bloqueada.
+
 ## Migração e restauração ativa no menu técnico — 25/08/2026
 
 - branch/worktree isolados: `codex/migracao-restauracao-menu-tecnico` em
