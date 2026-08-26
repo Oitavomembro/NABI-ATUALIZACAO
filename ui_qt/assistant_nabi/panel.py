@@ -398,6 +398,9 @@ class NabiAssistantPanel(QWidget):
                 "estoque.preparar_movimento",
                 "financeiro.preparar_titulo",
                 "financeiro.preparar_baixa",
+                "caixa.preparar_abertura",
+                "caixa.preparar_movimento",
+                "caixa.preparar_fechamento",
             }:
                 self._service.invalidate_confirmations()
                 self._pending_draft = (
@@ -493,6 +496,13 @@ class NabiAssistantPanel(QWidget):
             "STOCK_RECEIVE": "Confira produto, saldo anterior, quantidade de entrada, novo saldo e motivo.",
             "STOCK_REMOVE": "Confira produto, saldo anterior, quantidade de saída, novo saldo e motivo.",
             "STOCK_ADJUST": "Confira produto, saldo anterior, novo saldo absoluto e motivo.",
+            "CASH_OPEN": "Confira terminal, operador, modo e saldo inicial do caixa.",
+            "CASH_SANGRIA": "Confira terminal, sessão, valor e motivo da sangria.",
+            "CASH_SUPRIMENTO": "Confira terminal, sessão, valor e motivo do suprimento.",
+            "CASH_CLOSE": (
+                "Confira terminal, sessão e valor contado. O fechamento assistido "
+                "permanece bloqueado até possuir atomicidade comprovada."
+            ),
         }.get(operation_kind, "Confira itens, total, cliente e pagamento.")
         if operation_kind.startswith("FINANCIAL_CREATE_"):
             guidance = "Confira tipo, parte, valor, emissão, vencimento e documento do título."
@@ -540,6 +550,10 @@ class NabiAssistantPanel(QWidget):
                 )
             elif operation_kind.startswith("FINANCIAL_"):
                 result, _authorization = self._service.confirm_and_execute_financial(
+                    self._confirmation_token, draft_id, fingerprint
+                )
+            elif operation_kind.startswith("CASH_"):
+                result, _authorization = self._service.confirm_and_execute_cash(
                     self._confirmation_token, draft_id, fingerprint
                 )
             else:
@@ -612,6 +626,17 @@ class NabiAssistantPanel(QWidget):
             self.history.append(
                 "<b>Nabi:</b> Operação financeira confirmada pelo serviço oficial. "
                 f"Título #{int(result.title_id)}{payment}; saldo R$ {result.open_amount}."
+            )
+        elif operation_kind.startswith("CASH_"):
+            movement_id = result.get("movement_id")
+            if operation_kind == "CASH_OPEN":
+                detail = f"Sessão #{int(result['session_id'])} aberta."
+            else:
+                detail = f"Movimento #{int(movement_id)} registrado."
+            self._set_state("completed", "Caixa registrado")
+            self.history.append(
+                "<b>Nabi:</b> Operação de caixa confirmada pelo serviço oficial. "
+                + detail
             )
         else:
             self._set_state("completed", "Rascunho carregado no PDV")
@@ -926,6 +951,25 @@ class NabiAssistantPanel(QWidget):
                 f"— cartões R$ {payload['card_sales']} — outros R$ {payload['other_sales']}",
                 f"Recebimentos em dinheiro: R$ {payload['cash_receipts']}",
                 f"Suprimentos: R$ {payload['supplies']} — sangrias R$ {payload['withdrawals']}",
+            ))
+        if result.tool_name in {
+            "caixa.preparar_abertura",
+            "caixa.preparar_movimento",
+            "caixa.preparar_fechamento",
+        }:
+            operation = payload.get("operation_kind", "")
+            labels = {
+                "CASH_OPEN": "Abertura",
+                "CASH_SANGRIA": "Sangria",
+                "CASH_SUPRIMENTO": "Suprimento",
+                "CASH_CLOSE": "Fechamento",
+            }
+            return "\n".join((
+                f"{labels.get(operation, 'Operação')} do caixa {payload.get('terminal', '-')}",
+                f"Valor: R$ {payload.get('amount', '0.00')}",
+                f"Sessão esperada: {payload.get('expected_session_id') or '-'}",
+                f"Observação: {payload.get('note') or '-'}",
+                "RASCUNHO — nenhuma operação de caixa foi registrada.",
             ))
         if result.tool_name == "interface.abrir_pesquisa_produtos":
             term = payload.get("term", "")

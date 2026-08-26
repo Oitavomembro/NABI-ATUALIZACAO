@@ -38,6 +38,7 @@ class AssistantApplicationService:
         product_stock_executor=None,
         financial_executor=None,
         safe_error_recovery_executor=None,
+        cash_executor=None,
     ) -> None:
         self._model = model
         self._registry = registry
@@ -54,6 +55,7 @@ class AssistantApplicationService:
         self._product_stock_executor = product_stock_executor
         self._financial_executor = financial_executor
         self._safe_error_recovery_executor = safe_error_recovery_executor
+        self._cash_executor = cash_executor
 
     def ask(self, message: str) -> AssistantTurn:
         text = str(message or "").strip()
@@ -114,6 +116,8 @@ class AssistantApplicationService:
             permission = ("financeiro", "create")
         elif operation_kind.startswith("FINANCIAL_SETTLE_"):
             permission = ("financeiro", "pay")
+        elif operation_kind.startswith("CASH_"):
+            permission = ("financeiro", "pay")
         if permission is None or not self._permissions.allows(actor, *permission):
             raise PermissionError("A permissão para confirmar o rascunho não está disponível.")
         if draft.fingerprint != str(fingerprint or ""):
@@ -132,6 +136,15 @@ class AssistantApplicationService:
         draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
         result = self._financial_executor.execute(draft, authorization)
         return result, authorization
+
+    def confirm_and_execute_cash(self, token: str, draft_id: str, fingerprint: str):
+        if self._cash_executor is None:
+            raise RuntimeError("Execução assistida de caixa não está configurada.")
+        draft = self._drafts.get(draft_id)
+        if not str(getattr(draft, "operation_kind", "")).startswith("CASH_"):
+            raise TypeError("O rascunho confirmado não é de caixa.")
+        draft, authorization = self.confirm_draft(token, draft_id, fingerprint)
+        return self._cash_executor.execute(draft, authorization), authorization
 
     def confirm_and_execute_purchase(
         self, token: str, draft_id: str, fingerprint: str

@@ -19,6 +19,7 @@ from .customer_tools import register_customer_draft_tools
 from .customer_receipt_tools import register_customer_receipt_tools
 from .report_tools import register_report_read_tools
 from .cash_tools import register_cash_read_tools
+from .cash_draft_tools import register_cash_draft_tools
 from .purchase_read_tools import register_purchase_read_tools
 from .procurement_tools import register_procurement_draft_tools
 from .product_stock_tools import register_product_stock_draft_tools
@@ -82,6 +83,7 @@ def create_draft_assistant(
     product_stock_draft_service=None, product_stock_executor=None,
     financial_draft_service=None, financial_executor=None,
     safe_error_recovery_service=None, safe_error_recovery_executor=None,
+    cash_draft_service=None, cash_executor=None,
 ) -> AssistantApplicationService:
     """Compõe consultas e rascunhos; não registra ferramentas mutáveis."""
     for value, message in (
@@ -114,6 +116,7 @@ def create_draft_assistant(
         product_stock_draft_service,
         financial_draft_service,
         safe_error_recovery_service,
+        cash_draft_service,
     )
     confirmations = DraftConfirmationService(
         audit=AdminAssistantConfirmationAuditAdapter(audit_service)
@@ -136,6 +139,8 @@ def create_draft_assistant(
         register_financial_draft_tools(registry, financial_draft_service)
     if safe_error_recovery_service is not None:
         register_safe_error_recovery_tools(registry, safe_error_recovery_service)
+    if cash_draft_service is not None:
+        register_cash_draft_tools(registry, cash_draft_service)
     return AssistantApplicationService(
         model=model, registry=registry, permissions=permissions,
         draft_service=draft_catalog, confirmation_service=confirmations,
@@ -147,4 +152,5 @@ def create_draft_assistant(
         product_stock_executor=product_stock_executor,
         financial_executor=financial_executor,
         safe_error_recovery_executor=safe_error_recovery_executor,
+        cash_executor=cash_executor,
     )

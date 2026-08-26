@@ -73,6 +73,10 @@ class DraftService(Service):
         self.confirmations.append((token, draft_id, fingerprint))
         return SimpleNamespace(resource_id=92), object()
 
+    def confirm_and_execute_cash(self, token, draft_id, fingerprint):
+        self.confirmations.append((token, draft_id, fingerprint))
+        return {"session_id": 12, "movement_id": None}, object()
+
 
 @unittest.skipUnless(QT_AVAILABLE, f"Qt indisponível: {QT_ERROR}")
 class NabiAssistantPanelTests(unittest.TestCase):
@@ -515,6 +519,27 @@ class NabiAssistantPanelTests(unittest.TestCase):
         self.assertEqual(service.confirmations[0][1], "receipt-1")
         self.assertIn("Movimento #92", panel.history.toPlainText())
         self.assertEqual(panel.status.text(), "Recebimento registrado")
+
+    def test_abertura_caixa_exige_revisao_reforcada_e_servico_oficial(self):
+        service = DraftService(); panel = NabiAssistantPanel(service)
+        self.addCleanup(panel.close)
+        panel._generation = 16
+        panel._complete(16, AssistantTurn("Abertura preparada", (ToolResult(
+            "req-cash", "caixa.preparar_abertura", True,
+            {
+                "draft_id": "cash-1", "fingerprint": "a" * 64,
+                "operation_kind": "CASH_OPEN", "terminal": "CAIXA-1",
+                "amount": "100.00", "persisted": False,
+            },
+        ),)))
+        self.assertFalse(panel.review_draft_button.isHidden())
+        self.assertIn("nenhuma operação de caixa", panel.history.toPlainText())
+        panel.review_draft()
+        self.assertIn("saldo inicial", panel.history.toPlainText())
+        panel.confirm_draft()
+        self.assertEqual(service.confirmations[0][1], "cash-1")
+        self.assertIn("Sessão #12 aberta", panel.history.toPlainText())
+        self.assertEqual(panel.status.text(), "Caixa registrado")
 
     def test_resposta_xml_atrasada_e_ignorada_apos_parar(self):
         panel = NabiAssistantPanel(Service(), nfe_entry_service=object())

@@ -10,7 +10,7 @@ from commercial.application.pdv_application_service import PDVApplicationService
 
 from .commercial.pdv_view_model import PDVViewModel
 from .commercial.pdv_window import PDVWindow
-from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant
+from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant, NabiFloatingCoordinator
 from .shell import NabiCodeShellWindow
 from .backup_startup import DailyBackupController
 
@@ -85,6 +85,7 @@ def create_application(
             )
         floating = NabiFloatingAssistant(panel, window)
         window.nabi_assistant = floating
+        window.nabi_assistant_coordinator = NabiFloatingCoordinator(qt_application, window, floating)
     return qt_application, window
 
 
@@ -198,6 +199,8 @@ def create_shell_application(
         window.daily_backup_controller = DailyBackupController(
             daily_backup_service, window
         )
+    if assistant_service is not None or assistant_panel_factory is not None:
+        window.nabi_assistant_coordinator = NabiFloatingCoordinator(qt_application, window, floating)
     return qt_application, window
 
 
