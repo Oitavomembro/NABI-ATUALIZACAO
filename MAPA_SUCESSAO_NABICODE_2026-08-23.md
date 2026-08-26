@@ -4301,3 +4301,25 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - coordenação de homologação: a outra conversa conduz e registra os testes; esta
   conversa atua como auditor adversarial independente. Nenhuma etapa fiscal é
   aprovada apenas por quem a executou.
+
+## Integração Caixa/Contador — fechamento e saídas documentadas
+
+- branch isolada `codex/integracao-caixa-contador`, derivada da candidata
+  `codex/release-qt-portatil@444cecc`;
+- merge normal de `codex/caixa-despesas-documentadas`, que já contém
+  integralmente `codex/caixa-fechamento-idempotente`, preservando os dois
+  históricos sem duplicação;
+- fechamento manual usa transação `BEGIN IMMEDIATE`, diário idempotente,
+  fingerprint do conteúdo, ator autenticado, auditoria obrigatória e rollback
+  integral; repetição idêntica devolve o fechamento oficial e repetição
+  divergente falha fechada;
+- despesas empresariais, retiradas de sócio, adiantamentos, pagamentos a
+  fornecedor e outras saídas usam categorias/formas/origens fechadas, revisão
+  imutável, confirmação humana, ID real opcional do fornecedor, comprovante e
+  estado explícito `A_REVISAR_PELO_CONTADOR`;
+- saída em dinheiro originada no Caixa reduz o dinheiro esperado; outras
+  origens permanecem visíveis para reconciliação sem adulterar o numerário;
+- a janela ampla do Caixa preserva os seis cards reconciliáveis e acrescenta
+  ação e card próprios para saídas documentadas, sem decidir dedutibilidade ou
+  apuração tributária;
+- Fiscal/SEFAZ, Nabi, licenciamento e banco real permanecem fora desta etapa.

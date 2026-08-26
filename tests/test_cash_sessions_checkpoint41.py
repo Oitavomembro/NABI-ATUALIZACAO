@@ -10,6 +10,7 @@ from services.cash_service import CashService
 SCHEMA = """
 CREATE TABLE cash_sessions(id INTEGER PRIMARY KEY AUTOINCREMENT,terminal TEXT NOT NULL,opened_by TEXT NOT NULL,opened_at TEXT NOT NULL,opening_balance TEXT NOT NULL,opening_mode TEXT NOT NULL,status TEXT NOT NULL,closed_by TEXT DEFAULT '',closed_at TEXT DEFAULT '',expected_cash TEXT,counted_cash TEXT,difference TEXT,closing_note TEXT DEFAULT '');
 CREATE UNIQUE INDEX one_open_cash ON cash_sessions(terminal) WHERE status='ABERTO';
+CREATE TABLE cash_closing_journal(cash_session_id INTEGER PRIMARY KEY,fingerprint TEXT NOT NULL,status TEXT NOT NULL,result_json TEXT NOT NULL DEFAULT '',username TEXT NOT NULL,created_at TEXT NOT NULL,committed_at TEXT NOT NULL DEFAULT '');
 CREATE TABLE cash_movements(id INTEGER PRIMARY KEY AUTOINCREMENT,cash_session_id INTEGER NOT NULL,type TEXT NOT NULL,amount TEXT NOT NULL,payment_method TEXT DEFAULT 'DINHEIRO',source TEXT DEFAULT 'CAIXA',source_id TEXT DEFAULT '',user_id TEXT NOT NULL,note TEXT DEFAULT '',created_at TEXT NOT NULL);
 CREATE TABLE movimentacoes(id INTEGER PRIMARY KEY AUTOINCREMENT,tipo TEXT,forma_pagamento TEXT,valor REAL,valor_decimal TEXT,data TEXT,status_pagamento TEXT DEFAULT 'PAGO');
 CREATE TABLE auditoria(id INTEGER PRIMARY KEY AUTOINCREMENT,data TEXT,usuario TEXT,modulo TEXT,acao TEXT,objeto TEXT,detalhes TEXT,resultado TEXT);

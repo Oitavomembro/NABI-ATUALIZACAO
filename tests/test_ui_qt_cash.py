@@ -131,7 +131,7 @@ def test_cards_sao_acessiveis_clicaveis_e_bloqueiam_auto_repeat(app,monkeypatch)
     dialog.close()
 
 
-def test_todos_os_seis_cards_abrem_o_detalhe_tipado_exato(app):
+def test_todos_os_cards_abrem_o_detalhe_tipado_exato(app):
     captured=[]
     class ImmediateDialog(QDialog):
         def exec(self):return QDialog.DialogCode.Rejected
@@ -142,7 +142,7 @@ def test_todos_os_seis_cards_abrem_o_detalhe_tipado_exato(app):
         CashApplicationService(Backend(),terminal="PC1",user="ANA"),
         detail_dialog_factory=factory,
     )
-    expected=("expected","cash","pix","card","supplies","withdrawals")
+    expected=("expected","cash","pix","card","supplies","withdrawals","documented")
     assert tuple(dialog.cards)==expected
     for key_name in expected:
         assert dialog.cards[key_name][1].accessibleName()
