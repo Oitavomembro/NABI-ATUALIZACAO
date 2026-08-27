@@ -126,6 +126,32 @@ class NabiFloatingGlobalTests(unittest.TestCase):
         self.assertFalse(self.coordinator._installed)
         self.assertTrue(self.floating.isHidden())
 
+    def test_fechamento_recusado_preserva_coordenador_global(self):
+        class RootThatCanRejectClose(QWidget):
+            reject_close = True
+
+            def closeEvent(self, event):
+                if self.reject_close:
+                    event.ignore()
+                    return
+                super().closeEvent(event)
+
+        root = RootThatCanRejectClose()
+        root.show()
+        floating = NabiFloatingAssistant(QWidget(), root, settings=self.settings)
+        coordinator = NabiFloatingCoordinator(self.app, root, floating)
+        self.addCleanup(coordinator.shutdown)
+
+        self.assertFalse(root.close())
+        QTest.qWait(1)
+        self.assertTrue(root.isVisible())
+        self.assertTrue(coordinator._installed)
+
+        root.reject_close = False
+        self.assertTrue(root.close())
+        QTest.qWait(1)
+        self.assertFalse(coordinator._installed)
+
     def test_varios_shells_fechados_nao_deixam_coordenadores_globais(self):
         coordinators = []
         roots = []

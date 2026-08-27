@@ -52,8 +52,14 @@ class NabiFloatingCoordinator(QObject):
         root = getattr(self, "_root", None)
         application = getattr(self, "_application", None)
         floating = getattr(self, "_floating", None)
-        if watched is root and event.type() in {QEvent.Type.Close, QEvent.Type.Destroy}:
+        if watched is root and event.type() == QEvent.Type.Destroy:
             self.shutdown()
+            return False
+        if watched is root and event.type() == QEvent.Type.Close:
+            # O filtro recebe Close antes de QWidget.closeEvent decidir se o
+            # fechamento será aceito. Confira no próximo ciclo para não
+            # desmontar a Nabi quando uma janela recusar o encerramento.
+            QTimer.singleShot(0, self._shutdown_if_root_closed)
             return False
         if floating is None or not isValid(floating):
             return False
@@ -99,6 +105,12 @@ class NabiFloatingCoordinator(QObject):
                 self._floating.attach_to(active)
                 return
         self._floating.attach_to(self._root)
+
+    def _shutdown_if_root_closed(self) -> None:
+        if not self._installed or not isValid(self._root):
+            return
+        if not self._root.isVisible():
+            self.shutdown()
 
     def _belongs_to_root(self, widget: QWidget) -> bool:
         current: QWidget | None = widget
