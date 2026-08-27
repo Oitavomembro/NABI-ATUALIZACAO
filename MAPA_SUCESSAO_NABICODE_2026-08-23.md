@@ -4493,3 +4493,34 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `96 passed`; `compileall` e `git diff --check` aprovados. A suíte completa
   imediatamente anterior deste mesmo checkpoint-base registrou `2712 passed`,
   `492 subtests passed`, zero falhas e um teste externo condicionado.
+
+#### Auditoria transversal de ações visuais — 27/08/2026
+
+- cartões de Início, resumos laterais de clientes, cartões do Caixa e cartões de
+  prontidão Fiscal possuem ação explícita, clique/Enter controlados e detalhe
+  correspondente; diagnósticos da Central de Ajuda abrem o detalhe sanitizado
+  dentro da própria central, que já é uma janela operacional dedicada;
+- seletores de perfil da Central do Contador continuam sendo escolhas, não
+  indicadores de detalhe. Os totais de Relatórios são `QLabel` informativos e
+  não simulam botões clicáveis; portanto não foi criada navegação sem destino;
+- Relatórios e Configurações permanecem em janelas próprias maximizadas e
+  reutilizadas. A política adaptativa continua protegendo os demais diálogos e
+  a roda do mouse sobre seletores fechados;
+- validação transversal: `71 passed` em dashboard, shell, política adaptativa,
+  Caixa, prontidão Fiscal e Relatórios. Nenhum código precisou ser alterado.
+
+### Futuro emissor multiproduto — nome provisório “Notas Iglbalt”
+
+- requisito autorizado apenas para planejamento: um único emissor externo
+  poderá selecionar NabiCode ou o novo produto independente;
+- antes de implementar, confirmar a grafia pública e o `product_id` do novo
+  produto. Não gerar chave permanente antes dessa decisão e da cerimônia;
+- cada produto terá catálogo, `key_id`, par Ed25519, edições, recursos, política
+  e formato próprios. A chave privada do NabiCode nunca será reutilizada;
+- licenças devem falhar fechadas quando apresentadas ao produto errado, mesmo
+  se renomeadas. Compatibilidade das licenças NabiCode existentes será mantida;
+- o novo programa receberá somente um verificador mínimo: chave pública,
+  fingerprint hasheado, estados, portão fail-closed e ativação. Nenhum módulo
+  comercial, fiscal ou de IA do NabiCode será transportado;
+- testes futuros obrigatórios: rejeição cruzada, adulteração, outra máquina,
+  vencimento/tolerância, revogação e renovação.
