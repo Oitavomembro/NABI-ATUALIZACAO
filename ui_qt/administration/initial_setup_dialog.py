@@ -131,7 +131,9 @@ class InitialSetupDialog(QDialog):
         message = self._guidance.get(field)
         if message:
             self.nabi_guidance.setText(
-                f"<b>NABI • ASSISTENTE DE CONFIGURAÇÃO</b><br>{message}"
+                "<b>NABI • ASSISTENTE DE CONFIGURAÇÃO • DISPONÍVEL</b><br>"
+                f"{message}<br><small>Nesta etapa eu somente oriento e preparo dados; "
+                "ações operacionais serão liberadas após criar o administrador.</small>"
             )
 
     def eventFilter(self, watched, event):

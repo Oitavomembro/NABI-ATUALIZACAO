@@ -63,6 +63,12 @@ class MainQtAssistantActivationTests(unittest.TestCase):
         importer.assert_not_called()
         drafts.assert_not_called()
 
+    def test_shell_autoativa_toda_nabi_composta_inclusive_licenca_legada(self):
+        source = Path(main_qt.__file__).read_text(encoding="utf-8")
+        self.assertIn(
+            "auto_activate_assistant=assistant_activation is not None", source
+        )
+
     def test_licenca_sem_comercial_fiscal_ou_assistente_nao_compoe_nabi(self):
         gate = self.gate(Capability.QT)
         with patch.object(main_qt, "_create_assistant_activation") as activation:

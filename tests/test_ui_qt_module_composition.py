@@ -53,6 +53,8 @@ def test_configuracao_inicial_consumo_de_auto_repeat_nao_grava():
 def test_nabi_orienta_primeiro_acesso_sem_modelo_local():
     dialog=InitialSetupDialog(Mock())
     assert "NABI" in dialog.nabi_guidance.text()
+    assert "DISPONÍVEL" in dialog.nabi_guidance.text()
+    assert "somente oriento" in dialog.nabi_guidance.text()
     dialog._show_guidance(dialog.document)
     assert "modo não fiscal" in dialog.nabi_guidance.text()
     dialog._show_guidance(dialog.password)

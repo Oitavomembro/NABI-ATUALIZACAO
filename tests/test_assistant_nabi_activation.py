@@ -103,6 +103,26 @@ class AuthenticatedAssistantActivationTests(unittest.TestCase):
         self.assertEqual(runtime.started, 1)
         self.assertEqual(calls[0][0], "modelo-local")
 
+    def test_sessao_atual_e_entregue_a_factory_real_de_tres_argumentos(self):
+        security = Security()
+        runtime = Runtime()
+        user = type("User", (), {"active": True, "username": "operador"})()
+        session = type("Session", (), {"user": user})()
+        security.session = session
+        received = []
+
+        activation = AuthenticatedAssistantActivation(
+            security_service=security,
+            runtime_factory=lambda: runtime,
+            assistant_factory=lambda model, session_id, authenticated: (
+                received.append((model, session_id, authenticated)) or "assistente"
+            ),
+            logout_on_stop=False,
+        )
+
+        self.assertEqual(activation.activate_current_session(), "assistente")
+        self.assertIs(received[0][2], session)
+
     def test_sessao_ausente_falha_fechada_sem_iniciar_modelo(self):
         activation, security, runtime, calls = self.create()
         security.session = None
