@@ -4608,3 +4608,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - a matriz comprova o contrato automatizado dos comandos; homologação visual e
   recursos físicos continuam sendo evidências separadas e não são inferidos
   destes testes.
+
+## Regressão automatizada integral particionada — 27/08/2026
+
+- a suíte não-Qt completa aprovou `2303 passed`, `490 subtests passed`, com um
+  único teste condicional sem pacote informado; esse mesmo teste foi aprovado
+  separadamente contra o pacote NabiMig real preservado;
+- os 34 arquivos `test_ui_qt*.py` foram executados um por processo para evitar
+  contaminação do runtime nativo entre janelas: `422 passed`, `2 subtests
+  passed`, zero falhas;
+- total automatizado comprovado nesta revisão: `2725 passed`, `492 subtests
+  passed`, mais `1 passed` do pacote NabiMig real;
+- `compileall` completo, `git diff --check` e árvore de trabalho limpa foram
+  aprovados;
+- a aprovação automatizada não substitui certificado, impressora, SEFAZ,
+  credenciamento, segunda máquina e demais homologações físicas registradas.
