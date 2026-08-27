@@ -4509,6 +4509,22 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação transversal: `71 passed` em dashboard, shell, política adaptativa,
   Caixa, prontidão Fiscal e Relatórios. Nenhum código precisou ser alterado.
 
+#### Identidade empresarial canônica no Qt — 27/08/2026
+
+- implementação `3f0147e`: a versão vigente e confirmada do Perfil Empresarial
+  passou a ser a primeira autoridade de CNPJ e nome para a Central do Contador;
+- nome fantasia é usado quando disponível e razão social permanece como
+  fallback. O CNPJ não volta a ser entrada manual na geração do pacote;
+- na edição Fiscal, perfil vigente, configuração fiscal e certificado A1 devem
+  possuir exatamente o mesmo CNPJ. Dado ausente ou divergente bloqueia a
+  geração antes de qualquer arquivo;
+- bases antigas sem perfil vigente conservam o fallback legado existente, sem
+  confirmação automática nem migração silenciosa;
+- validação focada: `62 passed`; regressão ampliada de perfil empresarial, XML,
+  Contador, prontidão Fiscal, comprovantes, composição e shell: `154 passed`;
+  `compileall` e `git diff --check` aprovados. Nenhum certificado, XML real,
+  banco de produção, segredo ou comunicação SEFAZ foi acessado.
+
 ### Futuro emissor multiproduto — nome provisório “Notas Iglbalt”
 
 - requisito autorizado apenas para planejamento: um único emissor externo
