@@ -3898,3 +3898,16 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   usando chave temporária apagada ao final. Teste arquitetural impede inclusão
   de PEM/KEY/P12/PFX ou marcador de chave privada. O catálogo de teste jamais
   pode ser distribuído em produção.
+- Contrato real do cliente finalizado em `a867b0f`: documento externo contém
+  exatamente `payload` e `signature`; Ed25519 assina somente o payload UTF-8
+  canônico com `ensure_ascii=false`. Payload schema 3: `NOTAS_IGLBALT`, edição
+  `COMPLETA`, feature `core`, código NABI2, `issued_at`, `not_before` e
+  `expires_at`. O envelope NabiCode V2 permanece separado e compatível.
+- Identidade permanente externa criada: key id
+  `notas-iglbalt-prod-2026-01`; chave privada criptografada e senha protegida
+  por DPAPI do usuário atual, ambas fora do Git. Licença de homologação externa
+  emitida para `NABI2-D415-40A8-E5E2-6FD0`, sem validade conforme contrato do
+  cliente. Não copiar segredo ou licença real para o repositório.
+- Evidência: chave pública bruta decodifica para 32 bytes; releitura e validação
+  independentes aprovadas; adulteração recusada; 74 testes relacionados,
+  `compileall` e `git diff --check` aprovados; regressão NabiCode preservada.
