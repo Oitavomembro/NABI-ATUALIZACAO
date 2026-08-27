@@ -3911,3 +3911,6 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - Evidência: chave pública bruta decodifica para 32 bytes; releitura e validação
   independentes aprovadas; adulteração recusada; 74 testes relacionados,
   `compileall` e `git diff --check` aprovados; regressão NabiCode preservada.
+- O pacote público de integração foi regenerado em `9bcb8c2` conforme o contrato
+  final; qualquer ZIP/hash anterior está substituído. SHA-256 vigente do ZIP
+  local: `5C734A676F36F961AB3FD519CB9BC59944520F7A2EAF192A368E1AA0B5CF8F7B`.
