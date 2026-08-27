@@ -93,10 +93,11 @@ class NFePurchaseImportDialog(QDialog):
             for key in ("acao", "produto_id", "codigo", "descricao", "codigo_barras", "tipo_fator", "fator", "unidade", "status"):
                 if key in saved: row[key] = saved[key]
             row["margem"] = Decimal(str(saved.get("margem", row["margem"])))
-            row["preco"] = Decimal(str(saved.get("preco", row["preco"])))
             row["raw_margin"] = str(saved.get("raw_margin", _number(row["margem"], 2)))
-            row["raw_price"] = str(saved.get("raw_price", _number(row["preco"], 2)))
             row["saved_ok"] = True; self._recalculate(index)
+            # Margem e preço são um único cálculo. A margem restaurada recompõe
+            # o preço e corrige rascunhos antigos exibidos indevidamente como 0.
+            row["raw_price"] = _number(row["preco"], 2)
         self._render_rows()
         page = max(0, min(int(state.get("page", 0)), 2))
         if page >= 1: self._render_prices()
@@ -208,6 +209,7 @@ class NFePurchaseImportDialog(QDialog):
         page = QWidget(); layout = QVBoxLayout(page)
         line = QHBoxLayout(); line.addWidget(QLabel("Margem para todos (%)")); self.bulk_margin = QLineEdit("0")
         apply_all = QPushButton("Aplicar a todos"); apply_all.clicked.connect(self._apply_bulk_margin)
+        self.bulk_margin.textEdited.connect(self._bulk_margin_changed)
         line.addWidget(self.bulk_margin); line.addWidget(apply_all); line.addStretch()
         line.addWidget(QLabel("Visualização")); self.price_view_mode = QComboBox(); self.price_view_mode.addItem("Detalhes", "DETAILS"); self.price_view_mode.addItem("Compacto", "COMPACT")
         self.price_font_size = QComboBox()
@@ -215,6 +217,12 @@ class NFePurchaseImportDialog(QDialog):
         self.price_font_size.setCurrentIndex(self.price_font_size.findData(13))
         self.price_view_mode.currentIndexChanged.connect(self._apply_price_view); self.price_font_size.currentIndexChanged.connect(self._apply_price_view)
         line.addWidget(self.price_view_mode); line.addWidget(self.price_font_size); layout.addLayout(line)
+        price_help = QLabel(
+            "A margem é aplicada imediatamente: 0% deixa o preço igual ao custo. "
+            "Você também pode informar diretamente o preço de venda em cada linha."
+        )
+        price_help.setWordWrap(True); price_help.setStyleSheet("color:#fbbf24;font-weight:800")
+        layout.addWidget(price_help)
         self.price_table = QTableWidget(0, 6)
         self.price_table.setHorizontalHeaderLabels((
             "Item", "Produto", "Custo unitário", "Margem %", "Preço de venda", "Alerta",
@@ -278,6 +286,7 @@ class NFePurchaseImportDialog(QDialog):
                 "unlinked_snapshot": None,
             })
             self._recalculate(index)
+            self._rows[index]["raw_price"] = _number(self._rows[index]["preco"], 2)
 
     def _factor(self, row):
         entered = _decimal(row["fator"], "Fator", positive=True)
@@ -553,6 +562,30 @@ class NFePurchaseImportDialog(QDialog):
             row["margem"] = margin; row["raw_margin"] = _number(margin, 2); self._recalculate(index); row["raw_price"] = _number(row["preco"], 2)
         self._render_prices()
         self._checkpoint()
+
+    def _bulk_margin_changed(self, _text):
+        """Atualiza a grade enquanto o operador digita, sem exigir outro clique."""
+
+        if self._loading or self.pages.currentIndex() != 1:
+            return
+        try:
+            margin = _decimal(self.bulk_margin.text(), "Margem geral")
+        except ValueError:
+            return
+        self._loading = True
+        try:
+            for index, row in enumerate(self._rows):
+                row["margem"] = margin; row["raw_margin"] = _number(margin, 2)
+                self._recalculate(index); row["raw_price"] = _number(row["preco"], 2)
+                margin_edit = self.price_table.cellWidget(index, 3)
+                price_edit = self.price_table.cellWidget(index, 4)
+                if margin_edit is not None: margin_edit.setText(row["raw_margin"])
+                if price_edit is not None: price_edit.setText(row["raw_price"])
+                alert = self.price_table.item(index, 5)
+                if alert is not None: alert.setText("")
+        finally:
+            self._loading = False
+        self._refresh_summary(); self._checkpoint()
 
     def _refresh_summary(self):
         total = sum((row["stock_quantity"] for row in self._rows), Decimal("0"))

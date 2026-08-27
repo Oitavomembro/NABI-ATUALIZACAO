@@ -333,6 +333,24 @@ class NFeImportAtomicTests(unittest.TestCase):
         journal = db.fetch_one("SELECT status,username FROM assistant_operation_journal")
         self.assertEqual((journal["status"], journal["username"]), ("COMMITTED", "Operador"))
 
+    def test_diario_idempotente_serializa_decimal_sem_perder_precisao(self):
+        preparados = [{**self.preparados[0], "fator": Decimal("6"),
+                       "custo": Decimal("5.93"), "margem": Decimal("30"),
+                       "preco": Decimal("7.71")}]
+        first = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=preparados,
+            expected_actor="Operador", idempotency_key="nabi:nfe:decimal",
+            operation_fingerprint="d" * 64,
+        )
+        second = self.service.importar_atomicamente(
+            self.doc, arquivo_origem="nfe.xml", itens=preparados,
+            expected_actor="Operador", idempotency_key="nabi:nfe:decimal",
+            operation_fingerprint="d" * 64,
+        )
+        self.assertEqual(second, first)
+        self.assertEqual(first["resultados"][0]["custo_unitario_estoque"], "5.93")
+        self.assertEqual(first["resultados"][0]["preco_venda"], "7.71")
+
     def test_idempotencia_rejeita_mesma_chave_com_outro_conteudo(self):
         self.service.importar_atomicamente(
             self.doc, arquivo_origem="nfe.xml", itens=self.preparados,

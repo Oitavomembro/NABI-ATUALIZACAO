@@ -4,6 +4,7 @@ import logging
 import json
 import re
 import unicodedata
+from decimal import Decimal
 from pathlib import Path
 from datetime import datetime
 from typing import Any, Callable, Iterable
@@ -17,6 +18,14 @@ from .nfe_matching_service import (
 )
 from .nfe_xml_service import NFeDocument
 from .nfe_packaging_factor_service import normalize_gtin
+
+
+def _journal_json_default(value):
+    """Preserva decimais monetários no diário sem conversão binária em float."""
+
+    if isinstance(value, Decimal):
+        return format(value, "f")
+    raise TypeError(f"{type(value).__name__} não pode ser gravado no diário da operação.")
 
 
 class NFeImportService:
@@ -265,12 +274,21 @@ class NFeImportService:
                 "resultados": resultados,
             }
             if key:
+                journal_result = json.dumps(
+                    result, ensure_ascii=False, sort_keys=True,
+                    default=_journal_json_default,
+                )
                 connection.execute(
                     """UPDATE assistant_operation_journal
                        SET status='COMMITTED',result_json=?,committed_at=?
                        WHERE idempotency_key=?""",
-                    (json.dumps(result, ensure_ascii=False, sort_keys=True), agora, key),
+                    (journal_result, agora, key),
                 )
+
+        if key:
+            # Primeira execução e repetição idempotente devolvem a mesma forma
+            # canônica, inclusive quando os valores de origem são Decimal.
+            return json.loads(journal_result)
 
         return result
 

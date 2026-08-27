@@ -149,6 +149,19 @@ def test_troca_de_linha_atualiza_painel_sem_reconstruir_tabela():
     dialog.close()
 
 
+def test_preco_inicial_com_margem_zero_e_o_custo_e_digitacao_aplica_imediatamente():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog._show_prices()
+    price = dialog.price_table.cellWidget(0, 4)
+    assert Decimal(price.text().replace(",", ".")) == dialog._rows[0]["unit_cost"]
+    dialog.bulk_margin.setFocus(); dialog.bulk_margin.selectAll()
+    QTest.keyClicks(dialog.bulk_margin, "25"); APP.processEvents()
+    expected = (dialog._rows[0]["unit_cost"] * Decimal("1.25")).quantize(Decimal("0.01"))
+    assert dialog._rows[0]["preco"] == expected
+    assert Decimal(price.text().replace(",", ".")) == expected
+    dialog.close()
+
+
 def test_troca_de_linha_nao_copia_edicao_para_o_produto_seguinte():
     second = SimpleNamespace(
         supplier_code="XYZ", description="SEGUNDO PRODUTO",
