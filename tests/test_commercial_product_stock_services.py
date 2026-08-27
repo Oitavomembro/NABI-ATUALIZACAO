@@ -86,6 +86,20 @@ class CommercialProductStockServicesTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "duplicado"):
             gateway.get_by_barcode("789")
 
+    def test_ficha_fiscal_manual_faz_round_trip_e_update_comercial_nao_apaga(self):
+        created = self.products.create_product(ProductCreateCommand(
+            "PF1", "PRODUTO FISCAL", Decimal("10"), ncm="22021000",
+            cest="0300700", cfop="5102", fiscal_origin="0",
+            fiscal_csosn="102", fiscal_pis_cst="49", fiscal_cofins_cst="49",
+            fiscal_profile_source="MANUAL",
+        ))
+        self.assertEqual((created.ncm, created.cfop, created.fiscal_csosn), ("22021000", "5102", "102"))
+        updated = self.products.update_product(ProductUpdateCommand(
+            "PF1", "PRODUTO FISCAL EDITADO", Decimal("11"),
+            current_stock=created.current_stock, product_id=created.product_id,
+        ))
+        self.assertEqual((updated.ncm, updated.cfop, updated.fiscal_csosn), ("22021000", "5102", "102"))
+
     def test_multiplos_codigos_identificam_o_mesmo_produto(self):
         created = self.products.create_product(ProductCreateCommand(
             "P200", "PRODUTO CAIXA E UNIDADE", Decimal("12.00"),

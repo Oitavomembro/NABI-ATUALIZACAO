@@ -14,7 +14,8 @@ from PySide6.QtWidgets import QApplication, QMessageBox
 
 from commercial.application.product_dto import ProductDetails
 from ui_qt.commercial.product_management_dialog import (
-    ProductEditorDialog, ProductManagementDialog, StockMovementDialog,
+    FiscalCatalogSearchDialog, ProductEditorDialog, ProductManagementDialog,
+    StockMovementDialog,
 )
 
 
@@ -45,6 +46,12 @@ class Application:
         self.removed.append((command, confirmed)); return SimpleNamespace(committed=True, message="ok")
     def adjust(self, command, *, confirmed):
         self.adjusted.append((command, confirmed)); return SimpleNamespace(committed=True, message="ok")
+    def fiscal_issues(self, product_id):
+        return (SimpleNamespace(message="ficha fiscal incompleta — CFOP, origem."),)
+    def search_ncm(self, term, *, limit=50):
+        return (SimpleNamespace(code="22021000", description="Águas, incluindo minerais"),)
+    def search_cest(self, term, *, ncm="", limit=50):
+        return (SimpleNamespace(code="0300700", description="Bebidas"),)
 
 
 def _key(*, shift=False, repeat=False):
@@ -101,6 +108,30 @@ def test_edicao_nao_altera_saldo_diretamente_e_preserva_id_real():
     assert command.product_id == 17
     assert command.current_stock == Decimal("4.0000")
     editor.close()
+
+
+def test_editor_expoe_pendencia_e_transporta_ficha_fiscal_sem_inferir():
+    application = Application(); editor = ProductEditorDialog(application, PRODUCT)
+    assert "CFOP" in editor.fiscal_status.text()
+    editor.ncm.setText("22021000"); editor.cest.setText("0300700"); editor.cfop.setText("5102")
+    ProductEditorDialog._select_data(editor.origin, "0")
+    ProductEditorDialog._select_data(editor.csosn, "102")
+    ProductEditorDialog._select_data(editor.pis_cst, "49")
+    ProductEditorDialog._select_data(editor.cofins_cst, "49")
+    editor._save(); command = application.updated[0]
+    assert (command.ncm, command.cest, command.cfop) == ("22021000", "0300700", "5102")
+    assert command.fiscal_origin == "0" and command.fiscal_csosn == "102"
+    assert command.fiscal_profile_source == "MANUAL"
+    editor.close()
+
+
+def test_catalogo_ncm_pesquisa_e_seleciona_codigo_real():
+    dialog = FiscalCatalogSearchDialog(Application(), "NCM")
+    dialog.query.setText("agua"); dialog._search()
+    assert dialog.table.rowCount() == 1
+    dialog._accept()
+    assert dialog.selected_code == "22021000"
+    dialog.close()
 
 
 def test_enter_auto_repeat_nao_edita_nem_avanca():

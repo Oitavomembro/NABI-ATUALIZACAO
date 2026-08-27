@@ -1,4 +1,5 @@
 import sqlite3
+import sys
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +36,8 @@ from services.help_center_repair_service import (
 )
 from services.ui_preferences import UIPreferencesService
 from services.company_profile_service import CompanyProfileService
+from services.fiscal_ncm_catalog_service import FiscalNCMCatalogService
+from services.fiscal_cest_catalog_service import FiscalCESTCatalogService
 from database.sqlite_connection import backup_database
 from ui_qt.commercial.cash_dialog import CashDialog
 from ui_qt.commercial.customer_dialog import CustomerManagementDialog
@@ -223,9 +226,28 @@ def build_administrative_modules(
             "clientes", filtered_factory=filtered_customers,
         ))
     if getattr(container,"product_application",None) and getattr(container,"stock_actions",None):
+        ncm_catalog = cest_catalog = None
+        if fiscal_service is not None:
+            runtime_root = Path(getattr(sys, "_MEIPASS", Path(__file__).resolve().parents[2]))
+            catalog_cache = profile.paths.config / "fiscal" / "catalogos"
+            ncm_catalog = FiscalNCMCatalogService(
+                bundled_path=runtime_root / "resources" / "fiscal" / "catalogs" / "ncm_oficial.json",
+                cache_path=catalog_cache / "ncm_oficial.json",
+            )
+            cest_catalog = FiscalCESTCatalogService(
+                bundled_path=runtime_root / "resources" / "fiscal" / "catalogs" / "cest_convenio_142_18.html",
+                cache_path=catalog_cache / "cest_convenio_142_18.html",
+            )
         product_management=ProductManagementService(
             container.product_application, container.stock_actions, security,
             nfe_purchase_import=nfe_purchase_import,
+            ncm_catalog=ncm_catalog, cest_catalog=cest_catalog,
+            fiscal_catalog=fiscal_catalog_service,
+            fiscal_crt_provider=(
+                (lambda: fiscal_service.TAX_REGIME_CODES.get(
+                    str(fiscal_service.load_config().get("tax_regime") or "").upper(), 0
+                )) if fiscal_service is not None else None
+            ),
         );modules.append(AdministrativeModule("Produtos / Estoque","Cadastro, preços, saldos e histórico","F4","produtos","view",lambda p, service=product_management:ProductManagementDialog(service,p),"produtos"))
     if getattr(container,"purchase_service",None):
         purchase_management=PurchaseManagementService(container.purchase_service,FornecedorRepository(database),security);modules.append(AdministrativeModule("Fornecedores / Compras","Pedidos, fornecedores e recebimentos","","compras","view",lambda p, service=purchase_management:PurchaseDialog(service,p),"compras"))

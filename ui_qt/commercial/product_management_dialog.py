@@ -6,8 +6,8 @@ from PySide6.QtCore import QEvent, Qt
 from PySide6.QtGui import QKeySequence, QShortcut
 from PySide6.QtWidgets import (
     QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout,
-    QFileDialog, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton, QTableWidget,
-    QTableWidgetItem, QVBoxLayout,
+    QFileDialog, QGroupBox, QHeaderView, QLabel, QLineEdit, QMessageBox, QPushButton,
+    QScrollArea, QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget,
 )
 
 from commercial.application.product_dto import (
@@ -50,8 +50,11 @@ class ProductEditorDialog(QDialog):
         super().__init__(parent)
         self.application = application; self.product = product; self.saved = None
         self.setWindowTitle("Editar produto" if product else "Novo produto")
-        self.setMinimumWidth(650); self.setStyleSheet(STYLE)
-        root = QVBoxLayout(self); form = QFormLayout()
+        self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint | Qt.WindowType.WindowMaximizeButtonHint | Qt.WindowType.WindowCloseButtonHint)
+        self.resize(1180, 760); self.setMinimumSize(900, 620); self.setStyleSheet(STYLE)
+        root = QVBoxLayout(self)
+        scroll = QScrollArea(); scroll.setWidgetResizable(True); body = QWidget(); body_root = QVBoxLayout(body)
+        commercial = QGroupBox("DADOS COMERCIAIS E ESTOQUE"); form = QFormLayout(commercial)
         self.code = QLineEdit(product.code if product else "")
         self.barcode = QLineEdit(product.barcode if product else "")
         existing_codes = tuple(getattr(product, "barcodes", ()) or ()) if product else ()
@@ -99,7 +102,38 @@ class ProductEditorDialog(QDialog):
             ("Estoque inicial" if not product else "Estoque atual", self.current_stock),
             ("Estoque mínimo", self.minimum_stock), ("", self.allow_negative),
         ): form.addRow(label, widget)
-        root.addLayout(form)
+        body_root.addWidget(commercial)
+        fiscal = QGroupBox("FICHA FISCAL DE VENDA — confirme com seu contador")
+        fiscal_form = QFormLayout(fiscal)
+        self.fiscal_status = QLabel("")
+        self.fiscal_status.setWordWrap(True)
+        self.fiscal_status.setStyleSheet("background:#2d2108;color:#ffd866;padding:10px;font-weight:800")
+        fiscal_form.addRow(self.fiscal_status)
+        self.ncm = QLineEdit(getattr(product, "ncm", "") if product else "")
+        self.ncm_search = QPushButton("Pesquisar NCM oficial")
+        ncm_row = QWidget(); ncm_layout = QHBoxLayout(ncm_row); ncm_layout.setContentsMargins(0,0,0,0)
+        ncm_layout.addWidget(self.ncm, 1); ncm_layout.addWidget(self.ncm_search)
+        self.cest = QLineEdit(getattr(product, "cest", "") if product else "")
+        self.cest_search = QPushButton("Pesquisar CEST oficial")
+        cest_row = QWidget(); cest_layout = QHBoxLayout(cest_row); cest_layout.setContentsMargins(0,0,0,0)
+        cest_layout.addWidget(self.cest, 1); cest_layout.addWidget(self.cest_search)
+        self.cfop = QLineEdit(getattr(product, "cfop", "") if product else "")
+        self.cfop.setPlaceholderText("CFOP de saída/venda; não copie o CFOP de compra do XML")
+        self.origin = QComboBox(); self.origin.addItem("Selecione…", "")
+        for code, name in (("0","Nacional"),("1","Estrangeira — importação direta"),("2","Estrangeira — mercado interno"),("3","Nacional, conteúdo importação >40%"),("4","Nacional conforme processos básicos"),("5","Nacional, conteúdo importação ≤40%"),("6","Estrangeira sem similar nacional"),("7","Estrangeira mercado interno sem similar"),("8","Nacional, conteúdo importação >70%")):
+            self.origin.addItem(f"{code} — {name}", code)
+        self._select_data(self.origin, getattr(product, "fiscal_origin", "") if product else "")
+        self.csosn = self._code_combo(("102","103","201","202","203","300","400","500"), getattr(product, "fiscal_csosn", "") if product else "")
+        self.icms_cst = self._code_combo(("00","40","41","50","60"), getattr(product, "fiscal_icms_cst", "") if product else "")
+        contribution = ("01","02","04","05","06","07","08","09","49","50","51","52","53","54","55","56","60","61","62","63","64","65","66","67","70","71","72","73","74","75","98","99")
+        self.pis_cst = self._code_combo(contribution, getattr(product, "fiscal_pis_cst", "") if product else "")
+        self.cofins_cst = self._code_combo(contribution, getattr(product, "fiscal_cofins_cst", "") if product else "")
+        self.icms_rate = QLineEdit(str(getattr(product, "fiscal_icms_rate", 0) if product else 0))
+        self.pis_rate = QLineEdit(str(getattr(product, "fiscal_pis_rate", 0) if product else 0))
+        self.cofins_rate = QLineEdit(str(getattr(product, "fiscal_cofins_rate", 0) if product else 0))
+        for label, widget in (("NCM*", ncm_row),("CEST (quando aplicável)", cest_row),("CFOP de venda*",self.cfop),("Origem da mercadoria*",self.origin),("CSOSN — Simples/MEI",self.csosn),("CST ICMS — regime normal",self.icms_cst),("Alíquota ICMS %",self.icms_rate),("CST PIS*",self.pis_cst),("Alíquota PIS %",self.pis_rate),("CST COFINS*",self.cofins_cst),("Alíquota COFINS %",self.cofins_rate)):
+            fiscal_form.addRow(label, widget)
+        body_root.addWidget(fiscal); body_root.addStretch(); scroll.setWidget(body); root.addWidget(scroll, 1)
         row = QHBoxLayout(); row.addStretch()
         cancel = QPushButton("Cancelar  [Esc]"); self.save = QPushButton("Salvar  [Enter]")
         self.save.setObjectName("primary"); cancel.clicked.connect(self.reject)
@@ -109,12 +143,46 @@ class ProductEditorDialog(QDialog):
             self.code, self.barcode, self.additional_barcodes, self.description, self.product_type,
             self.unit, self.fraction_policy,
             self.sale_price, self.cost_price, self.current_stock,
-            self.minimum_stock, self.allow_negative, self.save,
+            self.minimum_stock, self.allow_negative, self.ncm, self.ncm_search, self.cest,
+            self.cest_search, self.cfop, self.origin, self.csosn, self.icms_cst,
+            self.icms_rate, self.pis_cst, self.pis_rate, self.cofins_cst,
+            self.cofins_rate, self.save,
         )
         for field in self._fields: field.installEventFilter(self)
         self._escape = QShortcut(QKeySequence("Esc"), self)
         self._escape.setAutoRepeat(False); self._escape.activated.connect(self.reject)
         self.description.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.ncm_search.clicked.connect(lambda _checked=False: self._choose_catalog("NCM"))
+        self.cest_search.clicked.connect(lambda _checked=False: self._choose_catalog("CEST"))
+        self._refresh_fiscal_status()
+
+    @staticmethod
+    def _select_data(combo, value):
+        for index in range(combo.count()):
+            if str(combo.itemData(index) or "") == str(value or ""):
+                combo.setCurrentIndex(index); return
+
+    @classmethod
+    def _code_combo(cls, values, selected):
+        combo = QComboBox(); combo.addItem("Selecione…", "")
+        for value in values: combo.addItem(value, value)
+        cls._select_data(combo, selected); return combo
+
+    def _refresh_fiscal_status(self):
+        if not self.product or not hasattr(self.application, "fiscal_issues"):
+            self.fiscal_status.setText("Preencha somente dados fiscais confirmados. O NabiCode não inventa tributação.")
+            return
+        try: issues = tuple(self.application.fiscal_issues(self.product.product_id))
+        except Exception as error: self.fiscal_status.setText(f"Diagnóstico fiscal indisponível: {error}"); return
+        self.fiscal_status.setText(
+            "Ficha fiscal pronta para o pré-voo." if not issues else
+            "Pendência que bloqueia o pré-voo: " + " | ".join(issue.message for issue in issues)
+        )
+
+    def _choose_catalog(self, kind):
+        dialog = FiscalCatalogSearchDialog(self.application, kind, ncm=self.ncm.text(), parent=self)
+        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selected_code: return
+        (self.ncm if kind == "NCM" else self.cest).setText(dialog.selected_code)
 
     def _visible_fields(self):
         return tuple(field for field in self._fields if field.isEnabled() and not field.isHidden())
@@ -146,6 +214,16 @@ class ProductEditorDialog(QDialog):
                 code.strip() for code in self.additional_barcodes.text().split(";") if code.strip()
             ),
             allow_fractional_quantity=self.fraction_policy.currentData(),
+            ncm=self.ncm.text().strip(), cest=self.cest.text().strip(),
+            cfop=self.cfop.text().strip(), fiscal_origin=str(self.origin.currentData() or ""),
+            fiscal_csosn=str(self.csosn.currentData() or ""),
+            fiscal_icms_cst=str(self.icms_cst.currentData() or ""),
+            fiscal_icms_rate=_decimal(self.icms_rate.text(), "Alíquota ICMS"),
+            fiscal_pis_cst=str(self.pis_cst.currentData() or ""),
+            fiscal_pis_rate=_decimal(self.pis_rate.text(), "Alíquota PIS"),
+            fiscal_cofins_cst=str(self.cofins_cst.currentData() or ""),
+            fiscal_cofins_rate=_decimal(self.cofins_rate.text(), "Alíquota COFINS"),
+            fiscal_profile_source="MANUAL",
         )
         return ProductUpdateCommand(**values, product_id=self.product.product_id) if self.product else ProductCreateCommand(**values)
 
@@ -156,6 +234,41 @@ class ProductEditorDialog(QDialog):
         except Exception as error:
             QMessageBox.warning(self, "Produtos", str(error)); self.description.setFocus(); return
         self.accept()
+
+
+class FiscalCatalogSearchDialog(QDialog):
+    def __init__(self, application, kind: str, *, ncm="", parent=None):
+        super().__init__(parent); self.application=application; self.kind=kind; self.ncm=ncm; self.selected_code=""
+        self.setWindowTitle(f"Pesquisar {kind} oficial"); self.resize(1050, 680); self.setStyleSheet(STYLE)
+        root=QVBoxLayout(self); root.addWidget(QLabel(f"CATÁLOGO {kind} — referência oficial offline"))
+        self.query=QLineEdit(); self.query.setPlaceholderText("Digite código ou descrição (mínimo 2 caracteres)")
+        self.search_button=QPushButton("Pesquisar  [Enter]"); row=QHBoxLayout(); row.addWidget(self.query,1); row.addWidget(self.search_button); root.addLayout(row)
+        self.table=QTableWidget(0,2); self.table.setHorizontalHeaderLabels((kind,"Descrição")); self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers); self.table.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows); self.table.horizontalHeader().setSectionResizeMode(1,QHeaderView.ResizeMode.Stretch); root.addWidget(self.table,1)
+        self.select=QPushButton("Selecionar  [Enter]"); self.select.setObjectName("primary"); root.addWidget(self.select)
+        self.search_button.clicked.connect(self._search); self.select.clicked.connect(self._accept); self.table.cellDoubleClicked.connect(lambda *_: self._accept())
+        QShortcut(QKeySequence("Esc"),self,activated=self.reject).setAutoRepeat(False); self.query.returnPressed.connect(self._search); self.table.installEventFilter(self); self.query.setFocus()
+
+    def _search(self):
+        try:
+            entries=(self.application.search_ncm(self.query.text()) if self.kind=="NCM" else self.application.search_cest(self.query.text(),ncm=self.ncm))
+        except Exception as error: QMessageBox.warning(self,f"Catálogo {self.kind}",str(error)); return
+        self.table.setRowCount(len(entries))
+        for row, entry in enumerate(entries):
+            values=(entry.code, entry.description)
+            for column,value in enumerate(values): self.table.setItem(row,column,QTableWidgetItem(str(value)))
+        if entries: self.table.selectRow(0); self.table.setFocus()
+
+    def _accept(self):
+        row=self.table.currentRow()
+        if row<0: return
+        self.selected_code=self.table.item(row,0).text(); self.accept()
+
+    def eventFilter(self, watched, event):
+        if watched is self.table and event.type()==QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return,Qt.Key.Key_Enter}:
+            event.accept()
+            if not event.isAutoRepeat(): self._accept()
+            return True
+        return super().eventFilter(watched,event)
 
 
 class StockMovementDialog(QDialog):

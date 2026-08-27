@@ -41,6 +41,19 @@ class ProductCreateCommand:
     unit_code: str = ""
     barcodes: tuple[str, ...] = ()
     allow_fractional_quantity: bool | None = None
+    cfop: str = ""
+    fiscal_origin: str = ""
+    fiscal_csosn: str = ""
+    fiscal_icms_cst: str = ""
+    fiscal_icms_rate: Decimal = Decimal("0")
+    fiscal_pis_cst: str = ""
+    fiscal_pis_rate: Decimal = Decimal("0")
+    fiscal_cofins_cst: str = ""
+    fiscal_cofins_rate: Decimal = Decimal("0")
+    fiscal_ipi_cst: str = ""
+    fiscal_ipi_rate: Decimal = Decimal("0")
+    fiscal_ipi_enq: str = ""
+    fiscal_profile_source: str = ""
 
     def __post_init__(self) -> None:
         if not str(self.description or "").strip():
@@ -84,6 +97,21 @@ class ProductDetails:
     unit_code: str = "UN"
     barcodes: tuple[str, ...] = ()
     allows_fractional_quantity: bool = False
+    ncm: str = ""
+    cest: str = ""
+    cfop: str = ""
+    fiscal_origin: str = ""
+    fiscal_csosn: str = ""
+    fiscal_icms_cst: str = ""
+    fiscal_icms_rate: Decimal = Decimal("0")
+    fiscal_pis_cst: str = ""
+    fiscal_pis_rate: Decimal = Decimal("0")
+    fiscal_cofins_cst: str = ""
+    fiscal_cofins_rate: Decimal = Decimal("0")
+    fiscal_ipi_cst: str = ""
+    fiscal_ipi_rate: Decimal = Decimal("0")
+    fiscal_ipi_enq: str = ""
+    fiscal_profile_source: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "sale_price", MoneyCodec.parse(self.sale_price, field="preço de venda"))

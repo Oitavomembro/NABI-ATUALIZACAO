@@ -9,7 +9,8 @@ class ProductManagementService:
 
     def __init__(
         self, products, stock_actions, security, assisted_actions=None,
-        xml_catalog_import=None, nfe_purchase_import=None,
+        xml_catalog_import=None, nfe_purchase_import=None, ncm_catalog=None,
+        cest_catalog=None, fiscal_catalog=None, fiscal_crt_provider=None,
     ) -> None:
         if products is None or stock_actions is None or security is None:
             raise ValueError("Produtos, estoque e segurança são obrigatórios.")
@@ -19,6 +20,10 @@ class ProductManagementService:
         self.assisted_actions = assisted_actions
         self.xml_catalog_import = xml_catalog_import or ProductXMLCatalogImportService(products)
         self.nfe_purchase_import = nfe_purchase_import
+        self.ncm_catalog = ncm_catalog
+        self.cest_catalog = cest_catalog
+        self.fiscal_catalog = fiscal_catalog
+        self.fiscal_crt_provider = fiscal_crt_provider
 
     def _require(self, action: str) -> str:
         session = self.security.session
@@ -49,6 +54,25 @@ class ProductManagementService:
     def update(self, command):
         self._require("edit")
         return self.products.update_product(command)
+
+    def search_ncm(self, query: str, *, limit: int = 50):
+        self._require("view")
+        if self.ncm_catalog is None:
+            raise RuntimeError("Catálogo oficial NCM não está disponível.")
+        return tuple(self.ncm_catalog.search(query, limit=limit))
+
+    def search_cest(self, query: str, *, ncm: str = "", limit: int = 50):
+        self._require("view")
+        if self.cest_catalog is None:
+            raise RuntimeError("Catálogo oficial CEST não está disponível.")
+        return tuple(self.cest_catalog.search(query, ncm=ncm, limit=limit))
+
+    def fiscal_issues(self, product_id: int):
+        self._require("view")
+        if self.fiscal_catalog is None or self.fiscal_crt_provider is None:
+            return ()
+        report = self.fiscal_catalog.audit(crt=int(self.fiscal_crt_provider()))
+        return tuple(issue for issue in report.issues if issue.product_id == int(product_id))
 
     def prepare_xml(self, path):
         actor = self._require("create")

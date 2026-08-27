@@ -1,4 +1,5 @@
 from dataclasses import dataclass
+from types import SimpleNamespace
 
 from services.fiscal_preflight_service import FiscalPreflightService
 
@@ -15,6 +16,7 @@ class Catalog:
     ready: int = 1
     blocked: int = 0
     ready_product_ids: tuple[int, ...] = (7,)
+    issues: tuple = ()
 
 
 @dataclass
@@ -93,6 +95,14 @@ def test_pre_voo_nao_gera_xml_quando_catalogo_tem_pendencia():
     assert result.success is False
     assert "1 produto(s)" in result.problems[0]
     assert result.xml_sha256 == ""
+
+
+def test_pre_voo_identifica_produto_e_pendencia_exata():
+    fiscal = FakeFiscalService()
+    issue = SimpleNamespace(code="ABC", name="BISCOITO", message="ficha fiscal incompleta — CFOP.")
+    catalog = Catalog(total=1, ready=0, blocked=1, ready_product_ids=(), issues=(issue,))
+    result = FiscalPreflightService(fiscal, FakeCatalogService(catalog)).run(password="senha")
+    assert any("Produto ABC" in problem and "CFOP" in problem for problem in result.problems)
 
 
 def test_pre_voo_detecta_certificado_de_outro_cnpj():

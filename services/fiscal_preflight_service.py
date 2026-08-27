@@ -60,6 +60,10 @@ class FiscalPreflightService:
             problems.append(
                 f"O catálogo possui {catalog.blocked} produto(s) com pendência fiscal."
             )
+            problems.extend(
+                f"Produto {issue.code} — {issue.name}: {issue.message}"
+                for issue in getattr(catalog, "issues", ())
+            )
 
         certificate_document = ""
         xml_hash = ""

@@ -41,6 +41,14 @@ class NabiCodeProductStockGateway:
             bool(row.get("permite_estoque_negativo")), str(row.get("tipo_produto") or ""),
             bool(row.get("ativo", True)), str(row.get("unidade") or "UN"),
             tuple(row.get("codigos_barras") or ()), bool(row.get("permite_fracionado", False)),
+            str(row.get("ncm") or ""), str(row.get("cest") or ""),
+            str(row.get("cfop") or ""), str(row.get("fiscal_origin") or ""),
+            str(row.get("fiscal_csosn") or ""), str(row.get("fiscal_icms_cst") or ""),
+            _decimal(row.get("fiscal_icms_rate")), str(row.get("fiscal_pis_cst") or ""),
+            _decimal(row.get("fiscal_pis_rate")), str(row.get("fiscal_cofins_cst") or ""),
+            _decimal(row.get("fiscal_cofins_rate")), str(row.get("fiscal_ipi_cst") or ""),
+            _decimal(row.get("fiscal_ipi_rate")), str(row.get("fiscal_ipi_enq") or ""),
+            str(row.get("fiscal_profile_source") or ""),
         )
 
     def get_details(self, product_id: int) -> ProductDetails | None:
@@ -98,6 +106,9 @@ class NabiCodeProductStockGateway:
     def _save_kwargs(self, command, current=None):
         current = current or {}
         creating = not current
+        edits_fiscal = creating or bool(str(getattr(command, "fiscal_profile_source", "") or "").strip())
+        def fiscal_value(name, default=""):
+            return getattr(command, name, default) if edits_fiscal else current.get(name, default)
         unit_id = current.get("unidade_id") if current else self._unit_id(
             getattr(command, "unit_code", "")
         )
@@ -114,21 +125,19 @@ class NabiCodeProductStockGateway:
             codigo_barras=command.barcode,
             codigos_barras=tuple(getattr(command, "barcodes", ()) or ()),
             permite_fracionado=getattr(command, "allow_fractional_quantity", None),
-            ncm=(getattr(command, "ncm", "") if creating else current.get("ncm", "")),
-            cest=(getattr(command, "cest", "") if creating else current.get("cest", "")),
-            cfop=current.get("cfop", ""),
-            fiscal_origin=current.get("fiscal_origin", ""),
-            fiscal_csosn=current.get("fiscal_csosn", ""),
-            fiscal_icms_cst=current.get("fiscal_icms_cst", ""),
-            fiscal_icms_rate=current.get("fiscal_icms_rate", "0"),
-            fiscal_pis_cst=current.get("fiscal_pis_cst", ""),
-            fiscal_pis_rate=current.get("fiscal_pis_rate", "0"),
-            fiscal_cofins_cst=current.get("fiscal_cofins_cst", ""),
-            fiscal_cofins_rate=current.get("fiscal_cofins_rate", "0"),
-            fiscal_ipi_cst=current.get("fiscal_ipi_cst", ""),
-            fiscal_ipi_rate=current.get("fiscal_ipi_rate", "0"),
-            fiscal_ipi_enq=current.get("fiscal_ipi_enq", ""),
-            fiscal_profile_source=current.get("fiscal_profile_source", ""),
+            ncm=fiscal_value("ncm"), cest=fiscal_value("cest"), cfop=fiscal_value("cfop"),
+            fiscal_origin=fiscal_value("fiscal_origin"),
+            fiscal_csosn=fiscal_value("fiscal_csosn"),
+            fiscal_icms_cst=fiscal_value("fiscal_icms_cst"),
+            fiscal_icms_rate=str(fiscal_value("fiscal_icms_rate", "0")),
+            fiscal_pis_cst=fiscal_value("fiscal_pis_cst"),
+            fiscal_pis_rate=str(fiscal_value("fiscal_pis_rate", "0")),
+            fiscal_cofins_cst=fiscal_value("fiscal_cofins_cst"),
+            fiscal_cofins_rate=str(fiscal_value("fiscal_cofins_rate", "0")),
+            fiscal_ipi_cst=fiscal_value("fiscal_ipi_cst"),
+            fiscal_ipi_rate=str(fiscal_value("fiscal_ipi_rate", "0")),
+            fiscal_ipi_enq=fiscal_value("fiscal_ipi_enq"),
+            fiscal_profile_source=(str(getattr(command, "fiscal_profile_source", "") or "") if edits_fiscal else current.get("fiscal_profile_source", "")),
             ibs_cbs_cst=current.get("ibs_cbs_cst", ""),
             ibs_cbs_class=current.get("ibs_cbs_class", ""),
             ibs_uf_rate=current.get("ibs_uf_rate", "0"),
