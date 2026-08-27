@@ -65,9 +65,37 @@ def _financial_actor(security, action="view"):
     return username
 
 
-def _company_identity_provider(database, fiscal_service):
-    """Identidade única; no Fiscal exige concordância entre cadastro e A1."""
+def _company_identity_provider(database, fiscal_service, company_profile):
+    """Perfil vigente é a autoridade; no Fiscal exige concordância com o A1."""
     def provide():
+        active = company_profile.active()
+        if active is not None:
+            cnpj = "".join(char for char in str(active.cnpj or "") if char.isdigit())
+            if not cnpj:
+                raise RuntimeError("O perfil empresarial vigente não possui CNPJ válido.")
+            if fiscal_service is not None:
+                config = fiscal_service.load_config()
+                configured_cnpj = "".join(
+                    char for char in str(config.get("cnpj") or "") if char.isdigit()
+                )
+                certificate = config.get("certificate_info") or {}
+                certificate_cnpj = "".join(
+                    char for char in str(certificate.get("document") or "") if char.isdigit()
+                )
+                if not configured_cnpj or not certificate_cnpj:
+                    raise RuntimeError(
+                        "Configure a empresa e instale o certificado A1 antes de gerar o pacote."
+                    )
+                if len({cnpj, configured_cnpj, certificate_cnpj}) != 1:
+                    raise RuntimeError(
+                        "O CNPJ do perfil empresarial diverge da configuração fiscal ou do "
+                        "certificado A1; geração bloqueada."
+                    )
+            legal_name = str(active.trade_name or active.legal_name or "").strip()
+            return CompanyIdentity(
+                cnpj, legal_name,
+                f"perfil empresarial confirmado v{active.version}",
+            )
         if fiscal_service is not None:
             config = fiscal_service.load_config()
             cnpj = "".join(char for char in str(config.get("cnpj") or "") if char.isdigit())
@@ -177,6 +205,7 @@ def build_administrative_modules(
     restore_helper_command=None,
 ):
     modules=[]; system=SystemRepository(database.connect)
+    company_profile = CompanyProfileService(database.connect, security_service=security)
     dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
     modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
     if getattr(container,"customer_application",None):
@@ -235,7 +264,7 @@ def build_administrative_modules(
     accountant_center = AccountantCenterApplicationService(
         AccountantMonthlyPackageService(database.connect, fiscal_service=fiscal_service),
         security,
-        _company_identity_provider(database, fiscal_service),
+        _company_identity_provider(database, fiscal_service, company_profile),
     )
     delivery_gateway = LocalFolderAccountantDeliveryGateway(
         outbox_path=profile.paths.config / "entrega_contabil" / "outbox.sqlite3",
@@ -282,7 +311,6 @@ def build_administrative_modules(
         printing_service=PrintingService(system.get_config),
         fiscal_service=fiscal_service,
     )
-    company_profile = CompanyProfileService(database.connect, security_service=security)
     modules.append(AdministrativeModule(
         "Configurações", "Interface, backup e diagnóstico", "Ctrl+G",
         "configs", "view", lambda p: SettingsDialog(
