@@ -146,6 +146,80 @@ def test_troca_de_linha_atualiza_painel_sem_reconstruir_tabela():
     dialog.close()
 
 
+def test_troca_de_linha_nao_copia_edicao_para_o_produto_seguinte():
+    second = SimpleNamespace(
+        supplier_code="XYZ", description="SEGUNDO PRODUTO",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class TwoItemsApplication(Application):
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="XYZ", descricao="SEGUNDO PRODUTO", cfop="5102",
+                quantidade=Decimal("3"), unidade="UN", valor_unitario=Decimal("2"),
+                codigo_barras="790", ncm="19059090", cest="",
+            )))
+        def saved_link(self, _draft, index):
+            return super().saved_link(_draft, index) if index == 0 else None
+        def save_draft(self, *_args, **_kwargs): return 1
+
+    dialog = NFePurchaseImportDialog(TwoItemsApplication(), two_items)
+    dialog.name.setText("PRIMEIRO EDITADO"); dialog.barcode.setText("111")
+    dialog.factor.setText("6")
+    dialog.table.selectRow(1); APP.processEvents()
+    assert dialog._rows[0]["descricao"] == "PRIMEIRO EDITADO"
+    assert dialog._rows[0]["codigo_barras"] == "111"
+    assert dialog._rows[1]["descricao"] == "SEGUNDO PRODUTO"
+    assert dialog._rows[1]["codigo_barras"] == "790"
+    assert dialog._rows[1]["fator"] == "1"
+    assert dialog.name.text() == "SEGUNDO PRODUTO"
+    assert dialog.barcode.text() == "790"
+    dialog.close()
+
+
+def test_codigo_de_barras_repetido_bloqueia_antes_do_commit(monkeypatch):
+    second = SimpleNamespace(
+        supplier_code="XYZ", description="SEGUNDO PRODUTO",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class DuplicateApplication(Application):
+        def __init__(self): self.commit_calls = 0
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="XYZ", descricao="SEGUNDO PRODUTO", cfop="5102",
+                quantidade=Decimal("1"), unidade="UN", valor_unitario=Decimal("2"),
+                codigo_barras="789", ncm="19059090", cest="",
+            )))
+        def saved_link(self, _draft, index): return None
+        def commit(self, *_args, **_kwargs): self.commit_calls += 1
+
+    application = DuplicateApplication()
+    dialog = NFePurchaseImportDialog(application, two_items)
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+    dialog._commit()
+    assert application.commit_calls == 0
+    assert warnings and "789" in warnings[-1] and "linhas 1, 2" in warnings[-1]
+    assert dialog.pages.currentIndex() == 0
+    dialog.close()
+
+
+def test_tabela_de_precos_forca_texto_escuro_em_todas_as_linhas():
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog._show_prices()
+    for column in (0, 1, 2, 5):
+        assert dialog.price_table.item(0, column).foreground().color().name() in {
+            "#111827", "#991b1b"
+        }
+    assert "QTableWidget QLineEdit" in dialog.price_table.styleSheet()
+    dialog.close()
+
+
 def test_desfazer_desvinculo_restaura_exatamente_o_vinculo_anterior():
     dialog = NFePurchaseImportDialog(Application(), draft())
     original = dict(dialog._rows[0])

@@ -102,6 +102,25 @@ def test_atualizacoes_repetidas_substituem_conteudo_sem_sobrepor_rotulos():
     dialog.close()
 
 
+def test_modelo_com_numeracao_preparada_nao_permanece_vermelho():
+    application = Mock()
+    ready = snapshot()
+    ready.state = "AGUARDA_VERIFICACAO_MANUAL"
+    ready.enabled = True
+    ready.models = (SimpleNamespace(
+        label="NFC-e — modelo 65", enabled=True, numbering_initialized=True,
+        next_number=1, local_problems=(), model="65",
+    ),)
+    application.snapshot.return_value = ready
+    dialog = FiscalReadinessDialog(application)
+    card = next(button for button in dialog.findChildren(__import__("PySide6.QtWidgets", fromlist=["QPushButton"]).QPushButton)
+                if "NFC-e" in button.text())
+    assert card.property("readinessState") == "local"
+    assert "#58a6ff" in card.styleSheet()
+    assert "configurar esta pendência" not in card.text()
+    dialog.close()
+
+
 def test_enter_configura_uma_vez_e_auto_repeat_nao_abre():
     application = Mock(); application.snapshot.return_value = snapshot()
     dialog = FiscalReadinessDialog(application); dialog.configure = Mock(return_value=False)

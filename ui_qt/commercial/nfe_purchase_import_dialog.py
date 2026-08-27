@@ -18,6 +18,7 @@ QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#f3f4f6
  border:1px solid #cbd5e1;gridline-color:#d1d5db;selection-background-color:#bfdbfe;
  selection-color:#111827} QHeaderView::section{background:#e5e7eb;color:#111827;
  padding:7px;border:0;border-right:1px solid #cbd5e1;font-weight:800}
+QTableWidget QLineEdit{background:#ffffff;color:#111827;border:1px solid #64748b}
 """
 
 
@@ -108,11 +109,11 @@ class NFePurchaseImportDialog(QDialog):
             field.currentIndexChanged.connect(self._checkpoint)
         self.pages.currentChanged.connect(self._checkpoint)
 
-    def _checkpoint(self, *_args):
+    def _checkpoint(self, *_args, capture_current=True):
         if self._loading or self._busy or not hasattr(self.application, "save_draft"):
             return
         index = self.table.currentRow() if hasattr(self, "table") else -1
-        if index >= 0:
+        if capture_current and index >= 0:
             row = self._rows[index]
             row["descricao"] = self.name.text()
             row["codigo_barras"] = self.barcode.text()
@@ -434,12 +435,55 @@ class NFePurchaseImportDialog(QDialog):
         })
         self._recalculate(index)
         self.table.blockSignals(True); self._update_row_cells(index); self.table.blockSignals(False)
-        self._checkpoint()
+        # A mudança de seleção já aponta currentRow() para a próxima linha.
+        # Não recapture os widgets aqui: eles ainda pertencem à linha salva.
+        self._checkpoint(capture_current=False)
         return True
+
+    def _duplicate_barcodes(self):
+        occurrences = {}
+        for index, row in enumerate(self._rows, start=1):
+            barcode = str(row.get("codigo_barras") or "").strip()
+            if barcode:
+                identity = (
+                    ("produto", int(row["produto_id"]))
+                    if row.get("produto_id") is not None
+                    else (
+                        "novo",
+                        " ".join(str(row.get("descricao") or "").casefold().split()),
+                        str(row.get("unidade") or "").upper(),
+                    )
+                )
+                occurrences.setdefault(barcode, []).append((index, identity))
+        return {
+            barcode: tuple(index for index, _identity in entries)
+            for barcode, entries in occurrences.items()
+            if len({identity for _index, identity in entries}) > 1
+        }
+
+    def _validate_unique_barcodes(self):
+        duplicates = self._duplicate_barcodes()
+        if not duplicates:
+            return True
+        details = "; ".join(
+            f"{barcode} nas linhas {', '.join(map(str, lines))}"
+            for barcode, lines in duplicates.items()
+        )
+        QMessageBox.warning(
+            self,
+            "Códigos de barras repetidos",
+            "Corrija ou vincule os produtos antes de continuar. " + details,
+        )
+        self.pages.setCurrentIndex(0)
+        self.table.selectRow(next(iter(duplicates.values()))[0] - 1)
+        self.barcode.setFocus(Qt.FocusReason.OtherFocusReason)
+        return False
 
     def _show_prices(self):
         try:
             if not self._save_selected():
+                return
+            if not self._validate_unique_barcodes():
                 return
             for index, row in enumerate(self._rows):
                 if not row.get("saved_ok"): raise ValueError(f"Revise e salve o item {index + 1}.")
@@ -453,13 +497,16 @@ class NFePurchaseImportDialog(QDialog):
         self.price_table.setRowCount(len(self._rows))
         for index, row in enumerate(self._rows):
             fixed = (index + 1, row["descricao"], _number(row["unit_cost"], 2))
-            for column, value in enumerate(fixed): self.price_table.setItem(index, column, QTableWidgetItem(str(value)))
+            for column, value in enumerate(fixed):
+                item = QTableWidgetItem(str(value)); item.setForeground(QColor("#111827"))
+                self.price_table.setItem(index, column, item)
             margin = QLineEdit(str(row.get("raw_margin", _number(row["margem"], 2))))
             price = QLineEdit(str(row.get("raw_price", _number(row["preco"], 2))))
             margin.textEdited.connect(lambda _text, i=index: self._margin_changed(i))
             price.textEdited.connect(lambda _text, i=index: self._price_changed(i))
             self.price_table.setCellWidget(index, 3, margin); self.price_table.setCellWidget(index, 4, price)
-            self.price_table.setItem(index, 5, QTableWidgetItem(""))
+            alert = QTableWidgetItem(""); alert.setForeground(QColor("#991b1b"))
+            self.price_table.setItem(index, 5, alert)
         if not self._price_columns_fitted:
             self._fit_price_columns(); self._price_columns_fitted = True
         self._refresh_summary()
@@ -557,6 +604,7 @@ class NFePurchaseImportDialog(QDialog):
 
     def _commit(self):
         if self._busy: return
+        if not self._validate_unique_barcodes(): return
         answer = QMessageBox.question(
             self, "Confirmar entrada da NF-e",
             "Confirma os vínculos, cadastros, fatores, preços, entrada de estoque e financeiro?\n\n"

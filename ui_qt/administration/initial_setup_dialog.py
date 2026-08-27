@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QDialog, QFileDialog, QFormLayout, QInputDialog, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
+    QDialog, QFileDialog, QFormLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QVBoxLayout,
 )
 from services.company_xml_import_service import CompanyXMLImportService
 
@@ -34,6 +34,12 @@ class InitialSetupDialog(QDialog):
             "border-radius:10px;padding:12px;color:#e8f6ff;font-size:14px;}"
         )
         root.addWidget(self.nabi_guidance)
+        self.import_xml_button = QPushButton("Importar destinatário de XML de compra")
+        self.import_xml_button.setStyleSheet(
+            "background:#1769aa;color:white;min-height:42px;font-weight:800"
+        )
+        self.import_xml_button.clicked.connect(lambda _checked=False: self.import_xml())
+        root.addWidget(self.import_xml_button)
         form = QFormLayout()
         self.store_name = QLineEdit()
         self.document = QLineEdit(); self.document.setMaxLength(18)
@@ -50,17 +56,14 @@ class InitialSetupDialog(QDialog):
         ):
             form.addRow(label, field)
         root.addLayout(form)
-        self.import_xml_button = QPushButton("Importar dados de XML")
-        self.import_xml_button.clicked.connect(lambda _checked=False: self.import_xml())
-        root.addWidget(self.import_xml_button)
         self.finish = QPushButton("Concluir configuração [Enter]")
         self.finish.setStyleSheet("background:#238636;color:white;min-height:38px;font-weight:800")
         self.finish.clicked.connect(self.complete)
         root.addWidget(self.finish)
         self.fields = (
-            self.store_name, self.document, self.email, self.username,
+            self.import_xml_button, self.store_name, self.document, self.email, self.username,
             self.display_name, self.password, self.password_confirmation,
-            self.import_xml_button, self.finish,
+            self.finish,
         )
         for field in self.fields:
             field.installEventFilter(self)
@@ -72,11 +75,11 @@ class InitialSetupDialog(QDialog):
             self.display_name: "Informe o nome que aparecerá na auditoria das operações.",
             self.password: "Crie uma senha exclusiva com pelo menos oito caracteres. Eu nunca mostro nem armazeno essa senha em texto aberto.",
             self.password_confirmation: "Repita a senha. Depois desta etapa, o acesso exigirá usuário e senha.",
-            self.import_xml_button: "Escolha um XML fiscal autorizado local. Vou mostrar emitente e destinatário e nada será salvo sem sua confirmação.",
+            self.import_xml_button: "Escolha um XML de compra autorizado. Usarei somente o destinatário como sua empresa; o emitente é o fornecedor.",
             self.finish: "Vou validar os dados e criar somente o primeiro administrador. Depois ajudarei com caixa, impressão e backup.",
         }
-        self._show_guidance(self.store_name)
-        self.store_name.setFocus()
+        self._show_guidance(self.import_xml_button)
+        self.import_xml_button.setFocus()
 
     def import_xml(self, path=None, *, selected_role="") -> bool:
         # QPushButton.clicked emits a boolean.  Keep this public entry point
@@ -90,15 +93,15 @@ class InitialSetupDialog(QDialog):
         try:
             service = CompanyXMLImportService()
             review = service.inspect(path, known_documents=(self.document.text(),))
-            role = selected_role or review.selected_role
+            role = selected_role
             if not role:
-                labels = [f"{item.role}: {item.legal_name} ({item.document})" for item in review.participants]
-                choice, accepted = QInputDialog.getItem(
-                    self, "Qual participante é sua empresa?", "Confirme o participante:", labels, 0, False,
+                destination = next(
+                    (item for item in review.participants if item.role.casefold() == "destinatário"),
+                    None,
                 )
-                if not accepted:
-                    return False
-                role = review.participants[labels.index(choice)].role
+                if destination is None:
+                    raise ValueError("XML de compra sem destinatário identificável; importação bloqueada.")
+                role = destination.role
             review = service.select(review, role, known_documents=(self.document.text(),))
             participant = review.selected
             preview = (

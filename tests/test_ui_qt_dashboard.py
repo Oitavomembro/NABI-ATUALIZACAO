@@ -56,6 +56,33 @@ def test_worker_preenche_cartoes_e_historico_legacy():
     dialog.close()
 
 
+def test_cartoes_ficam_visualmente_separados_do_historico():
+    dialog = DashboardDialog(Mock(), worker_pool=Pool())
+    subtitle = next(
+        label for label in dialog.findChildren(__import__("PySide6.QtWidgets", fromlist=["QLabel"]).QLabel)
+        if label.text() == "HISTÓRICO DE MOVIMENTAÇÕES DO DIA"
+    )
+    assert "border-top" in subtitle.styleSheet()
+    assert "padding-top" in subtitle.styleSheet()
+    dialog.close()
+
+
+def test_clique_no_cartao_mantem_janela_ampla_referenciada(monkeypatch):
+    application = Mock(); application.detail.return_value = SimpleNamespace(
+        total_records=0, total_value=Decimal("0"), rows=(),
+    )
+    dialog = DashboardDialog(application, worker_pool=Pool())
+    assert dialog.open_detail("sales") is True
+    APP.processEvents()
+    opened = dialog._detail_dialogs["sales"]
+    assert opened.isVisible() and opened.isMaximized()
+    assert dialog.open_detail("sales") is True
+    assert dialog._detail_dialogs["sales"] is opened
+    opened.close(); APP.processEvents()
+    assert "sales" not in dialog._detail_dialogs
+    dialog.close()
+
+
 def test_paginacao_dispara_nova_carga_limitada():
     application = Mock(); application.load.return_value = snapshot(total=120); pool = Pool()
     dialog = DashboardDialog(application, worker_pool=pool); pool.workers[0].run(); APP.processEvents()

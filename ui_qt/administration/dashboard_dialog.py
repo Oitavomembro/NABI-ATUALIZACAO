@@ -50,13 +50,15 @@ class DashboardDialog(QDialog):
         self.pool = worker_pool or QThreadPool.globalInstance()
         self.page_size = max(10, min(int(page_size), 100)); self.offset = 0
         self.total_records = 0; self._generation = 0; self._workers = []
+        self._detail_dialogs = {}
         self.setWindowTitle("Início"); self.resize(1180, 740); self.setMinimumSize(900, 600)
         self.setStyleSheet(STYLE); root = QVBoxLayout(self)
         heading = QHBoxLayout(); title = QLabel("INÍCIO")
         title.setStyleSheet("font-size:26px;font-weight:900;color:#00d084")
         self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#8b949e")
         heading.addWidget(title); heading.addStretch(); heading.addWidget(self.loading); root.addLayout(heading)
-        cards = QGridLayout(); cards.setSpacing(12); self.cards = {}
+        cards = QGridLayout(); cards.setSpacing(12)
+        cards.setContentsMargins(0, 0, 0, 14); self.cards = {}
         for index, (key, label, color, tint) in enumerate((
             ("sales", "VENDAS REALIZADAS HOJE", "#00e88a", "rgba(0,232,138,28)"),
             ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff", "rgba(88,166,255,30)"),
@@ -81,7 +83,10 @@ class DashboardDialog(QDialog):
             cards.addWidget(card, index // 2, index % 2); self.cards[key] = (label, card)
         root.addLayout(cards)
         subtitle = QLabel("HISTÓRICO DE MOVIMENTAÇÕES DO DIA")
-        subtitle.setStyleSheet("font-size:17px;font-weight:900"); root.addWidget(subtitle)
+        subtitle.setStyleSheet(
+            "font-size:17px;font-weight:900;padding-top:8px;"
+            "border-top:1px solid #30363d"
+        ); root.addWidget(subtitle)
         self.table = QTableWidget(0, 6); self.table.setHorizontalHeaderLabels(
             ("ID", "Horário", "Cliente", "Tipo", "Descrição / Produto", "Valor")
         )
@@ -114,13 +119,29 @@ class DashboardDialog(QDialog):
 
     def open_detail(self, kind: str) -> bool:
         try:
+            current = self._detail_dialogs.get(kind)
+            if current is not None and current.isVisible():
+                current.showMaximized(); current.raise_(); current.activateWindow()
+                return True
             dialog = DashboardDetailDialog(self.application, kind, self)
-            dialog.exec()
-            self.cards[kind][1].setFocus(Qt.FocusReason.OtherFocusReason)
+            dialog.setModal(False)
+            dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+            self._detail_dialogs[kind] = dialog
+            dialog.finished.connect(
+                lambda _result, selected=kind, opened=dialog:
+                self._detail_closed(selected, opened)
+            )
+            dialog.showMaximized(); dialog.raise_(); dialog.activateWindow()
             return True
         except Exception as error:
             QMessageBox.warning(self, "Detalhes do Início", str(error))
             return False
+
+    def _detail_closed(self, kind, dialog) -> None:
+        if self._detail_dialogs.get(kind) is dialog:
+            self._detail_dialogs.pop(kind, None)
+        if kind in self.cards:
+            self.cards[kind][1].setFocus(Qt.FocusReason.OtherFocusReason)
 
     def eventFilter(self, watched, event) -> bool:
         if watched is self.table and event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:

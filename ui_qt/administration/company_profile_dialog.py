@@ -8,7 +8,8 @@ from typing import Callable
 from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
     QCheckBox, QComboBox, QDateEdit, QDialog, QFormLayout, QHBoxLayout, QLabel,
-    QFileDialog, QInputDialog, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton, QVBoxLayout, QWidget,
+    QFileDialog, QLineEdit, QMessageBox, QPlainTextEdit, QPushButton,
+    QScrollArea, QVBoxLayout, QWidget,
 )
 
 from services.company_profile_service import (
@@ -39,7 +40,8 @@ class CompanyProfileDialog(QDialog):
         self._confirming = False
         self.setWindowTitle("Perfil empresarial do NabiCode")
         self.setModal(True)
-        self.resize(880, 760)
+        self.resize(1000, 700)
+        self.setMinimumSize(720, 520)
 
         root = QVBoxLayout(self)
         title = QLabel("PERFIL EMPRESARIAL")
@@ -56,6 +58,15 @@ class CompanyProfileDialog(QDialog):
         self.readiness_label.setWordWrap(True)
         self.readiness_label.setStyleSheet("color:#ffd166;font-weight:700")
         root.addWidget(self.readiness_label)
+
+        self.scroll_area = QScrollArea()
+        self.scroll_area.setWidgetResizable(True)
+        self.scroll_area.setFrameShape(QScrollArea.Shape.NoFrame)
+        self.scroll_content = QWidget()
+        scroll_layout = QVBoxLayout(self.scroll_content)
+        scroll_layout.setContentsMargins(0, 0, 0, 0)
+        self.scroll_area.setWidget(self.scroll_content)
+        root.addWidget(self.scroll_area, 1)
 
         self.form_page = QWidget()
         form = QFormLayout(self.form_page)
@@ -117,15 +128,17 @@ class CompanyProfileDialog(QDialog):
             ("Motivo da confirmação*", self.change_reason),
         ):
             form.addRow(label, field)
-        root.addWidget(self.form_page)
+        scroll_layout.addWidget(self.form_page)
 
-        actions = QHBoxLayout()
-        self.xml_button = QPushButton("Importar dados de XML")
+        self.actions_page = QWidget()
+        actions = QHBoxLayout(self.actions_page)
+        actions.setContentsMargins(0, 0, 0, 0)
+        self.xml_button = QPushButton("Importar destinatário de XML de compra")
         self.legacy_button = QPushButton("Carregar configuração antiga como rascunho")
         self.review_button = QPushButton("Revisar perfil [Enter]")
         self.review_button.setStyleSheet("min-height:38px;font-weight:800")
         actions.addWidget(self.xml_button); actions.addWidget(self.legacy_button); actions.addStretch(); actions.addWidget(self.review_button)
-        root.addLayout(actions)
+        scroll_layout.addWidget(self.actions_page)
 
         self.review_panel = QWidget(); self.review_panel.setVisible(False)
         review_layout = QVBoxLayout(self.review_panel)
@@ -138,7 +151,8 @@ class CompanyProfileDialog(QDialog):
         )
         review_layout.addWidget(review_title); review_layout.addWidget(self.review_summary)
         review_layout.addWidget(self.review_ack)
-        root.addWidget(self.review_panel)
+        scroll_layout.addWidget(self.review_panel)
+        scroll_layout.addStretch()
 
         bottom = QHBoxLayout()
         self.back_button = QPushButton("Voltar e editar [Shift+Enter]")
@@ -264,16 +278,15 @@ class CompanyProfileDialog(QDialog):
         known = tuple(self._configured_documents_provider())
         try:
             review = self.xml_import_service.inspect(path, known_documents=known)
-            role = selected_role or review.selected_role
+            role = selected_role
             if not role:
-                labels = [f"{item.role}: {item.legal_name} ({item.document})" for item in review.participants]
-                choice, accepted = QInputDialog.getItem(
-                    self, "Qual participante é sua empresa?",
-                    "Confirme o participante; fornecedor e cliente não são intercambiáveis:", labels, 0, False,
+                destination = next(
+                    (item for item in review.participants if item.role.casefold() == "destinatário"),
+                    None,
                 )
-                if not accepted:
-                    return False
-                role = review.participants[labels.index(choice)].role
+                if destination is None:
+                    raise ValueError("XML de compra sem destinatário identificável; importação bloqueada.")
+                role = destination.role
             review = self.xml_import_service.select(review, role, known_documents=known)
             participant = review.selected
             if participant is None:
@@ -445,6 +458,8 @@ class CompanyProfileDialog(QDialog):
         return [item for item in self._navigation if item.isVisible() and item.isEnabled()]
 
     def eventFilter(self, watched, event) -> bool:
+        if watched in self._navigation and event.type() == QEvent.Type.FocusIn:
+            self.scroll_area.ensureWidgetVisible(watched, 24, 24)
         if watched in self._navigation and event.type() == QEvent.Type.KeyPress:
             if event.key() == Qt.Key.Key_Escape:
                 event.accept()

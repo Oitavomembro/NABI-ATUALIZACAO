@@ -10,7 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 import pytest
 from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtGui import QKeyEvent
-from PySide6.QtWidgets import QApplication, QDialog
+from PySide6.QtWidgets import QApplication, QDialog, QScrollArea
 from PySide6.QtWidgets import QMessageBox
 
 from services.company_profile_service import CompanyProfileService
@@ -131,6 +131,15 @@ def test_texto_separa_licenca_permissao_perfil_e_readiness_nao_habilita_fiscal(e
     assert "enables_fiscal=false" in visible
 
 
+def test_formulario_longo_tem_rolagem_e_acoes_finais_ficam_fora_do_corte(environment):
+    _, _, _, dialog, _ = environment
+    assert isinstance(dialog.scroll_area, QScrollArea)
+    assert dialog.scroll_area.widgetResizable()
+    assert dialog.scroll_area.widget() is dialog.scroll_content
+    assert dialog.xml_button.parent() is dialog.actions_page
+    assert dialog.close_button.parent() is dialog
+
+
 def test_enter_shift_enter_e_auto_repeat_sao_deterministicos(environment):
     _, _, _, dialog, _ = environment
     dialog.show(); dialog.cnpj.setFocus(); QApplication.processEvents()
@@ -210,6 +219,23 @@ def test_importacao_mostra_previa_e_so_substitui_apos_confirmacao(environment, t
     assert dialog.trade_name.text() == "FANTASIA XML"
     assert dialog.tax_regime.currentData() == "MEI"  # XML/CRT nunca decide regime.
     assert service.history() == ()
+
+
+def test_xml_de_compra_escolhe_destinatario_sem_perguntar(environment, tmp_path, monkeypatch):
+    _, _, service, original_dialog, _ = environment
+    original_dialog.close()
+    dialog = CompanyProfileDialog(
+        service,
+        notifier=lambda *_args: None,
+        configured_documents_provider=lambda: ("98765432000198",),
+    )
+    path = tmp_path / "compra.xml"; path.write_text(_company_xml(), encoding="utf-8")
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Apply)
+    assert dialog.import_xml(path) is True
+    assert dialog.legal_name.text() == "CLIENTE"
+    assert dialog.cnpj.text() == "98765432000198"
+    assert service.history() == ()
+    dialog.close()
 
 
 def test_cancelamento_da_previa_nao_altera_campo_algum(environment, tmp_path, monkeypatch):

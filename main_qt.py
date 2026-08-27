@@ -320,6 +320,8 @@ def main(argv=None) -> int:
         index = effective_argv.index("--apply-prepared-restore")
         return restore_main(effective_argv[index + 1:])
     qt = QApplication.instance() or QApplication(effective_argv)
+    from ui_qt.adaptive_window_policy import install_adaptive_window_policy
+    install_adaptive_window_policy(qt)
     profile = configure_profile_environment("PRODUCAO")
     from licensing.restricted_commands import handle_restricted_command
 

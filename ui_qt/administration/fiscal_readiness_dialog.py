@@ -151,6 +151,17 @@ class FiscalReadinessDialog(QDialog):
             summary.addWidget(heading, row, 0); summary.addWidget(data, row, 1)
         self.content.addLayout(summary)
         for model in snapshot.models:
+            locally_ready = bool(
+                model.enabled and model.numbering_initialized and not model.local_problems
+            )
+            fully_ready = locally_ready and snapshot.state not in {
+                "BLOQUEADO", "AGUARDA_VERIFICACAO_MANUAL"
+            }
+            accent = "#2ea043" if fully_ready else "#58a6ff" if locally_ready else "#ff5263"
+            instruction = (
+                "Configuração local preparada; clique para revisar"
+                if locally_ready else "Clique para configurar esta pendência"
+            )
             lines = [
                 f"{model.label} — {'habilitado' if model.enabled else 'não habilitado'}",
                 (
@@ -159,15 +170,16 @@ class FiscalReadinessDialog(QDialog):
                 ),
             ]
             lines.extend(f"• {problem}" for problem in model.local_problems)
-            card = QPushButton("\n".join(lines) + "\n\nClique para configurar esta pendência")
+            card = QPushButton("\n".join(lines) + f"\n\n{instruction}")
             card.setCursor(Qt.CursorShape.PointingHandCursor)
             card.clicked.connect(
                 lambda _checked=False, selected=model: self.configure_numbering(selected)
             )
             card.setStyleSheet(
-                "background:#161b22;border:1px solid #30363d;border-left:6px solid #ff5263;"
+                f"background:#161b22;border:1px solid #30363d;border-left:6px solid {accent};"
                 "border-radius:8px;padding:12px;font-size:15px;text-align:left"
             )
+            card.setProperty("readinessState", "ready" if fully_ready else "local" if locally_ready else "blocked")
             self.content.addWidget(card)
         notice = QLabel("\n".join(f"• {text}" for text in snapshot.notices))
         notice.setWordWrap(True); notice.setTextFormat(Qt.TextFormat.PlainText)
