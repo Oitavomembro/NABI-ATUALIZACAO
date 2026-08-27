@@ -4623,3 +4623,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   aprovados;
 - a aprovação automatizada não substitui certificado, impressora, SEFAZ,
   credenciamento, segunda máquina e demais homologações físicas registradas.
+
+## Isolamento da edição XML e estabilidade das janelas Qt — 27/08/2026
+
+- implementação: `cfb8598` — `fix: isola edicoes XML e estabiliza janelas Qt`;
+- causa comprovada da cópia entre produtos: o sinal `clicked(bool)` do botão
+  “Salvar edição deste item” era ligado diretamente a uma função cujo primeiro
+  argumento opcional era o índice; o valor `False` era interpretado como índice
+  zero e podia gravar a edição de outra linha no primeiro produto;
+- o clique agora consome explicitamente o booleano do Qt e sempre salva a linha
+  mantida pelo editor. Um teste com refrigerantes normal/zero açúcar comprova
+  que nome, código de barras e fator da segunda linha não alteram a primeira;
+- a política adaptativa chama os métodos nativos de geometria pela classe
+  `QWidget`, impedindo colisão com telas antigas que possuem botão de instância
+  chamado `move`;
+- janelas principais já maximizadas não são mais redimensionadas após o evento
+  de exibição, eliminando o lampejo de janela pequena e a restauração com dados
+  cortados;
+- módulos principais abertos pelo shell recebem antes da exibição os controles
+  nativos de minimizar, maximizar/restaurar e fechar;
+- validação: geometria `5 passed`; importação NF-e `20 passed`; shell `30
+  passed`; Produtos `10 passed`; Configurações `10 passed`; Perfil empresarial
+  `15 passed`; prontidão Fiscal `15 passed`; Caixa `12 passed`; `compileall` e
+  `git diff --check` aprovados. Nenhuma transmissão SEFAZ ou banco real foi
+  usada.
