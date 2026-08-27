@@ -4472,3 +4472,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   teste externo condicionado; `compileall` e `git diff --check` aprovados.
   Nenhum XML real, banco de produção, certificado, segredo ou comunicação com
   a SEFAZ foi usado nesta blindagem.
+
+### Janelas principais, cartões e seletores protegidos — 26/08/2026
+
+- Início permanece como painel central do shell; Vendas, Clientes, Produtos,
+  Financeiro, Caixa, Central Fiscal, Relatórios e Configurações possuem espaço
+  operacional próprio. Relatórios e Configurações deixaram de ser embutidos
+  sob a navegação e agora abrem em janela independente, maximizada e reutilizada;
+- a política adaptativa continua alcançando todos os diálogos operacionais Qt,
+  mantendo-os amplos, horizontais, centralizados e contidos na área útil do
+  monitor; avisos curtos do sistema permanecem compactos;
+- a roda do mouse sobre qualquer `QComboBox` fechado é consumida globalmente.
+  Rolar Configurações ou outro formulário não altera modo, tema, impressora,
+  unidade, regime ou opção selecionada sem intenção. A lista aberta continua
+  disponível para escolha explícita;
+- cartões do Início preservam clique, Enter, cursor de mão e janela detalhada,
+  e receberam altura e margem inferiores fixas para não se sobrepor ao título
+  do Histórico de Movimentações do Dia;
+- validação focada: `50 passed`; regressão ampliada do shell e módulos Qt:
+  `96 passed`; `compileall` e `git diff --check` aprovados. A suíte completa
+  imediatamente anterior deste mesmo checkpoint-base registrou `2712 passed`,
+  `492 subtests passed`, zero falhas e um teste externo condicionado.
