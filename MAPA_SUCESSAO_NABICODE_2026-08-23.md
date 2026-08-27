@@ -4597,3 +4597,14 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   vazio e os dois backups anteriores à migração foram comprovados;
 - resultado: `1 passed`; nenhum pacote privado, banco temporário ou dado
   migrado foi versionado e nenhum banco ativo foi acessado.
+
+## Revalidação de abertura, primeiro uso e comandos Qt — 27/08/2026
+
+- os testes de primeiro acesso, ciclo da licença, splash, Nabi técnica de
+  configuração, onboarding fiscal local, autorização de instalação, atalhos
+  globais, matriz de botões, startup, preferências e backup diário foram
+  executados em processos isolados para não acumular estado nativo do Qt;
+- resultado consolidado: `85 passed`, `3 subtests passed`, zero falhas;
+- a matriz comprova o contrato automatizado dos comandos; homologação visual e
+  recursos físicos continuam sendo evidências separadas e não são inferidos
+  destes testes.
