@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, QObject, QPoint, QTimer
 from PySide6.QtWidgets import (
-    QApplication, QColorDialog, QDialog, QFileDialog, QInputDialog, QMessageBox,
+    QApplication, QColorDialog, QComboBox, QDialog, QFileDialog, QInputDialog,
+    QMessageBox,
 )
 
 
@@ -21,6 +22,11 @@ class AdaptiveWindowPolicy(QObject):
         application.installEventFilter(self)
 
     def eventFilter(self, watched, event) -> bool:
+        if isinstance(watched, QComboBox) and event.type() == QEvent.Type.Wheel:
+            view = watched.view()
+            if view is None or not view.isVisible():
+                event.ignore()
+                return True
         if (
             isinstance(watched, QDialog)
             and not isinstance(watched, _COMPACT_DIALOGS)

@@ -48,7 +48,7 @@ def test_worker_preenche_cartoes_e_historico_legacy():
     assert "R$ 25,00" in dialog.cards["sales"][1].text()
     assert "R$ 10,00" in dialog.cards["receipts"][1].text()
     assert "2 • R$ 80,00" in dialog.cards["overdue"][1].text()
-    assert dialog.cards["products"][1].minimumHeight() >= 82
+    assert dialog.cards["products"][1].minimumHeight() >= 104
     assert "qlineargradient" in dialog.cards["products"][1].styleSheet()
     assert "border-bottom:5px" in dialog.cards["products"][1].styleSheet()
     assert dialog.table.item(0, 0).text() == "7"
@@ -63,7 +63,8 @@ def test_cartoes_ficam_visualmente_separados_do_historico():
         if label.text() == "HISTÓRICO DE MOVIMENTAÇÕES DO DIA"
     )
     assert "border-top" in subtitle.styleSheet()
-    assert "padding-top" in subtitle.styleSheet()
+    assert "padding:" in subtitle.styleSheet()
+    assert all(button.height() >= 104 for _label, button in dialog.cards.values())
     dialog.close()
 
 

@@ -267,6 +267,41 @@ def test_cash_and_financial_open_as_reused_maximized_windows(qt_application):
         shell.close()
 
 
+def test_reports_and_settings_open_in_their_own_reused_maximized_windows(qt_application):
+    created = []
+
+    def factory(parent):
+        dialog = QDialog(parent)
+        created.append(dialog)
+        return dialog
+
+    reports = AdministrativeModule(
+        "Relatórios", "Consultas", "", "relatorios", "view", factory,
+        "relatorios",
+    )
+    settings = AdministrativeModule(
+        "Configurações", "Preferências", "F5", "configs", "view", factory,
+        "configs",
+    )
+    shell = NabiCodeShellWindow(
+        Security(), (dashboard_module(), reports, settings), lambda: QMainWindow()
+    )
+    try:
+        for module_id in ("relatorios", "configs"):
+            assert shell.show_module(module_id) is True
+            qt_application.processEvents()
+            opened = shell._wide_windows[module_id]
+            assert opened is created[-1]
+            assert opened.isWindow() is True
+            assert opened.isMaximized() is True
+            assert opened not in tuple(shell._module_pages.values())
+            assert shell.show_module(module_id) is True
+            assert shell._wide_windows[module_id] is opened
+        assert len(created) == 2
+    finally:
+        shell.close()
+
+
 def test_summary_cards_open_the_matching_authorized_customer_filter(qt_application):
     opened = []
     def filtered(parent, segment, title):

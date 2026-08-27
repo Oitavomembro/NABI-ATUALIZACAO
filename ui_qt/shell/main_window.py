@@ -156,7 +156,12 @@ class VisualShellRoot(QWidget):
 class NabiCodeShellWindow(QMainWindow):
     """Janela principal com a mesma hierarquia operacional do NabiCode Legacy."""
 
-    WIDE_PRIMARY_MODULES = frozenset({"clientes", "produtos", "caixa", "financeiro", "fiscal"})
+    # Início permanece como painel do shell. Todos os demais cartões principais
+    # possuem espaço operacional próprio e independente da navegação superior.
+    WIDE_PRIMARY_MODULES = frozenset({
+        "clientes", "produtos", "financeiro", "caixa", "fiscal",
+        "relatorios", "configs",
+    })
     CUSTOMER_SEGMENTS = {
         "total": ("all", "TODOS OS CLIENTES"),
         "current": ("current", "CLIENTES EM DIA"),

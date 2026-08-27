@@ -57,8 +57,8 @@ class DashboardDialog(QDialog):
         title.setStyleSheet("font-size:26px;font-weight:900;color:#00d084")
         self.loading = QLabel("Carregando..."); self.loading.setStyleSheet("color:#8b949e")
         heading.addWidget(title); heading.addStretch(); heading.addWidget(self.loading); root.addLayout(heading)
-        cards = QGridLayout(); cards.setSpacing(12)
-        cards.setContentsMargins(0, 0, 0, 14); self.cards = {}
+        cards = QGridLayout(); cards.setSpacing(14)
+        cards.setContentsMargins(0, 0, 0, 24); self.cards = {}
         for index, (key, label, color, tint) in enumerate((
             ("sales", "VENDAS REALIZADAS HOJE", "#00e88a", "rgba(0,232,138,28)"),
             ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff", "rgba(88,166,255,30)"),
@@ -78,13 +78,13 @@ class DashboardDialog(QDialog):
                 f"QPushButton:focus{{border:3px solid {color}}}"
             )
             # Aplicar depois do QSS: o min-height do tema não pode encolher o cartão.
-            card.setFixedHeight(90)
+            card.setFixedHeight(104)
             card.clicked.connect(lambda _checked=False, selected=key: self.open_detail(selected))
             cards.addWidget(card, index // 2, index % 2); self.cards[key] = (label, card)
         root.addLayout(cards)
         subtitle = QLabel("HISTÓRICO DE MOVIMENTAÇÕES DO DIA")
         subtitle.setStyleSheet(
-            "font-size:17px;font-weight:900;padding-top:8px;"
+            "font-size:17px;font-weight:900;padding:12px 0 8px 0;"
             "border-top:1px solid #30363d"
         ); root.addWidget(subtitle)
         self.table = QTableWidget(0, 6); self.table.setHorizontalHeaderLabels(

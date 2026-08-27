@@ -1,8 +1,10 @@
 import os
+from unittest.mock import Mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
+from PySide6.QtCore import QEvent
+from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QMessageBox
 
 from ui_qt.adaptive_window_policy import install_adaptive_window_policy
 
@@ -26,3 +28,14 @@ def test_aviso_curto_permanece_compacto():
     APP.processEvents()
     assert message.width() < 720
     message.close()
+
+
+def test_roda_do_mouse_nao_altera_seletor_fechado():
+    policy = install_adaptive_window_policy(APP)
+    combo = QComboBox(); combo.addItems(("Primeiro", "Segundo", "Terceiro"))
+    combo.setCurrentIndex(1)
+    event = Mock()
+    event.type.return_value = QEvent.Type.Wheel
+    assert policy.eventFilter(combo, event) is True
+    event.ignore.assert_called_once_with()
+    assert combo.currentIndex() == 1
