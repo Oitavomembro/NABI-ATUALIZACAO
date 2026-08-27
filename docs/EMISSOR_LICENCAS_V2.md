@@ -43,6 +43,12 @@ botão **Assinar e gerar** pede a senha somente nesse instante, confirma que a
 chave privada corresponde ao catálogo, assina, verifica o resultado e cria o
 arquivo sem sobrescrever destino existente.
 
+O emissor é multiproduto. A seleção determina edição e recursos canônicos.
+Estão cadastrados `NABICODE` e `NOTAS_IGLBALT` (nome visual "Notas IglBalt").
+Cada produto exige chave e catálogo próprios; a chave privada do NabiCode nunca
+deve assinar uma licença do Notas IglBalt. A chave permanente do novo produto
+só pode ser criada em cerimônia externa.
+
 Também é possível usar `license_issuer_cli.py issue`. A linha de comando exibe
 a mesma revisão e somente continua quando o operador digita `EMITIR`; a senha
 não é argumento de linha de comando.

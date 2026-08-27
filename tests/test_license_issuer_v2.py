@@ -362,10 +362,10 @@ def test_interface_facil_usuario_escolhe_edicao_periodo_e_nome(tmp_path, monkeyp
     window.customer.setText("Pedro Miranda")
     window.edition.setCurrentText("COMERCIAL")
     window.duration.setCurrentIndex(window.duration.findData(3))
-    assert window.features.text() == "commercial,legacy,qt"
+    assert window.features.text() == "assistant,commercial,legacy,qt"
     assert window.fiscal_enabled.isEnabled()
     window.fiscal_enabled.setChecked(True)
-    assert window.features.text() == "commercial,fiscal,legacy,qt"
+    assert window.features.text() == "assistant,commercial,fiscal,legacy,qt"
     assert window.valid_until.date() == QDate.currentDate().addMonths(3)
     assert "comercial-pedro-miranda" in window.output.text()
     window.edition.setCurrentText("AVALIACAO")
@@ -375,6 +375,43 @@ def test_interface_facil_usuario_escolhe_edicao_periodo_e_nome(tmp_path, monkeyp
     assert not window.duration.isEnabled()
     assert window.valid_until.date() == QDate.currentDate().addDays(29)
     window.close(); app.processEvents()
+
+
+def test_interface_cadastra_notas_iglbalt_com_contrato_fechado(tmp_path, monkeypatch):
+    monkeypatch.setenv("QT_QPA_PLATFORM", "offscreen")
+    from PySide6.QtWidgets import QApplication
+    from license_issuer.ui_qt import LicenseIssuerWindow
+
+    app = QApplication.instance() or QApplication([])
+    window = LicenseIssuerWindow(key_directory=tmp_path / "sem-chave", output_directory=tmp_path)
+    assert [window.product.itemData(i) for i in range(window.product.count())] == [
+        "NABICODE", "NOTAS_IGLBALT",
+    ]
+    window.product.setCurrentIndex(window.product.findData("NOTAS_IGLBALT"))
+    assert window.edition.currentText() == "COMPLETA"
+    assert window.edition.count() == 1
+    assert window.features.text() == "core"
+    assert not window.fiscal_enabled.isEnabled()
+    assert "notas-iglbalt-completa" in window.output.text()
+    window.close(); app.processEvents()
+
+
+def test_notas_iglbalt_recusa_chave_nabicode_e_recursos_manipulados():
+    base = dict(
+        product_id="NOTAS_IGLBALT", machine_fingerprint=FINGERPRINT,
+        customer_name="CLIENTE", edition=LicenseEdition.COMPLETE,
+        valid_until=date(2026, 8, 31), issued_at=NOW,
+    )
+    with pytest.raises(ValueError, match="não pertence"):
+        IssuanceRequest(key_id="nabicode-prod-01", features=("core",), **base)
+    with pytest.raises(ValueError, match="Recursos incompatíveis"):
+        IssuanceRequest(
+            key_id="notas-iglbalt-prod-01", features=("core", "fiscal"), **base,
+        )
+    request = IssuanceRequest(
+        key_id="notas-iglbalt-prod-01", features=("core",), **base,
+    )
+    assert request.product_id == "NOTAS_IGLBALT"
 
 
 def test_interface_facil_usa_maquina_local_e_minimiza(tmp_path, monkeypatch):

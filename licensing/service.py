@@ -23,6 +23,7 @@ class LicenseV2Service:
         state_store: ProtectedStateStore,
         public_keys: Mapping[str, bytes],
         machine_fingerprint: Callable[[], str],
+        expected_product_id: str = "NABICODE",
         now: Callable[[], datetime] = lambda: datetime.now(timezone.utc),
     ) -> None:
         self.license_path = Path(license_path)
@@ -30,6 +31,7 @@ class LicenseV2Service:
         self.public_keys = dict(public_keys)
         self._machine_fingerprint = machine_fingerprint
         self._now = now
+        self.expected_product_id = str(expected_product_id).upper()
 
     def _current(self) -> datetime:
         current = self._now()
@@ -45,7 +47,10 @@ class LicenseV2Service:
         return LicenseDecision(LicenseState.INVALID, reason, code)
 
     def _load_payload(self) -> LicensePayload:
-        return verify_envelope(self.license_path.read_bytes(), self.public_keys)
+        return verify_envelope(
+            self.license_path.read_bytes(), self.public_keys,
+            expected_product_id=self.expected_product_id,
+        )
 
     @staticmethod
     def _state_for(payload: LicensePayload, fingerprint: str, current: datetime) -> dict:
@@ -61,7 +66,9 @@ class LicenseV2Service:
         """Importa uma licença verificada; senha local nunca participa da decisão."""
         source_path = Path(source)
         raw = source_path.read_bytes()
-        payload = verify_envelope(raw, self.public_keys)
+        payload = verify_envelope(
+            raw, self.public_keys, expected_product_id=self.expected_product_id,
+        )
         current = self._current()
         fingerprint, code = self._fingerprint()
         if payload.issued_at > current + self.CLOCK_ROLLBACK_TOLERANCE:

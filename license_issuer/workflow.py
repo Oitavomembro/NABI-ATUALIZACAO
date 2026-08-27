@@ -19,6 +19,7 @@ from licensing.machine import machine_code
 from licensing.models import LicenseEdition, LicensePayload
 
 from .emitter import issue_license, load_private_key
+from .products import product
 
 
 _KEY_ID = re.compile(r"^[a-zA-Z0-9][a-zA-Z0-9_.-]{1,63}$")
@@ -33,6 +34,7 @@ class IssuanceRequest:
     edition: LicenseEdition
     valid_until: date
     features: tuple[str, ...]
+    product_id: str = "NABICODE"
     license_id: str | None = None
     revoked: bool = False
     issued_at: datetime | None = None
@@ -53,11 +55,22 @@ class IssuanceRequest:
         issued = issued.astimezone(timezone.utc).replace(microsecond=0)
         license_id = str(uuid.UUID(str(self.license_id))) if self.license_id else str(uuid.uuid4())
         # LicensePayload concentra duração AVALIAÇÃO, recursos e tolerância normativa.
+        product_id = str(self.product_id or "").strip().upper()
+        selected_product = product(product_id)
+        if self.edition not in selected_product.editions:
+            raise ValueError("Edição incompatível com o produto selecionado.")
+        canonical = set(selected_product.features[self.edition])
+        supplied = frozenset(str(item).strip().lower() for item in self.features)
+        if product_id != "NABICODE" and supplied != canonical:
+            raise ValueError("Recursos incompatíveis com o produto selecionado.")
+        if selected_product.key_id_prefix and not key_id.startswith(selected_product.key_id_prefix):
+            raise ValueError("A chave selecionada não pertence ao produto.")
         payload = LicensePayload(
-            schema=2, license_id=license_id, edition=self.edition,
+            schema=2 if product_id == "NABICODE" else 3,
+            license_id=license_id, edition=self.edition,
             customer_name=customer, machine_fingerprint=fingerprint,
             issued_at=issued, valid_until=self.valid_until, grace_days=10,
-            features=tuple(self.features), revoked=bool(self.revoked),
+            features=tuple(self.features), revoked=bool(self.revoked), product_id=product_id,
         )
         object.__setattr__(self, "key_id", key_id)
         object.__setattr__(self, "machine_fingerprint", fingerprint)
@@ -65,9 +78,11 @@ class IssuanceRequest:
         object.__setattr__(self, "license_id", payload.license_id)
         object.__setattr__(self, "issued_at", payload.issued_at)
         object.__setattr__(self, "features", payload.features)
+        object.__setattr__(self, "product_id", payload.product_id)
 
     def review_mapping(self) -> Mapping[str, object]:
         return MappingProxyType({
+            "produto": self.product_id,
             "cliente": self.customer_name,
             "edicao": self.edition.value,
             "emissao_utc": self.issued_at.isoformat().replace("+00:00", "Z"),
@@ -159,6 +174,7 @@ def request_from_existing(
     if not revoked and valid_until <= previous.valid_until:
         raise ValueError("A renovação deve ampliar a validade da licença anterior.")
     return IssuanceRequest(
+        product_id=previous.product_id,
         key_id=_envelope_key_id(Path(license_path).expanduser().resolve().read_bytes()),
         machine_fingerprint=previous.machine_fingerprint,
         customer_name=previous.customer_name,
@@ -216,6 +232,7 @@ def sign_review(
         issued_at=request.issued_at,
         license_id=request.license_id,
         revoked=request.revoked,
+        product_id=request.product_id,
     )
     payload = verify_envelope(raw, {request.key_id: public})
     output.parent.mkdir(parents=True, exist_ok=True)

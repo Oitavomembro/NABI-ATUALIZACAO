@@ -69,11 +69,13 @@ def issue_license(
     customer_name: str, edition: LicenseEdition, valid_until: date,
     features: tuple[str, ...], issued_at: datetime | None = None,
     license_id: str | None = None, revoked: bool = False,
+    product_id: str = "NABICODE",
 ) -> bytes:
     payload = LicensePayload(
-        schema=2, license_id=license_id or str(uuid.uuid4()), edition=edition,
+        schema=2 if product_id == "NABICODE" else 3,
+        license_id=license_id or str(uuid.uuid4()), edition=edition,
         customer_name=customer_name, machine_fingerprint=machine_fingerprint,
         issued_at=issued_at or datetime.now(timezone.utc), valid_until=valid_until,
-        grace_days=10, features=features, revoked=bool(revoked),
+        grace_days=10, features=features, revoked=bool(revoked), product_id=product_id,
     )
     return create_envelope(payload, key_id=key_id, signer=private_key)

@@ -20,16 +20,11 @@ from .workflow import (
     IssuanceRequest, IssuanceReview, parse_machine_request, request_from_existing,
     load_public_catalog, review_request, sign_review, verify_license_file,
 )
+from .products import PRODUCTS, product
 
 
 class LicenseIssuerWindow(QDialog):
     """Ferramenta administrativa externa; nunca é importada pelo NabiCode."""
-
-    EDITION_FEATURES = {
-        LicenseEdition.COMMERCIAL: "commercial,legacy,qt",
-        LicenseEdition.FICHARIO: "commercial,fichario,financial,qt",
-        LicenseEdition.EVALUATION: "commercial,qt",
-    }
 
     def __init__(self, parent=None, *, key_directory: Path | None = None,
                  output_directory: Path | None = None) -> None:
@@ -44,6 +39,7 @@ class LicenseIssuerWindow(QDialog):
             Path.home() / "Documents" / "NabiCode-Licencas"
         )
         self._suggested_output = ""
+        self._active_product_id: str | None = None
         self.setWindowTitle("NabiCode — Emissor externo de Licenças V2")
         self.setWindowFlag(Qt.WindowType.WindowMinimizeButtonHint, True)
         self.setMinimumSize(860, 680)
@@ -68,9 +64,10 @@ class LicenseIssuerWindow(QDialog):
         self.machine_fingerprint = QLineEdit()
         self.machine_code = QLabel("—")
         self.customer = QLineEdit()
+        self.product = QComboBox()
+        for item in PRODUCTS:
+            self.product.addItem(item.label, item.product_id)
         self.edition = QComboBox()
-        self.edition.addItems([item.value for item in LicenseEdition])
-        self.edition.setCurrentText(LicenseEdition.FICHARIO.value)
         self.duration = QComboBox()
         for months in (1, 3, 6, 9, 12):
             self.duration.addItem(f"{months} {'mês' if months == 1 else 'meses'}", months)
@@ -103,6 +100,7 @@ class LicenseIssuerWindow(QDialog):
         request_row.addWidget(load_request)
         request_row.addWidget(self.local_machine_button)
         output_row = self._path_row(self.output, self._choose_output, "Escolher saída")
+        form.addRow("Produto:", self.product)
         form.addRow("Máquina:", request_row)
         form.addRow("Cliente/titular:", self.customer)
         form.addRow("Edição:", self.edition)
@@ -162,7 +160,7 @@ class LicenseIssuerWindow(QDialog):
         self.advanced_button.toggled.connect(self._toggle_advanced)
         for widget in (
             self.private_key, self.public_catalog, self.key_id, self.machine_fingerprint, self.customer,
-            self.edition, self.valid_until, self.features, self.license_id,
+            self.product, self.edition, self.valid_until, self.features, self.license_id,
             self.fiscal_enabled, self.revoked, self.output,
         ):
             signal = getattr(widget, "textChanged", None)
@@ -174,11 +172,12 @@ class LicenseIssuerWindow(QDialog):
                 signal = getattr(widget, "toggled", None)
             signal.connect(self._invalidate_review)
         self.edition.currentTextChanged.connect(self._apply_edition_defaults)
+        self.product.currentIndexChanged.connect(self._apply_product_defaults)
         self.fiscal_enabled.toggled.connect(self._refresh_features)
         self.duration.currentIndexChanged.connect(self._apply_duration)
         self.customer.textChanged.connect(self._suggest_output)
         self._discover_owner_keys()
-        self._apply_edition_defaults()
+        self._apply_product_defaults()
         self._apply_duration()
 
     def _toggle_advanced(self, visible: bool) -> None:
@@ -203,9 +202,23 @@ class LicenseIssuerWindow(QDialog):
         self.public_catalog.setText(str(catalog))
         self.key_id.setText(key_ids[0])
 
+    def _apply_product_defaults(self, *_args) -> None:
+        selected = product(self.product.currentData())
+        if self._active_product_id is not None and self._active_product_id != selected.product_id:
+            self.private_key.clear()
+            self.public_catalog.clear()
+            self.key_id.clear()
+        self._active_product_id = selected.product_id
+        self.edition.blockSignals(True)
+        self.edition.clear()
+        self.edition.addItems([item.value for item in selected.editions])
+        self.edition.setCurrentText(selected.default_edition.value)
+        self.edition.blockSignals(False)
+        self._apply_edition_defaults()
+
     def _apply_edition_defaults(self, *_args) -> None:
         edition = LicenseEdition(self.edition.currentText())
-        commercial = edition is LicenseEdition.COMMERCIAL
+        commercial = self.product.currentData() == "NABICODE" and edition is LicenseEdition.COMMERCIAL
         self.fiscal_enabled.setEnabled(commercial)
         if not commercial:
             self.fiscal_enabled.setChecked(False)
@@ -219,8 +232,9 @@ class LicenseIssuerWindow(QDialog):
 
     def _refresh_features(self, *_args) -> None:
         edition = LicenseEdition(self.edition.currentText())
-        features = self.EDITION_FEATURES[edition].split(",")
-        if edition is LicenseEdition.COMMERCIAL and self.fiscal_enabled.isChecked():
+        selected = product(self.product.currentData())
+        features = list(selected.features[edition])
+        if selected.product_id == "NABICODE" and edition is LicenseEdition.COMMERCIAL and self.fiscal_enabled.isChecked():
             features.append("fiscal")
         self.features.setText(",".join(sorted(set(features))))
 
@@ -251,12 +265,13 @@ class LicenseIssuerWindow(QDialog):
         if self.output.text() and self.output.text() != self._suggested_output:
             return
         edition = self.edition.currentText().casefold() or "licenca"
+        product_name = self._safe_name(self.product.currentText())
         customer = self._safe_name(self.customer.text())
         date_text = self.valid_until.date().toString("yyyyMMdd")
-        candidate = self._output_directory / f"{edition}-{customer}-{date_text}.nabilic"
+        candidate = self._output_directory / f"{product_name}-{edition}-{customer}-{date_text}.nabilic"
         sequence = 1
         while candidate.exists():
-            candidate = self._output_directory / f"{edition}-{customer}-{date_text}-{sequence}.nabilic"
+            candidate = self._output_directory / f"{product_name}-{edition}-{customer}-{date_text}-{sequence}.nabilic"
             sequence += 1
         self._suggested_output = str(candidate)
         self.output.setText(self._suggested_output)
@@ -329,6 +344,11 @@ class LicenseIssuerWindow(QDialog):
         self.machine_fingerprint.setText(payload.machine_fingerprint)
         self.machine_code.setText(machine_code(payload.machine_fingerprint))
         self.customer.setText(payload.customer_name)
+        product_index = self.product.findData(payload.product_id)
+        if product_index < 0:
+            QMessageBox.critical(self, "Produto desconhecido", "O produto desta licença não é suportado.")
+            return
+        self.product.setCurrentIndex(product_index)
         self.edition.setCurrentText(payload.edition.value)
         self.fiscal_enabled.setChecked("fiscal" in payload.features)
         self._refresh_features()
@@ -371,6 +391,7 @@ class LicenseIssuerWindow(QDialog):
                 revoked=self.revoked.isChecked(),
             )
         return IssuanceRequest(
+            product_id=self.product.currentData(),
             key_id=self.key_id.text(),
             machine_fingerprint=self.machine_fingerprint.text(),
             customer_name=self.customer.text(),
