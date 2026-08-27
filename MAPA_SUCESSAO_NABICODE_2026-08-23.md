@@ -4446,3 +4446,29 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   empresarial como fonte única para Fiscal/Contador/comprovantes e auditar a
   ativação da Nabi desde o início nas edições COMERCIAL e FISCAL, sempre por
   portas oficiais, permissões reais e confirmação humana.
+
+### Blindagem da edição por linha e dos códigos de barras na entrada de NF-e
+
+- causa raiz comprovada no Qt: ao mudar a seleção da tabela, `currentRow()` já
+  apontava para a nova linha enquanto os campos laterais ainda continham os
+  dados da linha anterior. A identidade da linha em edição agora é mantida
+  separadamente da seleção recém-recebida; salvar, trocar por mouse/teclado,
+  voltar e restaurar rascunho não misturam produtos semelhantes;
+- cenários de regressão cobrem refrigerante normal/zero açúcar, sete itens com
+  descrições parecidas, CFOPs iguais/diferentes, trocas rápidas para frente e
+  para trás, nome, GTIN, fator, unidade, fator inválido, preços e restauração de
+  rascunho interrompido;
+- conflito de GTIN com outro produto é verificado antes do `INSERT`/`UPDATE`.
+  O operador recebe mensagem de domínio com o código conflitante, em vez de
+  `UNIQUE constraint failed`, e produto, estoque, financeiro, nota e diário
+  permanecem integralmente inalterados;
+- referências técnicas auditadas: ERPNext mantém UOM de compra, UOM de estoque,
+  fator, quantidade comprada e quantidade convertida por linha e registra
+  códigos de barras separadamente; Odoo valida conflitos de código antes da
+  persistência e mantém quantidades por linha. Foram usados como contraste de
+  arquitetura, sem copiar regra fiscal ou código de terceiros;
+- validação focada: `67 passed`; regressão Produtos/Compras/XML: `155 passed`;
+  validação completa: `2712 passed`, `492 subtests passed`, zero falhas e um
+  teste externo condicionado; `compileall` e `git diff --check` aprovados.
+  Nenhum XML real, banco de produção, certificado, segredo ou comunicação com
+  a SEFAZ foi usado nesta blindagem.
