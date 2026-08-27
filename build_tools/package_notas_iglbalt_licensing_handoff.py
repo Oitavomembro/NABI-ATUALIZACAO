@@ -23,6 +23,7 @@ OUTPUT = ROOT / "artifacts" / "NotasIglBalt_Licensing_Handoff"
 FILES = (
     "docs/INTEGRACAO_LICENCA_NOTAS_IGLBALT.md",
     "docs/LICENCIAMENTO_V2.md",
+    "license_issuer/notas_iglbalt_format.py",
     "licensing/__init__.py",
     "licensing/gate.py",
     "licensing/license_format.py",
@@ -63,7 +64,7 @@ def build() -> Path:
         request = IssuanceRequest(
             product_id="NOTAS_IGLBALT",
             key_id="notas-iglbalt-test-only-01",
-            machine_fingerprint="a" * 64,
+            machine_fingerprint="NABI2-AAAA-AAAA-AAAA-AAAA",
             customer_name="EXEMPLO TESTE — NÃO USAR EM PRODUÇÃO",
             edition=LicenseEdition.COMPLETE,
             valid_until=date.today() + timedelta(days=30),
@@ -79,7 +80,7 @@ def build() -> Path:
         "product_id": "NOTAS_IGLBALT",
         "display_name": "Notas IglBalt",
         "expected_product_id": "NOTAS_IGLBALT",
-        "sample_machine_fingerprint": "a" * 64,
+        "sample_machine_code": "NABI2-AAAA-AAAA-AAAA-AAAA",
         "sample_only": True,
         "private_key_included": False,
     }
@@ -92,7 +93,7 @@ def build() -> Path:
         "Este pacote NÃO contém emissor nem chave privada.\n"
         "O catálogo e a licença incluídos são TEST-ONLY, usam fingerprint fictício "
         "e não podem ser enviados em produção.\n\n"
-        "No cliente, use LicenseV2Service(expected_product_id='NOTAS_IGLBALT').\n"
+        "No cliente, valide com license_issuer/notas_iglbalt_format.py.\n"
         "Antes da distribuição, substitua o catálogo de teste pelo catálogo público "
         "gerado na cerimônia oficial e remova todos os artefatos TEST-ONLY.\n",
         encoding="utf-8",
