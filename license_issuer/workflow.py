@@ -19,6 +19,10 @@ from licensing.machine import machine_code
 from licensing.models import LicenseEdition, LicensePayload
 
 from .emitter import issue_license, load_private_key
+from .notas_iglbalt_format import (
+    NotasIglBaltLicense, sign_license as sign_notas_iglbalt,
+    verify_license as verify_notas_iglbalt,
+)
 from .products import product
 
 
@@ -41,13 +45,11 @@ class IssuanceRequest:
 
     def __post_init__(self) -> None:
         key_id = str(self.key_id or "").strip()
-        fingerprint = str(self.machine_fingerprint or "").strip().lower()
+        machine_identity = str(self.machine_fingerprint or "").strip()
         customer = str(self.customer_name or "").strip()
         issued = self.issued_at or datetime.now(timezone.utc)
         if not _KEY_ID.fullmatch(key_id):
             raise ValueError("Identificador da chave inválido.")
-        if not _HEX_64.fullmatch(fingerprint):
-            raise ValueError("Fingerprint da máquina deve possuir 64 caracteres hexadecimais.")
         if not customer:
             raise ValueError("Informe o cliente/titular da licença.")
         if issued.tzinfo is None or issued.utcoffset() is None:
@@ -57,6 +59,14 @@ class IssuanceRequest:
         # LicensePayload concentra duração AVALIAÇÃO, recursos e tolerância normativa.
         product_id = str(self.product_id or "").strip().upper()
         selected_product = product(product_id)
+        if product_id == "NOTAS_IGLBALT":
+            machine_identity = machine_identity.upper()
+            if not re.fullmatch(r"NABI2-[0-9A-F]{4}(?:-[0-9A-F]{4}){3}", machine_identity):
+                raise ValueError("Informe o código NABI2 completo da máquina.")
+        else:
+            machine_identity = machine_identity.lower()
+            if not _HEX_64.fullmatch(machine_identity):
+                raise ValueError("Fingerprint da máquina deve possuir 64 caracteres hexadecimais.")
         if self.edition not in selected_product.editions:
             raise ValueError("Edição incompatível com o produto selecionado.")
         canonical = set(selected_product.features[self.edition])
@@ -65,20 +75,21 @@ class IssuanceRequest:
             raise ValueError("Recursos incompatíveis com o produto selecionado.")
         if selected_product.key_id_prefix and not key_id.startswith(selected_product.key_id_prefix):
             raise ValueError("A chave selecionada não pertence ao produto.")
-        payload = LicensePayload(
-            schema=2 if product_id == "NABICODE" else 3,
-            license_id=license_id, edition=self.edition,
-            customer_name=customer, machine_fingerprint=fingerprint,
-            issued_at=issued, valid_until=self.valid_until, grace_days=10,
-            features=tuple(self.features), revoked=bool(self.revoked), product_id=product_id,
-        )
+        payload = None
+        if product_id == "NABICODE":
+            payload = LicensePayload(
+                schema=2, license_id=license_id, edition=self.edition,
+                customer_name=customer, machine_fingerprint=machine_identity,
+                issued_at=issued, valid_until=self.valid_until, grace_days=10,
+                features=tuple(self.features), revoked=bool(self.revoked), product_id=product_id,
+            )
         object.__setattr__(self, "key_id", key_id)
-        object.__setattr__(self, "machine_fingerprint", fingerprint)
-        object.__setattr__(self, "customer_name", payload.customer_name)
-        object.__setattr__(self, "license_id", payload.license_id)
-        object.__setattr__(self, "issued_at", payload.issued_at)
-        object.__setattr__(self, "features", payload.features)
-        object.__setattr__(self, "product_id", payload.product_id)
+        object.__setattr__(self, "machine_fingerprint", machine_identity)
+        object.__setattr__(self, "customer_name", payload.customer_name if payload else customer)
+        object.__setattr__(self, "license_id", payload.license_id if payload else license_id)
+        object.__setattr__(self, "issued_at", payload.issued_at if payload else issued)
+        object.__setattr__(self, "features", payload.features if payload else tuple(sorted(supplied)))
+        object.__setattr__(self, "product_id", payload.product_id if payload else product_id)
 
     def review_mapping(self) -> Mapping[str, object]:
         return MappingProxyType({
@@ -87,7 +98,10 @@ class IssuanceRequest:
             "edicao": self.edition.value,
             "emissao_utc": self.issued_at.isoformat().replace("+00:00", "Z"),
             "fingerprint": self.machine_fingerprint,
-            "codigo_maquina": machine_code(self.machine_fingerprint),
+            "codigo_maquina": (
+                self.machine_fingerprint if self.product_id == "NOTAS_IGLBALT"
+                else machine_code(self.machine_fingerprint)
+            ),
             "validade": self.valid_until.isoformat(),
             "tolerancia_dias": 10,
             "recursos": self.features,
@@ -221,20 +235,23 @@ def sign_review(
         raise ValueError("A chave da revisão não existe no catálogo público.")
     if public != expected_public:
         raise ValueError("A chave privada não corresponde à chave pública selecionada.")
-    raw = issue_license(
-        private_key=private_key,
-        key_id=request.key_id,
-        machine_fingerprint=request.machine_fingerprint,
-        customer_name=request.customer_name,
-        edition=request.edition,
-        valid_until=request.valid_until,
-        features=request.features,
-        issued_at=request.issued_at,
-        license_id=request.license_id,
-        revoked=request.revoked,
-        product_id=request.product_id,
-    )
-    payload = verify_envelope(raw, {request.key_id: public})
+    if request.product_id == "NOTAS_IGLBALT":
+        if request.revoked:
+            raise ValueError("Revogação do Notas IglBalt não pertence ao contrato atual.")
+        raw = sign_notas_iglbalt(
+            NotasIglBaltLicense(request.machine_fingerprint, request.issued_at), private_key,
+        )
+        payload = verify_notas_iglbalt(raw, public)
+    else:
+        raw = issue_license(
+            private_key=private_key, key_id=request.key_id,
+            machine_fingerprint=request.machine_fingerprint,
+            customer_name=request.customer_name, edition=request.edition,
+            valid_until=request.valid_until, features=request.features,
+            issued_at=request.issued_at, license_id=request.license_id,
+            revoked=request.revoked, product_id=request.product_id,
+        )
+        payload = verify_envelope(raw, {request.key_id: public})
     output.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     try:

@@ -49,6 +49,11 @@ Cada produto exige chave e catálogo próprios; a chave privada do NabiCode nunc
 deve assinar uma licença do Notas IglBalt. A chave permanente do novo produto
 só pode ser criada em cerimônia externa.
 
+O Notas IglBalt possui contrato externo próprio: a assinatura cobre somente o
+payload canônico schema 3 e o documento contém apenas `payload` e `signature`.
+Essa exceção é isolada em `license_issuer/notas_iglbalt_format.py`; não altera o
+envelope V2 das licenças NabiCode existentes.
+
 Também é possível usar `license_issuer_cli.py issue`. A linha de comando exibe
 a mesma revisão e somente continua quando o operador digita `EMITIR`; a senha
 não é argumento de linha de comando.

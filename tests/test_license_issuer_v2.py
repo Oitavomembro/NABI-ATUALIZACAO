@@ -398,7 +398,7 @@ def test_interface_cadastra_notas_iglbalt_com_contrato_fechado(tmp_path, monkeyp
 
 def test_notas_iglbalt_recusa_chave_nabicode_e_recursos_manipulados():
     base = dict(
-        product_id="NOTAS_IGLBALT", machine_fingerprint=FINGERPRINT,
+        product_id="NOTAS_IGLBALT", machine_fingerprint="NABI2-D415-40A8-E5E2-6FD0",
         customer_name="CLIENTE", edition=LicenseEdition.COMPLETE,
         valid_until=date(2026, 8, 31), issued_at=NOW,
     )

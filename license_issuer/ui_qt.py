@@ -209,6 +209,10 @@ class LicenseIssuerWindow(QDialog):
             self.public_catalog.clear()
             self.key_id.clear()
         self._active_product_id = selected.product_id
+        self.machine_fingerprint.setPlaceholderText(
+            "Código NABI2 completo" if selected.product_id == "NOTAS_IGLBALT"
+            else "Fingerprint técnico de 64 caracteres"
+        )
         self.edition.blockSignals(True)
         self.edition.clear()
         self.edition.addItems([item.value for item in selected.editions])
@@ -253,8 +257,11 @@ class LicenseIssuerWindow(QDialog):
         except Exception as error:
             QMessageBox.critical(self, "Máquina indisponível", str(error))
             return
-        self.machine_fingerprint.setText(fingerprint)
-        self.machine_code.setText(machine_code(fingerprint))
+        code = machine_code(fingerprint)
+        self.machine_fingerprint.setText(
+            code if self.product.currentData() == "NOTAS_IGLBALT" else fingerprint
+        )
+        self.machine_code.setText(code)
 
     @staticmethod
     def _safe_name(value: str) -> str:

@@ -7,15 +7,20 @@ Identidade provisória cadastrada no código:
 - edição: `COMPLETA`;
 - recursos canônicos: `core`;
 - tolerância: dez dias;
-- formato: envelope `.nabilic`, payload schema 3, assinatura Ed25519.
+- formato próprio `.nabilic`: objeto com exatamente `payload` e `signature`;
+- assinatura Ed25519 sobre os bytes UTF-8 do payload canônico, com chaves
+  ordenadas, sem espaços, `ensure_ascii=false` e valores finitos;
+- payload exato: `schema`, `product_id`, `edition`, `machine_code`, `features`,
+  `issued_at`, `not_before` e `expires_at`;
+- `not_before` e `expires_at` são `null` no contrato atual de homologação.
 
-O aplicativo cliente deve carregar apenas sua chave pública e construir
-`LicenseV2Service` com `expected_product_id="NOTAS_IGLBALT"`. A inicialização
-normal só ocorre quando a decisão estiver `ATIVA` ou `TOLERANCIA`.
+O aplicativo cliente deve carregar somente a chave pública bruta Base64,
+decodificá-la para exatamente 32 bytes e validar o contrato em
+`license_issuer/notas_iglbalt_format.py`. O funcionamento normal só pode ocorrer
+depois da assinatura, produto, edição, máquina e features serem confirmados.
 
-Licenças schema 2 são implicitamente do NabiCode e devem ser recusadas pelo
-Notas IglBalt. Licenças schema 3 cujo `product_id` seja diferente também devem
-ser recusadas, ainda que a assinatura seja criptograficamente válida.
+Licenças schema 2 e envelopes do NabiCode não possuem o formato externo exigido
+pelo Notas IglBalt e devem ser recusados. O formato NabiCode permanece intacto.
 
 Não transportar para o novo projeto chave privada, emissor, catálogo do
 NabiCode, senha, licença real de cliente ou qualquer módulo comercial/fiscal/IA
