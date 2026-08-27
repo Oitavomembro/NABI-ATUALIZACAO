@@ -4647,3 +4647,20 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `15 passed`; prontidão Fiscal `15 passed`; Caixa `12 passed`; `compileall` e
   `git diff --check` aprovados. Nenhuma transmissão SEFAZ ou banco real foi
   usada.
+
+## Decimais e preços na entrada de NF-e — 27/08/2026
+
+- implementação: `f17a9fa` — `fix: preserva decimais na entrada de NF-e`;
+- causa do erro físico “Object of type Decimal is not JSON serializable”: o
+  resultado preciso da importação chegava corretamente ao diário idempotente,
+  mas sua serialização JSON não possuía contrato para `Decimal`;
+- o diário agora converte somente `Decimal` em texto canônico, sem introduzir
+  arredondamento binário por `float`, e primeira execução/repetição devolvem a
+  mesma estrutura;
+- a página de preços explica que margem `0%` significa preço igual ao custo,
+  exibe esse valor corretamente inclusive em rascunhos antigos e recalcula a
+  grade imediatamente durante a digitação da margem geral;
+- validação: transação atômica `24 passed`; rascunhos duráveis `5 passed`;
+  interface NF-e `21 passed`; regressão adicional relacionada `17 passed`;
+  `compileall` e `git diff --check` aprovados. Nenhum documento foi transmitido
+  e nenhum banco real foi usado pelos testes.
