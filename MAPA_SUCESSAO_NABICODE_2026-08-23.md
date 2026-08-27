@@ -4572,7 +4572,11 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - `refresh` não acessa widgets encerrados ou coordenadores já removidos;
 - vinte ciclos consecutivos de criar/fechar shell foram cobertos para impedir
   acúmulo de filtros globais entre janelas e testes;
-- validação direcionada PDV/Nabi: `118 passed`, `2 subtests passed`;
+- endurecimento adicional: `37f98c1` — `fix: preserva Nabi quando fechamento e
+  recusado`; o evento `Close` só desmonta o coordenador depois que a janela
+  realmente deixa de estar visível, mantendo a Nabi ativa se `closeEvent`
+  recusar o encerramento;
+- validação direcionada PDV/Nabi: `119 passed`, `2 subtests passed`;
 - validação dos seis módulos Qt em processos isolados: `89 passed` no total;
 - `compileall` e `git diff --check` aprovados;
 - a execução monolítica de vários arquivos Qt ainda pode encerrar no runtime
