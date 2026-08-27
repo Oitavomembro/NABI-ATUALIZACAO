@@ -3893,3 +3893,8 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - Pendência física: confirmar a grafia pública “Notas IglBalt”, realizar a
   cerimônia externa do par Ed25519 exclusivo e entregar ao novo programa apenas
   o catálogo público. Não promover nem emitir licença real antes disso.
+- Pacote de integração reproduzível: commit `5b4f6ed`; o gerador cria contrato,
+  núcleo cliente, catálogo e licença `TEST-ONLY`, manifesto de hashes e ZIP,
+  usando chave temporária apagada ao final. Teste arquitetural impede inclusão
+  de PEM/KEY/P12/PFX ou marcador de chave privada. O catálogo de teste jamais
+  pode ser distribuído em produção.
