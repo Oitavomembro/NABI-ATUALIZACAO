@@ -34,6 +34,16 @@ class NabiFloatingCoordinator(QObject):
         self._installed = True
         application.installEventFilter(self)
 
+    def shutdown(self) -> None:
+        """Remove o filtro global assim que o shell encerra."""
+
+        if self._installed:
+            self._application.removeEventFilter(self)
+            self._installed = False
+        floating = getattr(self, "_floating", None)
+        if floating is not None and isValid(floating):
+            floating.hide()
+
     @property
     def floating(self) -> NabiFloatingAssistant:
         return self._floating
@@ -42,10 +52,8 @@ class NabiFloatingCoordinator(QObject):
         root = getattr(self, "_root", None)
         application = getattr(self, "_application", None)
         floating = getattr(self, "_floating", None)
-        if watched is root and event.type() == QEvent.Type.Destroy:
-            if getattr(self, "_installed", False) and application is not None:
-                application.removeEventFilter(self)
-                self._installed = False
+        if watched is root and event.type() in {QEvent.Type.Close, QEvent.Type.Destroy}:
+            self.shutdown()
             return False
         if floating is None or not isValid(floating):
             return False
@@ -66,6 +74,12 @@ class NabiFloatingCoordinator(QObject):
         return False
 
     def refresh(self) -> None:
+        if (
+            not self._installed
+            or not isValid(self._root)
+            or not isValid(self._floating)
+        ):
+            return
         if not self._root.isVisible():
             self._floating.hide()
             return

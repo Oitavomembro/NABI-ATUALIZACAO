@@ -117,6 +117,30 @@ class NabiFloatingGlobalTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "inválida"):
             classify_nabi_overlay(QDialog(self.root), "livre")
 
+    def test_fechar_shell_remove_imediatamente_o_filtro_global(self):
+        self.assertTrue(self.coordinator._installed)
+
+        self.root.close()
+        QTest.qWait(1)
+
+        self.assertFalse(self.coordinator._installed)
+        self.assertTrue(self.floating.isHidden())
+
+    def test_varios_shells_fechados_nao_deixam_coordenadores_globais(self):
+        coordinators = []
+        roots = []
+        for _index in range(20):
+            root = QWidget()
+            floating = NabiFloatingAssistant(QWidget(), root, settings=self.settings)
+            coordinator = NabiFloatingCoordinator(self.app, root, floating)
+            roots.append(root)
+            coordinators.append(coordinator)
+            root.show()
+            root.close()
+        QTest.qWait(1)
+
+        self.assertTrue(all(not item._installed for item in coordinators))
+
 
 if __name__ == "__main__":
     unittest.main()
