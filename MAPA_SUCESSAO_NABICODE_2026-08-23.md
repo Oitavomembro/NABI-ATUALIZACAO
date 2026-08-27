@@ -4664,3 +4664,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   interface NF-e `21 passed`; regressão adicional relacionada `17 passed`;
   `compileall` e `git diff --check` aprovados. Nenhum documento foi transmitido
   e nenhum banco real foi usado pelos testes.
+
+## Correção assistida da ficha fiscal dos produtos — 27/08/2026
+
+- implementação: `0658ce4` — `feat: permite corrigir ficha fiscal dos produtos`;
+- o pré-voo deixou de informar apenas a quantidade de produtos bloqueados e
+  passou a identificar, por código e nome, cada mercadoria e a pendência fiscal
+  exata que impede a emissão;
+- o editor de Produtos passou a transportar e preservar NCM, CEST, CFOP de
+  saída, origem, CSOSN/CST, PIS, COFINS e respectivas alíquotas, sem apagar a
+  ficha fiscal quando uma atualização exclusivamente comercial for realizada;
+- NCM e CEST podem ser pesquisados nos catálogos oficiais locais já distribuídos
+  pelo NabiCode, por código ou descrição, sem materializar o catálogo completo
+  e sem baixar dados ou consultar a SEFAZ durante a edição;
+- CFOP de compra não é reutilizado como CFOP de venda; códigos tributários não
+  são inventados nem inferidos silenciosamente. A escolha continua pertencendo
+  ao responsável fiscal, e o pré-voo permanece fail-closed enquanto faltarem
+  dados;
+- o editor é amplo, redimensionável, rolável e conserva os controles nativos da
+  janela; a seleção dos catálogos usa somente códigos reais e permite cancelar
+  sem alterar o cadastro;
+- validação: interface de Produtos/importação `34 passed`; ficha, catálogos,
+  prontidão, pré-voo e persistência comercial `59 passed`; `compileall` e
+  `git diff --check` aprovados. Nenhuma transmissão SEFAZ ou banco real foi
+  usado.
