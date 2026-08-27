@@ -4416,3 +4416,33 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   caminho preferencial; quando faltar, a Nabi poderá sugerir relação com fonte,
   versão e confiança explícitas, nunca preencher ou alterar tributação em
   silêncio. Catálogos comerciais como Cosmos são apenas evidência auxiliar.
+
+### Correções da homologação visual — configuração, cartões e entrada de NF-e
+
+- janelas operacionais Qt passam por política global adaptativa ao monitor;
+  diálogos longos abrem amplos, centralizados e limitados à área disponível. O
+  Perfil Empresarial possui rolagem real e mantém Voltar/Confirmar acessíveis;
+- no primeiro acesso, a importação de XML de compra aparece antes dos campos
+  manuais e seleciona exclusivamente o destinatário como empresa. O emitente
+  continua sendo o fornecedor; XML sem destinatário identificável é bloqueado;
+- na conferência de NF-e, trocar de linha não recaptura os campos da linha
+  anterior no produto seguinte. O rascunho preserva estado independente por
+  item e códigos de barras repetidos dentro da nota são mostrados por código e
+  linhas antes de qualquer tentativa de gravação;
+- a tabela de preços força contraste escuro sobre fundo branco, inclusive em
+  linhas alternadas, campos editáveis e alertas;
+- detalhes dos cartões do Início ficam em janelas amplas mantidas explicitamente
+  pelo dashboard, sem perda de referência; reentrada reutiliza a janela aberta.
+  O histórico ganhou separação visual própria dos cartões;
+- cards de modelo fiscal usam vermelho somente para bloqueio/pendência, azul
+  para configuração local preparada aguardando verificação e verde apenas para
+  estado completamente aprovado. Numeração preparada não é mais apresentada
+  como pendência vermelha;
+- validação focada: `73 passed`; regressão ampliada das áreas Qt, importação,
+  rascunho, dashboard, Fiscal e shell: `168 passed`; `compileall` e
+  `git diff --check` aprovados. Nenhuma comunicação SEFAZ, segredo, XML real ou
+  banco de produção foi usado;
+- pendências posteriores, separadas deste desbloqueio: consolidar o perfil
+  empresarial como fonte única para Fiscal/Contador/comprovantes e auditar a
+  ativação da Nabi desde o início nas edições COMERCIAL e FISCAL, sempre por
+  portas oficiais, permissões reais e confirmação humana.
