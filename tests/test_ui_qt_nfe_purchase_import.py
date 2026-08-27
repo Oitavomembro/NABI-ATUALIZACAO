@@ -182,6 +182,42 @@ def test_troca_de_linha_nao_copia_edicao_para_o_produto_seguinte():
     dialog.close()
 
 
+def test_clique_em_salvar_na_segunda_linha_nao_grava_no_primeiro_produto():
+    second = SimpleNamespace(
+        supplier_code="ZERO", description="REFRIG IT GUAR ZERO ACUCAR PET 2L",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class TwoItemsApplication(Application):
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="ZERO", descricao=second.description, cfop="5405",
+                quantidade=Decimal("2"), unidade="PAC", valor_unitario=Decimal("35.39"),
+                codigo_barras="790", ncm="22021000", cest="",
+            )))
+        def saved_link(self, _draft, index):
+            return super().saved_link(_draft, index) if index == 0 else None
+        def save_draft(self, *_args, **_kwargs): return 1
+
+    dialog = NFePurchaseImportDialog(TwoItemsApplication(), two_items)
+    original_first = deepcopy(dialog._rows[0])
+    dialog.table.selectRow(1); APP.processEvents()
+    dialog.name.setText("REFRIGERANTE ZERO ACUCAR EDITADO")
+    dialog.barcode.setText("2222222222222")
+    dialog.factor.setText("12")
+    dialog.save_item.click(); APP.processEvents()
+
+    assert dialog._rows[0]["descricao"] == original_first["descricao"]
+    assert dialog._rows[0]["codigo_barras"] == original_first["codigo_barras"]
+    assert dialog._rows[0]["fator"] == original_first["fator"]
+    assert dialog._rows[1]["descricao"] == "REFRIGERANTE ZERO ACUCAR EDITADO"
+    assert dialog._rows[1]["codigo_barras"] == "2222222222222"
+    assert dialog._rows[1]["fator"] == "12"
+    dialog.close()
+
+
 def test_sete_itens_parecidos_mantem_edicao_isolada_em_trocas_rapidas():
     names = (
         "REFRIG IT GUAR Z AC PET 2L",

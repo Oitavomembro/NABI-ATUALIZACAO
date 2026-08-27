@@ -185,7 +185,8 @@ class NFePurchaseImportDialog(QDialog):
         for code, description in self.application.units():
             self.stock_unit.addItem(f"{code} — {description}", code)
         self.conversion = QLabel(); self.save_item = QPushButton("Salvar edição deste item")
-        self.save_item.setObjectName("primary"); self.save_item.clicked.connect(self._save_selected)
+        self.save_item.setObjectName("primary")
+        self.save_item.clicked.connect(lambda _checked=False: self._save_selected())
         for label, widget in (("Situação", self.status),
                               ("Nome do produto", self.name), ("Vínculo", self.linked_product),
                               ("", self.unlink),

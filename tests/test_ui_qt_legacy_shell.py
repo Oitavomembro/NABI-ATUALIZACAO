@@ -294,6 +294,10 @@ def test_reports_and_settings_open_in_their_own_reused_maximized_windows(qt_appl
             assert opened is created[-1]
             assert opened.isWindow() is True
             assert opened.isMaximized() is True
+            flags = opened.windowFlags()
+            assert flags & Qt.WindowType.WindowMinimizeButtonHint
+            assert flags & Qt.WindowType.WindowMaximizeButtonHint
+            assert flags & Qt.WindowType.WindowCloseButtonHint
             assert opened not in tuple(shell._module_pages.values())
             assert shell.show_module(module_id) is True
             assert shell._wide_windows[module_id] is opened

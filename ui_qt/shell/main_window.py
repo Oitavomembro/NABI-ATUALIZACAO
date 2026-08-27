@@ -494,6 +494,7 @@ class NabiCodeShellWindow(QMainWindow):
         dialog = factory(self)
         if not isinstance(dialog, QDialog):
             raise TypeError("O módulo não pôde abrir sua janela.")
+        enable_primary_window_controls(dialog)
         dialog.setModal(False)
         dialog.setProperty("customerSegment", segment)
         self._wide_windows[module_id] = dialog

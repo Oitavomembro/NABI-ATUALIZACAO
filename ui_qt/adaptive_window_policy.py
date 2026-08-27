@@ -5,7 +5,7 @@ from __future__ import annotations
 from PySide6.QtCore import QEvent, QObject, QPoint, QTimer
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QComboBox, QDialog, QFileDialog, QInputDialog,
-    QMessageBox,
+    QMessageBox, QWidget,
 )
 
 
@@ -40,6 +40,11 @@ class AdaptiveWindowPolicy(QObject):
     def _fit(self, window: QDialog) -> None:
         if not window.isVisible():
             return
+        # Telas principais são abertas maximizadas pelo shell. Alterar sua
+        # geometria logo depois do Show provocava o lampejo de uma janela
+        # pequena e podia restaurá-la com conteúdo cortado.
+        if window.isMaximized() or window.isFullScreen():
+            return
         screen = window.screen() or self.application.primaryScreen()
         if screen is None:
             return
@@ -48,8 +53,10 @@ class AdaptiveWindowPolicy(QObject):
         height = max(520, min(900, int(available.height() * 0.90)))
         width = min(width, available.width())
         height = min(height, available.height())
-        window.resize(width, height)
-        window.move(QPoint(
+        QWidget.resize(window, width, height)
+        # Algumas telas antigas possuem um botão de instância chamado `move`.
+        # O descritor da classe não é escondido por esse atributo da tela.
+        QWidget.move(window, QPoint(
             available.x() + max(0, (available.width() - window.width()) // 2),
             available.y() + max(0, (available.height() - window.height()) // 2),
         ))
