@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from copy import deepcopy
 import os
 from types import SimpleNamespace
 from unittest.mock import Mock
@@ -8,6 +9,8 @@ from unittest.mock import Mock
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
 from PySide6.QtWidgets import QApplication, QMessageBox
+from PySide6.QtCore import Qt
+from PySide6.QtTest import QTest
 
 from ui_qt.commercial.nfe_purchase_import_dialog import NFePurchaseImportDialog
 
@@ -177,6 +180,173 @@ def test_troca_de_linha_nao_copia_edicao_para_o_produto_seguinte():
     assert dialog.name.text() == "SEGUNDO PRODUTO"
     assert dialog.barcode.text() == "790"
     dialog.close()
+
+
+def test_sete_itens_parecidos_mantem_edicao_isolada_em_trocas_rapidas():
+    names = (
+        "REFRIG IT GUAR Z AC PET 2L",
+        "REFRIG IT GUAR PET 2L",
+        "REFRIG IT LIM PET 2L",
+        "REFRIG IT LAR PET 2L",
+        "REFRIG IT COLA PET 2L",
+        "REFRIG IT COLA ZERO PET 2L",
+        "ENERG TNT ORIG LT 473ML PACK 6",
+    )
+    many = draft()
+    many.items = tuple(SimpleNamespace(
+        supplier_code=f"200{i:03d}CR4", description=name,
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    ) for i, name in enumerate(names, start=1))
+
+    class ManyItemsApplication(Application):
+        def document(self, _draft_id):
+            return SimpleNamespace(itens=tuple(SimpleNamespace(
+                codigo=f"200{i:03d}CR4", descricao=name,
+                cfop="5910" if i in (1, 6) else "5405",
+                quantidade=Decimal(str((i % 3) + 1)), unidade="PAC",
+                valor_unitario=Decimal(str(30 + i)),
+                codigo_barras=f"7897305009{i:03d}", ncm="22021000", cest="",
+            ) for i, name in enumerate(names, start=1)))
+
+        def saved_link(self, _draft, _index): return None
+        def save_draft(self, *_args, **_kwargs): return 1
+
+    dialog = NFePurchaseImportDialog(ManyItemsApplication(), many)
+    expected = []
+    for index, original_name in enumerate(names):
+        dialog.table.selectRow(index); APP.processEvents()
+        edited_name = f"{original_name} EDITADO {index + 1}"
+        barcode = f"7890000000{index + 1:03d}"
+        factor = str(index + 2)
+        dialog.name.setText(edited_name)
+        dialog.barcode.setText(barcode)
+        dialog.factor.setText(factor)
+        expected.append((edited_name, barcode, factor))
+
+    for index in reversed(range(len(names))):
+        dialog.table.selectRow(index); APP.processEvents()
+        assert dialog.name.text() == expected[index][0]
+        assert dialog.barcode.text() == expected[index][1]
+        assert dialog.factor.text() == expected[index][2]
+        assert dialog._rows[index]["descricao"] == expected[index][0]
+        assert dialog._rows[index]["codigo_barras"] == expected[index][1]
+        assert dialog._rows[index]["fator"] == expected[index][2]
+    dialog.close()
+
+
+def test_troca_por_teclado_preserva_normal_e_zero_acucar_independentes():
+    second = SimpleNamespace(
+        supplier_code="ZERO", description="REFRIG IT GUAR ZERO ACUCAR PET 2L",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class KeyboardApplication(Application):
+        def document(self, _draft_id):
+            first = SimpleNamespace(
+                codigo="NORMAL", descricao="REFRIG IT GUAR PET 2L", cfop="5405",
+                quantidade=Decimal("2"), unidade="PAC", valor_unitario=Decimal("35.50"),
+                codigo_barras="7891111111111", ncm="22021000", cest="",
+            )
+            zero = SimpleNamespace(
+                codigo="ZERO", descricao=second.description, cfop="5405",
+                quantidade=Decimal("2"), unidade="PAC", valor_unitario=Decimal("35.39"),
+                codigo_barras="7892222222222", ncm="22021000", cest="",
+            )
+            return SimpleNamespace(itens=(first, zero))
+
+        def saved_link(self, _draft, _index): return None
+        def save_draft(self, *_args, **_kwargs): return 1
+
+    dialog = NFePurchaseImportDialog(KeyboardApplication(), two_items)
+    dialog.table.setFocus()
+    dialog.name.setText("REFRIGERANTE NORMAL")
+    dialog.barcode.setText("1111111111111")
+    dialog.factor.setText("6")
+    QTest.keyClick(dialog.table, Qt.Key.Key_Down); APP.processEvents()
+    assert dialog.name.text() == "REFRIG IT GUAR ZERO ACUCAR PET 2L"
+    dialog.name.setText("REFRIGERANTE ZERO ACUCAR")
+    dialog.barcode.setText("2222222222222")
+    dialog.factor.setText("12")
+    QTest.keyClick(dialog.table, Qt.Key.Key_Up); APP.processEvents()
+    assert dialog.name.text() == "REFRIGERANTE NORMAL"
+    assert dialog.barcode.text() == "1111111111111"
+    assert dialog.factor.text() == "6"
+    QTest.keyClick(dialog.table, Qt.Key.Key_Down); APP.processEvents()
+    assert dialog.name.text() == "REFRIGERANTE ZERO ACUCAR"
+    assert dialog.barcode.text() == "2222222222222"
+    assert dialog.factor.text() == "12"
+    dialog.close()
+
+
+def test_fator_invalido_impede_troca_e_nao_contamina_linha_destino(monkeypatch):
+    second = SimpleNamespace(
+        supplier_code="B", description="PRODUTO B",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class TwoItemsApplication(Application):
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="B", descricao="PRODUTO B", cfop="5102",
+                quantidade=Decimal("1"), unidade="UN", valor_unitario=Decimal("5"),
+                codigo_barras="222", ncm="", cest="",
+            )))
+        def saved_link(self, _draft, index): return super().saved_link(_draft, index) if index == 0 else None
+        def save_draft(self, *_args, **_kwargs): return 1
+
+    warnings = []
+    monkeypatch.setattr(QMessageBox, "warning", lambda *args: warnings.append(args[2]))
+    dialog = NFePurchaseImportDialog(TwoItemsApplication(), two_items)
+    dialog.name.setText("PRIMEIRO EM CORRECAO")
+    dialog.factor.setText("0")
+    dialog.table.selectRow(1); APP.processEvents()
+    assert dialog.table.currentRow() == 0
+    assert dialog._editor_row == 0
+    assert dialog.name.text() == "PRIMEIRO EM CORRECAO"
+    assert dialog._rows[1]["descricao"] == "PRODUTO B"
+    assert warnings and "Corrija o item atual" in warnings[-1]
+    dialog.close()
+
+
+def test_rascunho_restaurado_preserva_cada_linha_sem_misturar_estado():
+    second = SimpleNamespace(
+        supplier_code="ZERO", description="REFRIG ZERO ACUCAR",
+        suggested_product_id=None, match_status="NOVO", candidates=(),
+    )
+    two_items = draft(); two_items.items = two_items.items + (second,)
+
+    class DurableApplication(Application):
+        def __init__(self): self.last_state = None
+        def document(self, _draft_id):
+            first = super().document(_draft_id).itens[0]
+            return SimpleNamespace(itens=(first, SimpleNamespace(
+                codigo="ZERO", descricao=second.description, cfop="5405",
+                quantidade=Decimal("2"), unidade="PAC", valor_unitario=Decimal("20"),
+                codigo_barras="222", ncm="22021000", cest="",
+            )))
+        def saved_link(self, _draft, index): return super().saved_link(_draft, index) if index == 0 else None
+        def save_draft(self, _draft, rows, *, page=0):
+            self.last_state = {"version": 1, "page": page, "rows": deepcopy(list(rows))}
+            return 1
+
+    application = DurableApplication()
+    first_dialog = NFePurchaseImportDialog(application, two_items)
+    first_dialog.name.setText("NORMAL EDITADO"); first_dialog.factor.setText("6")
+    first_dialog.table.selectRow(1); APP.processEvents()
+    first_dialog.name.setText("ZERO EDITADO"); first_dialog.factor.setText("12")
+    first_dialog._checkpoint()
+    restored_state = deepcopy(application.last_state)
+    first_dialog.close()
+
+    restored = NFePurchaseImportDialog(application, two_items, restored_state=restored_state)
+    restored.table.selectRow(0); APP.processEvents()
+    assert (restored.name.text(), restored.factor.text()) == ("NORMAL EDITADO", "6")
+    restored.table.selectRow(1); APP.processEvents()
+    assert (restored.name.text(), restored.factor.text()) == ("ZERO EDITADO", "12")
+    restored.close()
 
 
 def test_codigo_de_barras_repetido_bloqueia_antes_do_commit(monkeypatch):

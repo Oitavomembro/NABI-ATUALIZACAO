@@ -12,6 +12,46 @@ from product_identifiers import normalize_gtin
 
 class NFeImportRepository:
     @staticmethod
+    def _validar_codigo_barras_disponivel(
+        connection, codigo: str, *, produto_id: int | None = None
+    ) -> str:
+        code = normalize_gtin(codigo)
+        if not code:
+            return ""
+        parameters: tuple[Any, ...]
+        if produto_id is None:
+            product_sql = (
+                "SELECT id FROM produtos WHERE codigo_barras=? COLLATE NOCASE LIMIT 1"
+            )
+            parameters = (code,)
+        else:
+            product_sql = (
+                "SELECT id FROM produtos WHERE codigo_barras=? COLLATE NOCASE AND id<>? LIMIT 1"
+            )
+            parameters = (code, int(produto_id))
+        conflict = connection.execute(product_sql, parameters).fetchone()
+        if not conflict and table_exists(connection, "produto_codigos_barras"):
+            if produto_id is None:
+                barcode_sql = (
+                    "SELECT produto_id FROM produto_codigos_barras "
+                    "WHERE codigo=? COLLATE NOCASE LIMIT 1"
+                )
+                barcode_parameters = (code,)
+            else:
+                barcode_sql = (
+                    "SELECT produto_id FROM produto_codigos_barras "
+                    "WHERE codigo=? COLLATE NOCASE AND produto_id<>? LIMIT 1"
+                )
+                barcode_parameters = (code, int(produto_id))
+            conflict = connection.execute(barcode_sql, barcode_parameters).fetchone()
+        if conflict:
+            raise ValueError(
+                f"O código de barras {code} já pertence a outro produto; "
+                "revise o vínculo antes de confirmar a entrada."
+            )
+        return code
+
+    @staticmethod
     def _vincular_codigo_barras(connection, produto_id: int, codigo: str, agora: str, *, principal: bool) -> None:
         code = normalize_gtin(codigo)
         if not code:
@@ -131,6 +171,7 @@ class NFeImportRepository:
             preparado.get("codigo_barras")
             if "codigo_barras" in preparado else item.codigo_barras
         )
+        self._validar_codigo_barras_disponivel(connection, product_barcode)
         product_ncm = str(preparado.get("ncm") or item.ncm or "").strip()
         product_cest = str(preparado.get("cest") or item.cest or "").strip()
         product_columns = {
@@ -202,6 +243,12 @@ class NFeImportRepository:
         novo_custo = DecimalStorage.to_decimal(preparado["custo"], field="preço de custo")
         nova_margem = DecimalStorage.to_decimal(preparado["margem"], field="margem")
         novo_fator = DecimalStorage.to_decimal(preparado["fator"], field="fator de conversão")
+        novo_codigo_barras = self._validar_codigo_barras_disponivel(
+            connection,
+            preparado.get("codigo_barras")
+            if "codigo_barras" in preparado else item.codigo_barras,
+            produto_id=int(produto_id),
+        )
         preco_real, preco_decimal = DecimalStorage.pair(novo_preco)
         custo_real, custo_decimal = DecimalStorage.pair(novo_custo)
         margem_real, margem_decimal = DecimalStorage.pair(nova_margem)
@@ -215,8 +262,7 @@ class NFeImportRepository:
                atualizado_em=? WHERE id=?""",
             (fornecedor_id, unidade_id, unidade_compra_id, fator_real, fator_decimal, custo_real, custo_decimal,
              margem_real, margem_decimal, preco_real, preco_decimal,
-             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
-             normalize_gtin(preparado.get("codigo_barras") if "codigo_barras" in preparado else item.codigo_barras),
+             novo_codigo_barras, novo_codigo_barras,
              str(preparado.get("ncm") or item.ncm or ""), str(preparado.get("ncm") or item.ncm or ""),
              str(preparado.get("cest") or item.cest or ""), str(preparado.get("cest") or item.cest or ""), agora, int(produto_id)),
         )

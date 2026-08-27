@@ -50,6 +50,7 @@ class NFePurchaseImportDialog(QDialog):
         self._loading = False
         self._columns_fitted = False
         self._price_columns_fitted = False
+        self._editor_row = -1
         self._rows = []
         self.setWindowTitle("Importar NF-e de compra por XML")
         self.setWindowFlags(Qt.WindowType.Window | Qt.WindowType.WindowMinimizeButtonHint |
@@ -112,7 +113,7 @@ class NFePurchaseImportDialog(QDialog):
     def _checkpoint(self, *_args, capture_current=True):
         if self._loading or self._busy or not hasattr(self.application, "save_draft"):
             return
-        index = self.table.currentRow() if hasattr(self, "table") else -1
+        index = self._editor_row
         if capture_current and index >= 0:
             row = self._rows[index]
             row["descricao"] = self.name.text()
@@ -322,7 +323,7 @@ class NFePurchaseImportDialog(QDialog):
     def _load_selected(self):
         index = self.table.currentRow()
         if index < 0: return
-        self._loading = True; row = self._rows[index]
+        self._loading = True; self._editor_row = index; row = self._rows[index]
         labels = {"SALVO": "Vínculo anterior confirmado", "EXATO_NOVO": "Coincidência exata nova — revisar", "REVISAR": "Sem vínculo exato — escolha humana", "NOVO": "Produto novo"}
         self.status.setText(labels.get(row["status"], row["status"]))
         product_name = ""
@@ -344,8 +345,9 @@ class NFePurchaseImportDialog(QDialog):
     def _selection_changed(self, current_row, _current_column, previous_row, _previous_column):
         if self._loading:
             return
-        if previous_row >= 0 and previous_row != current_row and not self._save_selected(previous_row, show_error=False):
-            self._loading = True; self.table.selectRow(previous_row); self._loading = False
+        editor_row = self._editor_row
+        if editor_row >= 0 and editor_row != current_row and not self._save_selected(editor_row, show_error=False):
+            self._loading = True; self.table.selectRow(editor_row); self._loading = False
             QMessageBox.warning(self, "Revisar item", "Corrija o item atual antes de selecionar outro.")
             return
         self._load_selected()
@@ -418,7 +420,7 @@ class NFePurchaseImportDialog(QDialog):
         self._preview_conversion()
 
     def _save_selected(self, index=None, *, show_error=True):
-        index = self.table.currentRow() if index is None else index
+        index = self._editor_row if index is None else index
         if index < 0: return False
         try:
             factor = _decimal(self.factor.text(), "Fator", positive=True)

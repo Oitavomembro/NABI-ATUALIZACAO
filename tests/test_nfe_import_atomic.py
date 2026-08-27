@@ -155,6 +155,54 @@ class NFeImportAtomicTests(unittest.TestCase):
         barcodes = self.repo.database.fetch_all("SELECT codigo_barras FROM produtos ORDER BY codigo")
         self.assertEqual([row["codigo_barras"] for row in barcodes], ["", ""])
 
+    def test_codigo_de_barras_existente_falha_com_mensagem_clara_e_rollback_total(self):
+        self.repo.database.execute(
+            "CREATE UNIQUE INDEX idx_barcode_test ON produtos(codigo_barras) WHERE codigo_barras<>''"
+        )
+        self.repo.database.execute(
+            "INSERT INTO produtos(codigo,nome,codigo_barras) VALUES('EXISTENTE','Já cadastrado','7891234567890')"
+        )
+        self.preparados[0]["codigo_barras"] = "7891234567890"
+
+        with self.assertRaisesRegex(ValueError, "já pertence a outro produto"):
+            self.service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=self.preparados
+            )
+
+        self.assertEqual(self.repo.database.fetch_one("SELECT COUNT(*) n FROM produtos")["n"], 1)
+        for table in ("estoque_movimentacoes", "titulos_financeiros", "nfe_importacoes"):
+            self.assertEqual(self.repo.database.fetch_one(f"SELECT COUNT(*) n FROM {table}")["n"], 0)
+
+    def test_atualizacao_nao_rouba_codigo_de_barras_de_outro_produto(self):
+        self.repo.database.execute(
+            "CREATE UNIQUE INDEX idx_barcode_test ON produtos(codigo_barras) WHERE codigo_barras<>''"
+        )
+        self.repo.database.execute(
+            "INSERT INTO produtos(codigo,nome,codigo_barras,estoque_atual) VALUES('ALVO','Alvo','111',5)"
+        )
+        target_id = self.repo.database.fetch_one(
+            "SELECT id FROM produtos WHERE codigo='ALVO'"
+        )["id"]
+        self.repo.database.execute(
+            "INSERT INTO produtos(codigo,nome,codigo_barras,estoque_atual) VALUES('OUTRO','Outro','222',7)"
+        )
+        prepared = dict(
+            self.preparados[0], acao="ATUALIZAR", produto_id=target_id,
+            codigo="ALVO", descricao="Alvo editado", codigo_barras="222",
+        )
+
+        with self.assertRaisesRegex(ValueError, "já pertence a outro produto"):
+            self.service.importar_atomicamente(
+                self.doc, arquivo_origem="nfe.xml", itens=[prepared]
+            )
+
+        target = self.repo.database.fetch_one(
+            "SELECT nome,codigo_barras,estoque_atual FROM produtos WHERE id=?", (target_id,)
+        )
+        self.assertEqual((target["nome"], target["codigo_barras"], target["estoque_atual"]), ("Alvo", "111", 5))
+        for table in ("estoque_movimentacoes", "titulos_financeiros", "nfe_importacoes"):
+            self.assertEqual(self.repo.database.fetch_one(f"SELECT COUNT(*) n FROM {table}")["n"], 0)
+
     def test_conferencia_pode_corrigir_ncm_cest_e_codigo_de_barras_antes_de_criar(self):
         self.preparados[0].update({
             "codigo_barras": "7891234567890",
