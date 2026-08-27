@@ -4584,3 +4584,16 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   individualmente, por isso a regressão Qt deve continuar particionada por
   processo até o harness global isolar completamente o ciclo de vida nativo;
 - nenhum arquivo Fiscal/SEFAZ, licenciamento, emissor ou banco real foi alterado.
+
+## Validação física do pacote NabiMig preservado — 27/08/2026
+
+- o teste condicional `test_nabimig_real_package.py`, anteriormente ignorado
+  quando nenhum pacote era informado, foi executado contra o artefato real de
+  validação `HOST_R6_EXE_REAL.nabimig`, mantido fora do repositório;
+- a importação foi realizada duas vezes exclusivamente em banco temporário: a
+  primeira restaurou 87 clientes, 198 produtos, 277 vendas, 317 itens, 32
+  contas e 12 fornecedores; a segunda não duplicou registros;
+- saldo de abertura permaneceu em `R$ 10.171,00`, `foreign_key_check` ficou
+  vazio e os dois backups anteriores à migração foram comprovados;
+- resultado: `1 passed`; nenhum pacote privado, banco temporário ou dado
+  migrado foi versionado e nenhum banco ativo foi acessado.
