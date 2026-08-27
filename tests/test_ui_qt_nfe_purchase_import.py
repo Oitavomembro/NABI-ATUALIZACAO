@@ -428,7 +428,7 @@ def test_codigo_de_barras_repetido_bloqueia_antes_do_commit(monkeypatch):
     dialog.close()
 
 
-def test_tabela_de_precos_forca_texto_escuro_em_todas_as_linhas():
+def test_tabela_de_precos_usa_texto_branco_nas_linhas_cinzas():
     dialog = NFePurchaseImportDialog(Application(), draft())
     dialog._show_prices()
     for column in (0, 1, 2, 5):
@@ -436,6 +436,20 @@ def test_tabela_de_precos_forca_texto_escuro_em_todas_as_linhas():
             "#111827", "#991b1b"
         }
     assert "QTableWidget QLineEdit" in dialog.price_table.styleSheet()
+    dialog.close()
+
+
+def test_resultado_final_e_organizado_em_resumo_e_tabela(monkeypatch):
+    dialog = NFePurchaseImportDialog(Application(), draft())
+    dialog._show_prices(); dialog._show_confirmation()
+    monkeypatch.setattr(QMessageBox, "question", lambda *args, **kwargs: QMessageBox.StandardButton.Yes)
+    dialog._commit()
+    plain = dialog.completion_text.toPlainText()
+    assert "Entrada concluída com segurança" in plain
+    assert "Resultado por produto" in plain
+    assert "Produtos criados" in plain
+    assert "Financeiro" in plain
+    assert "font-size:16px" in dialog.completion_text.styleSheet()
     dialog.close()
 
 

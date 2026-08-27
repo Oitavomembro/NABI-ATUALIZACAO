@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from html import escape
 
 from PySide6.QtCore import Qt
 from PySide6.QtGui import QColor, QKeySequence, QShortcut
@@ -14,10 +15,11 @@ from administration.nfe_purchase_import_service import suggest_purchase_factor
 
 
 WHITE_TABLE = """
-QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#f3f4f6;
+QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#21262d;
  border:1px solid #cbd5e1;gridline-color:#d1d5db;selection-background-color:#bfdbfe;
  selection-color:#111827} QHeaderView::section{background:#e5e7eb;color:#111827;
  padding:7px;border:0;border-right:1px solid #cbd5e1;font-weight:800}
+QTableWidget::item:alternate{background:#21262d;color:#ffffff}
 QTableWidget QLineEdit{background:#ffffff;color:#111827;border:1px solid #64748b}
 """
 
@@ -262,7 +264,10 @@ class NFePurchaseImportDialog(QDialog):
         page = QWidget(); layout = QVBoxLayout(page)
         layout.addWidget(QLabel("IMPORTAÇÃO CONCLUÍDA"))
         self.completion_text = QTextEdit(); self.completion_text.setReadOnly(True)
-        self.completion_text.setStyleSheet("background:#ffffff;color:#111827;border:1px solid #cbd5e1;padding:10px")
+        self.completion_text.setStyleSheet(
+            "background:#ffffff;color:#111827;border:1px solid #cbd5e1;"
+            "padding:16px;font-size:16px"
+        )
         layout.addWidget(self.completion_text, 1)
         close = QPushButton("Fechar"); close.setObjectName("primary"); close.clicked.connect(self.accept)
         layout.addWidget(close); self.pages.addWidget(page)
@@ -510,7 +515,8 @@ class NFePurchaseImportDialog(QDialog):
         for index, row in enumerate(self._rows):
             fixed = (index + 1, row["descricao"], _number(row["unit_cost"], 2))
             for column, value in enumerate(fixed):
-                item = QTableWidgetItem(str(value)); item.setForeground(QColor("#111827"))
+                item = QTableWidgetItem(str(value))
+                item.setForeground(QColor("#ffffff" if index % 2 else "#111827"))
                 self.price_table.setItem(index, column, item)
             margin = QLineEdit(str(row.get("raw_margin", _number(row["margem"], 2))))
             price = QLineEdit(str(row.get("raw_price", _number(row["preco"], 2))))
@@ -656,11 +662,31 @@ class NFePurchaseImportDialog(QDialog):
             self._busy = False; self.confirm.setEnabled(True)
             QMessageBox.warning(self, "Entrada não realizada", str(error)); return
         result = dict(self.result_data or {})
-        lines = [f"Importação nº {result.get('importacao_id', '—')} concluída.",
-                 f"Produtos criados: {result.get('itens_criados', 0)}",
-                 f"Produtos vinculados/atualizados: {result.get('itens_vinculados', 0)}",
-                 f"Títulos financeiros: {len(result.get('titulo_ids') or ())}",
-                 str(result.get('financeiro_indicacao') or "")]
-        for item in result.get("resultados") or ():
-            lines.append(f"• {item.get('descricao')} — {item.get('status')} — estoque +{item.get('quantidade_estoque')}")
-        self.completion_text.setPlainText("\n".join(lines)); self.pages.setCurrentIndex(3)
+        products = tuple(result.get("resultados") or ())
+        rows = "".join(
+            "<tr>"
+            f"<td>{escape(str(item.get('descricao') or '—'))}</td>"
+            f"<td>{escape(str(item.get('status') or '—').upper())}</td>"
+            f"<td style='text-align:right'>+{escape(str(item.get('quantidade_estoque') or 0))}</td>"
+            "</tr>"
+            for item in products
+        )
+        indication = escape(str(result.get("financeiro_indicacao") or "Nenhuma informação financeira."))
+        html = f"""
+        <h1 style='color:#15803d'>Entrada concluída com segurança</h1>
+        <p style='font-size:18px'><b>Importação nº {escape(str(result.get('importacao_id', '—')))}</b></p>
+        <table cellspacing='10' cellpadding='10' width='100%'>
+          <tr>
+            <td bgcolor='#dcfce7'><b>Produtos criados</b><br><span style='font-size:22px'>{result.get('itens_criados', 0)}</span></td>
+            <td bgcolor='#dbeafe'><b>Vinculados/atualizados</b><br><span style='font-size:22px'>{result.get('itens_vinculados', 0)}</span></td>
+            <td bgcolor='#fef3c7'><b>Títulos financeiros</b><br><span style='font-size:22px'>{len(result.get('titulo_ids') or ())}</span></td>
+          </tr>
+        </table>
+        <h2>Resultado por produto</h2>
+        <table border='1' cellspacing='0' cellpadding='8' width='100%' style='border-color:#cbd5e1'>
+          <tr bgcolor='#e5e7eb'><th align='left'>Produto</th><th align='left'>Situação</th><th align='right'>Entrada no estoque</th></tr>
+          {rows}
+        </table>
+        <h2>Financeiro</h2><p>{indication}</p>
+        """
+        self.completion_text.setHtml(html); self.pages.setCurrentIndex(3)
