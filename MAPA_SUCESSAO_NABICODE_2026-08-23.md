@@ -4525,6 +4525,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `compileall` e `git diff --check` aprovados. Nenhum certificado, XML real,
   banco de produção, segredo ou comunicação SEFAZ foi acessado.
 
+#### Nabi disponível desde o primeiro acesso — 27/08/2026
+
+- implementação `a362016`: antes da criação do primeiro administrador, a Nabi
+  aparece como assistente de configuração disponível, contextual e
+  determinística. Ela orienta campos e importação local do XML, mas não recebe
+  acesso operacional nem contorna a criação do responsável;
+- depois do login, toda Nabi composta por licença Comercial, Fiscal ou pela
+  feature legada `assistant` tenta ativação automática usando a sessão já
+  autenticada, sem solicitar a senha novamente;
+- causa raiz corrigida: a ativação pela sessão atual agora entrega também o
+  objeto da sessão à fábrica real de três argumentos. Antes, o runtime podia
+  iniciar e a construção da assistente falhava por ausência desse argumento;
+- licença Comercial não ganha portas fiscais. Licença Fiscal continua sujeita
+  a perfil, certificado, prontidão, permissões e confirmações; a Nabi não libera
+  nenhum desses portões;
+- ausência do runtime/modelo local continua sendo falha segura e explícita: o
+  NabiCode permanece funcional, mas conversa livre não é simulada;
+- validação focada: `81 passed`; regressão completa da trilha Nabi e integração
+  Qt: `235 passed`, `38 subtests passed`; `compileall` e `git diff --check`
+  aprovados. Nenhum peso foi baixado e nenhuma rede, SEFAZ ou segredo foi usado.
+
 ### Futuro emissor multiproduto — nome provisório “Notas Iglbalt”
 
 - requisito autorizado apenas para planejamento: um único emissor externo
