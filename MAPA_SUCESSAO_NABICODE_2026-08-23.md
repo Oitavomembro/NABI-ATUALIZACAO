@@ -3876,3 +3876,20 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   login, shell e Vendas, sem comunicação Fiscal/SEFAZ;
 - isto não representa homologação física ou autorização SEFAZ. Produção fiscal,
   certificado real e rede permanecem bloqueados até a cerimônia manual.
+# Checkpoint — emissor multiproduto / Notas IglBalt (2026-08-27)
+
+- Branch isolada: `codex/emissor-multiproduto-notas-iglbalt`.
+- Implementação: `be6ab71` (`feat: cadastra Notas IglBalt no emissor multiproduto`).
+- Compatibilidade: licenças schema 2 continuam implicitamente `NABICODE`;
+  novas licenças multiproduto usam schema 3 com `product_id` assinado.
+- Produto cadastrado: `NOTAS_IGLBALT`, nome visual `Notas IglBalt`, edição
+  `COMPLETA`, recurso canônico `core` e prefixo de chave
+  `notas-iglbalt-`. O emissor impede chave NabiCode e recursos manipulados.
+- Runtime NabiCode exige `NABICODE`; o cliente Notas IglBalt deverá construir o
+  serviço com `expected_product_id="NOTAS_IGLBALT"`.
+- Validação: 41 testes focados; regressão ampliada 51 testes + 8 subtestes;
+  `compileall` e `git diff --check` aprovados.
+- Nenhuma chave privada, chave permanente, licença real ou segredo foi criado.
+- Pendência física: confirmar a grafia pública “Notas IglBalt”, realizar a
+  cerimônia externa do par Ed25519 exclusivo e entregar ao novo programa apenas
+  o catálogo público. Não promover nem emitir licença real antes disso.
