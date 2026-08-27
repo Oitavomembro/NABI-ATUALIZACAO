@@ -4561,3 +4561,22 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   comercial, fiscal ou de IA do NabiCode será transportado;
 - testes futuros obrigatórios: rejeição cruzada, adulteração, outra máquina,
   vencimento/tolerância, revogação e renovação.
+## Encerramento seguro do coordenador flutuante da Nabi — 27/08/2026
+
+- branch/worktree: `codex/fechamento-zero-pendencias` em
+  `NabiCode-QT-Fechamento-codex`;
+- implementação: `d2aa818` — `fix: encerra filtro global da Nabi com o shell`;
+- o `NabiFloatingCoordinator` remove imediatamente seu filtro global quando o
+  shell recebe `Close` ou `Destroy`, oculta a mascote e torna o encerramento
+  idempotente;
+- `refresh` não acessa widgets encerrados ou coordenadores já removidos;
+- vinte ciclos consecutivos de criar/fechar shell foram cobertos para impedir
+  acúmulo de filtros globais entre janelas e testes;
+- validação direcionada PDV/Nabi: `118 passed`, `2 subtests passed`;
+- validação dos seis módulos Qt em processos isolados: `89 passed` no total;
+- `compileall` e `git diff --check` aprovados;
+- a execução monolítica de vários arquivos Qt ainda pode encerrar no runtime
+  nativo do Windows por acúmulo entre módulos; os mesmos arquivos passam
+  individualmente, por isso a regressão Qt deve continuar particionada por
+  processo até o harness global isolar completamente o ciclo de vida nativo;
+- nenhum arquivo Fiscal/SEFAZ, licenciamento, emissor ou banco real foi alterado.
