@@ -4711,3 +4711,26 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `492 subtests passed`, zero falhas; `compileall`, `pip check` e
   `git diff --check` aprovados. Nenhuma comunicação SEFAZ, banco ativo ou
   alteração no emissor foi realizada.
+
+## Entrada XML, códigos internos e perfil automático de homologação — 28/08/2026
+
+- implementação: `f45d58e` — `fix: blinda entrada XML e prepara fiscal em homologacao`;
+- o código do item pertencente ao fornecedor deixou de ser usado como código
+  interno do NabiCode. Novos produtos recebem o menor código numérico interno
+  livre, enquanto o código original permanece no vínculo produto/fornecedor;
+- duas linhas da mesma NF-e com o mesmo código de fornecedor reutilizam o mesmo
+  produto criado dentro da transação, preservando movimentos de estoque
+  separados e eliminando a colisão “Já existe produto com o código”;
+- as três tabelas da conferência usam fundo branco/cinza-claro e texto escuro
+  explícito em todas as linhas, inclusive depois de trocar fonte ou voltar de
+  página, eliminando conteúdo que só aparecia ao passar o mouse;
+- em ambiente `HOMOLOGACAO`, para `SIMPLES_NACIONAL` ou `MEI`, produtos de XML
+  recebem automaticamente, apenas nos campos vazios, o perfil de simulação
+  `CFOP 5102`, origem `0`, `CSOSN 102`, `CST PIS 49`, `CST COFINS 49` e
+  alíquotas zero. Produtos importados anteriormente são regularizados na
+  inicialização; valores já preenchidos não são sobrescritos;
+- o preenchimento automático de simulação é desativado em `PRODUCAO`; uma regra
+  tributária real continua exigindo configuração aprovada da empresa;
+- validação focada: `67 passed`; regressão integral: `2740 passed`, `1 skipped`,
+  `492 subtests passed`; `compileall` e `git diff --check` aprovados. Nenhum
+  documento foi transmitido à SEFAZ e os testes não usaram o banco ativo.
