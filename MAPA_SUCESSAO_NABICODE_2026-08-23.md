@@ -4734,3 +4734,20 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação focada: `67 passed`; regressão integral: `2740 passed`, `1 skipped`,
   `492 subtests passed`; `compileall` e `git diff --check` aprovados. Nenhum
   documento foi transmitido à SEFAZ e os testes não usaram o banco ativo.
+
+## Clareza do PDV não fiscal e reorganização visual — 28/08/2026
+
+- implementação: `f1613d6` — `fix: reorganiza PDV e distingue venda nao fiscal`;
+- o botão principal e o pós-venda identificam explicitamente “VENDA NÃO
+  FISCAL”; a confirmação informa que não houve NF-e, chave, protocolo ou envio
+  à SEFAZ e direciona a emissão modelo 55 para o fluxo fiscal separado;
+- a ligação física do botão descarta o booleano do Qt antes de concluir a ação,
+  mantendo o mesmo caminho funcional do atalho F9/Enter;
+- o seletor rápido ficou mais alto e cada resultado mostra código, descrição,
+  estoque disponível e preço, evitando a lista curta sem quantidade;
+- quantidade e preço foram movidos para uma segunda linha sempre visível, e o
+  carrinho passou a ordenar as colunas como quantidade, código, produto,
+  unitário e total;
+- validação Qt relacionada: `124 passed`, `2 subtests passed`; `compileall` e
+  `git diff --check` aprovados. A venda física observada permaneceu registrada
+  como `NÃO FISCAL` e não houve comunicação com a SEFAZ.
