@@ -198,6 +198,20 @@ class NFeImportAtomicTests(unittest.TestCase):
             ("5102", "0", "102", "49", "49", "HOMOLOGACAO_AUTOMATICA", "000", "000001"),
         )
 
+    def test_homologacao_substitui_rtc_de_compra_incompativel_com_venda_regular(self):
+        self.test_homologacao_simples_preenche_ficha_fiscal_sem_sobrescrever_xml()
+        with self.repo.database.session(write=True) as connection:
+            connection.execute(
+                "UPDATE produtos SET ibs_cbs_cst='410',ibs_cbs_class='410001'"
+            )
+            self.repo.aplicar_perfil_fiscal_homologacao_transacao(
+                connection, produto_id=1
+            )
+        product = self.repo.database.fetch_one(
+            "SELECT ibs_cbs_cst,ibs_cbs_class FROM produtos WHERE id=1"
+        )
+        self.assertEqual(tuple(product), ("000", "000001"))
+
     def test_sem_gtin_nao_colide_entre_produtos_distintos(self):
         self.repo.database.execute(
             "CREATE UNIQUE INDEX idx_barcode_test ON produtos(codigo_barras) WHERE codigo_barras<>''"
