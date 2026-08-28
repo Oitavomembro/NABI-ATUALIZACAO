@@ -811,6 +811,9 @@ class PostSaleDialogTests(unittest.TestCase):
     def test_abrir_ou_cancelar_pos_venda_nao_emite_comprovante(self):
         dialog, output = self._dialog()
         self.assertEqual(output.calls, [])
+        texts = [label.text() for label in dialog.findChildren(QLabel)]
+        self.assertTrue(any("NÃO FISCAL" in text for text in texts))
+        self.assertTrue(any("não foi enviada à SEFAZ" in text for text in texts))
         dialog.reject()
         self.assertEqual(output.calls, [])
 
@@ -1063,10 +1066,10 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("20,00", self.window.total_label.text())
 
     def test_nabi_visual_hierarchy_and_shortcuts(self):
-        self.assertEqual(self.window.cart.columnCount(), 4)
+        self.assertEqual(self.window.cart.columnCount(), 5)
         self.assertEqual(
-            [self.window.cart.horizontalHeaderItem(index).text() for index in range(4)],
-            ["Produto / Serviço", "Qtd.", "Unitário", "Total"],
+            [self.window.cart.horizontalHeaderItem(index).text() for index in range(5)],
+            ["Qtd.", "Código", "Produto / Serviço", "Unitário", "Total"],
         )
         labels = [label.text() for label in self.window.findChildren(QLabel)]
         buttons = [button.text() for button in self.window.findChildren(QPushButton)]
@@ -1075,7 +1078,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("RESUMO DA VENDA", labels)
         self.assertIn("Vendas do dia  [F7]", buttons)
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
-        self.assertIn("FINALIZAR VENDA  [F9]", buttons)
+        self.assertIn("FINALIZAR VENDA NÃO FISCAL  [F9]", buttons)
         self.assertNotIn("EM EVOLUÇÃO", labels)
         self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}

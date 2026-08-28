@@ -217,7 +217,8 @@ class PDVWindow(QMainWindow):
         self.product_search = QLineEdit()
         self.product_search.setPlaceholderText("Digite o nome, código interno ou código de barras...")
         self.product_results = QListWidget()
-        self.product_results.setMaximumHeight(96)
+        self.product_results.setMinimumHeight(150)
+        self.product_results.setMaximumHeight(240)
         self.product_results.hide()
         dropdown = QPushButton("▼")
         self._dropdown_button = dropdown
@@ -251,17 +252,17 @@ class PDVWindow(QMainWindow):
         self.product_results.itemClicked.connect(self._select_product)
         self.add_button.clicked.connect(self._add_item)
         layout.addWidget(self.item_input_label, 0, 0)
-        layout.addWidget(self.item_input, 0, 1)
-        layout.addWidget(dropdown, 0, 2)
-        layout.addWidget(self.expanded_product_search, 0, 3)
-        layout.addWidget(QLabel("Qtd."), 0, 4)
-        layout.addWidget(self.quantity, 0, 5)
-        layout.addWidget(QLabel("Preço"), 0, 6)
-        layout.addWidget(self.price, 0, 7)
-        layout.addWidget(self.add_button, 0, 8)
-        layout.addWidget(self.product_results, 1, 1, 1, 2)
-        layout.addWidget(self.loose_item, 2, 1, 1, 4)
-        layout.addWidget(loose_hint, 2, 6, 1, 3, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(self.item_input, 0, 1, 1, 5)
+        layout.addWidget(dropdown, 0, 6)
+        layout.addWidget(self.expanded_product_search, 0, 7, 1, 2)
+        layout.addWidget(self.product_results, 1, 1, 1, 8)
+        layout.addWidget(QLabel("Quantidade"), 2, 0)
+        layout.addWidget(self.quantity, 2, 1)
+        layout.addWidget(QLabel("Preço unitário"), 2, 2)
+        layout.addWidget(self.price, 2, 3)
+        layout.addWidget(self.add_button, 2, 4, 1, 2)
+        layout.addWidget(self.loose_item, 3, 1, 1, 4)
+        layout.addWidget(loose_hint, 3, 6, 1, 3, Qt.AlignmentFlag.AlignRight)
         layout.setColumnStretch(1, 1)
         return box
 
@@ -272,16 +273,17 @@ class PDVWindow(QMainWindow):
         title = QLabel("ITENS DA VENDA")
         title.setObjectName("sectionTitle")
         layout.addWidget(title)
-        self.cart = QTableWidget(0, 4)
-        self.cart.setHorizontalHeaderLabels(["Produto / Serviço", "Qtd.", "Unitário", "Total"])
+        self.cart = QTableWidget(0, 5)
+        self.cart.setHorizontalHeaderLabels(["Qtd.", "Código", "Produto / Serviço", "Unitário", "Total"])
         self.cart.setSelectionBehavior(QAbstractItemView.SelectionBehavior.SelectRows)
         self.cart.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.cart.setAlternatingRowColors(True)
         self.cart.verticalHeader().setVisible(False)
-        self.cart.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.Stretch)
+        self.cart.horizontalHeader().setSectionResizeMode(0, QHeaderView.ResizeMode.ResizeToContents)
         self.cart.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.ResizeToContents)
-        self.cart.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.ResizeToContents)
+        self.cart.horizontalHeader().setSectionResizeMode(2, QHeaderView.ResizeMode.Stretch)
         self.cart.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.ResizeToContents)
+        self.cart.horizontalHeader().setSectionResizeMode(4, QHeaderView.ResizeMode.ResizeToContents)
         self.cart.doubleClicked.connect(self._edit_selected_item)
         self.cart.installEventFilter(self)
         layout.addWidget(self.cart)
@@ -321,9 +323,9 @@ class PDVWindow(QMainWindow):
         future.setObjectName("muted")
         future.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(future)
-        self.checkout_button = QPushButton("FINALIZAR VENDA  [F9]")
+        self.checkout_button = QPushButton("FINALIZAR VENDA NÃO FISCAL  [F9]")
         self.checkout_button.setObjectName("checkout")
-        self.checkout_button.clicked.connect(self._conclude_action)
+        self.checkout_button.clicked.connect(lambda _checked=False: self._conclude_action())
         self.suspend_button = QPushButton("Suspender venda  [F6]")
         self.suspend_button.clicked.connect(self._suspend_sale)
         summary_layout.addWidget(self.suspend_button)
@@ -539,7 +541,7 @@ class PDVWindow(QMainWindow):
             self.budget_button.setText("ORÇAMENTO DESLIGADO  [F5]")
             self.budget_button.setObjectName("inactive")
             self.budget_button.setStyleSheet("")
-            self.checkout_button.setText("FINALIZAR VENDA  [F9]")
+            self.checkout_button.setText("FINALIZAR VENDA NÃO FISCAL  [F9]")
         self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _conclude_action(self) -> None:
@@ -816,7 +818,14 @@ class PDVWindow(QMainWindow):
             self._show_error(error)
             return
         for record in records:
-            item = QListWidgetItem(f"{record.code} — {record.description}")
+            stock = (
+                "não informado" if record.current_stock is None
+                else format(record.current_stock.normalize(), "f").replace(".", ",")
+            )
+            item = QListWidgetItem(
+                f"{record.code} — {record.description}    |    "
+                f"Estoque: {stock}    |    R$ {MoneyCodec.format_br(record.unit_price)}"
+            )
             item.setData(Qt.ItemDataRole.UserRole, record.product_id)
             item.setData(int(Qt.ItemDataRole.UserRole) + 1, str(record.code).strip().casefold())
             item.setData(int(Qt.ItemDataRole.UserRole) + 2, str(record.barcode).strip().casefold())
@@ -961,15 +970,20 @@ class PDVWindow(QMainWindow):
         items = self.view_model.session.cart.items
         self.cart.setRowCount(len(items))
         for row, item in enumerate(items):
+            product = (
+                self.view_model.application.get_product(item.product_id)
+                if item.product_id is not None else None
+            )
             values = (
-                item.description, str(item.quantity), MoneyCodec.format_br(item.net_unit_price),
+                str(item.quantity), product.code if product is not None else "AVULSO",
+                item.description, MoneyCodec.format_br(item.net_unit_price),
                 MoneyCodec.format_br(item.subtotal),
             )
             for column, value in enumerate(values):
                 cell = QTableWidgetItem(value)
-                if column == 0:
+                if column == 2:
                     cell.setData(Qt.ItemDataRole.UserRole, item.line_id)
-                if column in {1, 2, 3}:
+                if column in {0, 3, 4}:
                     cell.setTextAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
                 self.cart.setItem(row, column, cell)
         self.total_label.setText(f"TOTAL: R$ {MoneyCodec.format_br(self.view_model.total)}")
@@ -979,13 +993,13 @@ class PDVWindow(QMainWindow):
         if row < 0:
             self.statusBar().showMessage("Selecione um item da venda para remover.", 2500)
             return
-        item = self.cart.item(row, 0)
+        item = self.cart.item(row, 2)
         if item is not None:
             self._remove_item(str(item.data(Qt.ItemDataRole.UserRole)))
 
     def _selected_cart_item(self):
         row = self.cart.currentRow()
-        cell = self.cart.item(row, 0) if row >= 0 else None
+        cell = self.cart.item(row, 2) if row >= 0 else None
         if cell is None:
             return None
         line_id = str(cell.data(Qt.ItemDataRole.UserRole))

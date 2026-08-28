@@ -17,21 +17,34 @@ class PostSaleDialog(QDialog):
             raise ValueError("O pós-venda exige uma venda confirmada.")
         self.view_model = view_model
         self.sale_result = result
-        self.setWindowTitle("Venda finalizada")
+        self.setWindowTitle("Venda comercial não fiscal finalizada")
         self.setModal(True)
         self.resize(460, 260)
         root = QVBoxLayout(self)
-        title = QLabel("✓ Venda finalizada")
+        title = QLabel("✓ Venda comercial finalizada")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title.setStyleSheet("font-size: 22px; font-weight: 700; color: #00ff88;")
         root.addWidget(title)
+        fiscal_status = QLabel(
+            "NÃO FISCAL — esta operação não gerou NF-e, não recebeu chave/protocolo "
+            "e não foi enviada à SEFAZ."
+        )
+        fiscal_status.setWordWrap(True)
+        fiscal_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        fiscal_status.setStyleSheet(
+            "background:#3b2f05;color:#ffd866;padding:12px;font-size:15px;font-weight:800;"
+        )
+        root.addWidget(fiscal_status)
         total = QLabel(f"Total: R$ {MoneyCodec.format_br(result.total)}")
         total.setAlignment(Qt.AlignmentFlag.AlignCenter)
         total.setStyleSheet("font-size: 17px; font-weight: 700;")
         root.addWidget(total)
-        root.addWidget(QLabel("Escolha uma ação para o comprovante. A venda já foi confirmada."))
+        root.addWidget(QLabel(
+            "Escolha uma ação para o comprovante comercial. Para emitir NF-e 55, "
+            "use o fluxo fiscal separado."
+        ))
         actions = QHBoxLayout()
-        self.finish_button = QPushButton("Finalizar")
+        self.finish_button = QPushButton("Fechar venda não fiscal")
         self.print_button = QPushButton("Imprimir cupom 80 mm")
         self.pdf_button = QPushButton("Gerar e abrir PDF")
         actions.addWidget(self.finish_button)
