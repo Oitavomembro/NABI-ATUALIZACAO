@@ -171,6 +171,11 @@ class NFeImportAtomicTests(unittest.TestCase):
             "fiscal_cofins_cst TEXT NOT NULL DEFAULT ''",
             "fiscal_cofins_rate TEXT NOT NULL DEFAULT '0'",
             "fiscal_profile_source TEXT NOT NULL DEFAULT ''",
+            "ibs_cbs_cst TEXT NOT NULL DEFAULT ''",
+            "ibs_cbs_class TEXT NOT NULL DEFAULT ''",
+            "ibs_uf_rate TEXT NOT NULL DEFAULT '0'",
+            "ibs_city_rate TEXT NOT NULL DEFAULT '0'",
+            "cbs_rate TEXT NOT NULL DEFAULT '0'",
         ):
             self.repo.database.execute(f"ALTER TABLE produtos ADD COLUMN {definition}")
         service = NFeImportService(
@@ -186,11 +191,11 @@ class NFeImportAtomicTests(unittest.TestCase):
 
         product = self.repo.database.fetch_one(
             "SELECT cfop,fiscal_origin,fiscal_csosn,fiscal_pis_cst,fiscal_cofins_cst,"
-            "fiscal_profile_source FROM produtos"
+            "fiscal_profile_source,ibs_cbs_cst,ibs_cbs_class FROM produtos"
         )
         self.assertEqual(
             tuple(product),
-            ("5102", "0", "102", "49", "49", "HOMOLOGACAO_AUTOMATICA"),
+            ("5102", "0", "102", "49", "49", "HOMOLOGACAO_AUTOMATICA", "000", "000001"),
         )
 
     def test_sem_gtin_nao_colide_entre_produtos_distintos(self):

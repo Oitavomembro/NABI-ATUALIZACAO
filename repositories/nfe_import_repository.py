@@ -351,7 +351,8 @@ class NFeImportRepository:
         required = {
             "cfop", "fiscal_origin", "fiscal_csosn", "fiscal_pis_cst",
             "fiscal_pis_rate", "fiscal_cofins_cst", "fiscal_cofins_rate",
-            "fiscal_profile_source",
+            "fiscal_profile_source", "ibs_cbs_cst", "ibs_cbs_class",
+            "ibs_uf_rate", "ibs_city_rate", "cbs_rate",
         }
         if not required.issubset(columns):
             return
@@ -364,6 +365,11 @@ class NFeImportRepository:
                    fiscal_pis_rate=CASE WHEN TRIM(fiscal_pis_rate)='' THEN '0' ELSE fiscal_pis_rate END,
                    fiscal_cofins_cst=CASE WHEN TRIM(fiscal_cofins_cst)='' THEN '49' ELSE fiscal_cofins_cst END,
                    fiscal_cofins_rate=CASE WHEN TRIM(fiscal_cofins_rate)='' THEN '0' ELSE fiscal_cofins_rate END,
+                   ibs_cbs_cst=CASE WHEN TRIM(ibs_cbs_cst)='' THEN '000' ELSE ibs_cbs_cst END,
+                   ibs_cbs_class=CASE WHEN TRIM(ibs_cbs_class)='' THEN '000001' ELSE ibs_cbs_class END,
+                   ibs_uf_rate=CASE WHEN TRIM(ibs_uf_rate)='' THEN '0' ELSE ibs_uf_rate END,
+                   ibs_city_rate=CASE WHEN TRIM(ibs_city_rate)='' THEN '0' ELSE ibs_city_rate END,
+                   cbs_rate=CASE WHEN TRIM(cbs_rate)='' THEN '0' ELSE cbs_rate END,
                    fiscal_profile_source=CASE WHEN TRIM(fiscal_profile_source)='' THEN
                        'HOMOLOGACAO_AUTOMATICA' ELSE fiscal_profile_source END
                WHERE id=?""",
