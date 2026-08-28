@@ -100,6 +100,28 @@ class CommercialProductStockServicesTests(unittest.TestCase):
         ))
         self.assertEqual((updated.ncm, updated.cfop, updated.fiscal_csosn), ("22021000", "5102", "102"))
 
+    def test_ficha_fiscal_malformada_e_rejeitada_antes_de_gravar(self):
+        with self.assertRaisesRegex(ValueError, "NCM deve possuir 8 dígitos"):
+            self.products.create_product(ProductCreateCommand(
+                "PF2", "PRODUTO FISCAL INVÁLIDO", Decimal("10"),
+                ncm="123", cfop="5102", fiscal_origin="0",
+                fiscal_csosn="102", fiscal_pis_cst="49", fiscal_cofins_cst="49",
+                fiscal_profile_source="MANUAL",
+            ))
+        self.assertEqual(self.products.search_products("PF2"), ())
+
+    def test_ficha_fiscal_normaliza_formatacao_sem_inferir_codigos(self):
+        created = self.products.create_product(ProductCreateCommand(
+            "PF3", "PRODUTO FISCAL FORMATADO", Decimal("10"),
+            ncm="22.02.10.00", cest="03.007.00", cfop="5.102",
+            fiscal_origin="0", fiscal_csosn="102", fiscal_pis_cst="49",
+            fiscal_cofins_cst="49", fiscal_icms_rate="1,65",
+            fiscal_profile_source="manual",
+        ))
+        self.assertEqual((created.ncm, created.cest, created.cfop), ("22021000", "0300700", "5102"))
+        self.assertEqual(created.fiscal_icms_rate, Decimal("1.65"))
+        self.assertEqual(created.fiscal_profile_source, "MANUAL")
+
     def test_multiplos_codigos_identificam_o_mesmo_produto(self):
         created = self.products.create_product(ProductCreateCommand(
             "P200", "PRODUTO CAIXA E UNIDADE", Decimal("12.00"),

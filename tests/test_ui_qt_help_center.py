@@ -25,6 +25,7 @@ from services.help_center_repair_service import (
 )
 from services.ui_preferences import UIPreferencesService
 from ui_qt.administration.help_center_dialog import HelpCenterDialog
+import ui_qt.administration.help_center_dialog as help_center_module
 
 
 APP = QApplication.instance() or QApplication([])
@@ -116,6 +117,20 @@ def test_detalhe_e_relatorio_redigem_segredos_e_exportam_atomicamente(tmp_path):
     assert "pessoa@empresa.com" not in rendered and "C:\\Users\\pessoa" not in rendered
     assert json.loads(report.read_text(encoding="utf-8"))["scope"] == "DIAGNOSTICO_SOMENTE_LEITURA"
     assert messages[-1][0] == "info"
+    dialog.close()
+
+
+def test_clique_em_salvar_relatorio_nao_transporta_booleano_como_destino(tmp_path, monkeypatch):
+    pool = Pool(); output = tmp_path / "socorro-clique.json"
+    dialog = HelpCenterDialog(service(tmp_path), worker_pool=pool, notifier=lambda *_: None)
+    dialog.reload(); complete(pool)
+    monkeypatch.setattr(
+        help_center_module.QFileDialog, "getSaveFileName",
+        lambda *_args, **_kwargs: (str(output), "Relatório JSON (*.json)"),
+    )
+    dialog.report_button.click()
+    assert output.is_file()
+    assert json.loads(output.read_text(encoding="utf-8"))["scope"] == "DIAGNOSTICO_SOMENTE_LEITURA"
     dialog.close()
 
 

@@ -167,7 +167,7 @@ class HelpCenterDialog(QDialog):
         self.report_button.setEnabled(False)
         self.close_button = QPushButton("Fechar [Esc]")
         self.run_button.clicked.connect(self.reload)
-        self.report_button.clicked.connect(self.export_report)
+        self.report_button.clicked.connect(lambda _checked=False: self.export_report())
         self.close_button.clicked.connect(self.reject)
         footer.addWidget(self.run_button); footer.addWidget(self.report_button)
         footer.addStretch(); footer.addWidget(self.close_button); root.addLayout(footer)

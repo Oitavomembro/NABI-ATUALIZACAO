@@ -9,6 +9,7 @@ from commercial.application.product_dto import (
     ProductDetails, ProductStockSummary, ProductUpdateCommand,
     StockAdjustmentCommand, StockMovementCommand, StockMovementSummary,
 )
+from services.fiscal_product_profile import FiscalProductProfile
 
 
 def _decimal(value) -> Decimal:
@@ -109,6 +110,21 @@ class NabiCodeProductStockGateway:
         edits_fiscal = creating or bool(str(getattr(command, "fiscal_profile_source", "") or "").strip())
         def fiscal_value(name, default=""):
             return getattr(command, name, default) if edits_fiscal else current.get(name, default)
+        fiscal = None
+        if edits_fiscal:
+            fiscal = FiscalProductProfile.normalize({
+                name: fiscal_value(name, "0" if name.endswith("_rate") else "")
+                for name in (
+                    "ncm", "cest", "cfop", "fiscal_origin", "fiscal_csosn",
+                    "fiscal_icms_cst", "fiscal_icms_rate", "fiscal_pis_cst",
+                    "fiscal_pis_rate", "fiscal_cofins_cst", "fiscal_cofins_rate",
+                    "fiscal_ipi_cst", "fiscal_ipi_rate", "fiscal_ipi_enq",
+                    "fiscal_profile_source", "ibs_cbs_cst", "ibs_cbs_class",
+                    "ibs_uf_rate", "ibs_city_rate", "cbs_rate",
+                )
+            })
+        def normalized_fiscal(name, default=""):
+            return fiscal[name] if fiscal is not None else current.get(name, default)
         unit_id = current.get("unidade_id") if current else self._unit_id(
             getattr(command, "unit_code", "")
         )
@@ -125,23 +141,24 @@ class NabiCodeProductStockGateway:
             codigo_barras=command.barcode,
             codigos_barras=tuple(getattr(command, "barcodes", ()) or ()),
             permite_fracionado=getattr(command, "allow_fractional_quantity", None),
-            ncm=fiscal_value("ncm"), cest=fiscal_value("cest"), cfop=fiscal_value("cfop"),
-            fiscal_origin=fiscal_value("fiscal_origin"),
-            fiscal_csosn=fiscal_value("fiscal_csosn"),
-            fiscal_icms_cst=fiscal_value("fiscal_icms_cst"),
-            fiscal_icms_rate=str(fiscal_value("fiscal_icms_rate", "0")),
-            fiscal_pis_cst=fiscal_value("fiscal_pis_cst"),
-            fiscal_pis_rate=str(fiscal_value("fiscal_pis_rate", "0")),
-            fiscal_cofins_cst=fiscal_value("fiscal_cofins_cst"),
-            fiscal_cofins_rate=str(fiscal_value("fiscal_cofins_rate", "0")),
-            fiscal_ipi_cst=fiscal_value("fiscal_ipi_cst"),
-            fiscal_ipi_rate=str(fiscal_value("fiscal_ipi_rate", "0")),
-            fiscal_ipi_enq=fiscal_value("fiscal_ipi_enq"),
-            fiscal_profile_source=(str(getattr(command, "fiscal_profile_source", "") or "") if edits_fiscal else current.get("fiscal_profile_source", "")),
-            ibs_cbs_cst=current.get("ibs_cbs_cst", ""),
-            ibs_cbs_class=current.get("ibs_cbs_class", ""),
-            ibs_uf_rate=current.get("ibs_uf_rate", "0"),
-            ibs_city_rate=current.get("ibs_city_rate", "0"), cbs_rate=current.get("cbs_rate", "0"),
+            ncm=normalized_fiscal("ncm"), cest=normalized_fiscal("cest"),
+            cfop=normalized_fiscal("cfop"), fiscal_origin=normalized_fiscal("fiscal_origin"),
+            fiscal_csosn=normalized_fiscal("fiscal_csosn"),
+            fiscal_icms_cst=normalized_fiscal("fiscal_icms_cst"),
+            fiscal_icms_rate=normalized_fiscal("fiscal_icms_rate", "0"),
+            fiscal_pis_cst=normalized_fiscal("fiscal_pis_cst"),
+            fiscal_pis_rate=normalized_fiscal("fiscal_pis_rate", "0"),
+            fiscal_cofins_cst=normalized_fiscal("fiscal_cofins_cst"),
+            fiscal_cofins_rate=normalized_fiscal("fiscal_cofins_rate", "0"),
+            fiscal_ipi_cst=normalized_fiscal("fiscal_ipi_cst"),
+            fiscal_ipi_rate=normalized_fiscal("fiscal_ipi_rate", "0"),
+            fiscal_ipi_enq=normalized_fiscal("fiscal_ipi_enq"),
+            fiscal_profile_source=normalized_fiscal("fiscal_profile_source"),
+            ibs_cbs_cst=normalized_fiscal("ibs_cbs_cst"),
+            ibs_cbs_class=normalized_fiscal("ibs_cbs_class"),
+            ibs_uf_rate=normalized_fiscal("ibs_uf_rate", "0"),
+            ibs_city_rate=normalized_fiscal("ibs_city_rate", "0"),
+            cbs_rate=normalized_fiscal("cbs_rate", "0"),
             estoque_atual=command.current_stock, estoque_minimo=command.minimum_stock,
             permite_estoque_negativo=command.allow_negative_stock,
         )
