@@ -132,6 +132,67 @@ class NFeImportAtomicTests(unittest.TestCase):
         self.assertEqual(self.repo.database.fetch_one("SELECT estoque_atual FROM produtos")["estoque_atual"], 4)
         self.assertEqual(self.repo.database.fetch_one("SELECT COUNT(*) n FROM estoque_movimentacoes")["n"], 2)
 
+    def test_codigo_do_fornecedor_repetido_nao_vira_codigo_interno(self):
+        self.repo.database.execute(
+            "INSERT INTO produtos(codigo,nome,codigo_barras,estoque_atual) "
+            "VALUES('13560','Produto interno já existente','',7)"
+        )
+        document = NFeDocument(
+            chave="CHAVE-CODIGO-FORNECEDOR", numero="90", fornecedor="Atacadão", cnpj="456",
+            data_emissao="2026-08-28", valor_total=12,
+            itens=(
+                NFeItem("13560", "ARROZ AGULHINHA", 1, "FD01", 4, codigo_barras="111", valor_total=4),
+                NFeItem("13560", "ARROZ AGULHINHA", 2, "UND9", 4, codigo_barras="111", valor_total=8),
+            ),
+        )
+        items = [dict(self.preparados[0], descricao=item.descricao, quantidade=item.quantidade,
+                      custo=4, preco=5, codigo_barras=item.codigo_barras)
+                 for item in document.itens]
+
+        result = self.service.importar_atomicamente(document, arquivo_origem="fornecedor.xml", itens=items)
+
+        self.assertEqual((result["itens_criados"], result["itens_vinculados"]), (1, 1))
+        products = self.repo.database.fetch_all("SELECT codigo,nome,estoque_atual FROM produtos ORDER BY id")
+        self.assertEqual(products[0]["estoque_atual"], 7)
+        self.assertNotEqual(products[1]["codigo"], "13560")
+        self.assertEqual(products[1]["estoque_atual"], 3)
+        link = self.repo.database.fetch_one(
+            "SELECT codigo_fornecedor FROM produto_fornecedores WHERE produto_id=?",
+            (result["resultados"][0]["produto_id"],),
+        )
+        self.assertEqual(link["codigo_fornecedor"], "13560")
+
+    def test_homologacao_simples_preenche_ficha_fiscal_sem_sobrescrever_xml(self):
+        for definition in (
+            "fiscal_origin TEXT NOT NULL DEFAULT ''",
+            "fiscal_csosn TEXT NOT NULL DEFAULT ''",
+            "fiscal_pis_cst TEXT NOT NULL DEFAULT ''",
+            "fiscal_pis_rate TEXT NOT NULL DEFAULT '0'",
+            "fiscal_cofins_cst TEXT NOT NULL DEFAULT ''",
+            "fiscal_cofins_rate TEXT NOT NULL DEFAULT '0'",
+            "fiscal_profile_source TEXT NOT NULL DEFAULT ''",
+        ):
+            self.repo.database.execute(f"ALTER TABLE produtos ADD COLUMN {definition}")
+        service = NFeImportService(
+            self.repo,
+            actor_provider=lambda: "Operador",
+            authorization_provider=lambda _module, _action: True,
+            fiscal_config_provider=lambda: {
+                "environment": "HOMOLOGACAO", "tax_regime": "SIMPLES_NACIONAL"
+            },
+        )
+
+        service.importar_atomicamente(self.doc, arquivo_origem="nfe.xml", itens=self.preparados)
+
+        product = self.repo.database.fetch_one(
+            "SELECT cfop,fiscal_origin,fiscal_csosn,fiscal_pis_cst,fiscal_cofins_cst,"
+            "fiscal_profile_source FROM produtos"
+        )
+        self.assertEqual(
+            tuple(product),
+            ("5102", "0", "102", "49", "49", "HOMOLOGACAO_AUTOMATICA"),
+        )
+
     def test_sem_gtin_nao_colide_entre_produtos_distintos(self):
         self.repo.database.execute(
             "CREATE UNIQUE INDEX idx_barcode_test ON produtos(codigo_barras) WHERE codigo_barras<>''"

@@ -157,11 +157,12 @@ class NFeImportRepository:
         self, connection, *, item, preparado: dict[str, Any], fornecedor_id: int,
         unidade_id: int, unidade_compra_id: int, agora: str,
     ) -> int:
-        codigo = str(preparado.get("codigo") or item.codigo or item.codigo_barras or "").strip()
-        if not codigo:
-            raise ValueError(f"O item {item.descricao} não possui código para criar o produto.")
-        if connection.execute("SELECT 1 FROM produtos WHERE codigo=? COLLATE NOCASE", (codigo,)).fetchone():
-            raise ValueError(f"Já existe produto com o código {codigo}.")
+        codigo = str(preparado.get("codigo_interno") or "").strip()
+        if codigo:
+            if connection.execute("SELECT 1 FROM produtos WHERE codigo=? COLLATE NOCASE", (codigo,)).fetchone():
+                raise ValueError(f"Já existe produto com o código interno {codigo}.")
+        else:
+            codigo = self._proximo_codigo_interno(connection)
         preco_real, preco_decimal = DecimalStorage.pair(preparado["preco"], field="preço de venda")
         custo_real, custo_decimal = DecimalStorage.pair(preparado["custo"], field="preço de custo")
         margem_real, margem_decimal = DecimalStorage.pair(preparado["margem"], field="margem")
@@ -217,7 +218,9 @@ class NFeImportRepository:
         ).fetchone()
         if not atual:
             raise ValueError("Produto selecionado não localizado.")
-        novo_codigo = str(preparado.get("codigo") or "").strip()
+        # O código do item no XML pertence ao fornecedor. Ele é preservado em
+        # produto_fornecedores e nunca substitui silenciosamente o código interno.
+        novo_codigo = str(preparado.get("codigo_interno") or "").strip()
         novo_nome = str(preparado.get("descricao") or "").strip().upper()
         if novo_codigo:
             duplicado = connection.execute(
@@ -337,6 +340,54 @@ class NFeImportRepository:
             (int(produto_id), int(fornecedor_id), str(codigo_fornecedor or ""), str(unidade_fornecedor or "UN"),
              fator_real, custo_real, fator_decimal, custo_decimal, agora),
         )
+
+    @staticmethod
+    def aplicar_perfil_fiscal_homologacao_transacao(connection, *, produto_id: int) -> None:
+        """Completa somente campos vazios com o perfil seguro de simulação local."""
+
+        columns = {
+            str(row[1]) for row in connection.execute("PRAGMA table_info(produtos)").fetchall()
+        }
+        required = {
+            "cfop", "fiscal_origin", "fiscal_csosn", "fiscal_pis_cst",
+            "fiscal_pis_rate", "fiscal_cofins_cst", "fiscal_cofins_rate",
+            "fiscal_profile_source",
+        }
+        if not required.issubset(columns):
+            return
+        connection.execute(
+            """UPDATE produtos SET
+                   cfop=CASE WHEN TRIM(cfop)='' THEN '5102' ELSE cfop END,
+                   fiscal_origin=CASE WHEN TRIM(fiscal_origin)='' THEN '0' ELSE fiscal_origin END,
+                   fiscal_csosn=CASE WHEN TRIM(fiscal_csosn)='' THEN '102' ELSE fiscal_csosn END,
+                   fiscal_pis_cst=CASE WHEN TRIM(fiscal_pis_cst)='' THEN '49' ELSE fiscal_pis_cst END,
+                   fiscal_pis_rate=CASE WHEN TRIM(fiscal_pis_rate)='' THEN '0' ELSE fiscal_pis_rate END,
+                   fiscal_cofins_cst=CASE WHEN TRIM(fiscal_cofins_cst)='' THEN '49' ELSE fiscal_cofins_cst END,
+                   fiscal_cofins_rate=CASE WHEN TRIM(fiscal_cofins_rate)='' THEN '0' ELSE fiscal_cofins_rate END,
+                   fiscal_profile_source=CASE WHEN TRIM(fiscal_profile_source)='' THEN
+                       'HOMOLOGACAO_AUTOMATICA' ELSE fiscal_profile_source END
+               WHERE id=?""",
+            (int(produto_id),),
+        )
+
+    def preparar_catalogo_fiscal_homologacao(self) -> int:
+        """Completa produtos vindos de XML que já existiam antes da automatização."""
+
+        with self.database.session(write=True) as connection:
+            columns = {
+                str(row[1]) for row in connection.execute("PRAGMA table_info(produtos)").fetchall()
+            }
+            if "fiscal_profile_source" not in columns:
+                return 0
+            rows = connection.execute(
+                "SELECT id FROM produtos WHERE ativo=1 AND participa_xml=1 "
+                "AND (TRIM(fiscal_profile_source)='' OR fiscal_profile_source='XML_IMPORT')"
+            ).fetchall()
+            for row in rows:
+                self.aplicar_perfil_fiscal_homologacao_transacao(
+                    connection, produto_id=int(row[0])
+                )
+            return len(rows)
 
     def registrar_entrada_estoque_transacao(
         self, connection, *, produto_id: int, quantidade: float, origem_id: str, motivo: str, usuario: str, agora: str,
@@ -924,3 +975,15 @@ class NFeImportRepository:
             "chave": str(nota.get("chave") or ""),
             "movimentos_revertidos": revertidos,
         }
+    @staticmethod
+    def _proximo_codigo_interno(connection) -> str:
+        """Reserva o menor código numérico livre dentro da mesma transação."""
+
+        rows = connection.execute(
+            "SELECT codigo FROM produtos WHERE codigo GLOB '[0-9]*'"
+        ).fetchall()
+        used = {int(str(row[0])) for row in rows if str(row[0]).isdigit()}
+        candidate = 1
+        while candidate in used:
+            candidate += 1
+        return str(candidate)

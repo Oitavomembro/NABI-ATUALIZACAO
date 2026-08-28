@@ -394,7 +394,12 @@ def main(argv=None) -> int:
                 ),
                 "authorization_provider": lambda module, action: module_security.require(module, action),
             }
-            purchase_imports = NFeImportService(NFeImportRepository(database), **import_security)
+            purchase_imports = NFeImportService(
+                NFeImportRepository(database),
+                fiscal_config_provider=fiscal_service.load_config,
+                **import_security,
+            )
+            purchase_imports.preparar_catalogo_fiscal_homologacao()
             from administration.nfe_purchase_import_service import NFePurchaseImportManagementService
             nfe_purchase_import = NFePurchaseImportManagementService(
                 purchase_imports, module_security,

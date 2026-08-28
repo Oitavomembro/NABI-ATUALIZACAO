@@ -15,11 +15,11 @@ from administration.nfe_purchase_import_service import suggest_purchase_factor
 
 
 WHITE_TABLE = """
-QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#21262d;
+QTableWidget{background:#ffffff;color:#111827;alternate-background-color:#e5e7eb;
  border:1px solid #cbd5e1;gridline-color:#d1d5db;selection-background-color:#bfdbfe;
  selection-color:#111827} QHeaderView::section{background:#e5e7eb;color:#111827;
  padding:7px;border:0;border-right:1px solid #cbd5e1;font-weight:800}
-QTableWidget::item:alternate{background:#21262d;color:#ffffff}
+QTableWidget::item{color:#111827} QTableWidget::item:alternate{background:#e5e7eb;color:#111827}
 QTableWidget QLineEdit{background:#ffffff;color:#111827;border:1px solid #64748b}
 """
 
@@ -331,6 +331,7 @@ class NFePurchaseImportDialog(QDialog):
                   _number(row["stock_quantity"]), _number(row["unit_cost"], 2), mark)
         for column, value in enumerate(values):
             cell = QTableWidgetItem(str(value)); cell.setToolTip(str(value))
+            cell.setForeground(QColor("#111827"))
             if column == 9:
                 cell.setForeground(QColor("#15803d" if row["status"] == "SALVO" else "#1d4ed8" if row["status"] == "EXATO_NOVO" else "#b45309"))
             self.table.setItem(index, column, cell)
@@ -516,7 +517,7 @@ class NFePurchaseImportDialog(QDialog):
             fixed = (index + 1, row["descricao"], _number(row["unit_cost"], 2))
             for column, value in enumerate(fixed):
                 item = QTableWidgetItem(str(value))
-                item.setForeground(QColor("#ffffff" if index % 2 else "#111827"))
+                item.setForeground(QColor("#111827"))
                 self.price_table.setItem(index, column, item)
             margin = QLineEdit(str(row.get("raw_margin", _number(row["margem"], 2))))
             price = QLineEdit(str(row.get("raw_price", _number(row["preco"], 2))))
@@ -634,7 +635,9 @@ class NFePurchaseImportDialog(QDialog):
             values = (row["descricao"], action, f"{row['tipo_fator'].lower()} {row['fator']}",
                       _number(row["stock_quantity"]), row["unidade"], f"R$ {_number(row['unit_cost'], 2)}",
                       f"{_number(row['margem'], 2)}%", f"R$ {_number(row['preco'], 2)}")
-            for column, value in enumerate(values): self.confirmation_table.setItem(index, column, QTableWidgetItem(str(value)))
+            for column, value in enumerate(values):
+                item = QTableWidgetItem(str(value)); item.setForeground(QColor("#111827"))
+                self.confirmation_table.setItem(index, column, item)
         confirmation_caps = (420, 190, 140, 110, 90, 110, 95, 110)
         for column, cap in enumerate(confirmation_caps): self.confirmation_table.setColumnWidth(column, min(self.confirmation_table.sizeHintForColumn(column) + 14, cap))
         self.confirmation_notes.setText(

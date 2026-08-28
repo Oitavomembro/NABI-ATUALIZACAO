@@ -37,11 +37,13 @@ class NFeImportService:
         *,
         actor_provider: Callable[[], str | None] | None = None,
         authorization_provider: Callable[[str, str], bool] | None = None,
+        fiscal_config_provider: Callable[[], dict[str, Any]] | None = None,
     ) -> None:
         self.repository = repository
         self.matching_service = NFeMatchingService(repository)
         self._actor_provider = actor_provider
         self._authorization_provider = authorization_provider
+        self._fiscal_config_provider = fiscal_config_provider
 
     def bind_security(
         self,
@@ -189,7 +191,11 @@ class NFeImportService:
             for indice, (item_xml, preparado) in enumerate(zip(documento.itens, itens)):
                 acao = str(preparado.get("acao") or "").upper()
                 produto_id = preparado.get("produto_id")
-                identity = self._document_item_identity(item_xml, preparado)
+                supplier_code = str(item_xml.codigo or "").strip().casefold()
+                identity = (
+                    ("SUPPLIER_CODE", supplier_code)
+                    if supplier_code else self._document_item_identity(item_xml, preparado)
+                )
                 repeated_product_id = products_created_in_document.get(identity) if identity else None
                 if acao == "CRIAR" and repeated_product_id is not None:
                     acao = "VINCULAR"
@@ -231,6 +237,7 @@ class NFeImportService:
                     codigo_fornecedor=item_xml.codigo, unidade_fornecedor=item_xml.unidade,
                     fator_conversao=preparado["fator"], ultimo_custo=preparado["custo"], agora=agora,
                 )
+                self._apply_homologation_fiscal_defaults(connection, int(produto_id))
                 quantidade_estoque = float(preparado["quantidade"]) * float(preparado["fator"])
                 origem_id = f"{documento.chave or documento.numero}:{indice}"
                 self.repository.registrar_entrada_estoque_transacao(
@@ -291,6 +298,33 @@ class NFeImportService:
             return json.loads(journal_result)
 
         return result
+
+    def _apply_homologation_fiscal_defaults(self, connection, produto_id: int) -> None:
+        """Deixa a entrada pronta para testes sem transformar padrão de teste em regra real."""
+
+        if self._fiscal_config_provider is None:
+            return
+        config = dict(self._fiscal_config_provider() or {})
+        if str(config.get("environment") or "").strip().upper() != "HOMOLOGACAO":
+            return
+        regime = str(config.get("tax_regime") or "").strip().upper()
+        if regime not in {"SIMPLES_NACIONAL", "MEI"}:
+            return
+        self.repository.aplicar_perfil_fiscal_homologacao_transacao(
+            connection, produto_id=produto_id
+        )
+
+    def preparar_catalogo_fiscal_homologacao(self) -> int:
+        if self._fiscal_config_provider is None:
+            return 0
+        config = dict(self._fiscal_config_provider() or {})
+        if str(config.get("environment") or "").strip().upper() != "HOMOLOGACAO":
+            return 0
+        if str(config.get("tax_regime") or "").strip().upper() not in {
+            "SIMPLES_NACIONAL", "MEI",
+        }:
+            return 0
+        return self.repository.preparar_catalogo_fiscal_homologacao()
 
     def listar_importacoes(self, data_inicial: str = "", data_final: str = "") -> list[dict[str, Any]]:
         return self.repository.listar_importacoes(data_inicial, data_final)
