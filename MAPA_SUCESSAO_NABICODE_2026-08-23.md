@@ -4688,3 +4688,26 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   prontidão, pré-voo e persistência comercial `59 passed`; `compileall` e
   `git diff --check` aprovados. Nenhuma transmissão SEFAZ ou banco real foi
   usado.
+
+## Auditoria ampla e endurecimento final — 28/08/2026
+
+- implementação: `5e09c5f` — `fix: endurece cadastros fiscais e botoes Qt`;
+- a regressão integral inicial aprovou `2735 passed`, `492 subtests passed`,
+  sem falhas. O único caso condicional ignorado exige o pacote NabiMig real,
+  que não foi localizado neste host nesta execução;
+- foi encontrada uma brecha de fronteira: comandos externos ao editor poderiam
+  tentar persistir ficha fiscal malformada. O gateway agora normaliza e valida
+  NCM, CEST, CFOP, origem, CST/CSOSN e alíquotas antes do banco, rejeitando o
+  comando inteiro sem criar produto; ficha incompleta continua permitida como
+  rascunho, mas permanece bloqueada pelo pré-voo e nenhum código é inferido;
+- atualizações exclusivamente comerciais continuam preservando integralmente a
+  ficha fiscal existente;
+- a auditoria das ligações `clicked` encontrou um botão de relatório ligado a
+  uma função com argumento opcional. A conexão agora descarta explicitamente o
+  booleano do Qt, impedindo que ele seja interpretado como caminho de arquivo;
+- testes novos comprovam rejeição antes da gravação, normalização sem inferência
+  e clique físico no botão de relatório com exportação sanitizada;
+- validação focada: `50 passed`; regressão integral posterior: `2738 passed`,
+  `492 subtests passed`, zero falhas; `compileall`, `pip check` e
+  `git diff --check` aprovados. Nenhuma comunicação SEFAZ, banco ativo ou
+  alteração no emissor foi realizada.
