@@ -60,6 +60,22 @@ class FiscalPreflightService:
                     operation="autorizacao", model=current_model
                 )
             )
+            series_value = config.get(f"sale_series_{current_model}")
+            try:
+                series = int(series_value)
+            except (TypeError, ValueError):
+                problems.append(f"{label}: série fiscal não configurada ou inválida.")
+                continue
+            if not 0 <= series <= 999:
+                problems.append(f"{label}: série fiscal deve estar entre 0 e 999.")
+                continue
+            numbering = self.fiscal_service.numbering_scope(
+                model=current_model, series=series, environment=environment
+            )
+            if not numbering.get("initialized"):
+                problems.append(
+                    f"{label}: numeração fiscal não inicializada para a série {series}."
+                )
         crt = self.fiscal_service.TAX_REGIME_CODES.get(
             str(config.get("tax_regime") or "").upper(), 0
         )
