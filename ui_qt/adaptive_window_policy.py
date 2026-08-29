@@ -2,10 +2,10 @@
 
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, QObject, QPoint, QTimer
+from PySide6.QtCore import QEvent, QObject, Qt
 from PySide6.QtWidgets import (
     QApplication, QColorDialog, QComboBox, QDialog, QFileDialog, QInputDialog,
-    QMessageBox, QWidget,
+    QMessageBox,
 )
 
 
@@ -30,36 +30,27 @@ class AdaptiveWindowPolicy(QObject):
         if (
             isinstance(watched, QDialog)
             and not isinstance(watched, _COMPACT_DIALOGS)
-            and event.type() == QEvent.Type.Show
+            and watched.isWindow()
+            and event.type() in {QEvent.Type.Polish, QEvent.Type.Show}
             and not bool(watched.property(_APPLIED_PROPERTY))
         ):
             watched.setProperty(_APPLIED_PROPERTY, True)
-            QTimer.singleShot(0, lambda window=watched: self._fit(window))
+            self._prepare_before_first_paint(watched)
         return False
 
-    def _fit(self, window: QDialog) -> None:
-        if not window.isVisible():
+    def _prepare_before_first_paint(self, window: QDialog) -> None:
+        """Define o estado final antes de o Windows compor o primeiro quadro.
+
+        O fluxo antigo esperava o ``Show`` e agendava um resize para o ciclo
+        seguinte. Isso tornava visível uma janela pequena, seguida de flash e
+        maximização. A política agora é síncrona e única para toda janela
+        operacional; diálogos compactos continuam fora dela.
+        """
+        if window.isFullScreen():
             return
-        # Telas principais são abertas maximizadas pelo shell. Alterar sua
-        # geometria logo depois do Show provocava o lampejo de uma janela
-        # pequena e podia restaurá-la com conteúdo cortado.
-        if window.isMaximized() or window.isFullScreen():
-            return
-        screen = window.screen() or self.application.primaryScreen()
-        if screen is None:
-            return
-        available = screen.availableGeometry()
-        width = max(720, min(1400, int(available.width() * 0.94)))
-        height = max(520, min(900, int(available.height() * 0.90)))
-        width = min(width, available.width())
-        height = min(height, available.height())
-        QWidget.resize(window, width, height)
-        # Algumas telas antigas possuem um botão de instância chamado `move`.
-        # O descritor da classe não é escondido por esse atributo da tela.
-        QWidget.move(window, QPoint(
-            available.x() + max(0, (available.width() - window.width()) // 2),
-            available.y() + max(0, (available.height() - window.height()) // 2),
-        ))
+        window.setWindowState(
+            window.windowState() | Qt.WindowState.WindowMaximized
+        )
 
 
 def install_adaptive_window_policy(application: QApplication) -> AdaptiveWindowPolicy:

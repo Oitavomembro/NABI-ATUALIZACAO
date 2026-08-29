@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-import subprocess
 from collections.abc import Callable
 from typing import Any
 
@@ -43,31 +42,14 @@ class PrintingService:
                     {item[2] for item in win32print.EnumPrinters(flags) if item[2]},
                     key=str.casefold,
                 )
-            except (ImportError, OSError, RuntimeError) as primary_error:
-                try:
-                    command = [
-                        "powershell",
-                        "-NoProfile",
-                        "-Command",
-                        "Get-CimInstance Win32_Printer | Select-Object -ExpandProperty Name",
-                    ]
-                    result = subprocess.run(
-                        command,
-                        capture_output=True,
-                        text=True,
-                        timeout=12,
-                        creationflags=getattr(subprocess, "CREATE_NO_WINDOW", 0),
-                        check=False,
-                    )
-                    if result.returncode != 0:
-                        raise RuntimeError(result.stderr.strip() or "PowerShell não retornou as impressoras.")
-                    names = sorted(
-                        {line.strip() for line in result.stdout.splitlines() if line.strip()},
-                        key=str.casefold,
-                    )
-                except (OSError, subprocess.SubprocessError, RuntimeError) as fallback_error:
-                    self.last_warning = f"Falha ao listar impressoras: {fallback_error or primary_error}"
-                    names = []
+            except (ImportError, OSError, RuntimeError) as error:
+                # pywin32 integra o produto ao spooler e é dependência oficial
+                # no Windows. Abrir um PowerShell como fallback bloqueava a UI
+                # por até 12 segundos e produzia uma janela transitória. Sem o
+                # backend, mantemos somente a opção segura do sistema e
+                # informamos o diagnóstico, sem criar processo externo.
+                self.last_warning = f"Backend de impressão indisponível: {error}"
+                names = []
         return ["Padrão do Sistema"] + [name for name in names if name != "Padrão do Sistema"]
 
     def is_available(self, name: str | None) -> bool:

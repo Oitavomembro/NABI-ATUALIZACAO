@@ -3,7 +3,7 @@ from unittest.mock import Mock
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 
-from PySide6.QtCore import QEvent
+from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import QApplication, QComboBox, QDialog, QMessageBox, QPushButton
 
 from ui_qt.adaptive_window_policy import install_adaptive_window_policy
@@ -19,6 +19,15 @@ def test_dialogo_operacional_abre_amplo_e_dentro_da_area_util():
     assert dialog.width() >= min(720, dialog.screen().availableGeometry().width())
     assert dialog.height() >= min(520, dialog.screen().availableGeometry().height())
     assert dialog.screen().availableGeometry().contains(dialog.frameGeometry())
+    dialog.close()
+
+
+def test_estado_final_e_definido_antes_do_primeiro_show_sem_janela_intermediaria():
+    install_adaptive_window_policy(APP)
+    dialog = QDialog(); dialog.resize(320, 240)
+    dialog.ensurePolished()
+    assert dialog.windowState() & Qt.WindowState.WindowMaximized
+    assert not dialog.isVisible()
     dialog.close()
 
 

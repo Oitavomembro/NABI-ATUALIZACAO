@@ -4778,3 +4778,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   contém os runtimes Tcl/Tk exigidos pelo empacotador; todos os testes de código
   fiscal, comercial e Qt foram aprovados. `compileall` e `git diff --check`
   aprovados. Nenhuma transmissão à SEFAZ nem banco ativo foi usado.
+
+## Eliminação estrutural de mini janela, flash e atraso — 29/08/2026
+
+- a causa visual estava na política global, que deixava o Windows pintar o
+  diálogo pequeno e somente no ciclo seguinte aplicava `resize/move`; o estado
+  maximizado agora é definido sincronamente no `Polish`, antes do primeiro
+  quadro, para toda janela operacional real;
+- diálogos compactos nativos (avisos, arquivos, cores e entradas curtas)
+  permanecem compactos; páginas incorporadas ao shell não são tratadas como
+  janelas externas;
+- a causa do atraso específico em Configurações era a descoberta de impressoras
+  abrir um processo PowerShell de fallback e aguardar até 12 segundos quando o
+  backend oficial `pywin32` não estava disponível. O fallback externo foi
+  removido: o produto usa o backend oficial ou retorna imediatamente a opção
+  segura “Padrão do Sistema” com diagnóstico;
+- validação focada: `62 passed`; regressão de todas as janelas Qt:
+  `468 passed`, `2 subtests passed`; `compileall` e `git diff --check`
+  aprovados.
+- pendência explicitamente adiada pelo proprietário para a próxima edição:
+  disponibilizar a lista/pesquisa completa de NCM na interface de Produtos;
+  não misturar essa entrega com o fechamento visual/fiscal atual.

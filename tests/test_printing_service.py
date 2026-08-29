@@ -79,6 +79,15 @@ class PrintingServiceTests(unittest.TestCase):
             with self.assertRaises(RuntimeError):
                 service.print_a4_text("teste")
 
+    def test_backend_ausente_nao_abre_processo_externo_nem_bloqueia_interface(self):
+        service = PrintingService()
+        with (
+            mock.patch("services.printing_service.os.name", "nt"),
+            mock.patch.dict("sys.modules", {"win32print": None}),
+        ):
+            self.assertEqual(service.list_printers(), ["Padrão do Sistema"])
+        self.assertIn("Backend de impressão indisponível", service.last_warning)
+
 
 if __name__ == "__main__":
     unittest.main()
