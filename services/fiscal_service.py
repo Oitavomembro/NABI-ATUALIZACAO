@@ -6,6 +6,7 @@ import hashlib
 import json
 import os
 import re
+import ssl
 import sys
 import tempfile
 import uuid
@@ -1112,12 +1113,15 @@ class FiscalService:
                 "ATUALIZAR_DEPENDENCIAS.bat antes de usar a transmissão fiscal."
             )
         pem_cert, pem_key = self._temporary_pem_files(pfx_path, password)
+        server_ca_bundle = ""
         try:
+            server_ca_bundle = self._temporary_server_ca_bundle()
             response = self.http_post(
                 endpoint,
                 data=xml.encode("utf-8") if isinstance(xml, str) else xml,
                 headers={"Content-Type": "application/soap+xml; charset=utf-8", **dict(headers or {})},
                 cert=(pem_cert, pem_key),
+                verify=server_ca_bundle,
                 timeout=int(timeout),
             )
             response.raise_for_status()
@@ -1130,8 +1134,9 @@ class FiscalService:
                 raise RuntimeError(message) from exc
             raise
         finally:
-            for temp_path in (pem_cert, pem_key):
-                self._secure_delete_file(temp_path)
+            for temp_path in (pem_cert, pem_key, server_ca_bundle):
+                if temp_path:
+                    self._secure_delete_file(temp_path)
 
     def parse_response(self, xml: bytes | str) -> FiscalResponse:
         self._require_dependency("lxml")
@@ -4026,6 +4031,64 @@ class FiscalService:
             if not key_file.closed:
                 key_file.close()
         return cert_file.name, key_file.name
+
+    @staticmethod
+    def _temporary_server_ca_bundle() -> str:
+        """Combina Mozilla/certifi com as autoridades confiáveis do Windows.
+
+        ``requests`` substitui o repositório do sistema pelo bundle do certifi.
+        Alguns serviços estaduais dependem de uma intermediária já distribuída
+        pelo Windows; usar apenas certifi produz ``unable to get local issuer``.
+        A composição mantém a verificação TLS obrigatória e nunca inclui o A1.
+        """
+        if requests is None:
+            raise RuntimeError("A dependência 'requests' não está instalada.")
+        chunks: list[bytes] = []
+        seen: set[str] = set()
+
+        certifi_path = Path(requests.certs.where())
+        if certifi_path.is_file():
+            chunks.append(certifi_path.read_bytes().rstrip() + b"\n")
+
+        enum_certificates = getattr(ssl, "enum_certificates", None)
+        if os.name == "nt" and callable(enum_certificates):
+            for store in ("ROOT", "CA"):
+                for certificate, encoding, trust in enum_certificates(store):
+                    if encoding != "x509_asn":
+                        continue
+                    if trust is not True and (
+                        not isinstance(trust, set)
+                        or "1.3.6.1.5.5.7.3.1" not in trust
+                    ):
+                        continue
+                    digest = hashlib.sha256(certificate).hexdigest()
+                    if digest in seen:
+                        continue
+                    seen.add(digest)
+                    chunks.append(
+                        ssl.DER_cert_to_PEM_cert(certificate).encode("ascii")
+                    )
+
+        if not chunks:
+            raise RuntimeError(
+                "Nenhuma autoridade certificadora confiável está disponível para HTTPS."
+            )
+        bundle = tempfile.NamedTemporaryFile(
+            prefix="nabicode_server_ca_", suffix=".pem", delete=False
+        )
+        try:
+            os.chmod(bundle.name, 0o600)
+            bundle.write(b"\n".join(chunks))
+            bundle.flush()
+            os.fsync(bundle.fileno())
+        except Exception:
+            bundle.close()
+            FiscalService._secure_delete_file(bundle.name)
+            raise
+        finally:
+            if not bundle.closed:
+                bundle.close()
+        return bundle.name
 
     @staticmethod
     def _secure_delete_file(path: str | Path) -> None:

@@ -2459,10 +2459,13 @@ if __name__ == "__main__":
 
         def fake_post(_url, **kwargs):
             cert_path, key_path = map(Path, kwargs["cert"])
+            ca_path = Path(kwargs["verify"])
             observed["paths"] = (cert_path, key_path)
+            observed["ca_path"] = ca_path
             observed["modes"] = (cert_path.stat().st_mode & 0o777, key_path.stat().st_mode & 0o777)
             self.assertTrue(cert_path.read_bytes().startswith(b"-----BEGIN CERTIFICATE-----"))
             self.assertTrue(key_path.read_bytes().startswith(b"-----BEGIN PRIVATE KEY-----"))
+            self.assertIn(b"-----BEGIN CERTIFICATE-----", ca_path.read_bytes())
             return Response()
 
         self.service.http_post = fake_post
@@ -2477,12 +2480,14 @@ if __name__ == "__main__":
         self.assertTrue(response.success)
         self.assertEqual(observed["modes"], (0o600, 0o600))
         self.assertTrue(all(not path.exists() for path in observed["paths"]))
+        self.assertFalse(observed["ca_path"].exists())
 
     def test_transmissao_remove_pems_quando_http_falha(self):
         observed = {}
 
         def fake_post(_url, **kwargs):
             observed["paths"] = tuple(map(Path, kwargs["cert"]))
+            observed["ca_path"] = Path(kwargs["verify"])
             raise RuntimeError("falha simulada")
 
         self.service.http_post = fake_post
@@ -2496,6 +2501,7 @@ if __name__ == "__main__":
                 pfx_path=self.pfx_path, password=self.password,
             )
         self.assertTrue(all(not path.exists() for path in observed["paths"]))
+        self.assertFalse(observed["ca_path"].exists())
 
 
 class FiscalDocumentIntegrityTests(unittest.TestCase):

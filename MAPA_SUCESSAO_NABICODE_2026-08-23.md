@@ -4842,3 +4842,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   orientação da Receita Federal de 14/08/2026 para optantes do Simples;
 - regressão fiscal, PDV, Pagamentos e gateway: `298 passed`,
   `12 subtests passed`; `git diff --check` aprovado.
+
+## Cadeia TLS da SEFAZ no Windows — 29/08/2026
+
+- a NF-e 55 de teste no valor de R$ 36,30 avançou até a fila fiscal, mas a
+  consulta retornou `CERTIFICATE_VERIFY_FAILED: unable to get local issuer`;
+  a chave foi preservada em `RESPOSTA_DESCONHECIDA`, sem retransmissão;
+- causa: `requests` usava apenas o bundle Mozilla/certifi, embora o repositório
+  confiável do Windows conseguisse validar o endpoint oficial da SEFAZ/BA;
+- o transporte agora combina o bundle certifi com certificados públicos
+  confiáveis dos repositórios `ROOT` e `CA` do Windows e continua passando um
+  arquivo explícito em `verify`; não existe `verify=False` nem aceitação de
+  cadeia inválida;
+- o A1 e sua chave privada permanecem em arquivos temporários separados e são
+  apagados; o bundle público também é removido tanto em sucesso quanto falha;
+- teste HTTPS somente de diagnóstico no Windows chegou ao endpoint oficial e
+  recebeu HTTP 403 para `HEAD`, comprovando TLS sem transmitir documento;
+- regressão do serviço fiscal, fila, worker e venda fiscal: `209 passed`,
+  `10 subtests passed`; `git diff --check` aprovado;
+- próximo passo físico: reiniciar na versão corrigida e consultar a chave já
+  existente. Não repetir nem retransmitir a venda enquanto o estado não for
+  resolvido pela consulta.
