@@ -86,6 +86,8 @@ def test_pre_voo_assina_e_valida_localmente_sem_transmitir():
     assert len(result.xml_sha256) == 64
     assert result.validated_models == ("55", "65")
     assert len(result.xml_sha256_by_model) == 2
+    assert len(result.conformance_snapshot_sha256) == 64
+    assert "general_tax_matrix" in result.blocked_operations
     assert fiscal.built_models == ["55", "65"]
     assert fiscal.transmitted is False
 
@@ -159,7 +161,9 @@ def test_pre_voo_bloqueia_catalogo_regulatorio_vencido():
     fiscal = FakeFiscalService()
     regulatory = SimpleNamespace(
         audit=lambda **_kwargs: SimpleNamespace(
-            problems=("Revisão regulatória vencida",)
+            problems=("Revisão regulatória vencida",), jurisdiction="BR-BA",
+            production_approved=False, supported_operations=(),
+            unsupported_operations=("general_tax_matrix",),
         )
     )
     result = FiscalPreflightService(

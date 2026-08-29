@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from services.fiscal_conformance_report_service import FiscalConformanceReportService
 from services.fiscal_regulatory_catalog_service import FiscalRegulatoryCatalogService
 
 
@@ -18,6 +19,8 @@ class FiscalPreflightResult:
     xml_sha256: str
     xml_sha256_by_model: tuple[tuple[str, str], ...]
     problems: tuple[str, ...]
+    conformance_snapshot_sha256: str = ""
+    blocked_operations: tuple[str, ...] = ()
 
     @property
     def success(self) -> bool:
@@ -36,6 +39,9 @@ class FiscalPreflightService:
         self.regulatory_service = regulatory_service or FiscalRegulatoryCatalogService(
             runtime_root=getattr(fiscal_service, "runtime_root", None)
         )
+        self.conformance_service = FiscalConformanceReportService(
+            self.regulatory_service
+        )
 
     def run(self, *, password: str) -> FiscalPreflightResult:
         config = self.fiscal_service.load_config()
@@ -48,6 +54,8 @@ class FiscalPreflightService:
         problems: list[str] = []
         regulatory = self.regulatory_service.audit(environment=environment)
         problems.extend(regulatory.problems)
+        conformance = self.conformance_service.snapshot()
+        problems.extend(conformance.regulatory_problems)
         if environment != "HOMOLOGACAO":
             problems.append(
                 "O pré-voo fiscal só pode ser executado no ambiente de homologação."
@@ -158,4 +166,6 @@ class FiscalPreflightService:
             certificate_document=certificate_document, xml_sha256=xml_hash,
             xml_sha256_by_model=tuple(model_hashes),
             problems=tuple(dict.fromkeys(problem for problem in problems if problem)),
+            conformance_snapshot_sha256=conformance.snapshot_sha256,
+            blocked_operations=conformance.blocked_operations,
         )
