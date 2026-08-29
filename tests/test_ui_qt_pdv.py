@@ -1078,7 +1078,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("RESUMO DA VENDA", labels)
         self.assertIn("Vendas do dia  [F7]", buttons)
         self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
-        self.assertIn("FINALIZAR VENDA NÃO FISCAL  [F9]", buttons)
+        self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         self.assertNotIn("EM EVOLUÇÃO", labels)
         self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
@@ -1099,7 +1099,7 @@ class PDVQtTests(unittest.TestCase):
         try:
             self.assertFalse(fiscal_window.loose_item.isVisible())
             self.assertFalse(fiscal_window.loose_item.isEnabled())
-            self.assertIn("EMITIR NF-e 55", fiscal_window.checkout_button.text())
+            self.assertEqual("FINALIZAR VENDA  [F9]", fiscal_window.checkout_button.text())
         finally:
             fiscal_window.close()
 

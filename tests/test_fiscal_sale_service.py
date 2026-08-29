@@ -274,6 +274,11 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(recipient, {})
         self.assertEqual(destination, 1)
 
+    def test_consumidor_final_na_nfe_55_nao_cria_destinatario_falso(self):
+        recipient, destination = self.service.recipient_for_customer(2, model="55")
+        self.assertEqual(recipient, {})
+        self.assertEqual(destination, 1)
+
     def test_cancelamento_pendente_cancela_fila_e_libera_numero(self):
         draft = FiscalSaleDraft("RES-1", "29" + "0" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
         connection = sqlite3.connect(self.db)

@@ -334,8 +334,7 @@ class PDVWindow(QMainWindow):
         future.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(future)
         self.checkout_button = QPushButton(
-            "EMITIR NF-e 55 E FINALIZAR  [F9]"
-            if self._fiscal_mode else "FINALIZAR VENDA NÃO FISCAL  [F9]"
+            "FINALIZAR VENDA  [F9]"
         )
         self.checkout_button.setObjectName("checkout")
         self.checkout_button.clicked.connect(lambda _checked=False: self._conclude_action())
@@ -555,8 +554,7 @@ class PDVWindow(QMainWindow):
             self.budget_button.setObjectName("inactive")
             self.budget_button.setStyleSheet("")
             self.checkout_button.setText(
-                "EMITIR NF-e 55 E FINALIZAR  [F9]"
-                if self._fiscal_mode else "FINALIZAR VENDA NÃO FISCAL  [F9]"
+                "FINALIZAR VENDA  [F9]"
             )
         self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
 

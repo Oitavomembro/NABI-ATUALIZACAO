@@ -39,7 +39,7 @@ def create_application(
         fiscal_mode=fiscal_mode,
         fiscal_sale_service=fiscal_sale_service,
         fiscal_outbox_worker=fiscal_outbox_worker,
-        require_registered_customer=bool(fiscal_mode),
+        require_registered_customer=False,
     )
     if administrative_hub_factory is not None:
         toolbar = QToolBar("NabiCode", window)
@@ -160,7 +160,7 @@ def create_shell_application(
             fiscal_mode=fiscal_mode,
             fiscal_sale_service=fiscal_sale_service,
             fiscal_outbox_worker=fiscal_outbox_worker,
-            require_registered_customer=bool(fiscal_mode),
+            require_registered_customer=False,
         )
 
     window = NabiCodeShellWindow(

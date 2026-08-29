@@ -4799,3 +4799,16 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - pendência explicitamente adiada pelo proprietário para a próxima edição:
   disponibilizar a lista/pesquisa completa de NCM na interface de Produtos;
   não misturar essa entrega com o fechamento visual/fiscal atual.
+
+## Consumidor Final no PDV fiscal — 29/08/2026
+
+- o cadastro técnico `CONSUMIDOR_FINAL` passa a representar corretamente uma
+  venda sem destinatário identificado também no fluxo NF-e 55; ele não é mais
+  exibido como selecionado para depois ser recusado pela própria tela;
+- a exceção é restrita ao cadastro técnico: clientes identificados continuam
+  exigindo CPF/CNPJ válido e endereço fiscal completo no modelo 55;
+- o botão do operador foi simplificado para `FINALIZAR VENDA [F9]`; modelo e
+  obrigatoriedade fiscal continuam visíveis no cabeçalho e protegidos pelo
+  gateway, sem expor detalhes técnicos no comando principal;
+- validação focada do PDV, gateway e serviço fiscal: `294 passed` e
+  `12 subtests passed`; `git diff --check` aprovado.

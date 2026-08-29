@@ -198,7 +198,11 @@ class FiscalSaleService:
             raise ValueError("Cliente selecionado não foi encontrado.")
         customer = dict(zip(names, row))
         technical_consumer = str(customer.get("codigo") or "").upper() == "CONSUMIDOR_FINAL"
-        if technical_consumer and fiscal_model == "65":
+        # O cadastro técnico CONSUMIDOR_FINAL representa operação sem
+        # destinatário identificado. Isso é diferente de um cliente digitado
+        # parcialmente: quando há destinatário, CPF/CNPJ e endereço continuam
+        # obrigatórios para NF-e 55.
+        if technical_consumer:
             return {}, 1
         document = self.fiscal_service._normalize_tax_document(customer.get("cpf"))
         valid_document = (
