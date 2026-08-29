@@ -22,7 +22,9 @@ try:
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtTest import QTest
-    from PySide6.QtWidgets import QApplication, QDialog, QLabel, QMessageBox, QPushButton
+    from PySide6.QtWidgets import (
+        QApplication, QDialog, QLabel, QMessageBox, QPushButton, QWidget,
+    )
     from ui_qt.commercial.checkout_dialog import CheckoutDialog
     from ui_qt.commercial.cart_item_dialog import CartItemDialog
     from ui_qt.commercial.budget_dialog import BudgetListDialog, BudgetPreviewDialog
@@ -422,11 +424,24 @@ class MoneyEditTests(unittest.TestCase):
         QTest.keyClicks(edit, "1234")
         QTest.keyClick(edit, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
         QTest.keyClick(edit, Qt.Key.Key_Delete)
-        self.assertEqual(edit.text(), "0,00")
+        self.assertEqual(edit.text(), "")
         self.assertEqual(edit.value(), Decimal("0.00"))
-        QTest.keyClick(edit, Qt.Key.Key_A, Qt.KeyboardModifier.ControlModifier)
         QTest.keyClicks(edit, "9876")
         self.assertEqual(edit.text(), "9.876,00")
+
+    def test_foco_seleciona_sugestao_e_digitacao_substitui_sem_prender_digitos(self):
+        container = QWidget()
+        edit = MoneyEdit(container)
+        edit.set_value("36.30")
+        container.show()
+        edit.show()
+        edit.setFocus()
+        QApplication.processEvents()
+        QTest.qWait(1)
+        self.assertEqual(edit.selectedText(), "36,30")
+        QTest.keyClicks(edit, "50")
+        self.assertEqual(edit.text(), "50,00")
+        self.assertEqual(edit.value(), Decimal("50.00"))
 
     def test_backspace_and_delete_with_cursor_in_middle(self):
         edit = MoneyEdit()
@@ -632,6 +647,12 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertEqual(self.dialog.adjustments_group.title(), "2. Ajustes da venda")
         self.assertEqual(self.dialog.credit_group.title(), "3. Condições do crediário")
 
+    def test_botao_final_e_grande_verde_e_sem_texto_tecnico(self):
+        self.assertEqual(self.dialog.confirm_button.text(), "FINALIZAR VENDA")
+        self.assertGreaterEqual(self.dialog.confirm_button.minimumHeight(), 52)
+        self.assertGreaterEqual(self.dialog.confirm_button.minimumWidth(), 280)
+        self.assertIn("#2ea043", self.dialog.confirm_button.styleSheet())
+
     def test_digitacao_de_ajuste_sincroniza_total_pagamento_e_saldo(self):
         self.view_model.add_loose_item("OUTRO", "1", Decimal("23"))
         self.dialog.discount.selectAll()
@@ -690,7 +711,7 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertEqual(self.dialog.balance_label.text(), "FALTA: R$ 50,00")
         self.assertIn("não foram alterados", self.dialog.error_label.text())
         self.assertIsNone(self.dialog._reviewed_input)
-        self.assertFalse(self.dialog.confirm_button.isEnabled())
+        self.assertTrue(self.dialog.confirm_button.isEnabled())
 
     def test_ajuste_invalida_revisao_sem_reescrever_pagamento_adicionado(self):
         self.assertTrue(self.dialog._add_payment())
@@ -704,7 +725,7 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertEqual(tuple(self.dialog._payments), original)
         self.assertEqual(self.dialog.balance_label.text(), "TROCO: R$ 10,00")
         self.assertIsNone(self.dialog._reviewed_input)
-        self.assertFalse(self.dialog.confirm_button.isEnabled())
+        self.assertTrue(self.dialog.confirm_button.isEnabled())
         self.assertIn("não foram alterados", self.dialog.error_label.text())
 
     def test_ajuste_recalcula_parcelas_do_crediario_pelo_nucleo(self):
@@ -765,11 +786,14 @@ class CheckoutDialogTests(unittest.TestCase):
         self.assertIsNotNone(self.dialog.checkout_input())
         self.assertEqual(self.gateway.commands, [])
 
-    def test_confirmar_sem_revisao_valida_e_impossivel(self):
-        self.dialog._confirm()
-        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Rejected)
-        self.assertIsNone(self.dialog._confirmed_input)
-        self.assertIn("Revise", self.dialog.error_label.text())
+    def test_confirmar_sem_revisao_valida_pergunta_e_finaliza(self):
+        with patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+        ) as question:
+            self.dialog._confirm()
+        self.assertEqual(question.call_count, 1)
+        self.assertEqual(self.dialog.result(), QDialog.DialogCode.Accepted)
+        self.assertIsNotNone(self.dialog._confirmed_input)
 
     def test_alteracao_posterior_invalida_revisao(self):
         with patch.object(QMessageBox, "information"):
@@ -779,8 +803,11 @@ class CheckoutDialogTests(unittest.TestCase):
         self.dialog.discount.set_value("1")
 
         self.assertIsNone(self.dialog._reviewed_input)
-        self.assertFalse(self.dialog.confirm_button.isEnabled())
-        self.dialog._confirm()
+        self.assertTrue(self.dialog.confirm_button.isEnabled())
+        with patch.object(
+            QMessageBox, "question", return_value=QMessageBox.StandardButton.No
+        ):
+            self.dialog._confirm()
         self.assertEqual(self.dialog.result(), QDialog.DialogCode.Rejected)
 
     def test_dupla_confirmacao_nao_produz_duas_acoes(self):

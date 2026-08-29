@@ -4812,3 +4812,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   gateway, sem expor detalhes técnicos no comando principal;
 - validação focada do PDV, gateway e serviço fiscal: `294 passed` e
   `12 subtests passed`; `git diff --check` aprovado.
+
+## Digitação e conclusão de Pagamentos — 29/08/2026
+
+- o editor monetário deixa o conteúdo realmente vazio após apagar a seleção e
+  seleciona a sugestão inteira ao receber foco, permitindo substituir o valor
+  recebido sem manter centavos ou algarismos anteriores no buffer;
+- a janela mantém a escolha explícita da forma de pagamento e pagamentos
+  mistos, mas o botão `FINALIZAR VENDA` agora nasce funcional, grande e verde;
+- o passo separado “Revisar” deixa de ser obrigatório: Finalizar valida os
+  dados e apresenta uma única confirmação resumida; pagamento insuficiente
+  permanece bloqueado e devolve o foco ao valor;
+- clique, Enter, F9, repetição automática e dupla confirmação continuam
+  protegidos contra persistência duplicada;
+- regressão conjunta de PDV, Pagamentos, gateway e emissão fiscal:
+  `297 passed`, `12 subtests passed`; `git diff --check` aprovado.

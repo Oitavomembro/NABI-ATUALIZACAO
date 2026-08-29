@@ -122,8 +122,18 @@ class CheckoutDialog(QDialog):
             "Revisar", QDialogButtonBox.ButtonRole.ActionRole
         )
         self.confirm_button = self.buttons.button(QDialogButtonBox.StandardButton.Ok)
-        self.confirm_button.setText("Confirmar venda")
-        self.confirm_button.setEnabled(False)
+        self.confirm_button.setText("FINALIZAR VENDA")
+        self.confirm_button.setMinimumHeight(52)
+        self.confirm_button.setMinimumWidth(280)
+        self.confirm_button.setStyleSheet(
+            "QPushButton { background:#2ea043; color:white; font-size:16px; "
+            "font-weight:800; border:1px solid #3fb950; border-radius:7px; "
+            "padding:10px 24px; } "
+            "QPushButton:hover { background:#238636; } "
+            "QPushButton:disabled { background:#30363d; color:#8b949e; "
+            "border-color:#484f58; }"
+        )
+        self.confirm_button.setEnabled(True)
         root.addWidget(self.buttons)
 
         self.method.currentIndexChanged.connect(self._sync_method)
@@ -390,7 +400,7 @@ class CheckoutDialog(QDialog):
     def _invalidate_review(self, *_args) -> None:
         self._reviewed_input = None
         self._confirmed_input = None
-        self.confirm_button.setEnabled(False)
+        self.confirm_button.setEnabled(True)
 
     def _review(self) -> None:
         try:
@@ -409,19 +419,25 @@ class CheckoutDialog(QDialog):
     def _confirm(self) -> None:
         if self._confirming:
             return
-        if self._reviewed_input is None:
-            self.error_label.setText("Revise a venda antes de confirmar.")
-            self.review_button.setFocus(Qt.FocusReason.OtherFocusReason)
-            return
         try:
             current = self._candidate_input()
-            if current != self._reviewed_input:
-                self._invalidate_review()
-                raise ValueError("Os dados mudaram. Revise a venda novamente.")
-            self.view_model.preview_checkout(current)
+            preview = self.view_model.preview_checkout(current)
         except (TypeError, ValueError) as error:
             self.error_label.setText(str(error))
+            self.amount.setFocus(Qt.FocusReason.OtherFocusReason)
+            self.amount.selectAll()
             return
+        if current != self._reviewed_input:
+            answer = QMessageBox.question(
+                self,
+                "Finalizar venda",
+                self._summary(preview) + "\n\nConfirma a finalização?",
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                QMessageBox.StandardButton.No,
+            )
+            if answer != QMessageBox.StandardButton.Yes:
+                self.confirm_button.setFocus(Qt.FocusReason.OtherFocusReason)
+                return
         self._confirming = True
         self.confirm_button.setEnabled(False)
         self._confirmed_input = current

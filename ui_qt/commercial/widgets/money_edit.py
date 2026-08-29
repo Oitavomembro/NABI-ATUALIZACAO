@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from decimal import Decimal
 
-from PySide6.QtCore import Qt, Signal
+from PySide6.QtCore import QTimer, Qt, Signal
 from PySide6.QtGui import QKeyEvent, QKeySequence
 from PySide6.QtWidgets import QApplication, QLineEdit
 
@@ -40,7 +40,19 @@ class MoneyEdit(QLineEdit):
         self._integer_digits = ""
         self._fraction_digits = ""
         self._fraction_mode = False
-        self._apply(MoneyCodec.ZERO)
+        self._value = MoneyCodec.ZERO
+        # Durante a edição, vazio precisa ser realmente vazio. Reformatar como
+        # 0,00 no mesmo instante fazia Backspace/Delete parecerem inoperantes e
+        # mantinha centavos antigos invisivelmente no buffer.
+        self.clear()
+        self.valueChanged.emit(self._value)
+
+    def focusInEvent(self, event) -> None:
+        super().focusInEvent(event)
+        # Campos monetários chegam normalmente preenchidos com uma sugestão.
+        # Selecionar tudo permite que a primeira digitação substitua o valor,
+        # em vez de inserir algarismos no meio da máscara formatada.
+        QTimer.singleShot(0, self.selectAll)
 
     def _apply(self, value: Decimal, *, integer_cursor: int | None = None) -> None:
         self._value = MoneyCodec.parse(value)
