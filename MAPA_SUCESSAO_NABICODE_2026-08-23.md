@@ -4917,3 +4917,21 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação focal final: `303 passed`, `12 subtests passed`; compilação e
   `git diff --check` aprovados. A NF-e em `RESPOSTA_DESCONHECIDA` permanece sem
   retransmissão e deve ser apenas consultada após reiniciar na versão corrigida.
+
+## Contrato SOAP 1.2 dos serviços NF-e — 29/08/2026
+
+- após a correção da cadeia TLS, a consulta real alcançou a SEFAZ/BA, mas o
+  endpoint `.asmx` respondeu HTTP 500 porque o transporte enviava o XML fiscal
+  puro, sem o envelope SOAP exigido pelo serviço;
+- todas as operações NF-e 4.00 agora são encapsuladas em SOAP 1.2 com
+  `nfeDadosMsg`, namespace WSDL e ação específicos para autorização, recibo,
+  consulta de protocolo, status, evento e inutilização;
+- a correção é feita na fronteira única de transporte, preservando os XMLs
+  fiscais canônicos e evitando tratamentos isolados ou divergentes por tela;
+- a venda em `RESPOSTA_DESCONHECIDA` continua fail-closed: não foi
+  retransmitida nem alterada e deve receber somente consulta até a SEFAZ
+  confirmar autorização, rejeição ou inexistência;
+- validação relacionada: `336 passed`, `12 subtests passed`; novos testes
+  inspecionam o envelope, o namespace, o conteúdo e a ação SOAP das seis
+  operações fiscais. Nenhum XML real, banco ativo ou transmissão SEFAZ foi
+  utilizado pelos testes.

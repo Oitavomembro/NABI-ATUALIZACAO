@@ -2445,6 +2445,61 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outra chave"):
             self.service.validate_authorized_xml(etree.tostring(root))
 
+    def test_transmissao_encapsula_consulta_no_contrato_soap_12(self):
+        observed = {}
+
+        class Response:
+            content = b"<retConsSitNFe><cStat>217</cStat><xMotivo>NF-e nao consta</xMotivo></retConsSitNFe>"
+
+            @staticmethod
+            def raise_for_status():
+                return None
+
+        def fake_post(_url, **kwargs):
+            observed.update(kwargs)
+            return Response()
+
+        self.service.http_post = fake_post
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO",
+            "endpoints": {"HOMOLOGACAO": {"consulta": "https://sefaz.invalid/consulta"}},
+        })
+        query = self.service.build_query_xml(
+            access_key="29260812345678000195550010000000011000000010"
+        )
+        self.service.transmit(
+            operation="consulta", model="55", xml=query,
+            pfx_path=self.pfx_path, password=self.password,
+        )
+
+        root = etree.fromstring(observed["data"])
+        self.assertEqual(etree.QName(root).namespace, "http://www.w3.org/2003/05/soap-envelope")
+        wrappers = root.xpath("//*[local-name()='nfeDadosMsg']")
+        self.assertEqual(len(wrappers), 1)
+        self.assertEqual(
+            etree.QName(wrappers[0]).namespace,
+            "http://www.portalfiscal.inf.br/nfe/wsdl/NFeConsultaProtocolo4",
+        )
+        self.assertEqual(len(wrappers[0].xpath("./*[local-name()='consSitNFe']")), 1)
+        self.assertIn("application/soap+xml", observed["headers"]["Content-Type"])
+        self.assertIn("NFeConsultaProtocolo4/nfeConsultaNF", observed["headers"]["Content-Type"])
+
+    def test_contratos_soap_cobrem_todas_as_operacoes_fiscais(self):
+        expected = {
+            "autorizacao": "NFeAutorizacao4/nfeAutorizacaoLote",
+            "recibo": "NFeRetAutorizacao4/nfeRetAutorizacaoLote",
+            "consulta": "NFeConsultaProtocolo4/nfeConsultaNF",
+            "status": "NFeStatusServico4/nfeStatusServicoNF",
+            "evento": "NFeRecepcaoEvento4/nfeRecepcaoEvento",
+            "inutilizacao": "NFeInutilizacao4/nfeInutilizacaoNF",
+        }
+        for operation, suffix in expected.items():
+            envelope, action = self.service._soap_request(operation=operation, xml=b"<teste/>")
+            root = etree.fromstring(envelope)
+            self.assertEqual(etree.QName(root).localname, "Envelope")
+            self.assertTrue(action.endswith(suffix))
+            self.assertEqual(len(root.xpath("//*[local-name()='nfeDadosMsg']/*[local-name()='teste']")), 1)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -1116,10 +1116,15 @@ class FiscalService:
         server_ca_bundle = ""
         try:
             server_ca_bundle = self._temporary_server_ca_bundle()
+            request_xml, soap_action = self._soap_request(operation=operation, xml=xml)
+            content_type = (
+                'application/soap+xml; charset=utf-8; '
+                f'action="{soap_action}"'
+            )
             response = self.http_post(
                 endpoint,
-                data=xml.encode("utf-8") if isinstance(xml, str) else xml,
-                headers={"Content-Type": "application/soap+xml; charset=utf-8", **dict(headers or {})},
+                data=request_xml,
+                headers={"Content-Type": content_type, **dict(headers or {})},
                 cert=(pem_cert, pem_key),
                 verify=server_ca_bundle,
                 timeout=int(timeout),
@@ -1137,6 +1142,36 @@ class FiscalService:
             for temp_path in (pem_cert, pem_key, server_ca_bundle):
                 if temp_path:
                     self._secure_delete_file(temp_path)
+
+    @staticmethod
+    def _soap_request(*, operation: str, xml: bytes | str) -> tuple[bytes, str]:
+        """Encapsula a mensagem fiscal no contrato SOAP 1.2 dos WS NF-e 4.00."""
+        contracts = {
+            "autorizacao": ("NFeAutorizacao4", "nfeAutorizacaoLote"),
+            "recibo": ("NFeRetAutorizacao4", "nfeRetAutorizacaoLote"),
+            "consulta": ("NFeConsultaProtocolo4", "nfeConsultaNF"),
+            "status": ("NFeStatusServico4", "nfeStatusServicoNF"),
+            "evento": ("NFeRecepcaoEvento4", "nfeRecepcaoEvento"),
+            "inutilizacao": ("NFeInutilizacao4", "nfeInutilizacaoNF"),
+        }
+        normalized = str(operation or "").strip().lower()
+        try:
+            service_name, method_name = contracts[normalized]
+        except KeyError as exc:
+            raise ValueError(f"Operação SOAP fiscal não suportada: {operation}.") from exc
+        raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
+        parser = etree.XMLParser(resolve_entities=False, no_network=True)
+        payload = etree.fromstring(raw, parser=parser)
+        if etree.QName(payload).localname == "Envelope":
+            return raw, f"http://www.portalfiscal.inf.br/nfe/wsdl/{service_name}/{method_name}"
+        soap = "http://www.w3.org/2003/05/soap-envelope"
+        wsdl = f"http://www.portalfiscal.inf.br/nfe/wsdl/{service_name}"
+        envelope = etree.Element(etree.QName(soap, "Envelope"), nsmap={"soap12": soap})
+        body = etree.SubElement(envelope, etree.QName(soap, "Body"))
+        data = etree.SubElement(body, etree.QName(wsdl, "nfeDadosMsg"))
+        data.append(payload)
+        action = f"{wsdl}/{method_name}"
+        return etree.tostring(envelope, xml_declaration=True, encoding="utf-8"), action
 
     def parse_response(self, xml: bytes | str) -> FiscalResponse:
         self._require_dependency("lxml")
