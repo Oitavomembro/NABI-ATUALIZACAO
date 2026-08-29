@@ -5,6 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from services.fiscal_regulatory_catalog_service import FiscalRegulatoryCatalogService
+
 
 @dataclass(frozen=True)
 class FiscalPreflightResult:
@@ -25,9 +27,15 @@ class FiscalPreflightResult:
 class FiscalPreflightService:
     """Prova local de prontidão fiscal sem rede, reserva ou persistência."""
 
-    def __init__(self, fiscal_service: Any, catalog_service: Any) -> None:
+    def __init__(
+        self, fiscal_service: Any, catalog_service: Any,
+        regulatory_service: Any | None = None,
+    ) -> None:
         self.fiscal_service = fiscal_service
         self.catalog_service = catalog_service
+        self.regulatory_service = regulatory_service or FiscalRegulatoryCatalogService(
+            runtime_root=getattr(fiscal_service, "runtime_root", None)
+        )
 
     def run(self, *, password: str) -> FiscalPreflightResult:
         config = self.fiscal_service.load_config()
@@ -38,6 +46,8 @@ class FiscalPreflightService:
         if not models:
             models = (model,)
         problems: list[str] = []
+        regulatory = self.regulatory_service.audit(environment=environment)
+        problems.extend(regulatory.problems)
         if environment != "HOMOLOGACAO":
             problems.append(
                 "O pré-voo fiscal só pode ser executado no ambiente de homologação."

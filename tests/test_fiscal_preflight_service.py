@@ -151,3 +151,20 @@ def test_pre_voo_recusa_configuracao_de_producao():
     assert result.success is False
     assert any("só pode ser executado" in problem for problem in result.problems)
     assert fiscal.built_models == []
+
+
+def test_pre_voo_bloqueia_catalogo_regulatorio_vencido():
+    fiscal = FakeFiscalService()
+    regulatory = SimpleNamespace(
+        audit=lambda **_kwargs: SimpleNamespace(
+            problems=("Revisão regulatória vencida",)
+        )
+    )
+    result = FiscalPreflightService(
+        fiscal, FakeCatalogService(), regulatory_service=regulatory
+    ).run(password="senha")
+
+    assert result.success is False
+    assert "Revisão regulatória vencida" in result.problems
+    assert result.validated_models == ()
+    assert fiscal.built_models == []

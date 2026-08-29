@@ -20,6 +20,7 @@ from urllib.parse import urlsplit
 from services.fiscal_state_catalog import FISCAL_STATE_PROFILES, STATE_CODES, state_profile
 from services.fiscal_outbox_service import FiscalOutboxService
 from services.fiscal_readiness_gate import FiscalReadinessGate
+from services.fiscal_regulatory_catalog_service import FiscalRegulatoryCatalogService
 from services.fiscal_product_profile import FiscalProductProfile
 from services.fiscal_operation_resolver import FiscalOperationResolver
 from services.fiscal_rtc_resolver import FiscalRtcResolver
@@ -197,7 +198,12 @@ class FiscalService:
 
     def bind_readiness_catalog(self, catalog_service: Any) -> None:
         """Liga o auditor oficial do catálogo ao mesmo portão fiscal."""
-        self._readiness_gate = FiscalReadinessGate(self, catalog_service)
+        regulatory_service = FiscalRegulatoryCatalogService(
+            runtime_root=self.runtime_root
+        )
+        self._readiness_gate = FiscalReadinessGate(
+            self, catalog_service, regulatory_service
+        )
         self._readiness_enforced = True
 
     def require_operational_readiness(

@@ -16,9 +16,13 @@ class FiscalReadinessResult:
 class FiscalReadinessGate:
     """Portão único, local e fail-closed para operações fiscais oficiais."""
 
-    def __init__(self, fiscal_service: Any, catalog_service: Any | None = None) -> None:
+    def __init__(
+        self, fiscal_service: Any, catalog_service: Any | None = None,
+        regulatory_service: Any | None = None,
+    ) -> None:
         self.fiscal_service = fiscal_service
         self.catalog_service = catalog_service
+        self.regulatory_service = regulatory_service
 
     def evaluate(
         self, *, operation: str, model: str, password: str,
@@ -28,6 +32,13 @@ class FiscalReadinessGate:
         service = self.fiscal_service
         config = service.load_config()
         problems = list(service.validate_ready(operation=operation, model=model))
+        if self.regulatory_service is None:
+            problems.append("O catálogo regulatório fiscal não está configurado.")
+        else:
+            regulatory = self.regulatory_service.audit(
+                environment=str(config.get("environment") or "HOMOLOGACAO")
+            )
+            problems.extend(regulatory.problems)
         certificate_path = str(config.get("certificate_path") or "").strip()
         try:
             certificate = service.inspect_certificate(certificate_path, password)
