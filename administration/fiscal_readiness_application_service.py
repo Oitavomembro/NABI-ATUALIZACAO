@@ -192,8 +192,13 @@ class FiscalReadinessApplicationService:
         models = []
         all_problems: list[str] = []
         for model in ("55", "65"):
-            problems = tuple(self._fiscal.validate_ready(operation="status", model=model))
-            all_problems.extend(problems)
+            enabled = model in enabled_models
+            problems = (
+                tuple(self._fiscal.validate_ready(operation="status", model=model))
+                if enabled else ()
+            )
+            if enabled:
+                all_problems.extend(problems)
             series = int(config.get(f"sale_series_{model}", 1))
             numbering = self._fiscal.numbering_scope(
                 model=model, series=series, environment=environment,
@@ -201,7 +206,7 @@ class FiscalReadinessApplicationService:
             models.append(FiscalModelReadiness(
                 model=model,
                 label=str(self._fiscal.MODEL_LABELS.get(model) or f"Modelo {model}"),
-                enabled=model in enabled_models,
+                enabled=enabled,
                 local_problems=problems,
                 numbering_initialized=bool(numbering.get("initialized")),
                 next_number=(

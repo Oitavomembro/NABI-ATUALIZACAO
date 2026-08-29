@@ -211,7 +211,7 @@ class FakeAcceptedCheckoutDialog:
 class FakePostSaleDialog:
     calls = []
 
-    def __init__(self, _view_model, result, parent=None):
+    def __init__(self, _view_model, result, parent=None, **_kwargs):
         type(self).calls.append(("init", result.sale_id, parent))
 
     def exec(self):
@@ -1088,6 +1088,42 @@ class PDVQtTests(unittest.TestCase):
             if shortcut.key().toString() == "F6"
         )
         self.assertFalse(f6.autoRepeat())
+
+    def test_modo_fiscal_esconde_item_avulso_e_identifica_emissao_nfe_55(self):
+        fiscal_window = PDVWindow(
+            self.view_model,
+            fiscal_mode=True,
+            fiscal_sale_service=object(),
+            require_registered_customer=True,
+        )
+        try:
+            self.assertFalse(fiscal_window.loose_item.isVisible())
+            self.assertFalse(fiscal_window.loose_item.isEnabled())
+            self.assertIn("EMITIR NF-e 55", fiscal_window.checkout_button.text())
+        finally:
+            fiscal_window.close()
+
+    def test_modo_fiscal_bloqueia_consumidor_final_antes_do_pagamento(self):
+        fiscal_window = PDVWindow(
+            self.view_model,
+            fiscal_mode=True,
+            fiscal_sale_service=object(),
+            require_registered_customer=True,
+        )
+        try:
+            self.view_model.select_final_consumer()
+            self.view_model.session.add_item(
+                CartItem("PRODUTO", 1, Decimal("10"), product_id=9)
+            )
+            fiscal_window.refresh_cart()
+            with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+                fiscal_window._checkout()
+            self.assertIn(
+                "Selecione uma ficha de cliente",
+                fiscal_window.statusBar().currentMessage(),
+            )
+        finally:
+            fiscal_window.close()
 
     def test_f6_suspende_sem_cliente_sem_checkout_e_limpa_sessao(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))

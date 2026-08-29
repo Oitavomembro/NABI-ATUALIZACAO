@@ -50,6 +50,15 @@ class FiscalPreflightService:
                     operation="autorizacao", model=current_model
                 )
             )
+            series = int(config.get(f"sale_series_{current_model}", 1))
+            numbering = self.fiscal_service.numbering_scope(
+                model=current_model, series=series, environment=environment,
+            )
+            if not numbering.get("initialized"):
+                problems.append(
+                    f"{label}: a numeração fiscal ainda não foi inicializada "
+                    f"para a série {series}."
+                )
         crt = self.fiscal_service.TAX_REGIME_CODES.get(
             str(config.get("tax_regime") or "").upper(), 0
         )
@@ -80,6 +89,13 @@ class FiscalPreflightService:
             trust = self.fiscal_service.validate_certificate_trust(certificate_path, password)
             if not trust.trusted:
                 problems.append(f"Cadeia ICP-Brasil não confirmada: {trust.message}")
+            revocation = self.fiscal_service.check_certificate_revocation(
+                certificate_path, password
+            )
+            if not revocation.good:
+                problems.append(
+                    f"Situação de revogação não confirmada: {revocation.message}"
+                )
         except Exception as exc:
             problems.append(str(exc))
 
@@ -87,6 +103,11 @@ class FiscalPreflightService:
             for current_model in models:
                 label = "NF-e 55" if current_model == "55" else "NFC-e 65"
                 try:
+                    series = int(config.get(f"sale_series_{current_model}", 1))
+                    numbering = self.fiscal_service.numbering_scope(
+                        model=current_model, series=series, environment=environment,
+                    )
+                    number = int(numbering.get("next_number") or 1)
                     fiscal_items = self.fiscal_service.prepare_sale_items(
                         [{"produto_id": catalog.ready_product_ids[0], "item": "PRÉ-VOO", "qtd": 1, "preco": "1.00"}],
                         destination=1, crt=crt,
@@ -104,7 +125,7 @@ class FiscalPreflightService:
                     xml, access_key = self.fiscal_service.build_document_xml(
                         issuer=issuer, recipient=recipient, items=fiscal_items,
                         document={
-                            "model": current_model, "series": 999, "number": 1,
+                            "model": current_model, "series": series, "number": number,
                             "state_code": self.fiscal_service.STATE_CODES[str(config.get("state") or "").upper()],
                             "issued_at": issued_at, "environment": "HOMOLOGACAO",
                             "numeric_code": "00000001", "destination": 1,

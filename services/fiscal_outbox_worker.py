@@ -89,7 +89,7 @@ class FiscalOutboxWorker:
             worker_id=self.worker_id,
             lease_seconds=self.lease_seconds,
             now=now,
-            operations=("autorizacao", "recibo", "evento"),
+            operations=("autorizacao", "recibo", "consulta", "evento"),
         )
         reconciliation = False
         if claimed is None:

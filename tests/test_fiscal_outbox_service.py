@@ -130,14 +130,24 @@ class FiscalOutboxServiceTests(unittest.TestCase):
     def test_lease_vencido_apos_inicio_de_transmissao_nao_e_reivindicado(self):
         self._enqueue(); now = datetime.now(timezone.utc) + timedelta(seconds=1)
         claimed = self.service.claim_next(worker_id="w1", lease_seconds=1, now=now)
-        rows = self.service.list_items()
-        rows[0]["transmission_started_at"] = now.isoformat()
-        self.service.save_records(rows)
+        claimed["transmission_started_at"] = now.isoformat()
+        self.service.save_claimed_record(claimed, worker_id="w1", finish=False)
         recovered = self.service.claim_next(
             worker_id="w2", lease_seconds=60, now=now + timedelta(seconds=2)
         )
         self.assertIsNone(recovered)
         self.assertEqual(self.service.list_items()[0]["status"], "RESPOSTA_DESCONHECIDA")
+
+    def test_fotografia_administrativa_nao_sobrescreve_claim_do_worker(self):
+        self._enqueue()
+        stale = self.service.list_items()
+        self.service.claim_next(worker_id="worker-real", lease_seconds=60)
+        stale[0]["status"] = "PENDENTE"
+        with self.assertRaisesRegex(RuntimeError, "fila fiscal mudou"):
+            self.service.save_records(stale)
+        current = self.service.list_items()[0]
+        self.assertEqual(current["status"], "PROCESSANDO")
+        self.assertEqual(current["worker_id"], "worker-real")
 
     def test_concluido_nao_e_reivindicado_novamente(self):
         self._enqueue(); claimed = self.service.claim_next(worker_id="w1")

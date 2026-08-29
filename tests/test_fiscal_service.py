@@ -247,6 +247,8 @@ class FiscalServiceTests(unittest.TestCase):
             },
         })
         self.service.configure_certificate(self.pfx_path, self.password)
+        self.service.initialize_numbering(model="55", series=1, next_number=1)
+        self.service.initialize_numbering(model="65", series=1, next_number=1)
 
         class ReadyCatalog:
             def audit(_self, *, crt):
@@ -256,9 +258,11 @@ class FiscalServiceTests(unittest.TestCase):
                 })()
 
         with patch.object(
-            self.service,
-            "validate_certificate_trust",
+            self.service, "validate_certificate_trust",
             return_value=type("Trust", (), {"trusted": True, "message": "Cadeia de teste válida."})(),
+        ), patch.object(
+            self.service, "check_certificate_revocation",
+            return_value=type("Revocation", (), {"good": True, "message": "Não revogado."})(),
         ):
             result = FiscalPreflightService(self.service, ReadyCatalog()).run(password=self.password)
         self.assertTrue(result.success, result.problems)
@@ -358,6 +362,16 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertFalse(production["initialized"])
         self.assertFalse(other_model["initialized"])
+
+    def test_numeração_corrompida_bloqueia_em_vez_de_reiniciar_em_um(self):
+        conn = self.connect()
+        conn.execute(
+            "INSERT OR REPLACE INTO configuracoes(chave,valor) VALUES(?,?)",
+            (self.service.NUMBERING_KEY, "{corrompido"),
+        )
+        conn.commit(); conn.close()
+        with self.assertRaisesRegex(RuntimeError, "corrompida"):
+            self.service.reserve_number(model="55", series=1)
 
     def test_numeração_inicial_nao_aceita_actor_livre(self):
         with self.assertRaisesRegex(TypeError, "actor"):

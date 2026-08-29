@@ -94,6 +94,13 @@ class FiscalOutboxService:
         if row is None:
             raise RuntimeError("Não foi possível persistir o item da outbox fiscal.")
         result = FiscalOutboxService._row_dict(connection, row)
+        supplied_original = str(original_xml_b64 or xml_b64 or "")
+        stored_original = str(result.get("original_xml_b64") or result.get("xml_b64") or "")
+        if supplied_original and stored_original and supplied_original != stored_original:
+            raise RuntimeError(
+                "Já existe uma obrigação fiscal com esta chave de acesso, mas o XML é diferente. "
+                "A operação foi bloqueada para impedir substituição ou retransmissão indevida."
+            )
         if fiscal_document_id:
             connection.execute(
                 """UPDATE fiscal_sale_documents
@@ -164,18 +171,28 @@ class FiscalOutboxService:
             connection.close()
 
     def save_records(self, records: list[Mapping[str, Any]]) -> None:
+        """Persiste edições administrativas sem atropelar um claim concorrente.
+
+        Os registros vêm de uma fotografia anterior da fila. O ``updated_at``
+        funciona como versão otimista; se um worker reivindicou ou concluiu o
+        item desde a leitura, toda a alteração é recusada e deve ser refeita a
+        partir do estado atual.
+        """
         connection = self.connection_factory()
         now = datetime.now(timezone.utc).isoformat()
         try:
             connection.execute("BEGIN IMMEDIATE")
             self.ensure_schema(connection)
             for record in records:
-                connection.execute(
+                expected_updated_at = str(record.get("updated_at") or "")
+                changed = connection.execute(
                     """UPDATE fiscal_outbox SET operation=?,status=?,attempts=?,max_attempts=?,
                            retry_minutes=?,next_attempt_at=?,worker_id=?,claimed_at=?,lease_until=?,
                            receipt=?,last_error_code=?,last_error_message=?,xml_b64=?,
                            original_xml_b64=?,contingency=?,contingency_deadline_at=?,metadata_json=?,updated_at=?
-                         WHERE id=?""",
+                         WHERE id=? AND status<>'PROCESSANDO'
+                           AND COALESCE(worker_id,'')=''
+                           AND COALESCE(updated_at,'')=?""",
                     (str(record.get("operation") or ""), str(record.get("status") or "PENDENTE").upper(),
                      int(record.get("attempts") or 0), int(record.get("max_attempts") or 5),
                      int(record.get("retry_minutes") or 5), str(record.get("next_attempt_at") or ""),
@@ -185,8 +202,13 @@ class FiscalOutboxService:
                      str(record.get("xml_b64") or ""), str(record.get("original_xml_b64") or ""),
                      1 if record.get("contingency") else 0, str(record.get("contingency_deadline_at") or ""),
                      json.dumps(dict(record), ensure_ascii=False, sort_keys=True, default=str),
-                     now, int(record["id"])),
-                )
+                     now, int(record["id"]), expected_updated_at),
+                ).rowcount
+                if changed != 1:
+                    raise RuntimeError(
+                        "A fila fiscal mudou enquanto esta ação era executada. "
+                        "Atualize a tela e tente novamente; nenhum estado foi sobrescrito."
+                    )
             connection.commit()
         except Exception:
             connection.rollback()

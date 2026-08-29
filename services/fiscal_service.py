@@ -4183,13 +4183,30 @@ class FiscalService:
     def _load_numbering_conn(self, conn: Any) -> dict[str, Any]:
         row = conn.execute("SELECT valor FROM configuracoes WHERE chave = ?", (self.NUMBERING_KEY,)).fetchone()
         if row is None:
+            has_history = False
+            for table in ("fiscal_sale_documents", "fiscal_outbox"):
+                exists = conn.execute(
+                    "SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (table,)
+                ).fetchone()
+                if exists and conn.execute(f"SELECT 1 FROM {table} LIMIT 1").fetchone():
+                    has_history = True
+                    break
+            if has_history:
+                raise RuntimeError(
+                    "A numeração fiscal não foi encontrada, mas já existem documentos fiscais. "
+                    "A emissão foi bloqueada para impedir reutilização de número."
+                )
             return {"scopes": {}, "records": {}, "initializations": []}
         try:
             data = json.loads(str(row[0]))
-        except (TypeError, ValueError):
-            return {"scopes": {}, "records": {}, "initializations": []}
+        except (TypeError, ValueError) as exc:
+            raise RuntimeError(
+                "A numeração fiscal armazenada está corrompida; emissão bloqueada."
+            ) from exc
         if not isinstance(data, dict):
-            return {"scopes": {}, "records": {}, "initializations": []}
+            raise RuntimeError(
+                "A numeração fiscal armazenada possui formato inválido; emissão bloqueada."
+            )
         data.setdefault("scopes", {})
         data.setdefault("records", {})
         data.setdefault("initializations", [])

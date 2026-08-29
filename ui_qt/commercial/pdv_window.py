@@ -38,11 +38,17 @@ class PDVWindow(QMainWindow):
         profile_label: str = "COMERCIAL / NÃO FISCAL",
         loose_items_only: bool = False,
         require_registered_customer: bool = False,
+        fiscal_mode: bool = False,
+        fiscal_sale_service=None,
+        fiscal_outbox_worker=None,
     ) -> None:
         super().__init__()
         self.view_model = view_model
         self._loose_items_only = bool(loose_items_only)
         self._require_registered_customer = bool(require_registered_customer)
+        self._fiscal_mode = bool(fiscal_mode)
+        self._fiscal_sale_service = fiscal_sale_service
+        self._fiscal_outbox_worker = fiscal_outbox_worker
         # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
         # montada. O filtro precisa existir em estado válido desde o início.
         self._enter_widgets = ()
@@ -81,6 +87,10 @@ class PDVWindow(QMainWindow):
             self.loose_item.hide()
             self.expanded_product_search.hide()
             self._dropdown_button.hide()
+        if self._fiscal_mode:
+            self.loose_item.setChecked(False)
+            self.loose_item.setEnabled(False)
+            self.loose_item.hide()
         self._install_shortcuts()
         self._install_enter_filters()
         initial_focus = self._active_item_input() if self._loose_items_only else self.customer_search
@@ -323,7 +333,10 @@ class PDVWindow(QMainWindow):
         future.setObjectName("muted")
         future.setAlignment(Qt.AlignmentFlag.AlignCenter)
         summary_layout.addWidget(future)
-        self.checkout_button = QPushButton("FINALIZAR VENDA NÃO FISCAL  [F9]")
+        self.checkout_button = QPushButton(
+            "EMITIR NF-e 55 E FINALIZAR  [F9]"
+            if self._fiscal_mode else "FINALIZAR VENDA NÃO FISCAL  [F9]"
+        )
         self.checkout_button.setObjectName("checkout")
         self.checkout_button.clicked.connect(lambda _checked=False: self._conclude_action())
         self.suspend_button = QPushButton("Suspender venda  [F6]")
@@ -541,7 +554,10 @@ class PDVWindow(QMainWindow):
             self.budget_button.setText("ORÇAMENTO DESLIGADO  [F5]")
             self.budget_button.setObjectName("inactive")
             self.budget_button.setStyleSheet("")
-            self.checkout_button.setText("FINALIZAR VENDA NÃO FISCAL  [F9]")
+            self.checkout_button.setText(
+                "EMITIR NF-e 55 E FINALIZAR  [F9]"
+                if self._fiscal_mode else "FINALIZAR VENDA NÃO FISCAL  [F9]"
+            )
         self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _conclude_action(self) -> None:
@@ -905,6 +921,14 @@ class PDVWindow(QMainWindow):
             self._show_error(error)
 
     def _toggle_loose(self, enabled: bool) -> None:
+        if self._fiscal_mode and enabled:
+            self.loose_item.blockSignals(True)
+            self.loose_item.setChecked(False)
+            self.loose_item.blockSignals(False)
+            self.statusBar().showMessage(
+                "NF-e 55 exige produto cadastrado com ficha fiscal completa.", 4000
+            )
+            return
         if self._loose_items_only and not enabled:
             self.loose_item.blockSignals(True)
             self.loose_item.setChecked(True)
@@ -1074,7 +1098,22 @@ class PDVWindow(QMainWindow):
             self.customer_search.clear()
             self.refresh_cart()
             try:
-                PostSaleDialog(self.view_model, result, self).exec()
+                fiscal_info = getattr(
+                    self.view_model.application.checkout_gateway,
+                    "last_fiscal_submission", None,
+                )
+                if self._fiscal_mode and not fiscal_info:
+                    raise RuntimeError(
+                        "A venda foi confirmada sem vínculo fiscal. Não tente emitir novamente; "
+                        "abra a Central Fiscal para diagnóstico."
+                    )
+                if fiscal_info and self._fiscal_outbox_worker is not None:
+                    self._fiscal_outbox_worker.wake()
+                PostSaleDialog(
+                    self.view_model, result, self,
+                    fiscal_info=fiscal_info,
+                    fiscal_sale_service=self._fiscal_sale_service,
+                ).exec()
             except Exception as error:
                 QMessageBox.critical(
                     self,

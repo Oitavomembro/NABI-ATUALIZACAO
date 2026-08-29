@@ -106,3 +106,16 @@ def test_pre_voo_usa_senha_somente_da_sessao_e_nao_recebe_segredo_da_gui():
     result = service.run_local_preflight()
     assert result is service._preflight.run.return_value
     service._preflight.run.assert_called_once_with(password="segredo-em-memoria")
+
+
+def test_snapshot_nao_bloqueia_por_modelo_desabilitado():
+    fiscal = Fiscal()
+    fiscal.config["enabled_models"] = ["55"]
+    calls = []
+    fiscal.validate_ready = lambda **kwargs: calls.append(kwargs["model"]) or []
+    snapshot = FiscalReadinessApplicationService(fiscal, Security()).snapshot()
+    assert calls == ["55"]
+    by_model = {item.model: item for item in snapshot.models}
+    assert by_model["55"].enabled is True
+    assert by_model["65"].enabled is False
+    assert by_model["65"].local_problems == ()

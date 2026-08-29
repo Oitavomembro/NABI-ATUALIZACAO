@@ -11,6 +11,15 @@ class NabiCodeCheckoutGateway:
     def __init__(self, transaction_service, pdv_service) -> None:
         self.transaction_service = transaction_service
         self.pdv_service = pdv_service
+        self.fiscal_sale_service = None
+        self.fiscal_required = False
+        self.last_fiscal_submission: dict[str, object] | None = None
+
+    def bind_fiscal(self, fiscal_sale_service, *, required: bool) -> None:
+        """Liga o checkout ao fiscal sem permitir queda silenciosa para comercial."""
+
+        self.fiscal_sale_service = fiscal_sale_service
+        self.fiscal_required = bool(required)
 
     def checkout(
         self,
@@ -54,15 +63,62 @@ class NabiCodeCheckoutGateway:
             )
 
         validation = command.payment_plan.validate_against(command.final_total)
-        finalized = self.transaction_service.finalize_sale(
-            customer_id=command.customer_id,
-            customer_name=customer.name,
-            items=items,
-            payments=payments,
-            received=validation.received,
-            change=validation.change,
-            user=user,
-        )
+        draft = None
+        self.last_fiscal_submission = None
+        if self.fiscal_required:
+            if self.fiscal_sale_service is None:
+                raise RuntimeError("Modo fiscal ativo, mas o emissor NF-e não foi conectado ao PDV.")
+            if any(item["item_avulso"] for item in items):
+                raise ValueError("Venda fiscal exige que todos os itens estejam cadastrados.")
+            config = self.fiscal_sale_service.fiscal_service.load_config()
+            if not bool(config.get("enabled")):
+                raise ValueError("O modo fiscal está ativo, mas a configuração fiscal não está habilitada.")
+            if str(config.get("default_model") or "") != "55":
+                raise ValueError("Esta empresa exige NF-e modelo 55 como modelo fiscal padrão.")
+            recipient, destination = self.fiscal_sale_service.recipient_for_customer(
+                command.customer_id, model="55"
+            )
+            draft = self.fiscal_sale_service.prepare(
+                items=items,
+                payments=payments,
+                recipient=recipient,
+                destination=destination,
+            )
+        try:
+            finalized = self.transaction_service.finalize_sale(
+                customer_id=command.customer_id,
+                customer_name=customer.name,
+                items=items,
+                payments=payments,
+                received=validation.received,
+                change=validation.change,
+                user=user,
+                after_sale_in_transaction=(
+                    (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
+                        connection, sale_id, draft
+                    )) if draft is not None else None
+                ),
+            )
+        except Exception:
+            if draft is not None:
+                try:
+                    self.fiscal_sale_service.fiscal_service.release_number(
+                        draft.reservation_id,
+                        reason="A transação comercial da venda foi revertida.",
+                    )
+                except Exception:
+                    # A falha principal precisa permanecer visível. Uma reserva
+                    # não liberada expira de forma segura e nunca autoriza venda.
+                    pass
+            raise
+        if draft is not None:
+            self.last_fiscal_submission = {
+                "sale_id": int(finalized.sale_id),
+                "access_key": draft.access_key,
+                "model": draft.model,
+                "environment": draft.environment,
+                "status": "ENFILEIRADO",
+            }
         return PersistedCheckout(
             sale_id=int(finalized.sale_id),
             total=finalized.total,

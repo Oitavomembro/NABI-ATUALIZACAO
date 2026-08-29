@@ -27,12 +27,19 @@ def create_application(
     assistant_panel_factory=None,
     administrative_hub_factory=None,
     auto_activate_assistant=False,
+    fiscal_mode=False,
+    fiscal_sale_service=None,
+    fiscal_outbox_worker=None,
 ) -> tuple[QApplication, PDVWindow]:
     qt_application = QApplication.instance() or QApplication(argv if argv is not None else sys.argv)
     qt_application.setApplicationName("NabiCode")
     qt_application.setOrganizationName("NabiCode")
     window = PDVWindow(
-        PDVViewModel(application), cash_label=cash_label, profile_label=profile_label
+        PDVViewModel(application), cash_label=cash_label, profile_label=profile_label,
+        fiscal_mode=fiscal_mode,
+        fiscal_sale_service=fiscal_sale_service,
+        fiscal_outbox_worker=fiscal_outbox_worker,
+        require_registered_customer=bool(fiscal_mode),
     )
     if administrative_hub_factory is not None:
         toolbar = QToolBar("NabiCode", window)
@@ -133,6 +140,9 @@ def create_shell_application(
     daily_backup_service=None,
     visual_preferences=None,
     auto_activate_assistant=False,
+    fiscal_mode=False,
+    fiscal_sale_service=None,
+    fiscal_outbox_worker=None,
 ):
     """Cria o shell Legacy; o PDV só nasce quando Vendas/F2 for acionado."""
 
@@ -147,6 +157,10 @@ def create_shell_application(
             PDVViewModel(application),
             cash_label=cash_label,
             profile_label=profile_label,
+            fiscal_mode=fiscal_mode,
+            fiscal_sale_service=fiscal_sale_service,
+            fiscal_outbox_worker=fiscal_outbox_worker,
+            require_registered_customer=bool(fiscal_mode),
         )
 
     window = NabiCodeShellWindow(
@@ -212,4 +226,8 @@ def run_shell(application, security, modules, argv=None, **kwargs) -> int:
     controller = getattr(window, "daily_backup_controller", None)
     if controller is not None:
         controller.start()
+    fiscal_worker = kwargs.get("fiscal_outbox_worker")
+    if fiscal_worker is not None:
+        fiscal_worker.start()
+        qt_application.aboutToQuit.connect(fiscal_worker.stop)
     return qt_application.exec()

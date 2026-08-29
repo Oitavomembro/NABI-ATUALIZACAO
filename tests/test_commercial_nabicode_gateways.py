@@ -64,6 +64,9 @@ class FakeTransactionService:
 
     def finalize_sale(self, **kwargs):
         self.kwargs = kwargs
+        callback = kwargs.get("after_sale_in_transaction")
+        if callback is not None:
+            callback("CONNECTION", 44)
         total = sum(item["qtd"] * item["preco"] for item in kwargs["items"])
         return SimpleNamespace(
             sale_id=44,
@@ -72,6 +75,29 @@ class FakeTransactionService:
             change=Decimal("0.00"),
             status="PENDENTE",
         )
+
+
+class FakeFiscalSaleService:
+    def __init__(self):
+        self.persisted = []
+        self.released = []
+        self.fiscal_service = SimpleNamespace(
+            load_config=lambda: {"enabled": True, "default_model": "55"},
+            release_number=lambda reservation_id, **_kwargs: self.released.append(reservation_id),
+        )
+
+    def recipient_for_customer(self, customer_id, *, model):
+        assert customer_id == 7 and model == "55"
+        return {"document": "12345678901", "name": "CLIENTE"}, 1
+
+    def prepare(self, **_kwargs):
+        return SimpleNamespace(
+            reservation_id="R55", access_key="29" + "1" * 42,
+            model="55", environment="HOMOLOGACAO",
+        )
+
+    def persist_draft(self, connection, sale_id, draft):
+        self.persisted.append((connection, sale_id, draft.reservation_id))
 
 
 class FakeReceiptService:
@@ -295,6 +321,36 @@ class NabiCodeGatewayTests(unittest.TestCase):
         payment = transaction.kwargs["payments"][0]
         self.assertEqual(payment["card_integration"], 2)
         self.assertEqual(payment["card_authorization"], "NSU123")
+
+    def test_checkout_fiscal_persiste_nfe_na_mesma_transacao_da_venda(self):
+        transaction = FakeTransactionService()
+        fiscal = FakeFiscalSaleService()
+        gateway = NabiCodeCheckoutGateway(transaction, FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+        command = CheckoutCommand(
+            customer_id=7,
+            items=[CartItem("ITEM", 1, Decimal("10"), product_id=10)],
+            payment_plan=PaymentPlan([Payment(PaymentMethod.PIX, Decimal("10"))]),
+        )
+        result = gateway.checkout(
+            command, customer=CustomerRecord(7, "C7", "CLIENTE"), user="op"
+        )
+        self.assertEqual(result.sale_id, 44)
+        self.assertEqual(fiscal.persisted, [("CONNECTION", 44, "R55")])
+        self.assertEqual(gateway.last_fiscal_submission["status"], "ENFILEIRADO")
+
+    def test_checkout_fiscal_nunca_aceita_item_avulso(self):
+        gateway = NabiCodeCheckoutGateway(FakeTransactionService(), FakeLegacyPDVService())
+        gateway.bind_fiscal(FakeFiscalSaleService(), required=True)
+        command = CheckoutCommand(
+            customer_id=7,
+            items=[CartItem("AVULSO", 1, Decimal("10"))],
+            payment_plan=PaymentPlan([Payment(PaymentMethod.PIX, Decimal("10"))]),
+        )
+        with self.assertRaisesRegex(ValueError, "itens estejam cadastrados"):
+            gateway.checkout(
+                command, customer=CustomerRecord(7, "C7", "CLIENTE"), user="op"
+            )
 
     def test_customer_gateway_pesquisa_e_obtem_por_id(self):
         repository = FakeCustomerRepository()

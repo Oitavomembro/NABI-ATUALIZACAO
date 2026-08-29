@@ -223,6 +223,12 @@ class FiscalOutboxWorkerTests(unittest.TestCase):
         self.worker().run_once()
         self.assertEqual(self.processor.calls, 1)
 
+    def test_consulta_pendente_e_processada_no_ciclo_normal(self):
+        self.enqueue(operation="consulta")
+        result = self.worker().run_once()
+        self.assertEqual(result["status"], "CONCLUIDO")
+        self.assertEqual(self.processor.calls, 1)
+
     def test_concluido_nao_retorna_ao_worker(self):
         self.enqueue(status="CONCLUIDO")
         self.assertIsNone(self.worker().run_once())

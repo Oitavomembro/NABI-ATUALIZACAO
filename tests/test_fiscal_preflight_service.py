@@ -25,6 +25,12 @@ class Trust:
     message: str = "Cadeia válida."
 
 
+@dataclass
+class Revocation:
+    good: bool = True
+    message: str = "Certificado não revogado."
+
+
 class FakeCatalogService:
     def __init__(self, report=None):
         self.report = report or Catalog()
@@ -60,6 +66,13 @@ class FakeFiscalService:
     def validate_certificate_trust(self, path, password):
         assert (path, password) == ("cert.pfx", "senha")
         return Trust()
+    def check_certificate_revocation(self, path, password):
+        assert (path, password) == ("cert.pfx", "senha")
+        return Revocation()
+    def numbering_scope(self, *, model, series, environment):
+        assert model in {"55", "65"}
+        assert series == 1 and environment in {"HOMOLOGACAO", "PRODUCAO"}
+        return {"initialized": True, "next_number": 7}
     def _normalize_cnpj(self, value): return value
     def prepare_sale_items(self, items, **_kwargs): return [{"code": "P1"}]
     def build_document_xml(self, **kwargs):
@@ -86,6 +99,24 @@ def test_pre_voo_assina_e_valida_localmente_sem_transmitir():
     assert len(result.xml_sha256_by_model) == 2
     assert fiscal.built_models == ["55", "65"]
     assert fiscal.transmitted is False
+
+
+def test_pre_voo_bloqueia_numeração_não_inicializada():
+    fiscal = FakeFiscalService()
+    fiscal.numbering_scope = lambda **_kwargs: {"initialized": False}
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert "numeração fiscal ainda não foi inicializada" in " ".join(result.problems)
+
+
+def test_pre_voo_bloqueia_revogação_não_confirmada():
+    fiscal = FakeFiscalService()
+    fiscal.check_certificate_revocation = lambda *_args: Revocation(
+        good=False, message="consulta indisponível"
+    )
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert "revogação não confirmada" in " ".join(result.problems)
 
 
 def test_pre_voo_nao_gera_xml_quando_catalogo_tem_pendencia():

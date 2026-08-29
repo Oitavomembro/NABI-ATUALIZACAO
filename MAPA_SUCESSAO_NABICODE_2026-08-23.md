@@ -4751,3 +4751,30 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação Qt relacionada: `124 passed`, `2 subtests passed`; `compileall` e
   `git diff --check` aprovados. A venda física observada permaneceu registrada
   como `NÃO FISCAL` e não houve comunicação com a SEFAZ.
+
+## Auditoria final do modo fiscal obrigatório — 29/08/2026
+
+- branch isolada: `codex/auditoria-fiscal-final`, derivada do fechamento
+  `2518b9b`; nenhum arquivo do checkout ativo nem do emissor de licenças foi
+  alterado;
+- quando `modo_operacao=FISCAL`, o PDV Qt não pode mais cair silenciosamente em
+  venda comercial: exige licença fiscal, cliente cadastrado, item cadastrado e
+  configuração NF-e modelo 55;
+- o rascunho NF-e, a venda, o estoque, os pagamentos, o vínculo fiscal e a
+  outbox são persistidos na mesma transação. Falha fiscal anterior ao commit
+  reverte a venda e libera a reserva; depois do commit a tela acompanha chave,
+  status e protocolo sem recomendar repetição;
+- a outbox passa a consumir consultas agendadas e usa versão otimista/posse de
+  claim para impedir que uma ação manual antiga sobrescreva um worker ou cause
+  retransmissão;
+- numeração ausente diante de histórico fiscal, JSON de numeração corrompido e
+  chave já existente com XML divergente agora bloqueiam em modo fail-closed;
+- prontidão valida somente modelos habilitados; pré-voo exige numeração real da
+  série configurada, cadeia e revogação do A1, sem usar série/número fictícios;
+- validação focada lógica: `94 passed`; matriz fiscal ampliada: `441 passed` e
+  `10 subtests passed`; Qt fiscal: `171 passed` e `2 subtests passed`; regressão
+  integral: `2750 passed`, `1 skipped`, `492 subtests passed`. A única falha de
+  ambiente foi o ensaio de primeira instalação no Python temporário, que não
+  contém os runtimes Tcl/Tk exigidos pelo empacotador; todos os testes de código
+  fiscal, comercial e Qt foram aprovados. `compileall` e `git diff --check`
+  aprovados. Nenhuma transmissão à SEFAZ nem banco ativo foi usado.

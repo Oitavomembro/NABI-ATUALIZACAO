@@ -50,6 +50,8 @@ from services.report_service import ReportService
 from services.cash_service import CashService
 from services.backup_service import BackupService
 from services.fiscal_service import FiscalService
+from services.fiscal_sale_service import FiscalSaleService
+from services.fiscal_outbox_worker import FiscalOutboxWorker
 from services.fiscal_catalog_readiness_service import FiscalCatalogReadinessService
 from services.assisted_product_stock_service import AssistedProductStockService
 from repositories.system_repository import SystemRepository
@@ -370,6 +372,13 @@ def main(argv=None) -> int:
         if ApplicationLoginDialog(module_security).exec() != QDialog.DialogCode.Accepted:
             return 5
         fiscal_service = fiscal_catalog_service = nfe_purchase_import = None
+        fiscal_sale_service = fiscal_outbox_worker = None
+        fiscal_mode = str(system.get_config("modo_operacao") or "COMERCIAL").strip().upper() == "FISCAL"
+        if fiscal_mode and not license_gate.allows(Capability.FISCAL_WRITE):
+            raise PermissionError(
+                "A empresa está em modo fiscal, mas a licença atual não libera o módulo fiscal. "
+                "O PDV foi bloqueado para impedir venda não fiscal."
+            )
         if license_gate.allows(Capability.FISCAL_WRITE):
             fiscal_service = FiscalService(
                 database.connect,
@@ -385,6 +394,9 @@ def main(argv=None) -> int:
             )
             fiscal_catalog_service = FiscalCatalogReadinessService(database.connect)
             fiscal_service.bind_readiness_catalog(fiscal_catalog_service)
+            fiscal_sale_service = FiscalSaleService(fiscal_service)
+            fiscal_outbox_worker = FiscalOutboxWorker(fiscal_service)
+            container.checkout.bind_fiscal(fiscal_sale_service, required=fiscal_mode)
             import_security = {
                 "actor_provider": lambda: (
                     module_security.session.user.username
@@ -499,10 +511,13 @@ def main(argv=None) -> int:
             store_name=str(system.get_config("nome_loja") or "NabiCode"),
             cash_label="Caixa ativo",
             profile_label=(
-                f"{profile.label} • COMERCIAL / FISCAL"
-                if license_gate.allows(Capability.FISCAL_WRITE)
+                f"{profile.label} • FISCAL OBRIGATÓRIO • NF-e 55"
+                if fiscal_mode
                 else f"{profile.label} • COMERCIAL / NÃO FISCAL"
             ),
+            fiscal_mode=fiscal_mode,
+            fiscal_sale_service=fiscal_sale_service,
+            fiscal_outbox_worker=fiscal_outbox_worker,
             assistant_service=assistant_service,
             assistant_activation=assistant_activation,
             nfe_entry_service=nfe_entry_service,
