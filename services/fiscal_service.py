@@ -703,13 +703,20 @@ class FiscalService:
         tax_regime = str(config.get("tax_regime", "")).upper()
         if tax_regime not in self.TAX_REGIME_CODES:
             problems.append("Regime tributário não configurado ou inválido.")
+        issuer = dict(config.get("issuer") or {})
+        issuer.update({
+            "cnpj": config.get("cnpj"),
+            "state": state,
+            "tax_regime_code": self.TAX_REGIME_CODES.get(tax_regime, 0),
+        })
+        problems.extend(self.validate_fiscal_profile(issuer=issuer, model=model))
         certificate_path = str(config.get("certificate_path", "")).strip()
         if not certificate_path or not Path(certificate_path).is_file():
             problems.append("Certificado A1 não configurado ou arquivo inexistente.")
         endpoint = self.endpoint(operation, model=model)
         if not endpoint:
             problems.append(f"Endpoint SEFAZ não configurado para {operation}.")
-        return problems
+        return list(dict.fromkeys(problems))
 
     def inspect_certificate(self, pfx_path: str | Path, password: str) -> FiscalCertificateInfo:
         self._require_dependency("cryptography")
@@ -1286,6 +1293,18 @@ class FiscalService:
             problems.append("Código IBGE do município do emitente deve possuir 7 dígitos.")
         if not self._digits(issuer.get("state_registration")):
             problems.append("Inscrição estadual do emitente é obrigatória para emissão fiscal.")
+        required_text_fields = (
+            ("name", "Razão social do emitente"),
+            ("street", "Logradouro do emitente"),
+            ("number", "Número do endereço do emitente"),
+            ("district", "Bairro do emitente"),
+            ("city", "Município do emitente"),
+        )
+        for field, label in required_text_fields:
+            if not str(issuer.get(field, "")).strip():
+                problems.append(f"{label} é obrigatório para emissão fiscal.")
+        if len(self._digits(issuer.get("zip_code"))) != 8:
+            problems.append("CEP do emitente deve possuir 8 dígitos.")
         return problems
 
     def register_rejection(self, *, operation: str, response: FiscalResponse, access_key: str = "", actor: str = "") -> dict[str, Any]:

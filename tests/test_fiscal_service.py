@@ -52,6 +52,11 @@ class FiscalServiceTests(unittest.TestCase):
         self.password = "senha-fiscal"
         self.pfx_path = Path(self.tmp.name) / "certificado.pfx"
         self._create_pfx(self.pfx_path, self.password)
+        self.ready_issuer = {
+            "name": "EMPRESA TESTE", "state_registration": "123456789",
+            "city_code": "2927408", "city": "SALVADOR", "street": "RUA TESTE",
+            "number": "10", "district": "CENTRO", "zip_code": "40000000",
+        }
 
     def tearDown(self):
         self.tmp.cleanup()
@@ -151,6 +156,11 @@ class FiscalServiceTests(unittest.TestCase):
         config = self.service.save_config({
             "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12.345.678/0001-95",
             "state": "BA", "tax_regime": "SIMPLES",
+            "issuer": {
+                "name": "EMPRESA TESTE", "state_registration": "123456789",
+                "city_code": "2927408", "city": "SALVADOR", "street": "RUA TESTE",
+                "number": "10", "district": "CENTRO", "zip_code": "40000000",
+            },
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid/autorizacao"}},
         })
         self.assertEqual(config["cnpj"], "12345678000195")
@@ -161,6 +171,30 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertTrue(info.expiring_soon)
         self.assertGreaterEqual(info.expires_in_days, 29)
         self.assertEqual(self.service.validate_ready(operation="autorizacao"), [])
+
+    def test_prontidao_exige_cadastro_completo_do_emitente(self):
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12.345.678/0001-95",
+            "state": "BA", "tax_regime": "SIMPLES", "certificate_path": str(self.pfx_path),
+            "issuer": {"state_registration": "123", "city_code": "2927408"},
+            "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid/autorizacao"}},
+        })
+        problems = self.service.validate_ready(operation="autorizacao")
+        self.assertTrue(any("Razão social" in problem for problem in problems))
+        self.assertTrue(any("Logradouro" in problem for problem in problems))
+        self.assertTrue(any("Número do endereço" in problem for problem in problems))
+        self.assertTrue(any("Bairro" in problem for problem in problems))
+        self.assertTrue(any("Município" in problem for problem in problems))
+        self.assertTrue(any("CEP" in problem for problem in problems))
+
+    def test_perfil_fiscal_aceita_emitente_completo(self):
+        issuer = {
+            "cnpj": "12345678000195", "name": "EMPRESA TESTE", "city_code": "2927408",
+            "city": "SALVADOR", "state": "BA", "street": "RUA TESTE", "number": "10",
+            "district": "CENTRO", "zip_code": "40000000", "state_registration": "123",
+            "tax_regime_code": 1,
+        }
+        self.assertEqual(self.service.validate_fiscal_profile(issuer=issuer, model="55"), [])
 
     def test_certificado_rejeita_extensao_e_senha_invalidas(self):
         wrong_extension = Path(self.tmp.name) / "certificado.txt"
@@ -1623,7 +1657,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(self.service.validate_fiscal_profile(
             issuer={
                 "cnpj": "12345678000195", "state": "BA", "tax_regime_code": 1,
-                "city_code": "2927408", "state_registration": "123456",
+                **self.ready_issuer,
             },
             model="55",
         ), [])
@@ -1895,6 +1929,7 @@ class FiscalServiceTests(unittest.TestCase):
             "state": "BA",
             "tax_regime": "SIMPLES",
             "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid"}, "PRODUCAO": {}},
         })
         key = "1" * 44
@@ -1919,6 +1954,7 @@ class FiscalServiceTests(unittest.TestCase):
             "state": "BA",
             "tax_regime": "SIMPLES",
             "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid"}, "PRODUCAO": {}},
         })
         key = "2" * 44
@@ -2045,6 +2081,7 @@ class FiscalServiceTests(unittest.TestCase):
             "state": "BA",
             "tax_regime": "SIMPLES",
             "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid"}, "PRODUCAO": {}},
         })
         key = "3" * 44
@@ -2069,6 +2106,7 @@ class FiscalServiceTests(unittest.TestCase):
             "state": "BA",
             "tax_regime": "SIMPLES",
             "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {
                 "HOMOLOGACAO": {
                     "autorizacao": "https://sefaz.invalid/aut",
@@ -2117,6 +2155,7 @@ class FiscalServiceTests(unittest.TestCase):
             "enabled": True, "environment": "HOMOLOGACAO",
             "cnpj": "12345678000195", "state": "BA", "tax_regime": "SIMPLES",
             "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid/aut", "recibo": "https://sefaz.invalid/rec"}, "PRODUCAO": {}},
         })
         key = "6" * 44
@@ -2147,6 +2186,7 @@ class FiscalServiceTests(unittest.TestCase):
         self.service.save_config({
             "enabled": True, "environment": "HOMOLOGACAO", "cnpj": "12345678000195",
             "state": "BA", "tax_regime": "SIMPLES", "certificate_path": str(self.pfx_path),
+            "issuer": self.ready_issuer,
             "endpoints": {"HOMOLOGACAO": {"autorizacao": "https://sefaz.invalid"}, "PRODUCAO": {}},
         })
         key = "3" * 44
