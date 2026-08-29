@@ -281,6 +281,8 @@ class FiscalServiceTests(unittest.TestCase):
             },
         })
         self.service.configure_certificate(self.pfx_path, self.password)
+        self.service.initialize_numbering(model="55", series=1, next_number=1)
+        self.service.initialize_numbering(model="65", series=1, next_number=1)
 
         class ReadyCatalog:
             def audit(_self, *, crt):
