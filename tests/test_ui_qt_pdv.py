@@ -5,6 +5,7 @@ import unittest
 import warnings
 from datetime import date
 from decimal import Decimal
+from types import SimpleNamespace
 from unittest.mock import patch
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
@@ -864,6 +865,27 @@ class PostSaleDialogTests(unittest.TestCase):
         self.assertEqual(critical.call_count, 1)
         self.assertEqual(output.calls, [("print", 41)])
         self.assertEqual(dialog.result(), QDialog.DialogCode.Rejected)
+
+    def test_comprovante_e_danfe_sao_acoes_distintas(self):
+        output = FakeReceiptOutput()
+        view_model, _gateway = make_view_model(receipt_output=output)
+        view_model.select_customer(7)
+        view_model.add_loose_item("ITEM", "1", Decimal("100"))
+        result = view_model.checkout(
+            CheckoutInput(PaymentMethod.CASH, Decimal("100")), user="Operador"
+        )
+        fiscal = SimpleNamespace(list_sales=lambda: [])
+        dialog = PostSaleDialog(
+            view_model, result,
+            fiscal_info={"sale_id": 41, "status": "RESPOSTA_DESCONHECIDA"},
+            fiscal_sale_service=fiscal,
+        )
+        self.assertEqual(dialog.print_button.text(), "Imprimir comprovante comercial")
+        self.assertEqual(dialog.pdf_button.text(), "Gerar comprovante em PDF")
+        self.assertEqual(dialog.danfe_button.text(), "Gerar e abrir DANFE")
+        self.assertFalse(dialog.danfe_button.isEnabled())
+        dialog._render_fiscal_status({"sale_id": 41, "status": "AUTORIZADO"})
+        self.assertTrue(dialog.danfe_button.isEnabled())
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")

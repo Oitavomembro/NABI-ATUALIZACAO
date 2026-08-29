@@ -1,6 +1,7 @@
 from __future__ import annotations
 
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import QUrl, Qt, QTimer
+from PySide6.QtGui import QDesktopServices
 from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout
 
 from commercial.application.dto import CheckoutResult
@@ -56,15 +57,22 @@ class PostSaleDialog(QDialog):
         self.finish_button = QPushButton(
             "Fechar acompanhamento" if self.fiscal_info else "Fechar venda não fiscal"
         )
-        self.print_button = QPushButton("Imprimir cupom 80 mm")
-        self.pdf_button = QPushButton("Gerar e abrir PDF")
+        self.print_button = QPushButton("Imprimir comprovante comercial")
+        self.pdf_button = QPushButton("Gerar comprovante em PDF")
+        self.danfe_button = QPushButton("Gerar e abrir DANFE")
+        self.danfe_button.setVisible(bool(self.fiscal_info))
+        self.danfe_button.setEnabled(
+            str(self.fiscal_info.get("status") or "").upper() == "AUTORIZADO"
+        )
         actions.addWidget(self.finish_button)
         actions.addWidget(self.print_button)
         actions.addWidget(self.pdf_button)
+        actions.addWidget(self.danfe_button)
         root.addLayout(actions)
         self.finish_button.clicked.connect(self.accept)
         self.print_button.clicked.connect(self._print)
         self.pdf_button.clicked.connect(self._pdf)
+        self.danfe_button.clicked.connect(self._danfe)
         self.finish_button.setFocus(Qt.FocusReason.OtherFocusReason)
         self._status_timer = None
         if self.fiscal_info and self.fiscal_sale_service is not None:
@@ -102,6 +110,8 @@ class PostSaleDialog(QDialog):
         self.fiscal_status.setStyleSheet(
             f"background:{color};color:{foreground};padding:12px;font-size:15px;font-weight:800;"
         )
+        if hasattr(self, "danfe_button"):
+            self.danfe_button.setEnabled(status == "AUTORIZADO")
 
     def _refresh_fiscal_status(self) -> None:
         sale_id = int(self.fiscal_info.get("sale_id") or 0)
@@ -134,3 +144,17 @@ class PostSaleDialog(QDialog):
             self.pdf_button.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         self.accept()
+
+    def _danfe(self) -> None:
+        if self.fiscal_sale_service is None:
+            QMessageBox.warning(self, "DANFE", "O serviço fiscal não está disponível.")
+            return
+        try:
+            path = self.fiscal_sale_service.generate_danfe_for_sale(
+                int(self.fiscal_info.get("sale_id") or 0)
+            )
+            if not QDesktopServices.openUrl(QUrl.fromLocalFile(str(path))):
+                raise RuntimeError(f"DANFE gerado em {path}, mas não foi possível abri-lo.")
+        except Exception as error:
+            QMessageBox.warning(self, "DANFE não disponível", str(error))
+            self.danfe_button.setFocus(Qt.FocusReason.OtherFocusReason)

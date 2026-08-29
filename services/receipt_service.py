@@ -187,7 +187,11 @@ class ReceiptService:
             sale = self._repository.sale_payment_plan(int(sale_id))
             if sale:
                 forma,qtd,aberto,status=sale; lines.extend([f"Venda: #{sale_id}",f"Pagamento: {forma or 'Não informado'}"])
-                if int(qtd or 1)>1 or str(status).upper() in {"PENDENTE","PARCIAL"}:
+                financed = (
+                    float(aberto or 0) > 0
+                    and str(status).upper() in {"PENDENTE", "PARCIAL"}
+                )
+                if financed:
                     total_parcelas = int(qtd or 1)
                     lines.append(f"Compra a prazo: {total_parcelas} parcela(s)")
                     for numero, valor, venc, _status in self._repository.payment_plan_parcels(int(sale_id)):

@@ -4893,3 +4893,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   única falha ambiental já conhecida do ensaio de primeira instalação no
   Python temporário, que não contém `tcl_library`/`tk_library`; `compileall` e
   `git diff --check` aprovados.
+
+## Comprovante comercial, DANFE e cadeia TLS completa — 29/08/2026
+
+- pagamento à vista (`DINHEIRO`, saldo aberto zero e situação `PAGO`) não exibe
+  mais parcela técnica residual, vencimento ou saldo financiado; esses dados
+  aparecem somente quando existe dívida real em aberto com situação pendente ou
+  parcial;
+- o cabeçalho térmico reduz a fonte do nome da empresa conforme a largura útil
+  real do papel, impedindo corte lateral sem esconder a razão social;
+- comprovante comercial e documento fiscal foram separados na interface:
+  `Imprimir comprovante comercial`, `Gerar comprovante em PDF` e `Gerar e abrir
+  DANFE`; o DANFE permanece desabilitado até a NF-e 55 estar `AUTORIZADO` e é
+  produzido exclusivamente do XML processado, assinado e autorizado;
+- referência oficial: MOC 7.0 e Anexo de especificações do DANFE. O recibo de
+  80 mm é complementar e não substitui o DANFE da NF-e modelo 55;
+- a cadeia HTTPS agora acrescenta ao certifi e ao Windows o catálogo público
+  ICP-Brasil do ITI já versionado no projeto, após conferir o SHA-512 fixado;
+  nenhum certificado é aceito sem validação e não existe `verify=False`;
+- diagnóstico somente de handshake no endpoint de homologação da SEFAZ/BA
+  retornou HTTP 403, comprovando que a validação TLS foi concluída sem enviar
+  XML, A1 ou documento fiscal;
+- validação focal final: `303 passed`, `12 subtests passed`; compilação e
+  `git diff --check` aprovados. A NF-e em `RESPOSTA_DESCONHECIDA` permanece sem
+  retransmissão e deve ser apenas consultada após reiniciar na versão corrigida.

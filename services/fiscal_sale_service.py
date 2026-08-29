@@ -4,6 +4,7 @@ import base64
 import hashlib
 import json
 import xml.etree.ElementTree as ET
+from pathlib import Path
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
@@ -405,6 +406,32 @@ class FiscalSaleService:
             return [dict(zip(names, row)) for row in cursor.fetchall()]
         finally:
             connection.close()
+
+    def generate_danfe_for_sale(self, sale_id: int) -> Path:
+        """Gera DANFE somente a partir do XML processado e autorizado."""
+
+        sale = next(
+            (row for row in self.list_sales() if int(row.get("sale_id") or 0) == int(sale_id)),
+            None,
+        )
+        if sale is None or str(sale.get("status") or "").upper() != "AUTORIZADO":
+            raise ValueError("O DANFE só pode ser gerado depois da autorização da NF-e.")
+        key = str(sale.get("access_key") or "").strip()
+        document = next(
+            (
+                row for row in self.fiscal_service.list_documents()
+                if str(row.get("access_key") or "").strip() == key
+                and str(row.get("status") or "").upper() == "AUTORIZADO"
+            ),
+            None,
+        )
+        source = Path(str((document or {}).get("processed_path") or ""))
+        if len(key) != 44 or not source.is_file():
+            raise ValueError("O XML autorizado da NF-e não está disponível para gerar o DANFE.")
+        output = self.fiscal_service.storage_dir / "danfe" / f"DANFE_{key}.pdf"
+        return self.fiscal_service.generate_official_danfe_pdf(
+            authorized_xml=source.read_bytes(), output_path=output,
+        )
 
     def summary(self) -> dict[str, int]:
         result = {"total": 0, "authorized": 0, "pending": 0, "failed": 0, "cancelled": 0}

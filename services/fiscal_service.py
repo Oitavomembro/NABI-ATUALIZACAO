@@ -4050,6 +4050,38 @@ class FiscalService:
         if certifi_path.is_file():
             chunks.append(certifi_path.read_bytes().rstrip() + b"\n")
 
+        # O catálogo público oficial do ITI já é verificado por SHA-512 em
+        # cada leitura. Ele inclui as intermediárias ICP-Brasil que alguns
+        # endpoints estaduais não entregam durante o handshake TLS.
+        resource_root = Path(__file__).resolve().parents[1] / "resources" / "fiscal" / "icp_brasil"
+        catalog_path = resource_root / "catalog.json"
+        if catalog_path.is_file():
+            catalog = json.loads(catalog_path.read_text(encoding="utf-8"))
+            archive_path = resource_root / str(catalog.get("file") or "")
+            expected_hash = str(catalog.get("sha512") or "").lower()
+            archive_bytes = archive_path.read_bytes()
+            if not expected_hash or hashlib.sha512(archive_bytes).hexdigest() != expected_hash:
+                raise RuntimeError("O catálogo público ICP-Brasil falhou na verificação de integridade.")
+            with zipfile.ZipFile(archive_path) as archive:
+                for name in sorted(archive.namelist()):
+                    if not name.lower().endswith((".crt", ".cer", ".pem")):
+                        continue
+                    raw = archive.read(name)
+                    try:
+                        public_cert = (
+                            x509.load_pem_x509_certificate(raw)
+                            if b"BEGIN CERTIFICATE" in raw
+                            else x509.load_der_x509_certificate(raw)
+                        )
+                    except (TypeError, ValueError):
+                        continue
+                    der = public_cert.public_bytes(serialization.Encoding.DER)
+                    digest = hashlib.sha256(der).hexdigest()
+                    if digest in seen:
+                        continue
+                    seen.add(digest)
+                    chunks.append(public_cert.public_bytes(serialization.Encoding.PEM))
+
         enum_certificates = getattr(ssl, "enum_certificates", None)
         if os.name == "nt" and callable(enum_certificates):
             for store in ("ROOT", "CA"):

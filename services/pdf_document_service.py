@@ -5,6 +5,7 @@ import os
 import re
 import unicodedata
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
 from typing import Any, Callable, Mapping, Sequence
 
@@ -300,14 +301,25 @@ class PDFDocumentService:
                 }
                 for index, (number, canonical, legacy, due, parcel_status) in enumerate(parcel_rows, 1)
             ]
-            if not parcelas and int(total_parcelas or 1) <= 1 and str(status or '').upper() not in {"PENDENTE", "PARCIAL"}:
-                return None
+            open_amount = DecimalStorage.read(
+                aberto_canonico, aberto_legado, field="saldo financiado"
+            )
+            # Bancos antigos podem conter uma parcela técnica até para venda à
+            # vista. A impressão deve refletir a dívida real, não essa linha
+            # residual: somente saldo aberto com estado pendente é financiamento.
+            financed = (
+                open_amount > 0
+                and str(status or "").upper() in {"PENDENTE", "PARCIAL"}
+            )
+            if not financed:
+                parcelas = []
             return {
                 "forma": str(forma or ""),
-                "total_parcelas": int(total_parcelas or len(parcelas) or 1),
-                "valor_aberto": DecimalStorage.read(aberto_canonico, aberto_legado, field="saldo financiado"),
+                "total_parcelas": int(total_parcelas or len(parcelas) or 1) if financed else 0,
+                "valor_aberto": open_amount if financed else Decimal("0.00"),
                 "status": str(status or ""),
                 "parcelas": parcelas,
+                "financiado": financed,
             }
         finally:
             connection.close()
@@ -656,9 +668,14 @@ class PDFDocumentService:
                 self.last_warning = f"Logo de impressão ignorado: {exc}"
                 self._logger.warning(self.last_warning, exc_info=True)
         bold_font = bold_font_name(font)
-        canvas.setFont(bold_font, title_size)
-        canvas.drawCentredString(center, y, data["nome"])
-        y -= title_size + 4
+        store_name = str(data["nome"] or "NabiCode")
+        available_width = max(1.0, width - (2 * margin))
+        fitted_size = title_size
+        while fitted_size > 8 and canvas.stringWidth(store_name, bold_font, fitted_size) > available_width:
+            fitted_size -= 0.5
+        canvas.setFont(bold_font, fitted_size)
+        canvas.drawCentredString(center, y, store_name)
+        y -= fitted_size + 4
         canvas.setFont(font, max(7, title_size - 5))
         extras: list[str] = []
         if self.config_bool("impressao_mostrar_endereco") and data["endereco"]:

@@ -93,6 +93,24 @@ class Sprint132PaymentPlanTests(unittest.TestCase):
             ["2026-09-05", "2026-10-05", "2026-11-05"],
         )
 
+    def test_venda_em_dinheiro_nao_imprime_parcela_tecnica_residual(self):
+        conn = sqlite3.connect(self.db_path)
+        conn.execute(
+            "INSERT INTO movimentacoes VALUES (11, 'DINHEIRO R$ 5.11', 1, 0, '0.00', 'PAGO')"
+        )
+        conn.execute(
+            "INSERT INTO parcelas VALUES (4, 11, 1, 5.11, '5.11', '2026-08-29', 'PAGO')"
+        )
+        conn.commit()
+        conn.close()
+
+        plan = self.service._sale_payment_plan(11)
+
+        self.assertEqual(plan["forma"], "DINHEIRO R$ 5.11")
+        self.assertFalse(plan["financiado"])
+        self.assertEqual(plan["parcelas"], [])
+        self.assertEqual(plan["valor_aberto"], Decimal("0.00"))
+
 
 if __name__ == "__main__":
     unittest.main()
