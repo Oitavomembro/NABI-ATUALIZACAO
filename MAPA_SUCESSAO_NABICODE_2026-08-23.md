@@ -4751,3 +4751,52 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação Qt relacionada: `124 passed`, `2 subtests passed`; `compileall` e
   `git diff --check` aprovados. A venda física observada permaneceu registrada
   como `NÃO FISCAL` e não houve comunicação com a SEFAZ.
+
+## Conformidade fiscal automatizável antes da homologação — 29/08/2026
+
+- branch/worktree isolados: `codex/fiscal-conformidade-pre-homologacao` em
+  `NabiCode-QT-FiscalConformidade-codex`, derivados de
+  `codex/fechamento-zero-pendencias@2518b9b`;
+- implementação `502b1b9`: catálogo regulatório canônico Bahia, com revisão e
+  prazo explícitos, fontes oficiais, versões, hashes e cobertura declarada. O
+  catálogo nasce com produção não aprovada e operações fora da cobertura devem
+  continuar bloqueadas;
+- implementação `dfd1a9a`: integridade das árvores XSD instaladas e do catálogo
+  de endpoints Bahia. Ausência, adulteração ou divergência impede prontidão;
+- implementação `1070390`: o portão de prontidão passou a exigir cadastro
+  completo do emitente — razão social, IE, CNPJ, CRT, UF, código IBGE,
+  logradouro, número, bairro, município e CEP — sem preencher dados por
+  inferência;
+- implementação `558454c`: relatório determinístico e auditável da cobertura
+  real. Ele registra modelos 55/65, CFOPs automatizados, CST/CSOSN aceitos,
+  perfis IBS/CBS estritamente implementados, operações bloqueadas e portões
+  humanos obrigatórios; não se apresenta como apuração ou conformidade geral;
+- implementação `730e2c5`: pré-voo local exige série válida e numeração
+  inicializada separadamente para cada modelo habilitado. Sem isso, nenhum XML
+  de pré-voo é produzido;
+- implementação `7b62258`: o hash do relatório de cobertura e sua lista de
+  operações bloqueadas passaram a integrar a evidência do pré-voo;
+- teste `68c8dfd`: o ensaio real local inicializa numeração de homologação para
+  NF-e e NFC-e antes de alegar sucesso;
+- fontes oficiais registradas: Portal Nacional da NF-e/MOC 7.0, pacotes de
+  schemas 010e v1.02 e serviços 010d v1.03, NT RTC 2025.002/tabela v1.60 e
+  catálogos/requisitos da SEFAZ Bahia. O catálogo deve ser revisto até
+  30/09/2026; depois disso o portão falha fechado;
+- validação focada: `154 passed`, `10 subtests passed` para o FiscalService;
+  `695 passed`, `10 subtests passed` na regressão fiscal ampliada; regressão
+  integral final: `2758 passed`, `1 skipped`, `492 subtests passed`;
+  `compileall` e `git diff --check` aprovados;
+- não foram usados certificado, senha, CSC, XML ou banco reais; nenhuma rede,
+  transmissão ou consulta SEFAZ foi feita. Produção permanece bloqueada;
+- pendências exclusivamente manuais/físicas: contador confirmar regras por
+  regime/NCM/operação e vigência; contribuinte confirmar credenciamento;
+  validar A1 real, cadeia, revogação e correspondência do CNPJ sem versionar
+  segredo; executar matriz adversarial 55/65 em HOMOLOGAÇÃO (autorização,
+  rejeição, consulta, idempotência, timeout desconhecido, reinício,
+  cancelamento, inutilização, contingência, DANFE/impressão); reunir protocolos,
+  hashes e responsáveis no dossiê e obter aprovação formal antes de qualquer
+  decisão futura sobre produção;
+- operações ainda deliberadamente fora da cobertura geral incluem matriz
+  tributária completa, regimes especiais RTC e Imposto Seletivo. Não ampliar
+  por suposição: cada cenário exige fonte oficial vigente, regra contábil
+  aprovada, testes e nova evidência de homologação.
