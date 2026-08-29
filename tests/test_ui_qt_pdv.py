@@ -1649,6 +1649,18 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(self.gateway.commands, [])
         self.assertTrue(self.window.checkout_button.hasFocus())
 
+    def test_clique_no_checkout_abre_o_mesmo_dialogo_uma_unica_vez(self):
+        self._cart_with_customer()
+        FakeCheckoutDialog.exec_calls = 0
+        with patch("ui_qt.commercial.pdv_window.CheckoutDialog", FakeCheckoutDialog):
+            QTest.mouseClick(
+                self.window.checkout_button, Qt.MouseButton.LeftButton
+            )
+            QApplication.processEvents()
+        self.assertEqual(FakeCheckoutDialog.exec_calls, 1)
+        self.assertEqual(self.gateway.commands, [])
+        self.assertTrue(self.window.checkout_button.hasFocus())
+
     def test_confirmacao_abre_pos_venda_uma_vez_sem_nova_persistencia(self):
         self._cart_with_customer()
         FakePostSaleDialog.calls = []
