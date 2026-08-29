@@ -21,6 +21,58 @@ class NabiCodeCheckoutGateway:
         self.fiscal_sale_service = fiscal_sale_service
         self.fiscal_required = bool(required)
 
+    def recover_fiscal_sale(self, sale_id: int) -> str:
+        """Agenda a única recuperação segura para o estado fiscal atual."""
+
+        if self.fiscal_sale_service is None:
+            raise RuntimeError("O serviço fiscal não está conectado ao PDV.")
+        document = next(
+            (
+                row for row in self.fiscal_sale_service.list_sales()
+                if int(row.get("sale_id") or 0) == int(sale_id)
+            ),
+            None,
+        )
+        if document is None:
+            raise ValueError("A venda selecionada não possui vínculo fiscal.")
+        status = str(document.get("status") or "").upper()
+        queue_id = str(document.get("queue_id") or "").strip()
+        if status == "RESPOSTA_DESCONHECIDA":
+            if not queue_id:
+                raise ValueError("A resposta é desconhecida, mas a fila fiscal não foi localizada.")
+            self.fiscal_sale_service.fiscal_service.reconcile_unknown(queue_id)
+            return "Consulta oficial agendada. A autorização não será retransmitida."
+        if status in {"FALHA", "ERRO"}:
+            if not queue_id:
+                self.fiscal_sale_service.enqueue_pending(sale_id=int(sale_id))
+            else:
+                self.fiscal_sale_service.fiscal_service.retry_transmission(queue_id)
+            return "Reenvio fiscal agendado com a mesma venda e numeração."
+        if status in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}:
+            return "O documento já está na fila fiscal; o processamento foi solicitado."
+        if status == "AUTORIZADO":
+            raise ValueError("A NF-e já está autorizada e não deve ser reenviada.")
+        if status in {"CANCELADO", "CANCELADO_LOCAL", "CANCELADO_FISCAL"}:
+            raise ValueError("Documento cancelado não pode ser reenviado.")
+        raise ValueError(f"O estado fiscal {status or 'SEM STATUS'} não permite reenvio.")
+
+    def cancel_fiscal_sale(
+        self, sale_id: int, *, password: str, justification: str, user: str
+    ) -> None:
+        """Cancela na SEFAZ antes de reverter estoque, Caixa e financeiro."""
+
+        if self.fiscal_sale_service is None:
+            raise RuntimeError("O serviço fiscal não está conectado ao PDV.")
+        self.fiscal_sale_service.cancel_authorized(
+            sale_id=int(sale_id), password=str(password),
+            justification=str(justification or "").strip(),
+        )
+        self.transaction_service.cancel_sale(
+            int(sale_id), user=str(user or "Sistema"),
+            before_cancel_commit=self.fiscal_sale_service.prepare_local_cancellation,
+        )
+        self.fiscal_sale_service.finalize_local_cancellation(sale_id=int(sale_id))
+
     def checkout(
         self,
         command: CheckoutCommand,

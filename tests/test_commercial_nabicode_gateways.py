@@ -76,14 +76,23 @@ class FakeTransactionService:
             status="PENDENTE",
         )
 
+    def cancel_sale(self, sale_id, *, user, before_cancel_commit=None):
+        self.cancelled = (sale_id, user)
+        if before_cancel_commit is not None:
+            before_cancel_commit("CONNECTION", sale_id)
+
 
 class FakeFiscalSaleService:
     def __init__(self):
         self.persisted = []
         self.released = []
+        self.documents = []
+        self.calls = []
         self.fiscal_service = SimpleNamespace(
             load_config=lambda: {"enabled": True, "default_model": "55"},
             release_number=lambda reservation_id, **_kwargs: self.released.append(reservation_id),
+            reconcile_unknown=lambda queue_id: self.calls.append(("consult", queue_id)),
+            retry_transmission=lambda queue_id: self.calls.append(("retry", queue_id)),
         )
 
     def recipient_for_customer(self, customer_id, *, model):
@@ -98,6 +107,21 @@ class FakeFiscalSaleService:
 
     def persist_draft(self, connection, sale_id, draft):
         self.persisted.append((connection, sale_id, draft.reservation_id))
+
+    def list_sales(self):
+        return list(self.documents)
+
+    def enqueue_pending(self, *, sale_id):
+        self.calls.append(("enqueue", sale_id))
+
+    def cancel_authorized(self, **kwargs):
+        self.calls.append(("cancel_sefaz", kwargs))
+
+    def prepare_local_cancellation(self, connection, sale_id):
+        self.calls.append(("prepare_local", connection, sale_id))
+
+    def finalize_local_cancellation(self, *, sale_id):
+        self.calls.append(("finalize_local", sale_id))
 
 
 class FakeReceiptService:
@@ -351,6 +375,45 @@ class NabiCodeGatewayTests(unittest.TestCase):
             gateway.checkout(
                 command, customer=CustomerRecord(7, "C7", "CLIENTE"), user="op"
             )
+
+    def test_resposta_desconhecida_agenda_consulta_e_nunca_reenvia(self):
+        fiscal = FakeFiscalSaleService()
+        fiscal.documents = [{
+            "sale_id": 44, "status": "RESPOSTA_DESCONHECIDA", "queue_id": "Q44",
+        }]
+        gateway = NabiCodeCheckoutGateway(FakeTransactionService(), FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+
+        message = gateway.recover_fiscal_sale(44)
+
+        self.assertIn("Consulta oficial", message)
+        self.assertEqual(fiscal.calls, [("consult", "Q44")])
+
+    def test_falha_definitiva_permite_reenvio_controlado(self):
+        fiscal = FakeFiscalSaleService()
+        fiscal.documents = [{"sale_id": 44, "status": "FALHA", "queue_id": "Q44"}]
+        gateway = NabiCodeCheckoutGateway(FakeTransactionService(), FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+
+        message = gateway.recover_fiscal_sale(44)
+
+        self.assertIn("Reenvio fiscal", message)
+        self.assertEqual(fiscal.calls, [("retry", "Q44")])
+
+    def test_cancelamento_fiscal_reverte_local_somente_depois_da_sefaz(self):
+        transaction = FakeTransactionService()
+        fiscal = FakeFiscalSaleService()
+        gateway = NabiCodeCheckoutGateway(transaction, FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+
+        gateway.cancel_fiscal_sale(
+            44, password="segredo", justification="PROBLEMAS TÉCNICOS", user="operador"
+        )
+
+        self.assertEqual(fiscal.calls[0][0], "cancel_sefaz")
+        self.assertEqual(fiscal.calls[1], ("prepare_local", "CONNECTION", 44))
+        self.assertEqual(transaction.cancelled, (44, "operador"))
+        self.assertEqual(fiscal.calls[2], ("finalize_local", 44))
 
     def test_customer_gateway_pesquisa_e_obtem_por_id(self):
         repository = FakeCustomerRepository()

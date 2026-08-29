@@ -389,7 +389,12 @@ class PDVWindow(QMainWindow):
 
     def _open_daily_sales(self) -> None:
         try:
-            DailySalesDialog(self.view_model, self).exec()
+            DailySalesDialog(
+                self.view_model, self,
+                fiscal_mode=self._fiscal_mode,
+                fiscal_gateway=self.view_model.application.checkout_gateway,
+                fiscal_outbox_worker=self._fiscal_outbox_worker,
+            ).exec()
         except Exception as error:
             self._show_error(error)
         self._focus_after_cart_operation()

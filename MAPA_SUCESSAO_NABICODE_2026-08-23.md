@@ -4863,3 +4863,33 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - próximo passo físico: reiniciar na versão corrigida e consultar a chave já
   existente. Não repetir nem retransmitir a venda enquanto o estado não for
   resolvido pela consulta.
+
+## Vendas do dia: recuperação e cancelamento fiscal — 29/08/2026
+
+- a instância usada no teste físico anterior foi identificada como a cópia
+  antiga `f8d8604`, anterior ao fechamento atômico `9dd31fb`; a venda nº 3 de
+  R$ 5,11 foi, portanto, registrada pela versão errada e não deve ser convertida
+  artificialmente em NF-e;
+- a retomada permanece exclusivamente na branch `codex/auditoria-fiscal-final`,
+  baseada em `6aa52e6`; modo fiscal obrigatório continua sem qualquer queda
+  permitida para venda comercial/não fiscal;
+- a aba Vendas do dia passa a expor a recuperação fiscal segura: estado
+  `RESPOSTA_DESCONHECIDA` agenda somente consulta por recibo/chave; `FALHA` ou
+  `ERRO` libera reenvio controlado; documento autorizado ou cancelado nunca é
+  retransmitido;
+- o botão muda explicitamente entre `Consultar situação na SEFAZ`, `Reenviar
+  NF-e` e `Processar NF-e pendente`, de acordo com o estado persistido;
+- cancelamento de documento autorizado pode ser iniciado na mesma aba, exige
+  justificativa de 15 a 255 caracteres, oferece `PROBLEMAS TÉCNICOS` como texto
+  inicial editável e só reverte venda, estoque, Caixa e financeiro depois da
+  aceitação fiscal;
+- resposta desconhecida permanece bloqueada para cancelamento e reenvio cego;
+  registros históricos sem vínculo aparecem como `ERRO — SEM VÍNCULO FISCAL`
+  quando a empresa está em modo fiscal;
+- trava de regressão: testes cobrem persistência fiscal atômica, consulta sem
+  reenvio, reenvio somente após falha definida, ordem SEFAZ antes do estorno e
+  motivo padrão. Validação focal: `194 passed`, `2 subtests passed`;
+  regressão integral: `2763 passed`, `1 skipped`, `492 subtests passed` e a
+  única falha ambiental já conhecida do ensaio de primeira instalação no
+  Python temporário, que não contém `tcl_library`/`tk_library`; `compileall` e
+  `git diff --check` aprovados.

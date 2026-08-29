@@ -4,7 +4,7 @@ from datetime import date
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QHBoxLayout, QLabel, QLineEdit, QMessageBox,
+    QAbstractItemView, QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
     QPlainTextEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
@@ -75,9 +75,17 @@ class DailySalePreviewDialog(QDialog):
 
 
 class DailySalesDialog(QDialog):
-    def __init__(self, view_model, parent=None) -> None:
+    DEFAULT_CANCELLATION_REASON = "PROBLEMAS TÉCNICOS"
+
+    def __init__(
+        self, view_model, parent=None, *, fiscal_mode=False,
+        fiscal_gateway=None, fiscal_outbox_worker=None,
+    ) -> None:
         super().__init__(parent)
         self.view_model = view_model
+        self.fiscal_mode = bool(fiscal_mode)
+        self.fiscal_gateway = fiscal_gateway
+        self.fiscal_outbox_worker = fiscal_outbox_worker
         self._records: list[tuple[str, DailySaleSummary | BudgetDocument]] = []
         self.setWindowTitle("Vendas do dia — reimpressão e cancelamento")
         self.resize(1080, 680)
@@ -105,25 +113,30 @@ class DailySalesDialog(QDialog):
         self.table.setEditTriggers(QAbstractItemView.EditTrigger.NoEditTriggers)
         self.table.horizontalHeader().setStretchLastSection(True)
         self.table.itemDoubleClicked.connect(lambda *_args: self._preview())
+        self.table.itemSelectionChanged.connect(self._update_fiscal_action)
         root.addWidget(self.table, 1)
         self.guidance = QLabel(
-            "Venda não fiscal: cancelamento local. Documento fiscal: use somente a Central Fiscal."
+            "Documento fiscal: consulte/recupere ou cancele por esta aba. "
+            "Resposta desconhecida nunca é reenviada antes da consulta à SEFAZ."
         )
         root.addWidget(self.guidance)
         buttons = QHBoxLayout()
+        self.recover_button = QPushButton("Consultar / recuperar na SEFAZ")
         self.cancel_button = QPushButton("Cancelar venda selecionada")
         self.preview_button = QPushButton("Visualizar / segunda via")
         self.close_button = QPushButton("Fechar  [Esc]")
+        self.recover_button.clicked.connect(self._recover)
         self.cancel_button.clicked.connect(self._cancel)
         self.preview_button.clicked.connect(self._preview)
         self.close_button.clicked.connect(self.reject)
         buttons.addStretch()
+        buttons.addWidget(self.recover_button)
         buttons.addWidget(self.cancel_button)
         buttons.addWidget(self.preview_button)
         buttons.addWidget(self.close_button)
         root.addLayout(buttons)
         for widget in (
-            self.search, self.table, self.refresh_button, self.cancel_button,
+            self.search, self.table, self.refresh_button, self.recover_button, self.cancel_button,
             self.preview_button, self.close_button,
         ):
             widget.installEventFilter(self)
@@ -159,16 +172,18 @@ class DailySalesDialog(QDialog):
                 self.table.setItem(row, column, cell)
         if visible:
             self.table.selectRow(0)
+        self._update_fiscal_action()
 
-    @staticmethod
-    def _values(kind, record) -> tuple[str, ...]:
+    def _values(self, kind, record) -> tuple[str, ...]:
         if kind == "ORÇAMENTO":
             return (
                 "ORÇAMENTO", str(record.budget_id), str(record.created_at).replace("T", " ")[:19],
                 record.customer_name, f"R$ {MoneyCodec.format_br(record.total)}", "ABERTO",
                 "SEM VALOR FISCAL",
             )
-        fiscal = record.fiscal_status or "NÃO FISCAL"
+        fiscal = record.fiscal_status or (
+            "ERRO — SEM VÍNCULO FISCAL" if self.fiscal_mode else "NÃO FISCAL"
+        )
         return (
             "VENDA", f"#{record.sale_id}", record.occurred_at,
             record.customer_name or str(record.customer_id or "CONSUMIDOR FINAL"),
@@ -179,6 +194,26 @@ class DailySalesDialog(QDialog):
         row = self.table.currentRow()
         item = self.table.item(row, 0) if row >= 0 else None
         return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
+
+    def _update_fiscal_action(self) -> None:
+        selected = self._selected()
+        enabled = bool(
+            selected is not None and selected[0] == "VENDA"
+            and selected[1].has_fiscal_document
+        )
+        self.recover_button.setEnabled(enabled)
+        status = (
+            str(selected[1].fiscal_status or "").upper() if enabled else ""
+        )
+        if status == "RESPOSTA_DESCONHECIDA":
+            label = "Consultar situação na SEFAZ"
+        elif status in {"FALHA", "ERRO"}:
+            label = "Reenviar NF-e"
+        elif status in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}:
+            label = "Processar NF-e pendente"
+        else:
+            label = "Consultar / recuperar na SEFAZ"
+        self.recover_button.setText(label)
 
     def _preview(self) -> None:
         selected = self._selected()
@@ -205,10 +240,7 @@ class DailySalesDialog(QDialog):
             )
             return
         if record.has_fiscal_document:
-            QMessageBox.information(
-                self, "Cancelamento fiscal",
-                "Venda vinculada a documento fiscal. Use exclusivamente a Central Fiscal.",
-            )
+            self._cancel_fiscal(record)
             return
         if QMessageBox.question(
             self, "Confirmar cancelamento",
@@ -224,6 +256,86 @@ class DailySalesDialog(QDialog):
             return
         self.reload()
         self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _recover(self) -> None:
+        selected = self._selected()
+        if selected is None or selected[0] != "VENDA":
+            QMessageBox.information(self, "Recuperação fiscal", "Selecione uma venda fiscal.")
+            return
+        record = selected[1]
+        if not record.has_fiscal_document:
+            QMessageBox.information(
+                self, "Recuperação fiscal", "Esta venda não possui documento fiscal para recuperar."
+            )
+            return
+        if self.fiscal_gateway is None:
+            QMessageBox.warning(self, "Recuperação fiscal", "O serviço fiscal não está disponível.")
+            return
+        try:
+            message = self.fiscal_gateway.recover_fiscal_sale(record.sale_id)
+            if self.fiscal_outbox_worker is not None:
+                self.fiscal_outbox_worker.wake()
+        except Exception as error:
+            QMessageBox.warning(self, "Recuperação fiscal", str(error))
+            return
+        QMessageBox.information(self, "Recuperação fiscal", message)
+        self.reload()
+
+    def _cancel_fiscal(self, record: DailySaleSummary) -> None:
+        status = str(record.fiscal_status or "").upper()
+        if status == "RESPOSTA_DESCONHECIDA":
+            QMessageBox.warning(
+                self, "Cancelamento fiscal",
+                "A resposta da SEFAZ é desconhecida. Use primeiro Consultar / recuperar; "
+                "o sistema não cancelará nem reenviará enquanto a autorização não for confirmada.",
+            )
+            return
+        if status != "AUTORIZADO":
+            QMessageBox.warning(
+                self, "Cancelamento fiscal",
+                "Somente uma NF-e autorizada pode ser cancelada na SEFAZ.",
+            )
+            return
+        reason, accepted = QInputDialog.getMultiLineText(
+            self, "Motivo do cancelamento",
+            "Informe o motivo obrigatório para a SEFAZ (15 a 255 caracteres):",
+            self.DEFAULT_CANCELLATION_REASON,
+        )
+        reason = str(reason or "").strip()
+        if not accepted:
+            return
+        if not 15 <= len(reason) <= 255:
+            QMessageBox.warning(
+                self, "Cancelamento fiscal", "O motivo deve possuir entre 15 e 255 caracteres."
+            )
+            return
+        password, accepted = QInputDialog.getText(
+            self, "Certificado A1", "Senha do certificado A1:",
+            QLineEdit.EchoMode.Password,
+        )
+        if not accepted:
+            return
+        if not str(password):
+            QMessageBox.warning(self, "Cancelamento fiscal", "Informe a senha do certificado A1.")
+            return
+        if QMessageBox.question(
+            self, "Confirmar cancelamento fiscal",
+            f"Cancelar a NF-e da venda #{record.sale_id} na SEFAZ e, somente após a aceitação, "
+            "reverter estoque, Caixa e financeiro?",
+        ) != QMessageBox.StandardButton.Yes:
+            return
+        try:
+            self.fiscal_gateway.cancel_fiscal_sale(
+                record.sale_id, password=password, justification=reason, user="Sistema"
+            )
+        except Exception as error:
+            QMessageBox.warning(self, "Cancelamento fiscal não concluído", str(error))
+            return
+        QMessageBox.information(
+            self, "Cancelamento fiscal concluído",
+            f"Venda #{record.sale_id} cancelada na SEFAZ e revertida localmente.",
+        )
+        self.reload()
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() != QEvent.Type.KeyPress or event.key() not in (

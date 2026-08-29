@@ -113,16 +113,40 @@ class DailySalesDialogTests(unittest.TestCase):
         self.assertEqual(self.view_model.cancelled, [])
         self.assertEqual(self.dialog.table.rowCount(), 1)
 
-    def test_documento_fiscal_nunca_chama_cancelamento_local(self):
+    def test_resposta_desconhecida_nunca_cancela_nem_reenvia(self):
         self.view_model.sales = (DailySaleSummary(
             42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
-            fiscal_status="AUTORIZADO",
+            fiscal_status="RESPOSTA_DESCONHECIDA",
         ),)
         self.dialog.reload()
-        with patch.object(QMessageBox, "information") as information:
+        with patch.object(QMessageBox, "warning") as warning:
             self.dialog._cancel()
-        information.assert_called_once()
+        warning.assert_called_once()
         self.assertEqual(self.view_model.cancelled, [])
+
+    def test_motivo_fiscal_padrao_e_problemas_tecnicos(self):
+        self.assertEqual(self.dialog.DEFAULT_CANCELLATION_REASON, "PROBLEMAS TÉCNICOS")
+
+    def test_acao_fiscal_muda_de_consulta_para_reenvio_somente_em_falha(self):
+        self.view_model.sales = (DailySaleSummary(
+            42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+            fiscal_status="RESPOSTA_DESCONHECIDA",
+        ),)
+        self.dialog.reload()
+        self.assertEqual(self.dialog.recover_button.text(), "Consultar situação na SEFAZ")
+        self.view_model.sales = (DailySaleSummary(
+            42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+            fiscal_status="FALHA",
+        ),)
+        self.dialog.reload()
+        self.assertEqual(self.dialog.recover_button.text(), "Reenviar NF-e")
+
+    def test_modo_fiscal_destaca_registro_antigo_sem_vinculo(self):
+        dialog = DailySalesDialog(self.view_model, fiscal_mode=True)
+        try:
+            self.assertEqual(dialog.table.item(0, 6).text(), "ERRO — SEM VÍNCULO FISCAL")
+        finally:
+            dialog.close()
 
     def test_esc_fecha_apenas_dialogo(self):
         QTest.keyClick(self.dialog, Qt.Key.Key_Escape)
