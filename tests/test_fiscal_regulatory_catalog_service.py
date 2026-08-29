@@ -4,6 +4,7 @@ from datetime import date
 import hashlib
 import json
 from pathlib import Path
+import shutil
 
 import pytest
 
@@ -89,3 +90,33 @@ def test_require_current_propaga_todos_os_bloqueios():
     )
     with pytest.raises(ValueError, match="não autoriza operação em produção"):
         service.require_current(environment="PRODUCAO")
+
+
+def test_schema_instalado_adulterado_falha_fechado(tmp_path):
+    fiscal_resources = tmp_path / "resources" / "fiscal"
+    shutil.copytree(ROOT / "resources" / "fiscal", fiscal_resources)
+    catalog = fiscal_resources / "regulatory_catalog.json"
+    target = fiscal_resources / "schemas" / "nfe_010e_v1.02" / "nfe_v4.00.xsd"
+    target.write_bytes(target.read_bytes() + b"\n")
+
+    report = FiscalRegulatoryCatalogService(
+        runtime_root=tmp_path, catalog_path=catalog,
+        today_provider=lambda: date(2026, 8, 29),
+    ).audit()
+
+    assert not report.ready
+    assert any("Árvore de schemas alterada" in problem for problem in report.problems)
+
+
+def test_endpoint_local_divergente_da_revisao_e_bloqueado(monkeypatch):
+    monkeypatch.setattr(
+        FiscalRegulatoryCatalogService,
+        "_endpoint_catalog_sha256",
+        staticmethod(lambda: "0" * 64),
+    )
+    report = FiscalRegulatoryCatalogService(
+        runtime_root=ROOT, today_provider=lambda: date(2026, 8, 29)
+    ).audit()
+
+    assert not report.ready
+    assert any("endpoints Bahia diverge" in problem for problem in report.problems)

@@ -5,6 +5,13 @@
   "review_due_at": "2026-09-30",
   "production_approved": false,
   "models": ["55", "65"],
+  "endpoint_catalog_sha256": "DF7C12357738720FB3A5B72A6ADA74AD8EE204FA4FF26778FC5F9DC7C5AEFDCB",
+  "installed_trees": {
+    "resources/fiscal/schemas/nfe_010e_v1.02": "0BFBB4F352A41D8C71BAE1F76228ADA74FAF17A381C3536DADD6AF6670C69D1B",
+    "resources/fiscal/schemas/eventos_010d_v1.03": "E19D4B7A18251E153B9F064B08F491392A00877B6B3E6DDB6830EA6C18FBEE87",
+    "resources/fiscal/schemas/servicos_010d_v1.03": "EA413C4C7DB81978E9CEBFF90B4CE6E09ABF3CBB424466D5C225DFB7C956B3B6",
+    "resources/fiscal/schemas/cadastro_010d_v1.03": "38EFD9A5E65A41CF2CF21522F501B9E30E787ACCD02664175DC4B4BD0B2CD9F6"
+  },
   "artifacts": [
     {
       "id": "nfe-schemas-010e-v1.02",

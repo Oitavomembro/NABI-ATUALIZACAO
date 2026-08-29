@@ -9,9 +9,11 @@ import sys
 from typing import Any, Callable
 from urllib.parse import urlsplit
 
+from services.fiscal_state_catalog import BA_ENDPOINTS, BA_NFCE_URLS
+
 
 CATALOG_SCHEMA = "nabicode.fiscal-regulatory-catalog.v1"
-CATALOG_SHA256 = "D83B31D8AF26E1AA3DC51EB5F66756E9BF67376D3B6BDDE56DF8D01D47337BC3"
+CATALOG_SHA256 = "0EA7F18AA3372C3BF80E5C21CF580F4C03CFF59589A22F9B21575791760A3B0E"
 OFFICIAL_HOSTS = {
     "www.nfe.fazenda.gov.br",
     "hom.nfe.fazenda.gov.br",
@@ -83,6 +85,27 @@ class FiscalRegulatoryCatalogService:
             raise ValueError("Schema do catálogo regulatório fiscal não é reconhecido.")
         return payload
 
+    @staticmethod
+    def _tree_sha256(path: Path) -> str:
+        rows = [
+            (
+                file.relative_to(path).as_posix(),
+                hashlib.sha256(file.read_bytes()).hexdigest().upper(),
+            )
+            for file in sorted(path.rglob("*"))
+            if file.is_file()
+        ]
+        canonical = json.dumps(rows, separators=(",", ":")).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest().upper()
+
+    @staticmethod
+    def _endpoint_catalog_sha256() -> str:
+        canonical = json.dumps(
+            {"endpoints": BA_ENDPOINTS, "nfce_urls": BA_NFCE_URLS},
+            sort_keys=True, separators=(",", ":"),
+        ).encode("utf-8")
+        return hashlib.sha256(canonical).hexdigest().upper()
+
     def audit(self, *, environment: str = "HOMOLOGACAO") -> FiscalRegulatoryReport:
         try:
             payload = self._load()
@@ -95,6 +118,16 @@ class FiscalRegulatoryCatalogService:
         jurisdiction = str(payload.get("jurisdiction") or "").strip().upper()
         if jurisdiction != "BR-BA":
             problems.append("Catálogo regulatório não corresponde à Bahia.")
+        expected_endpoint_hash = str(
+            payload.get("endpoint_catalog_sha256") or ""
+        ).strip().upper()
+        if (
+            len(expected_endpoint_hash) != 64
+            or expected_endpoint_hash != self._endpoint_catalog_sha256()
+        ):
+            problems.append(
+                "Catálogo de endpoints Bahia diverge da revisão regulatória instalada."
+            )
         try:
             reviewed_at = self._parse_date(payload.get("reviewed_at"), "Data de revisão")
             review_due_at = self._parse_date(payload.get("review_due_at"), "Prazo de revisão")
@@ -147,6 +180,26 @@ class FiscalRegulatoryCatalogService:
             ):
                 problems.append(f"Hash de origem inválido no artefato {identifier or '?'}.")
             versions.append((identifier, version))
+
+        installed_trees = payload.get("installed_trees")
+        if not isinstance(installed_trees, dict) or not installed_trees:
+            problems.append("Catálogo regulatório não protege as árvores de schemas instaladas.")
+        else:
+            for relative_path, expected_hash in installed_trees.items():
+                resolved = (self.runtime_root / str(relative_path)).resolve()
+                try:
+                    resolved.relative_to(self.runtime_root.resolve())
+                except ValueError:
+                    problems.append("Árvore fiscal aponta para fora do runtime.")
+                    continue
+                if not resolved.is_dir():
+                    problems.append(f"Árvore de schemas ausente: {relative_path}.")
+                    continue
+                actual_hash = self._tree_sha256(resolved)
+                if actual_hash != str(expected_hash).strip().upper():
+                    problems.append(
+                        f"Árvore de schemas alterada ou incompleta: {relative_path}."
+                    )
 
         operations = payload.get("supported_operations")
         supported: list[str] = []
