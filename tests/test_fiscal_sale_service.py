@@ -1,6 +1,7 @@
 import sqlite3
 import tempfile
 import unittest
+from datetime import datetime
 from decimal import Decimal
 from types import SimpleNamespace
 from pathlib import Path
@@ -23,6 +24,7 @@ class FakeFiscalService:
         self.reservations = 0
         self.contingency_calls = []
         self.authorized = True
+        self.prepare_item_kwargs = {}
 
     def connection_factory(self):
         return sqlite3.connect(self.db)
@@ -38,6 +40,7 @@ class FakeFiscalService:
         return []
 
     def prepare_sale_items(self, items, **_kwargs):
+        self.prepare_item_kwargs = dict(_kwargs)
         return [{"code": "P1", "quantity": 1, "unit_price": 10}] if items else []
 
     def reserve_number(self, **_kwargs):
@@ -136,6 +139,14 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(draft.model, "65")
         self.assertEqual(self.fiscal.document["number"], 7)
         self.assertEqual(self.fiscal.document["payment_code"], "17")
+        self.assertFalse(self.fiscal.prepare_item_kwargs["require_rtc"])
+
+    def test_simples_em_2027_habilita_rtc_sem_regra_escondida(self):
+        self.service.prepare(
+            items=[{"produto_id": 1}], payments=[{"forma": "PIX", "valor": 10}],
+            issued_at=datetime(2027, 1, 1).astimezone(),
+        )
+        self.assertTrue(self.fiscal.prepare_item_kwargs["require_rtc"])
 
     def test_previsualiza_sem_reservar_numeracao_ou_persistir(self):
         preview = self.service.preview(items=[{"produto_id": 1}])

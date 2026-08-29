@@ -4827,3 +4827,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   protegidos contra persistência duplicada;
 - regressão conjunta de PDV, Pagamentos, gateway e emissão fiscal:
   `297 passed`, `12 subtests passed`; `git diff --check` aprovado.
+
+## Cronograma IBS/CBS do Simples e total do pagamento — 29/08/2026
+
+- causa da recusa “soma dos pagamentos fiscais menor que o total”: o emissor
+  tratava `SIMPLES_NACIONAL` como regime regular em 2026, acrescentava as
+  alíquotas teste de IBS/CBS ao `vNFTot` e criava diferença entre carrinho,
+  Pagamentos, Caixa e XML;
+- a decisão passa a considerar regime e data: Simples/MEI não aplica os grupos
+  RTC antes de 2027; a estrutura volta a ser exigida a partir de 01/01/2027;
+- não há aumento escondido do pagamento nem ajuste artificial do Caixa; o total
+  aprovado pelo operador permanece idêntico ao total fiscal da venda em 2026;
+- referência normativa consultada: cronograma RFB/CGIBS de 31/07/2026 e
+  orientação da Receita Federal de 14/08/2026 para optantes do Simples;
+- regressão fiscal, PDV, Pagamentos e gateway: `298 passed`,
+  `12 subtests passed`; `git diff --check` aprovado.

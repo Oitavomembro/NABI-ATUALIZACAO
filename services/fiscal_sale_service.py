@@ -44,6 +44,21 @@ class FiscalSaleService:
     def __init__(self, fiscal_service: Any) -> None:
         self.fiscal_service = fiscal_service
 
+    @staticmethod
+    def _requires_rtc(config: Mapping[str, Any], issued_at: datetime) -> bool:
+        """Aplica o cronograma vigente sem tratar Simples como regime regular.
+
+        Em 2026 os documentos de optantes do Simples/MEI ainda não entram na
+        obrigatoriedade dos grupos IBS/CBS. A estrutura permanece habilitada a
+        partir de 2027; até lá, não se pode acrescentar o 1% informativo ao
+        valor cobrado do consumidor.
+        """
+        regime = str(config.get("tax_regime") or "").strip().upper()
+        return not (
+            regime in {"SIMPLES_NACIONAL", "SIMPLES", "MEI"}
+            and issued_at.year < 2027
+        )
+
     def prepare(
         self, *, items: Sequence[Mapping[str, Any]], payments: Sequence[Mapping[str, Any]],
         recipient: Mapping[str, Any] | None = None, destination: int = 1,
@@ -58,10 +73,12 @@ class FiscalSaleService:
         crt = self.fiscal_service.TAX_REGIME_CODES.get(
             str(config.get("tax_regime") or "").upper(), 0
         )
+        when = issued_at or datetime.now().astimezone()
         fiscal_items = self.fiscal_service.prepare_sale_items(
             items, destination=destination, crt=crt,
             destination_state=str((recipient or {}).get("state") or config.get("state") or ""),
             tax_regime=str(config.get("tax_regime") or ""),
+            require_rtc=self._requires_rtc(config, when),
         )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
@@ -88,7 +105,6 @@ class FiscalSaleService:
                 "cnpj": config.get("cnpj", ""), "state": config.get("state", ""),
                 "tax_regime_code": crt,
             })
-            when = issued_at or datetime.now().astimezone()
             digest = hashlib.sha256(
                 f"{environment}:{model}:{series}:{reservation['number']}:{when.isoformat()}".encode()
             ).hexdigest()
@@ -147,10 +163,12 @@ class FiscalSaleService:
         crt = self.fiscal_service.TAX_REGIME_CODES.get(
             str(config.get("tax_regime") or "").upper(), 0
         )
+        when = issued_at or datetime.now().astimezone()
         fiscal_items = self.fiscal_service.prepare_sale_items(
             items, destination=destination, crt=crt,
             destination_state=str((recipient or {}).get("state") or config.get("state") or ""),
             tax_regime=str(config.get("tax_regime") or ""),
+            require_rtc=self._requires_rtc(config, when),
         )
         environment = str(config.get("environment") or "HOMOLOGACAO").upper()
         series = int(config.get("sale_series_65" if model == "65" else "sale_series_55") or 1)
@@ -159,7 +177,6 @@ class FiscalSaleService:
             "cnpj": config.get("cnpj", ""), "state": config.get("state", ""),
             "tax_regime_code": crt,
         })
-        when = issued_at or datetime.now().astimezone()
         xml, _temporary_key = self.fiscal_service.build_document_xml(
             issuer=issuer, recipient=dict(recipient or {}), items=fiscal_items,
             document={
