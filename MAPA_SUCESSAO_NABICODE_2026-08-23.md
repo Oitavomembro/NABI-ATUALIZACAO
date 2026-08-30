@@ -5358,3 +5358,26 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - próximo passo operacional: com o NabiCode fechado, criar backup e concluir
   somente o estorno local da venda `#8` pelo serviço transacional; depois
   conferir novamente venda, parcela, estoque e documento fiscal.
+
+## Cancelamento fiscal da venda #8 — estorno concluído e histórico corrigido — 30/08/2026
+
+- antes da recuperação local foi criado o backup
+  `fichario_moveis_compartilhado.backup-estorno-venda8-20260830-143500.db`,
+  SHA-256 `140019FA6D26B931E60E96A519CFB5E889CE9D680246F7790275CDABDF01EEA5`;
+- o estorno local foi concluído pelo serviço transacional, sem nova comunicação
+  com a SEFAZ: venda `#8` em `CANCELADO`, parcela cancelada e paga zerada,
+  estoque do produto recomposto uma única vez de `9` para `10`, saldo do
+  consumidor final inalterado e chave/protocolo fiscal preservados;
+- a auditoria posterior encontrou uma falha independente: consultas do painel
+  e o resumo diário legado do caixa ainda podiam somar ou listar movimentações
+  cujo `status_pagamento` era `CANCELADO`, embora o estorno estivesse correto;
+- histórico diário, paginação, cartões de detalhe e totais do dashboard agora
+  excluem vendas e recebimentos cancelados. O resumo diário do caixa aplica a
+  mesma regra; os cálculos de sessão e fechamento já possuíam essa proteção;
+- regressão focada: `84 passed` cobrindo dashboard, caixa, sessões, transação
+  do PDV e cancelamento fiscal. O cenário de volume do dashboard processa
+  `5.000` movimentações adicionais, limita a página a 50 registros e preserva
+  os totais completos. `git diff --check` aprovado;
+- a auditoria ampla e o teste de estresse integral solicitados continuam como
+  etapa separada; esta entrega fecha especificamente o vazamento de registros
+  cancelados para histórico, faturamento e caixa.

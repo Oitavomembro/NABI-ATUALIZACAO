@@ -45,6 +45,23 @@ class CashServiceTests(unittest.TestCase):
         self.assertEqual(summary["abertura"], 100)
         self.assertEqual(summary["saldo_esperado"], 130)
 
+    def test_daily_summary_ignores_cancelled_sale_and_receipt(self):
+        conn = sqlite3.connect(self.db)
+        try:
+            conn.executemany(
+                """INSERT INTO movimentacoes
+                   (tipo,descricao,valor,data,status_pagamento,forma_pagamento)
+                   VALUES(?,'CANCELADO',999,'02/08/2026 12:00:00','CANCELADO','DINHEIRO')""",
+                [("COMPRA",), ("PAGAMENTO",)],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        summary = self.service.daily_summary("02/08/2026")
+        self.assertEqual(summary["vendas"], 0)
+        self.assertEqual(summary["recebimentos"], 0)
+        self.assertEqual(summary["saldo_esperado"], 0)
+
     def test_register_movement_rejects_invalid_values(self):
         with self.assertRaises(ValueError):
             self.service.register_movement("INEXISTENTE", 10, "Dinheiro")

@@ -271,11 +271,14 @@ class DashboardRepository:
                           COALESCE(m.descricao,''),m.valor,COALESCE(m.status_pagamento,'')
                    FROM movimentacoes m LEFT JOIN clientes c ON c.id=m.cliente_id
                    WHERE m.data LIKE ? AND m.tipo=?
+                     AND UPPER(COALESCE(m.status_pagamento,''))<>'CANCELADO'
                    ORDER BY m.id DESC LIMIT ? OFFSET ?""",
                 (day_prefix, movement_type, safe_limit, safe_offset),
             )
             totals = self.database.fetch_one(
-                "SELECT COUNT(*),COALESCE(SUM(valor),0) FROM movimentacoes WHERE data LIKE ? AND tipo=?",
+                """SELECT COUNT(*),COALESCE(SUM(valor),0) FROM movimentacoes
+                   WHERE data LIKE ? AND tipo=?
+                     AND UPPER(COALESCE(status_pagamento,''))<>'CANCELADO'""",
                 (day_prefix, movement_type),
             )
         elif normalized == "overdue":
@@ -325,6 +328,7 @@ class DashboardRepository:
             FROM movimentacoes m
             LEFT JOIN clientes c ON m.cliente_id = c.id
             WHERE m.data LIKE ?
+              AND UPPER(COALESCE(m.status_pagamento,''))<>'CANCELADO'
             ORDER BY m.id DESC
             """,
             (day_prefix,),
@@ -365,6 +369,7 @@ class DashboardRepository:
             FROM movimentacoes m
             LEFT JOIN clientes c ON m.cliente_id = c.id
             WHERE m.data LIKE ?
+              AND UPPER(COALESCE(m.status_pagamento,''))<>'CANCELADO'
             ORDER BY m.id DESC LIMIT ? OFFSET ?
             """,
             (day_prefix, safe_limit, safe_offset),
@@ -375,6 +380,7 @@ class DashboardRepository:
                    COALESCE(SUM(CASE WHEN tipo='COMPRA' THEN valor ELSE 0 END),0) AS vendas,
                    COALESCE(SUM(CASE WHEN tipo='PAGAMENTO' THEN valor ELSE 0 END),0) AS recebimentos
             FROM movimentacoes WHERE data LIKE ?
+              AND UPPER(COALESCE(status_pagamento,''))<>'CANCELADO'
             """,
             (day_prefix,),
         )

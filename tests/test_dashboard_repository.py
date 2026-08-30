@@ -143,6 +143,32 @@ class DashboardRepositoryTests(unittest.TestCase):
         self.assertEqual(first.received_total, Decimal("50"))
         self.assertEqual((first.limit, first.offset), (2, 0))
 
+    def test_cancelados_nao_compoem_historico_detalhes_ou_totais(self) -> None:
+        conn = sqlite3.connect(self.db_path)
+        try:
+            conn.executemany(
+                """INSERT INTO movimentacoes
+                   (cliente_id,tipo,descricao,valor,data,status_pagamento)
+                   VALUES(1,?,'CANCELADO',999,'02/08/2026 12:00:00','CANCELADO')""",
+                [("COMPRA",), ("PAGAMENTO",)],
+            )
+            conn.commit()
+        finally:
+            conn.close()
+        reference = datetime(2026, 8, 2)
+        history = self.repo.day_history(day=reference)
+        page = self.repo.day_history_page(day=reference)
+        self.assertEqual(len(history.movements), 3)
+        self.assertEqual(page.total_records, 3)
+        for result in (history, page):
+            self.assertEqual(result.sales_total, Decimal("300"))
+            self.assertEqual(result.received_total, Decimal("50"))
+        for kind, total, count in (("sales", "300", 2), ("receipts", "50", 1)):
+            detail = self.repo.detail_page(kind, now=reference)
+            self.assertEqual(detail.total_value, Decimal(total))
+            self.assertEqual(detail.total_records, count)
+            self.assertEqual(len(detail.rows), count)
+
     def test_day_history_page_with_volume_never_materializes_more_than_limit(self) -> None:
         connection = sqlite3.connect(self.db_path)
         try:

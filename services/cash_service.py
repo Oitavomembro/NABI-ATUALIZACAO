@@ -771,8 +771,13 @@ class CashService:
         try:
             movement_columns = self._columns(conn, "movimentacoes")
             movement_canonical = "valor_decimal" if "valor_decimal" in movement_columns else "NULL"
+            active_status = (
+                " AND UPPER(COALESCE(status_pagamento,''))<>'CANCELADO'"
+                if "status_pagamento" in movement_columns else ""
+            )
             rows = conn.execute(
-                f"SELECT tipo,COALESCE(forma_pagamento,''),valor,{movement_canonical} FROM movimentacoes WHERE data LIKE ?",
+                f"SELECT tipo,COALESCE(forma_pagamento,''),valor,{movement_canonical} "
+                f"FROM movimentacoes WHERE data LIKE ?{active_status}",
                 (date_br + "%",),
             ).fetchall()
             opening_columns = self._columns(conn, "caixa_aberturas")
