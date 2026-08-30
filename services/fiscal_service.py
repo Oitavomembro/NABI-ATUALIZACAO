@@ -1133,7 +1133,10 @@ class FiscalService:
             return self.parse_response(response.content)
         except Exception as exc:
             if requests is not None and isinstance(exc, requests.RequestException):
-                message = f"Falha de comunicação com a SEFAZ: {exc}"
+                detail = self._soap_fault_detail(
+                    getattr(getattr(exc, "response", None), "content", b"")
+                )
+                message = f"Falha de comunicação com a SEFAZ: {detail or exc}"
                 if str(operation).lower() in {"autorizacao", "evento", "inutilizacao"}:
                     raise FiscalTransmissionUnknownError(message) from exc
                 raise RuntimeError(message) from exc
@@ -1142,6 +1145,29 @@ class FiscalService:
             for temp_path in (pem_cert, pem_key, server_ca_bundle):
                 if temp_path:
                     self._secure_delete_file(temp_path)
+
+    @staticmethod
+    def _soap_fault_detail(xml: bytes | str | None) -> str:
+        """Extrai somente o texto seguro de um SOAP Fault, sem ecoar o XML."""
+        if not xml:
+            return ""
+        raw = xml.encode("utf-8") if isinstance(xml, str) else bytes(xml)
+        try:
+            root = etree.fromstring(
+                raw, parser=etree.XMLParser(resolve_entities=False, no_network=True)
+            )
+        except (etree.XMLSyntaxError, TypeError, ValueError):
+            return ""
+        faults = root.xpath("//*[local-name()='Fault'][1]")
+        if not faults:
+            return ""
+        fault = faults[0]
+        detail = str(
+            fault.xpath("string(.//*[local-name()='Reason']/*[local-name()='Text'][1])")
+            or fault.xpath("string(.//*[local-name()='faultstring'][1])")
+            or "Falha SOAP retornada pela SEFAZ."
+        ).strip()
+        return " ".join(detail.split())[:500]
 
     @staticmethod
     def _soap_request(*, operation: str, xml: bytes | str) -> tuple[bytes, str]:

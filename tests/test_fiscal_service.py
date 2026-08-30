@@ -2500,6 +2500,16 @@ class FiscalServiceTests(unittest.TestCase):
             self.assertTrue(action.endswith(suffix))
             self.assertEqual(len(root.xpath("//*[local-name()='nfeDadosMsg']/*[local-name()='teste']")), 1)
 
+    def test_fault_soap_12_e_reduzido_a_mensagem_segura(self):
+        fault = b'''<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
+          <soap:Body><soap:Fault><soap:Reason><soap:Text xml:lang="pt-BR">
+          Cabecalho SOAP invalido   para o servico
+          </soap:Text></soap:Reason><soap:Detail><segredo>nao ecoar</segredo></soap:Detail>
+          </soap:Fault></soap:Body></soap:Envelope>'''
+        detail = self.service._soap_fault_detail(fault)
+        self.assertEqual(detail, "Cabecalho SOAP invalido para o servico")
+        self.assertNotIn("segredo", detail)
+
 
 if __name__ == "__main__":
     unittest.main()

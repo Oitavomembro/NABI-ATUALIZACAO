@@ -43,7 +43,7 @@ class FiscalDFeService:
         "proceventonfe_v1.00.xsd": "procEventoNFe",
     }
     ENDPOINTS = {
-        "HOMOLOGACAO": "https://hom.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
+        "HOMOLOGACAO": "https://hom1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
         "PRODUCAO": "https://www1.nfe.fazenda.gov.br/NFeDistribuicaoDFe/NFeDistribuicaoDFe.asmx",
     }
     SOAP_ACTION = (
@@ -291,7 +291,9 @@ class FiscalDFeService:
         )
         envelope = self._soap_envelope(request)
         pem_cert, pem_key = self.fiscal_service._temporary_pem_files(certificate, password)
+        server_ca_bundle = ""
         try:
+            server_ca_bundle = self.fiscal_service._temporary_server_ca_bundle()
             endpoint = self.ENDPOINTS[environment]
             transport = self._transport or self.fiscal_service.http_post
             if not callable(transport):
@@ -299,7 +301,7 @@ class FiscalDFeService:
             response = transport(
                 endpoint, data=envelope,
                 headers={"Content-Type": "text/xml; charset=utf-8", "SOAPAction": self.SOAP_ACTION},
-                cert=(pem_cert, pem_key), timeout=45,
+                cert=(pem_cert, pem_key), verify=server_ca_bundle, timeout=45,
             )
             response.raise_for_status()
             return self.parse_response(
@@ -309,6 +311,8 @@ class FiscalDFeService:
         finally:
             self.fiscal_service._secure_delete_file(pem_cert)
             self.fiscal_service._secure_delete_file(pem_key)
+            if server_ca_bundle:
+                self.fiscal_service._secure_delete_file(server_ca_bundle)
 
     def list_documents(self) -> list[dict[str, str]]:
         rows: list[dict[str, str]] = []

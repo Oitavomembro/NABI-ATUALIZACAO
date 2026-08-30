@@ -4935,3 +4935,25 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   inspecionam o envelope, o namespace, o conteúdo e a ação SOAP das seis
   operações fiscais. Nenhum XML real, banco ativo ou transmissão SEFAZ foi
   utilizado pelos testes.
+
+## Auditoria complementar de conexão SEFAZ — 29/08/2026
+
+- a cadeia de transporte foi revista após a correção SOAP: endpoint, HTTPS,
+  certificado cliente, pacote de confiança do servidor, conteúdo, ações,
+  timeout, leitura de resposta e recuperação da fila;
+- foi encontrada uma segunda divergência independente do PDV: a Distribuição
+  DF-e apontava para o host antigo de homologação `hom` em vez do endpoint
+  oficial atual `hom1` e não usava o pacote TLS endurecido já aplicado aos
+  demais serviços;
+- a Distribuição DF-e agora usa o endpoint oficial do Ambiente Nacional, passa
+  explicitamente o mesmo bundle verificável de CAs e remove certificado,
+  chave e bundle temporários mesmo quando a chamada falha; seu envelope SOAP
+  1.1 foi preservado porque esse é o contrato específico documentado pela NT
+  2014.002, distinto dos serviços NF-e 4.00 estaduais;
+- respostas HTTP com SOAP Fault agora extraem somente o motivo seguro e útil,
+  sem ecoar XML, detalhes internos, certificado ou senha; autorização e eventos
+  continuam tratados como resultado desconhecido quando a entrega não pode ser
+  provada;
+- regressão ampliada de serviço fiscal, DF-e, outbox, worker, pré-voo, gateway
+  e PDV: `357 passed`, `12 subtests passed`; nenhum banco ativo, A1 real, XML
+  real ou transmissão de documento foi utilizado.

@@ -47,6 +47,7 @@ def test_monta_consulta_incremental_oficial_101(dfe_service):
     assert etree.fromstring(envelope).xpath(
         "count(//*[local-name()='nfeDistDFeInteresse']/*[local-name()='nfeDadosMsg']/*[local-name()='distDFeInt'])"
     ) == 1
+    assert service.ENDPOINTS["HOMOLOGACAO"].startswith("https://hom1.nfe.fazenda.gov.br/")
 
 
 def test_consulta_por_chave_exige_chave_valida(dfe_service):

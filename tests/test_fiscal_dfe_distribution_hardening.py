@@ -84,6 +84,9 @@ class FakeFiscal:
     def _temporary_pem_files(self, _path, _password):
         return "fake-cert.pem", "fake-key.pem"
 
+    def _temporary_server_ca_bundle(self):
+        return "fake-ca.pem"
+
     def _secure_delete_file(self, _path):
         return None
 
@@ -124,6 +127,7 @@ def test_transporte_fake_recebe_exclusivamente_endpoint_oficial(tmp_path):
 
     assert result.status_code == "137"
     assert fiscal.calls[0][0] == service.ENDPOINTS["HOMOLOGACAO"]
+    assert fiscal.calls[0][1]["verify"] == "fake-ca.pem"
 
 
 def test_cnpj_do_certificado_divergente_falha_antes_do_transporte(tmp_path):
