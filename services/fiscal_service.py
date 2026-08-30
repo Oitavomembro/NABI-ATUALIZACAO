@@ -3948,8 +3948,8 @@ class FiscalService:
         if str(target.get("status") or "").upper() not in {"FALHA", "ERRO"}:
             raise ValueError("Somente uma transmissão fiscal com falha definida pode ser reenviada.")
         operation = str(target.get("operation") or "").lower()
+        status_code = str(target.get("last_status_code") or "").strip()
         if operation in {"consulta", "recibo"}:
-            status_code = str(target.get("last_status_code") or "").strip()
             reconciliation = str(target.get("reconciliation_for") or "").strip()
             if status_code != "217" or reconciliation != "autorizacao":
                 raise ValueError(
@@ -3967,6 +3967,21 @@ class FiscalService:
             target["xml_b64"] = original_b64
             target.pop("reconciliation_for", None)
             target.pop("reconciliation_started_at", None)
+        elif operation == "autorizacao" and status_code in {"297", "486", "719"}:
+            # As correções seguras são aplicadas sobre o XML que efetivamente foi
+            # assinado e rejeitado. ``xml_b64`` guarda o rascunho anterior à
+            # assinatura; reutilizá-lo aqui contornaria a rotina de recuperação.
+            original_b64 = str(target.get("original_xml_b64") or "").strip()
+            try:
+                original_xml = base64.b64decode(original_b64, validate=True)
+            except (ValueError, TypeError, binascii.Error) as exc:
+                raise ValueError(
+                    "XML assinado rejeitado não está disponível para correção segura."
+                ) from exc
+            queued_key = self._normalize_access_key(target.get("access_key", ""))
+            if len(queued_key) != 44 or self._extract_access_key_from_xml(original_xml) != queued_key:
+                raise ValueError("XML assinado rejeitado não corresponde à chave fiscal enfileirada.")
+            target["xml_b64"] = original_b64
         target.update({
             "status": "PENDENTE",
             "next_attempt_at": datetime.now(timezone.utc).isoformat(),

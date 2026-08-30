@@ -189,6 +189,25 @@ class DailySalesDialogTests(unittest.TestCase):
         self.assertIn("719", self.dialog.table.item(0, 6).text())
         self.assertTrue(self.dialog.retry_button.isVisible())
 
+    def test_acompanhamento_sefaz_mostra_progresso_e_compara_retorno(self):
+        failed = DailySaleSummary(
+            42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+            fiscal_status="FALHA", fiscal_last_error="486: Grupo autXML ausente",
+        )
+        self.view_model.sales = (failed,)
+        self.dialog.reload()
+        self.dialog._begin_fiscal_wait(failed, "Reenvio fiscal agendado.")
+        self.assertTrue(self.dialog.fiscal_progress.isVisible())
+        self.assertFalse(self.dialog.retry_button.isEnabled())
+        self.view_model.sales = (DailySaleSummary(
+            42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+            fiscal_status="FALHA", fiscal_last_error="100: Autorizado para teste",
+        ),)
+        with patch.object(QMessageBox, "information") as information:
+            self.dialog._poll_fiscal_result()
+        self.assertFalse(self.dialog.fiscal_progress.isVisible())
+        self.assertIn("mudou", information.call_args.args[2])
+
     def test_modo_fiscal_destaca_registro_antigo_sem_vinculo(self):
         dialog = DailySalesDialog(self.view_model, fiscal_mode=True)
         try:

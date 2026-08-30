@@ -2,10 +2,10 @@ from __future__ import annotations
 
 from datetime import date, timedelta
 
-from PySide6.QtCore import QDate, QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, QTimer, Qt
 from PySide6.QtWidgets import (
     QAbstractItemView, QDateEdit, QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
-    QPlainTextEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
+    QPlainTextEdit, QProgressBar, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
 from commercial.application.dto import BudgetDocument
@@ -141,6 +141,17 @@ class DailySalesDialog(QDialog):
             "Resposta desconhecida nunca é reenviada antes da consulta à SEFAZ."
         )
         root.addWidget(self.guidance)
+        self.fiscal_progress = QProgressBar()
+        self.fiscal_progress.setRange(0, 0)
+        self.fiscal_progress.setTextVisible(False)
+        self.fiscal_progress.setVisible(False)
+        root.addWidget(self.fiscal_progress)
+        self._fiscal_poll_timer = QTimer(self)
+        self._fiscal_poll_timer.setInterval(1000)
+        self._fiscal_poll_timer.timeout.connect(self._poll_fiscal_result)
+        self._fiscal_poll_sale_id: int | None = None
+        self._fiscal_poll_previous = ""
+        self._fiscal_poll_ticks = 0
         buttons = QHBoxLayout()
         self.recover_button = QPushButton("Consultar situação na SEFAZ")
         self.retry_button = QPushButton("Reenviar NF-e")
@@ -240,6 +251,12 @@ class DailySalesDialog(QDialog):
         return item.data(Qt.ItemDataRole.UserRole) if item is not None else None
 
     def _update_fiscal_action(self) -> None:
+        if self._fiscal_poll_timer.isActive() or self._fiscal_poll_sale_id is not None:
+            self.recover_button.setEnabled(False)
+            self.retry_button.setEnabled(False)
+            self.cancel_button.setEnabled(False)
+            self.refresh_button.setEnabled(False)
+            return
         selected = self._selected()
         enabled = bool(
             selected is not None and selected[0] == "VENDA"
@@ -262,6 +279,8 @@ class DailySalesDialog(QDialog):
         self.recover_button.setEnabled(status == "RESPOSTA_DESCONHECIDA")
         self.retry_button.setVisible(retry_allowed)
         self.retry_button.setEnabled(retry_allowed)
+        self.cancel_button.setEnabled(True)
+        self.refresh_button.setEnabled(True)
 
     def _preview(self) -> None:
         selected = self._selected()
@@ -346,8 +365,62 @@ class DailySalesDialog(QDialog):
             QMessageBox.warning(self, "Recuperação fiscal", str(error))
             self.reload()
             return
-        QMessageBox.information(self, "Recuperação fiscal", message)
+        self._begin_fiscal_wait(record, message)
+
+    def _begin_fiscal_wait(self, record: DailySaleSummary, message: str) -> None:
+        self._fiscal_poll_sale_id = int(record.sale_id)
+        self._fiscal_poll_previous = " — ".join(filter(None, (
+            str(record.fiscal_status or "").strip(),
+            str(record.fiscal_last_error or "").strip(),
+        )))
+        self._fiscal_poll_ticks = 0
+        self.fiscal_progress.setVisible(True)
+        self.guidance.setText(f"{message} Aguardando o retorno da SEFAZ…")
+        for button in (self.recover_button, self.retry_button, self.cancel_button, self.refresh_button):
+            button.setEnabled(False)
         self.reload()
+        self._fiscal_poll_timer.start()
+
+    def _poll_fiscal_result(self) -> None:
+        self._fiscal_poll_ticks += 1
+        self.reload()
+        current = next((
+            record for kind, record in self._records
+            if kind == "VENDA" and int(record.sale_id) == self._fiscal_poll_sale_id
+        ), None)
+        if current is None:
+            self._finish_fiscal_wait("A venda não foi localizada após a atualização.", warning=True)
+            return
+        status = str(current.fiscal_status or "").upper()
+        if status not in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}:
+            result = " — ".join(filter(None, (
+                str(current.fiscal_status or "").strip(),
+                str(current.fiscal_last_error or "").strip(),
+            ))) or "SEM RETORNO"
+            comparison = (
+                "O retorno da SEFAZ mudou." if result != self._fiscal_poll_previous
+                else "A SEFAZ manteve o mesmo retorno."
+            )
+            self._finish_fiscal_wait(f"{comparison}\n\nRetorno atual: {result}")
+        elif self._fiscal_poll_ticks >= 120:
+            self._finish_fiscal_wait(
+                "A SEFAZ ainda não concluiu em 2 minutos. O documento permanece pendente; "
+                "use Atualizar para acompanhar e não clique em reenviar novamente.",
+                warning=True,
+            )
+
+    def _finish_fiscal_wait(self, message: str, *, warning: bool = False) -> None:
+        self._fiscal_poll_timer.stop()
+        self.fiscal_progress.setVisible(False)
+        self._fiscal_poll_sale_id = None
+        self.guidance.setText(
+            "Documento fiscal: consulte/recupere ou cancele por esta aba. "
+            "Resposta desconhecida nunca é reenviada antes da consulta à SEFAZ."
+        )
+        self.reload()
+        (QMessageBox.warning if warning else QMessageBox.information)(
+            self, "Retorno da SEFAZ", message,
+        )
 
     def _cancel_fiscal(self, record: DailySaleSummary) -> None:
         status = str(record.fiscal_status or "").upper()

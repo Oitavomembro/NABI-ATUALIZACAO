@@ -5285,3 +5285,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - novos XMLs da Bahia incluem o grupo na ordem oficial. A recuperação 486
   preserva venda, chave, série e número, insere somente `autXML` e reassina;
   fora da Bahia, correção automática permanece bloqueada.
+- o primeiro reteste revelou que a fila reabria o rascunho pré-assinatura em
+  `xml_b64`, embora preservasse corretamente o XML rejeitado em
+  `original_xml_b64`; assim a correção 486 não era alcançada. O reenvio das
+  correções seguras 297/486/719 agora restaura e valida o XML assinado da mesma
+  chave antes de corrigir e reassinar;
+- a tela de vendas passou a exibir progresso indeterminado durante a espera,
+  bloquear novos cliques concorrentes, consultar o estado a cada segundo e
+  informar explicitamente se o retorno da SEFAZ mudou ou permaneceu igual. O
+  acompanhamento expira visualmente após dois minutos sem converter pendência
+  em falha nem autorizar novo reenvio;
+- validação desta retomada: `185 passed`, `22 subtests passed` nos serviços
+  fiscais e tela; teste adicional isolado da tela: `15 passed`. A regressão
+  integral executou `2811 passed`, `1 skipped`, `504 subtests passed`, com a
+  única falha ambiental já conhecida no smoke Tcl/Tk do Python temporário
+  (`tcl_library`/`tk_library` físicos ausentes). `git diff --check` aprovado.

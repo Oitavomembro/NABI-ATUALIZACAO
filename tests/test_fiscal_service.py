@@ -2465,6 +2465,28 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(reopened["status"], "PENDENTE")
         self.assertEqual(reopened["retried_by"], "gerente")
 
+    def test_reenvio_486_restaura_xml_assinado_para_correcao_autxml(self):
+        key = "29" + "4" * 42
+        draft = f'<NFe><infNFe Id="NFe{key}"/></NFe>'.encode()
+        signed = (
+            f'<NFe><infNFe Id="NFe{key}"/>'
+            '<Signature xmlns="http://www.w3.org/2000/09/xmldsig#"/>'
+            '</NFe>'
+        ).encode()
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=draft)
+        rows = self.service.list_transmission_queue()
+        rows[0].update({
+            "status": "FALHA", "last_status_code": "486",
+            "original_xml_b64": base64.b64encode(signed).decode(),
+        })
+        self.service._save_transmission_queue(rows)
+
+        reopened = self.service.retry_transmission(item["id"])
+
+        self.assertEqual(reopened["status"], "PENDENTE")
+        self.assertEqual(reopened["last_status_code"], "486")
+        self.assertEqual(base64.b64decode(reopened["xml_b64"]), signed)
+
     def test_consulta_217_restaura_autorizacao_original_com_mesma_chave(self):
         key = "29" + "7" * 42
         original = f'<NFe><infNFe Id="NFe{key}"/></NFe>'.encode()
