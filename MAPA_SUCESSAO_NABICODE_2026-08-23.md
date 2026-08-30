@@ -5019,3 +5019,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação focada do serviço: `159 passed`, `10 subtests passed`; regressão
   fiscal/Qt ampliada: `366 passed`, `12 subtests passed`. Nenhum banco ativo,
   A1 real, XML real ou comunicação com a SEFAZ foi utilizado.
+
+## Rejeição 297 e preservação XMLDSig no SOAP — 29/08/2026
+
+- a homologação real das vendas nº 2, 4 e 6 alcançou a SEFAZ/BA e retornou
+  `297 — Assinatura difere do calculado`; novos reenvios foram interrompidos;
+- a leitura diagnóstica do banco TESTE foi estritamente somente leitura. O XML
+  armazenado possuía assinatura válida isoladamente, mas a mesma assinatura
+  ficava inválida dentro do corpo HTTP produzido pelo transporte;
+- causa raiz: o envelope SOAP declarava prefixos ancestrais artificiais
+  (`soap12`/`ns0`). Como a NF-e exige canonicalização XML inclusiva, esses
+  namespaces passavam a integrar a forma canônica de `infNFe`, alterando o
+  valor recalculado pela SEFAZ após a assinatura;
+- o envelope agora usa namespace padrão próprio em `Envelope` e
+  `nfeDadosMsg`; a NF-e redefine seu namespace padrão e deixa de herdar
+  prefixos estranhos à assinatura. O contrato SOAP, WSDL e o XML fiscal não
+  mudaram;
+- a correção foi confrontada com o padrão de montagem do PyNFe e a assinatura
+  do NFePHP; nenhum código externo ou nova dependência foi incorporado;
+- um teste criptográfico novo assina a NF-e, monta `enviNFe`, encapsula no SOAP
+  e recalcula `DigestValue`/`SignatureValue` sobre o corpo final. O XML real já
+  recusado também preservou a assinatura em memória com a nova montagem;
+- validação focada: `160 passed`, `10 subtests passed`; regressão fiscal/Qt:
+  `367 passed`, `12 subtests passed`. Nenhuma transmissão, alteração do banco
+  ativo ou reenvio foi realizado durante a correção.

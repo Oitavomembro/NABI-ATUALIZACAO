@@ -1201,9 +1201,19 @@ class FiscalService:
             return raw, f"http://www.portalfiscal.inf.br/nfe/wsdl/{service_name}/{method_name}"
         soap = "http://www.w3.org/2003/05/soap-envelope"
         wsdl = f"http://www.portalfiscal.inf.br/nfe/wsdl/{service_name}"
-        envelope = etree.Element(etree.QName(soap, "Envelope"), nsmap={"soap12": soap})
+        # A NF-e declara C14N inclusiva. Prefixos de namespace introduzidos
+        # somente pelo envelope SOAP tornam-se ancestrais de ``infNFe`` e
+        # alteram o DigestValue/SignatureValue no documento efetivamente
+        # recebido pela SEFAZ. Use namespaces padrão em cada camada: o payload
+        # NF-e redefine o namespace padrão e não herda prefixos estranhos à
+        # assinatura. Prefixos XML são sintaxe, não fazem parte do contrato.
+        envelope = etree.Element(etree.QName(soap, "Envelope"), nsmap={None: soap})
         body = etree.SubElement(envelope, etree.QName(soap, "Body"))
-        data = etree.SubElement(body, etree.QName(wsdl, "nfeDadosMsg"))
+        data = etree.SubElement(
+            body,
+            etree.QName(wsdl, "nfeDadosMsg"),
+            nsmap={None: wsdl},
+        )
         data.append(payload)
         action = f"{wsdl}/{method_name}"
         return etree.tostring(envelope, xml_declaration=True, encoding="utf-8"), action

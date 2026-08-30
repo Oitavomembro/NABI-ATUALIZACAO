@@ -2577,6 +2577,33 @@ class FiscalServiceTests(unittest.TestCase):
             self.assertTrue(action.endswith(suffix))
             self.assertEqual(len(root.xpath("//*[local-name()='nfeDadosMsg']/*[local-name()='teste']")), 1)
 
+    def test_envelope_soap_preserva_assinatura_xml_dsig_da_nfe(self):
+        unsigned = (
+            '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+            '<infNFe Id="NFe123"><ide/></infNFe>'
+            '</NFe>'
+        )
+        signed = self.service.sign_xml(
+            unsigned,
+            reference_id="NFe123",
+            pfx_path=self.pfx_path,
+            password=self.password,
+        )
+        authorization = self.service._authorization_envelope(
+            signed,
+            environment="HOMOLOGACAO",
+        )
+        soap, _action = self.service._soap_request(
+            operation="autorizacao",
+            xml=authorization,
+        )
+
+        self.assertTrue(self.service.verify_xml_signature(soap)["valid"])
+        root = etree.fromstring(soap)
+        inf_nfe = root.xpath("//*[local-name()='infNFe']")[0]
+        self.assertNotIn("soap12", inf_nfe.nsmap)
+        self.assertFalse(any(str(prefix or "").startswith("ns") for prefix in inf_nfe.nsmap))
+
     def test_fault_soap_12_e_reduzido_a_mensagem_segura(self):
         fault = b'''<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
           <soap:Body><soap:Fault><soap:Reason><soap:Text xml:lang="pt-BR">
