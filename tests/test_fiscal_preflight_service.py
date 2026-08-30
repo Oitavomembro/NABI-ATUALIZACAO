@@ -228,3 +228,16 @@ def test_pre_voo_rejeita_serie_fora_do_intervalo_oficial():
     assert result.success is False
     assert any("NF-e 55: série fiscal deve estar" in problem for problem in result.problems)
     assert fiscal.built_models == []
+
+
+def test_pre_voo_rejeita_serie_reservada_antes_de_gerar_xml():
+    fiscal = FakeFiscalService()
+    fiscal.config["sale_series_55"] = 999
+    fiscal.validate_taxpayer_series = lambda series, **_kwargs: (
+        series if 0 <= series <= 889 or 920 <= series <= 969
+        else (_ for _ in ()).throw(ValueError("série incompatível com emissão normal"))
+    )
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert any("NF-e 55: série incompatível" in problem for problem in result.problems)
+    assert fiscal.built_models == []

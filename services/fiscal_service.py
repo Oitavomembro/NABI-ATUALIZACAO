@@ -403,8 +403,7 @@ class FiscalService:
                 series = int(config.get(key, current.get(key, 1)) or 0)
             except (TypeError, ValueError) as exc:
                 raise ValueError(f"Série fiscal do modelo {model} inválida.") from exc
-            if series < 0 or series > 999:
-                raise ValueError(f"Série fiscal do modelo {model} deve estar entre 0 e 999.")
+            self.validate_taxpayer_series(series, model=model)
             sale_series[key] = series
         current.update({
             "enabled": bool(config.get("enabled", current["enabled"])),
@@ -465,6 +464,23 @@ class FiscalService:
             result.append(dict(record))
         return sorted(result, key=lambda item: (str(item.get("environment")), str(item.get("model")), int(item.get("series", 0)), int(item.get("number", 0))))
 
+    @staticmethod
+    def validate_taxpayer_series(series: int, *, model: str = "55") -> int:
+        """Valida série de emissão normal feita pelo contribuinte.
+
+        A regra B26-10 da NF-e/NFC-e aceita, para ``procEmi=0``, as faixas
+        0-889 e 920-969. As demais faixas pertencem a processos especiais
+        (NF-e avulsa, contingência legada ou PAA) e não podem ser usadas pelo
+        emissor normal do NabiCode.
+        """
+        normalized = int(series)
+        if 0 <= normalized <= 889 or 920 <= normalized <= 969:
+            return normalized
+        raise ValueError(
+            f"Série fiscal do modelo {model} incompatível com emissão normal "
+            "pelo contribuinte. Use 0 a 889 ou 920 a 969."
+        )
+
     def numbering_scope(
         self, *, model: str, series: int, environment: str | None = None
     ) -> dict[str, Any]:
@@ -494,8 +510,7 @@ class FiscalService:
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
         series = int(series)
-        if not 0 <= series <= 999:
-            raise ValueError("Série fiscal deve estar entre 0 e 999.")
+        self.validate_taxpayer_series(series, model=model)
         next_number = int(next_number)
         if not 1 <= next_number <= 999_999_999:
             raise ValueError("Próximo número fiscal deve estar entre 1 e 999999999.")
@@ -546,8 +561,7 @@ class FiscalService:
         if model not in self.VALID_MODELS:
             raise ValueError("Modelo fiscal deve ser 55 ou 65.")
         series = int(series)
-        if series < 0 or series > 999:
-            raise ValueError("Série fiscal inválida.")
+        self.validate_taxpayer_series(series, model=model)
         environment = str(environment or self.load_config().get("environment", "HOMOLOGACAO")).upper()
         if environment not in self.VALID_ENVIRONMENTS:
             raise ValueError("Ambiente fiscal inválido.")

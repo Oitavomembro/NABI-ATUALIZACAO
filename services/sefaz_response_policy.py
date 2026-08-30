@@ -32,6 +32,7 @@ class SefazResponsePolicy:
     TEMPORARY = frozenset({"108", "109"})
     QUERY_FIRST = frozenset({"105", "204", "539"})
     SAFE_CORRECTIONS = frozenset({"217", "297", "719"})
+    SERIES_INCOMPATIBLE = frozenset({"244"})
     DENIED = frozenset({"110", "301", "302", "303"})
 
     @classmethod
@@ -60,6 +61,12 @@ class SefazResponsePolicy:
             return SefazResponseDecision(
                 SefazAction.TERMINAL_DENIAL,
                 "Uso denegado: não reenviar, cancelar nem reutilizar esta numeração.",
+            )
+        if normalized in cls.SERIES_INCOMPATIBLE:
+            return SefazResponseDecision(
+                SefazAction.MANUAL_REVIEW,
+                "Série incompatível com a emissão normal. Corrija a configuração "
+                "e gere uma recuperação fiscal controlada; não reenvie a mesma chave.",
             )
         return SefazResponseDecision(
             SefazAction.MANUAL_REVIEW,

@@ -74,8 +74,16 @@ class FiscalPreflightService:
             except (TypeError, ValueError):
                 problems.append(f"{label}: série fiscal não configurada ou inválida.")
                 continue
-            if not 0 <= series <= 999:
-                problems.append(f"{label}: série fiscal deve estar entre 0 e 999.")
+            validate_series = getattr(
+                self.fiscal_service, "validate_taxpayer_series", None
+            )
+            try:
+                if validate_series is not None:
+                    validate_series(series, model=current_model)
+                elif not 0 <= series <= 999:
+                    raise ValueError("série fiscal deve estar entre 0 e 999.")
+            except (TypeError, ValueError) as exc:
+                problems.append(f"{label}: {exc}")
                 continue
             numbering = self.fiscal_service.numbering_scope(
                 model=current_model, series=series, environment=environment

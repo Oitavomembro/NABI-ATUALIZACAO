@@ -5255,3 +5255,21 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - o smoke empacotado com Tcl/Tk físico, a matriz manual NF-e/NFC-e em
   HOMOLOGAÇÃO, A1 real, credenciamento, validação do contador e aprovação
   formal continuam obrigatórios. PRODUÇÃO permanece bloqueada.
+
+## Rejeição 244 e série exclusiva de homologação — 30/08/2026
+
+- a primeira NF-e posterior à integração alcançou a SEFAZ/BA e recebeu
+  `244 — Processo de Emissão pelo Contribuinte incompatível com a Série da NF`;
+- a chave comprovou uso da série `999`, faixa incompatível com o processo
+  normal do contribuinte. A venda fiscal, pagamento, XML e rejeição foram
+  preservados; a mesma chave não deve ser reenviada;
+- configuração, inicialização de numeração, reserva, portão de prontidão e
+  pré-voo agora aceitam para `procEmi=0` somente as faixas oficiais `0-889`
+  e `920-969`; séries reservadas falham antes da reserva ou transmissão;
+- a política SEFAZ trata 244 explicitamente como revisão manual sem reenvio,
+  porque corrigir a série altera a chave de acesso;
+- validação focada: `214 passed`, `22 subtests passed`;
+- decisão operacional para os ensaios: NF-e 55 em HOMOLOGAÇÃO usará série
+  exclusiva `3`, iniciada no número `1`. Isso não autoriza a mesma série em
+  PRODUÇÃO, que continua dependendo de conferência do emissor anterior,
+  contador, credenciamento e aprovação formal.

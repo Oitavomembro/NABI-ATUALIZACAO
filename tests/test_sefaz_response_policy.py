@@ -14,3 +14,10 @@ def test_codigo_novo_ou_desconhecido_falha_fechado_sem_reenvio():
     decision = SefazResponsePolicy.decide("1234: retorno futuro")
     assert decision.action is SefazAction.MANUAL_REVIEW
     assert not decision.allows_resend
+
+
+def test_rejeicao_244_exige_nova_serie_sem_reenviar_a_mesma_chave():
+    decision = SefazResponsePolicy.decide("244")
+    assert decision.action is SefazAction.MANUAL_REVIEW
+    assert not decision.allows_resend
+    assert "não reenvie a mesma chave" in decision.operator_message

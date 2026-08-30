@@ -359,8 +359,23 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual((loaded["sale_series_55"], loaded["sale_series_65"]), (2, 7))
 
     def test_configuracao_rejeita_serie_de_venda_fora_do_intervalo(self):
-        with self.assertRaisesRegex(ValueError, "entre 0 e 999"):
+        with self.assertRaisesRegex(ValueError, "incompatível com emissão normal"):
             self.service.save_config({"sale_series_65": 1000})
+
+    def test_emissao_normal_rejeita_series_reservadas_antes_da_numeracao(self):
+        for series in (890, 899, 900, 919, 970, 979, 999):
+            with self.subTest(series=series):
+                with self.assertRaisesRegex(ValueError, "incompatível com emissão normal"):
+                    self.service.save_config({"sale_series_55": series})
+                with self.assertRaisesRegex(ValueError, "incompatível com emissão normal"):
+                    self.service.reserve_number(model="55", series=series)
+
+    def test_emissao_normal_aceita_faixas_oficiais_do_contribuinte(self):
+        for series in (0, 1, 889, 920, 969):
+            with self.subTest(series=series):
+                self.assertEqual(
+                    self.service.validate_taxpayer_series(series, model="55"), series
+                )
 
     def test_numeração_inicial_define_proximo_numero_uma_unica_vez(self):
         initialized = self.service.initialize_numbering(

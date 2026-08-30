@@ -63,13 +63,22 @@ class FiscalReadinessGate:
             if series is None:
                 problems.append("A série fiscal é obrigatória para validar a numeração.")
             else:
-                scope = service.numbering_scope(
-                    model=model, series=int(series), environment=config.get("environment")
-                )
-                if not scope.get("initialized"):
-                    problems.append(
-                        "A numeração fiscal ainda não foi inicializada para este ambiente, modelo e série."
+                try:
+                    validate_series = getattr(service, "validate_taxpayer_series", None)
+                    if validate_series is not None:
+                        validate_series(int(series), model=model)
+                    elif not 0 <= int(series) <= 999:
+                        raise ValueError("Série fiscal inválida.")
+                except (TypeError, ValueError) as exc:
+                    problems.append(str(exc))
+                else:
+                    scope = service.numbering_scope(
+                        model=model, series=int(series), environment=config.get("environment")
                     )
+                    if not scope.get("initialized"):
+                        problems.append(
+                            "A numeração fiscal ainda não foi inicializada para este ambiente, modelo e série."
+                        )
 
         if require_catalog:
             if self.catalog_service is None:
