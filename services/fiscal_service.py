@@ -1122,10 +1122,18 @@ class FiscalService:
                 'application/soap+xml; charset=utf-8; '
                 f'action="{soap_action}"'
             )
+            request_headers = dict(headers or {})
+            # Estes cabeçalhos fazem parte do contrato SOAP fiscal. Um chamador
+            # não pode degradar silenciosamente a requisição para XML puro ou
+            # anunciar um tipo de resposta incompatível com o parser seguro.
+            request_headers.update({
+                "Content-Type": content_type,
+                "Accept": "application/soap+xml; charset=utf-8",
+            })
             response = self.http_post(
                 endpoint,
                 data=request_xml,
-                headers={"Content-Type": content_type, **dict(headers or {})},
+                headers=request_headers,
                 cert=(pem_cert, pem_key),
                 verify=server_ca_bundle,
                 timeout=int(timeout),

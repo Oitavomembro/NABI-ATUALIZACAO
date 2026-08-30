@@ -4998,3 +4998,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   outbox, worker, gateways, Vendas do dia e PDV: `355 passed`, `12 subtests
   passed`. A leitura diagnóstica do banco TESTE foi somente leitura e nenhuma
   transmissão adicional foi realizada.
+
+## Comparação do transporte com implementações abertas — 29/08/2026
+
+- o transporte foi confrontado com o PyNFe, DFe.NET e os contratos oficiais do
+  Portal Nacional da NF-e; nenhum código externo foi incorporado;
+- a comparação confirmou o envelope SOAP 1.2 com `nfeDadosMsg`, namespaces e
+  métodos específicos dos seis serviços estaduais, e confirmou a exceção SOAP
+  1.1 da Distribuição DF-e prevista na NT 2014.002;
+- a ausência de retry HTTP automático na autorização foi mantida de propósito:
+  falha após o envio continua como resposta desconhecida, exige consulta e só
+  admite reenvio da autorização original depois da resposta 217 da SEFAZ;
+- foi fechada uma brecha residual nos cabeçalhos: parâmetros opcionais de um
+  chamador não podem mais sobrescrever `Content-Type`/ação SOAP nem `Accept`;
+  o transporte anuncia explicitamente resposta SOAP 1.2 e ainda preserva
+  cabeçalhos auxiliares inofensivos;
+- referências pesquisadas: `TadaSoftware/PyNFe` em
+  `pynfe/processamento/comunicacao.py`, `ZeusAutomacao/DFe.NET` no cliente
+  `NfeConsultaProtocolo4` e documentação técnica oficial da NF-e;
+- validação focada do serviço: `159 passed`, `10 subtests passed`; regressão
+  fiscal/Qt ampliada: `366 passed`, `12 subtests passed`. Nenhum banco ativo,
+  A1 real, XML real ou comunicação com a SEFAZ foi utilizado.

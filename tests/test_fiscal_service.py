@@ -2519,6 +2519,47 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(len(wrappers[0].xpath("./*[local-name()='consSitNFe']")), 1)
         self.assertIn("application/soap+xml", observed["headers"]["Content-Type"])
         self.assertIn("NFeConsultaProtocolo4/nfeConsultaNF", observed["headers"]["Content-Type"])
+        self.assertEqual(
+            observed["headers"]["Accept"],
+            "application/soap+xml; charset=utf-8",
+        )
+
+    def test_transmissao_nao_permite_sobrescrever_cabecalhos_soap_fiscais(self):
+        observed = {}
+
+        class Response:
+            content = b"<retConsSitNFe><cStat>217</cStat><xMotivo>NF-e nao consta</xMotivo></retConsSitNFe>"
+
+            @staticmethod
+            def raise_for_status():
+                return None
+
+        def fake_post(_url, **kwargs):
+            observed.update(kwargs)
+            return Response()
+
+        self.service.http_post = fake_post
+        self.service.save_config({
+            "enabled": True, "environment": "HOMOLOGACAO",
+            "endpoints": {"HOMOLOGACAO": {"consulta": "https://sefaz.invalid/consulta"}},
+        })
+        query = self.service.build_query_xml(
+            access_key="29260812345678000195550010000000011000000010"
+        )
+        self.service.transmit(
+            operation="consulta", model="55", xml=query,
+            pfx_path=self.pfx_path, password=self.password,
+            headers={
+                "Content-Type": "text/plain",
+                "Accept": "text/html",
+                "X-Correlation-ID": "teste-seguro",
+            },
+        )
+
+        self.assertIn("application/soap+xml", observed["headers"]["Content-Type"])
+        self.assertIn("NFeConsultaProtocolo4/nfeConsultaNF", observed["headers"]["Content-Type"])
+        self.assertEqual(observed["headers"]["Accept"], "application/soap+xml; charset=utf-8")
+        self.assertEqual(observed["headers"]["X-Correlation-ID"], "teste-seguro")
 
     def test_contratos_soap_cobrem_todas_as_operacoes_fiscais(self):
         expected = {
