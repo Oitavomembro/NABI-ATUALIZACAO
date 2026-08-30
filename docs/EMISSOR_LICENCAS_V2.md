@@ -54,6 +54,34 @@ payload canônico schema 3 e o documento contém apenas `payload` e `signature`.
 Essa exceção é isolada em `license_issuer/notas_iglbalt_format.py`; não altera o
 envelope V2 das licenças NabiCode existentes.
 
+### Pacote unificado do Notas IglBalt
+
+Ao selecionar **Notas IglBalt**, o emissor apresenta somente os controles
+administrativos necessários: cliente, CNPJ principal, máquina, operação, plano,
+validade administrativa, operador e observação. Os planos Individual, Duplo e
+Empresarial autorizam respectivamente 1, 2 e 3 CNPJs cadastrados; Personalizado
+aceita de 1 a 10.000. O campo assinado é sempre `max_registered_cnpjs`: CNPJ
+desativado continua consumindo uma vaga.
+
+**Nova instalação** e **Renovação** geram um `.iglbalt-activation` contendo a
+licença V2 original, `capacity.nabicap` e manifesto com SHA-256 e tamanho dos
+documentos. **Aumento de plano** exige selecionar e validar a licença V2 atual
+da mesma máquina e inclui somente a nova capacidade; não reemite uma licença
+que ainda está válida. O pacote é gravado atomicamente e jamais sobrescreve um
+arquivo anterior.
+
+A capacidade usa contrato próprio Ed25519, schema 1 e produto
+`NOTAS_IGLBALT_CAPACITY`. Sua chave privada continua fora do repositório e do
+executável. O emissor pode descobrir caminhos conhecidos na máquina
+administrativa para facilitar o uso, porém grava somente os caminhos nos
+campos visuais e lê a chave em memória durante a assinatura. O pacote, o
+histórico e os logs nunca recebem a chave privada.
+
+Depois da montagem, o emissor valida novamente ambas as assinaturas, a máquina,
+os hashes e o manifesto. Uma falha remove o pacote parcial. O histórico local
+registra cliente, máquina, limite, validade administrativa, operação, hashes,
+destino e operador, sem senha ou chave privada.
+
 Também é possível usar `license_issuer_cli.py issue`. A linha de comando exibe
 a mesma revisão e somente continua quando o operador digita `EMITIR`; a senha
 não é argumento de linha de comando.
