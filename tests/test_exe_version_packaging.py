@@ -18,7 +18,7 @@ class ExeVersionPackagingTests(unittest.TestCase):
 
     def test_legacy_uses_compiled_fallback(self):
         source = (ROOT / "nabicode_legacy.py").read_text(encoding="utf-8")
-        self.assertIn('COMPILED_APP_VERSION = "2.5.1"', source)
+        self.assertIn('COMPILED_APP_VERSION = "2.5.2"', source)
         self.assertIn("return load_app_version(", source)
         self.assertNotIn('raise RuntimeError("VERSAO.txt', source)
 

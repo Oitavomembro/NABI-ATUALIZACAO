@@ -322,7 +322,7 @@ class OfflineFiscalDossierService:
         *,
         profile: str = "TESTE",
         source_revision: str = DEFAULT_SOURCE_REVISION,
-        application_version: str = "2.5.1",
+        application_version: str = "2.5.2",
         application_revision: str = "21",
         readiness: FakeReadinessAdapter | None = None,
         store: FakeFiscalStore | None = None,
@@ -885,7 +885,7 @@ def run_offline_dossier(
     *,
     profile: str = "TESTE",
     source_revision: str = DEFAULT_SOURCE_REVISION,
-    application_version: str = "2.5.1",
+    application_version: str = "2.5.2",
     application_revision: str = "21",
     service: OfflineFiscalDossierService | None = None,
 ) -> dict[str, Any]:

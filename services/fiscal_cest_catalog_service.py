@@ -41,7 +41,7 @@ class FiscalCESTCatalogService:
 
     @staticmethod
     def _download(url: str) -> bytes:
-        request = Request(url, headers={"User-Agent": "NabiCode/2.5.1 CEST-Official-Catalog"})
+        request = Request(url, headers={"User-Agent": "NabiCode/2.5.2 CEST-Official-Catalog"})
         with urlopen(request, timeout=30) as response:
             payload = response.read(FiscalCESTCatalogService.MAX_DOWNLOAD_BYTES + 1)
         if len(payload) > FiscalCESTCatalogService.MAX_DOWNLOAD_BYTES:

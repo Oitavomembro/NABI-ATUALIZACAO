@@ -1,3 +1,10 @@
+# 2.5.2 R22 — candidata consolidada
+
+- Unifica as trilhas Qt comercial, fiscal e administrativa já homologadas em uma única candidata.
+- Completa o cadastro fiscal do cliente e preserva as travas fail-closed da emissão fiscal.
+- Mantém produção fiscal bloqueada até a homologação manual com credenciamento, contador e A1 reais.
+- Gera um artefato com identidade própria para impedir confusão com a instalação antiga 2.5.1.
+
 # 2.4.47 — Sprint 1.6 Produtos
 
 - Estado de preenchimento e leitura do formulário extraído do `nabicode_legacy.py`.

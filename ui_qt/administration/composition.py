@@ -202,7 +202,7 @@ def _repair_audit(audit_service, security, event):
 
 def build_administrative_modules(
     container, database, profile, security, *, terminal="CAIXA-1",
-    app_version="2.5.1", schema_version=21, fiscal_service=None,
+    app_version="2.5.2", schema_version=21, fiscal_service=None,
     fiscal_catalog_service=None,
     nfe_purchase_import=None,
     restore_helper_command=None,

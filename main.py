@@ -279,7 +279,7 @@ def _startup_logger(runtime_profile) -> logging.Logger:
         configure_diagnostic_logging(
             logger,
             runtime_profile.paths.logs / "startup.log",
-            app_version="2.5.1",
+            app_version="2.5.2",
             runtime_profile=runtime_profile.profile,
         )
     return logger

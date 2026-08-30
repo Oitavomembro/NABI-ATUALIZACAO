@@ -75,7 +75,7 @@ mark_startup("theme_manager_configured")
 
 SOURCE_DIR = os.path.dirname(os.path.abspath(__file__))
 RUNTIME_RESOURCE_DIR = getattr(sys, "_MEIPASS", SOURCE_DIR)
-COMPILED_APP_VERSION = "2.5.1"
+COMPILED_APP_VERSION = "2.5.2"
 
 def _ler_versao_aplicacao():
     return load_app_version(

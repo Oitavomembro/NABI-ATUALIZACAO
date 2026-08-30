@@ -25,8 +25,8 @@ def canonical_engine_event() -> dict:
 
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
-    assert build_windows.read_version(ROOT) == "2.5.1"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "21"
+    assert build_windows.read_version(ROOT) == "2.5.2"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "22"
 
 
 def test_wheelhouse_catalog_never_hashes_its_own_output_file():
@@ -91,7 +91,7 @@ def test_installer_discovers_other_registered_nabicode_versions_without_disk_wil
     assert "{commondesktop}\\NabiCode*.lnk" in script
     assert "{userdesktop}\\NabiCode*.lnk" in script
     assert str(ROOT) in build_windows.sys.path
-    assert build_windows.distribution_name(ROOT) == "NabiCode_v2_5_1"
+    assert build_windows.distribution_name(ROOT) == "NabiCode_v2_5_2"
     assert (ROOT / "PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "TESTE"
     assert (ROOT / "build_tools/resources/PERFIL_NABICODE.txt").read_text(encoding="utf-8").strip() == "PRODUCAO"
 

@@ -5752,3 +5752,16 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   isolado, repetir smoke e homologar visualmente;
 - produção fiscal permanece bloqueada conforme os portões anteriores. O smoke
   não usou banco, certificado, XML, chave privada, licença de cliente ou SEFAZ.
+
+### Promoção de identidade da candidata — 2.5.2 R22
+
+- a candidata consolidada recebeu identidade exclusiva `2.5.2`, revisão `22`,
+  para nunca sobrescrever nem ser confundida com a instalação antiga 2.5.1;
+- foram alinhados os fallbacks de versão das entradas Qt/Legacy, composição
+  administrativa, dossiê fiscal e identificadores dos catálogos oficiais;
+- referências históricas e cenários de compatibilidade com 2.5.1 foram
+  preservados deliberadamente nos relatórios e testes que simulam versões
+  anteriores;
+- o atalho público continua intocado. A promoção ao usuário depende de testes
+  focados, novo commit-fonte imutável, build lockado, smoke empacotado e
+  homologação visual no perfil TESTE.

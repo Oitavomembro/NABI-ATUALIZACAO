@@ -36,7 +36,7 @@ class StartupSmokeTestTests(unittest.TestCase):
                 check=False,
             )
             self.assertEqual(completed.returncode, 0, completed.stderr)
-            self.assertEqual(output.read_text(encoding="utf-8").strip(), "2.5.1")
+            self.assertEqual(output.read_text(encoding="utf-8").strip(), "2.5.2")
             events = json.loads(trace.read_text(encoding="utf-8"))["events"]
             self.assertEqual(
                 [event["name"] for event in events],

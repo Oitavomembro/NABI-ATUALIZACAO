@@ -177,7 +177,7 @@ def test_evidencias_e_payload_possuem_hashes_sha256_validos():
 
     assert report["schema_version"] == "1.0"
     assert report["versao_harness"] == "1.1.0"
-    assert report["versao_aplicacao"] == "2.5.1"
+    assert report["versao_aplicacao"] == "2.5.2"
     assert report["revisao_aplicacao"] == "21"
     assert report["revisao_fonte"] == (
         "base:a179e791a82bc0a58c4ccccc1bccf357b6008fa8+"

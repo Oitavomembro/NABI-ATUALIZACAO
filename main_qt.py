@@ -420,7 +420,7 @@ def main(argv=None) -> int:
         module_actions = build_administrative_modules(
             container, database, profile, module_security,
             terminal=str(system.get_config("caixa_terminal") or "CAIXA-1"),
-            app_version=load_app_version("2.5.1", source_file=__file__),
+            app_version=load_app_version("2.5.2", source_file=__file__),
             schema_version=SCHEMA_VERSION,
             fiscal_service=fiscal_service,
             fiscal_catalog_service=fiscal_catalog_service,
