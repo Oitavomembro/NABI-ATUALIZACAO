@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 import sys
 from pathlib import Path
@@ -14,6 +15,21 @@ FORBIDDEN_SOURCE_SUFFIXES = {
     ".pem", ".key", ".p12", ".pfx", ".nabilic", ".nabicap",
     ".iglbalt-activation",
 }
+
+
+def clean_build_environment() -> dict[str, str]:
+    """Impede DLLs de ferramentas auxiliares do host de contaminarem o build."""
+    environment = os.environ.copy()
+    python_directory = Path(sys.executable).resolve().parent
+    windows_directory = Path(os.environ.get("SystemRoot", r"C:\Windows")).resolve()
+    trusted_path = (
+        python_directory,
+        python_directory / "Scripts",
+        windows_directory / "System32",
+        windows_directory,
+    )
+    environment["PATH"] = os.pathsep.join(str(path) for path in trusted_path)
+    return environment
 
 
 def validate_emitter_source(root: Path = PROJECT_ROOT) -> None:
@@ -43,7 +59,9 @@ def main(argv=None) -> int:
         "--workpath", str(destination / "_work"),
         str(SPEC),
     ]
-    return subprocess.run(command, cwd=PROJECT_ROOT, check=False).returncode
+    return subprocess.run(
+        command, cwd=PROJECT_ROOT, check=False, env=clean_build_environment()
+    ).returncode
 
 
 if __name__ == "__main__":

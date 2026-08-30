@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import json
+import os
+import sys
 from datetime import date, datetime, timezone
 from pathlib import Path
 
@@ -403,6 +405,16 @@ def test_interface_cadastra_notas_iglbalt_com_contrato_fechado(tmp_path, monkeyp
     assert window.existing_notas_license.isEnabled()
     assert not window.private_key.isEnabled()
     window.close(); app.processEvents()
+
+
+def test_build_do_emissor_higieniza_path_de_ferramentas_externas(monkeypatch) -> None:
+    from build_tools import build_license_issuer
+
+    monkeypatch.setenv("PATH", r"C:\ferramenta-externa;C:\outra-dll")
+    environment = build_license_issuer.clean_build_environment()
+    assert "ferramenta-externa" not in environment["PATH"]
+    assert str(Path(sys.executable).resolve().parent) in environment["PATH"]
+    assert str(Path(os.environ["SystemRoot"]).resolve() / "System32") in environment["PATH"]
 
 
 def test_build_do_emissor_recusa_pacotes_e_capacidades_de_cliente(tmp_path):
