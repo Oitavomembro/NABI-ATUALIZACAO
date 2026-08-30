@@ -50,6 +50,12 @@ class Service:
     def update_customer(self, command):
         self.calls.append(("update", command)); return customer(command.customer_id, command.name)
 
+    def fiscal_address_defaults(self):
+        return {
+            "fiscal_city": "ITABUNA", "fiscal_city_code": "2914802",
+            "fiscal_state": "BA",
+        }
+
 
 @pytest.fixture(scope="module")
 def app():
@@ -160,10 +166,32 @@ def test_editor_enter_avanca_shift_volta_e_salva_sem_sql(app):
     dialog.save_button.setFocus(); key(dialog.save_button, Qt.Key.Key_Return)
     assert service.calls[-1][0] == "create"
     assert service.calls[-1][1].name == "JOAO"
+    assert service.calls[-1][1].fiscal_city == "ITABUNA"
+    assert service.calls[-1][1].fiscal_city_code == "2914802"
+    assert service.calls[-1][1].fiscal_state == "BA"
+    assert dialog.result() == QDialog.DialogCode.Accepted
+
+
+def test_editor_expoe_e_salva_endereco_fiscal_com_cep_opcional(app):
+    service = Service(); dialog = CustomerEditorDialog(service)
+    dialog.name.setText("CLIENTE FISCAL")
+    dialog.fiscal_street.setText("RUA PRINCIPAL")
+    dialog.fiscal_number.setText("100")
+    dialog.fiscal_district.setText("CENTRO")
+    dialog.fiscal_zip_code.clear()
+    dialog._save()
+    command = service.calls[-1][1]
+    assert command.fiscal_street == "RUA PRINCIPAL"
+    assert command.fiscal_number == "100"
+    assert command.fiscal_district == "CENTRO"
+    assert command.fiscal_zip_code == ""
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
 def test_gui_nao_importa_banco_repositorio_ou_fiscal():
     source = (__import__("pathlib").Path(__file__).parents[1] / "ui_qt/commercial/customer_dialog.py").read_text()
-    for forbidden in ("sqlite3", "database", "repositories", "fiscal", "sefaz"):
+    for forbidden in (
+        "import sqlite3", "from database", "from repositories",
+        "from services.fiscal", "import services.fiscal", "sefaz",
+    ):
         assert forbidden not in source.lower()

@@ -5,9 +5,9 @@ from decimal import Decimal
 from PySide6.QtCore import QEvent, QSettings, Qt, QTimer
 from PySide6.QtGui import QBrush, QColor, QFont, QKeySequence, QShortcut
 from PySide6.QtWidgets import (
-    QAbstractItemView, QComboBox, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
+    QAbstractItemView, QCheckBox, QComboBox, QDialog, QFormLayout, QHBoxLayout, QHeaderView, QLabel,
     QInputDialog, QLineEdit, QMessageBox, QPushButton, QTableWidget, QTableWidgetItem,
-    QTextEdit, QVBoxLayout,
+    QScrollArea, QTextEdit, QVBoxLayout, QWidget,
 )
 
 from commercial.application.customer_dto import CustomerCreateCommand, CustomerUpdateCommand
@@ -50,9 +50,14 @@ class CustomerEditorDialog(QDialog):
         self.saved_customer = None
         self.setWindowTitle("Editar cliente" if customer else "Novo cliente")
         self.setMinimumWidth(620)
+        self.resize(760, 760)
         self.setStyleSheet(_customer_style())
         layout = QVBoxLayout(self)
-        form = QFormLayout()
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QScrollArea.Shape.NoFrame)
+        form_body = QWidget()
+        form = QFormLayout(form_body)
         next_record = getattr(service, "next_record_number", lambda: 5500)
         self.record = QLineEdit(
             str(customer.record_number or "") if customer else str(next_record())
@@ -67,18 +72,54 @@ class CustomerEditorDialog(QDialog):
         self.rg = QLineEdit(customer.rg if customer else "")
         self.phone = QLineEdit(customer.phone if customer else "")
         self.address = QLineEdit(customer.address if customer else "")
+        defaults = getattr(service, "fiscal_address_defaults", lambda: {})() if customer is None else {}
+        self.email = QLineEdit(getattr(customer, "email", "") if customer else "")
+        self.state_registration = QLineEdit(
+            getattr(customer, "state_registration", "") if customer else ""
+        )
+        self.icms_taxpayer = QCheckBox("Cliente contribuinte do ICMS")
+        self.icms_taxpayer.setChecked(bool(getattr(customer, "icms_taxpayer", False)))
+        self.fiscal_street = QLineEdit(getattr(customer, "fiscal_street", "") if customer else "")
+        self.fiscal_number = QLineEdit(getattr(customer, "fiscal_number", "") if customer else "")
+        self.fiscal_district = QLineEdit(getattr(customer, "fiscal_district", "") if customer else "")
+        self.fiscal_city = QLineEdit(
+            getattr(customer, "fiscal_city", "") if customer else defaults.get("fiscal_city", "")
+        )
+        self.fiscal_city_code = QLineEdit(
+            getattr(customer, "fiscal_city_code", "")
+            if customer else defaults.get("fiscal_city_code", "")
+        )
+        self.fiscal_state = QLineEdit(
+            getattr(customer, "fiscal_state", "")
+            if customer else defaults.get("fiscal_state", "")
+        )
+        self.fiscal_zip_code = QLineEdit(
+            getattr(customer, "fiscal_zip_code", "") if customer else ""
+        )
+        self.fiscal_city_code.setMaxLength(7)
+        self.fiscal_state.setMaxLength(2)
+        self.fiscal_zip_code.setMaxLength(8)
         self.notes = QTextEdit(customer.notes if customer else "")
         self.notes.setMaximumHeight(90)
         self.limit = MoneyEdit()
         self.limit.set_value(customer.credit_limit if customer else Decimal("0"))
         for label, widget in (
             ("NÚMERO DA FICHA*", self.record), ("Código", self.code), ("Nome*", self.name),
-            ("CPF", self.cpf), ("RG", self.rg), ("Telefone", self.phone),
+            ("CPF/CNPJ", self.cpf), ("RG", self.rg), ("Telefone", self.phone),
             ("Endereço", self.address), ("Observações", self.notes),
             ("Limite de crédito", self.limit),
+            ("E-mail fiscal", self.email), ("Inscrição estadual", self.state_registration),
+            ("Situação no ICMS", self.icms_taxpayer),
+            ("Logradouro fiscal*", self.fiscal_street),
+            ("Número fiscal*", self.fiscal_number),
+            ("Bairro fiscal*", self.fiscal_district),
+            ("Município fiscal*", self.fiscal_city),
+            ("Código IBGE*", self.fiscal_city_code), ("UF fiscal*", self.fiscal_state),
+            ("CEP fiscal (opcional)", self.fiscal_zip_code),
         ):
             form.addRow(label, widget)
-        layout.addLayout(form)
+        scroll.setWidget(form_body)
+        layout.addWidget(scroll, 1)
         buttons = QHBoxLayout()
         buttons.addStretch()
         cancel = QPushButton("Cancelar  [Esc]")
@@ -91,7 +132,10 @@ class CustomerEditorDialog(QDialog):
         layout.addLayout(buttons)
         self._fields = (
             self.record, self.code, self.name, self.cpf, self.rg, self.phone,
-            self.address, self.notes, self.limit, self.save_button,
+            self.address, self.notes, self.limit, self.email, self.state_registration,
+            self.icms_taxpayer, self.fiscal_street, self.fiscal_number,
+            self.fiscal_district, self.fiscal_city, self.fiscal_city_code,
+            self.fiscal_state, self.fiscal_zip_code, self.save_button,
         )
         for widget in self._fields:
             widget.installEventFilter(self)
@@ -122,6 +166,15 @@ class CustomerEditorDialog(QDialog):
                 cpf=self.cpf.text(), rg=self.rg.text(), phone=self.phone.text(),
                 address=self.address.text(), notes=self.notes.toPlainText(),
                 credit_limit=self.limit.value(),
+                email=self.email.text(), state_registration=self.state_registration.text(),
+                icms_taxpayer=self.icms_taxpayer.isChecked(),
+                fiscal_street=self.fiscal_street.text(),
+                fiscal_number=self.fiscal_number.text(),
+                fiscal_district=self.fiscal_district.text(),
+                fiscal_city=self.fiscal_city.text(),
+                fiscal_city_code=self.fiscal_city_code.text(),
+                fiscal_state=self.fiscal_state.text(),
+                fiscal_zip_code=self.fiscal_zip_code.text(),
             )
             if self.customer is None:
                 self.saved_customer = self.service.create_customer(CustomerCreateCommand(**values))

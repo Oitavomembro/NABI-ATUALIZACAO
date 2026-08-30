@@ -5339,6 +5339,116 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - antes de integrar ao produto, validar a demonstração visual e funcional com
   o proprietário. Não misturar esta etapa com as correções SEFAZ em andamento.
 
+## Pendência de navegação no PDV — seletor de cliente
+
+- no campo de cliente do PDV, a tecla `Seta para baixo` deve abrir e permitir
+  navegar pela lista de clientes, reproduzindo o mesmo comportamento já
+  existente no seletor de produtos;
+- manter teclado e mouse funcionais, sem selecionar automaticamente um cliente
+  incorreto e sem interferir no teste fiscal/crediário em andamento.
+
+## Pendência visual — janela de recebimento/pagamentos
+
+- reduzir as dimensões da janela de recebimento para eliminar espaços vazios e
+  manter valor da venda, forma de pagamento, valor recebido, troco/saldo e ação
+  de finalizar visualmente mais próximos;
+- preservar legibilidade, ordem de foco, digitação e limpeza integral dos
+  valores, atalhos de teclado e botão principal grande como no PDV;
+- validar em resoluções menores antes de substituir o layout atual.
+
+## Pendência cadastral fiscal — endereço completo do cliente
+
+- o editor de cadastro de clientes deve disponibilizar separadamente todos os
+  dados usados pela emissão fiscal: logradouro, número, complemento, bairro,
+  município, código IBGE do município, UF e CEP;
+- em novos cadastros, município, UF e código IBGE devem iniciar com os dados da
+  cidade configurada na instalação/perfil da empresa, reduzindo digitação;
+- os valores sugeridos devem continuar editáveis por cliente, pois o
+  destinatário pode residir em outro município ou UF;
+- a aplicação deve validar a coerência entre município, UF e código IBGE antes
+  da emissão, sem inventar código e sem sobrescrever endereços já cadastrados;
+- para NF-e 55 com destinatário identificado, o grupo de endereço é exigido
+  pelas regras oficiais. No schema vigente, logradouro, número, bairro, código
+  IBGE do município, nome do município e UF são obrigatórios dentro do grupo;
+  complemento e CEP são opcionais. O programa não deve recusar a NF-e somente
+  por ausência de CEP, embora deva permitir e recomendar seu preenchimento;
+- o formulário precisa permitir corrigir esses dados diretamente no editor,
+  evitando que o PDV recuse a NF-e por campos que a própria interface não
+  oferece para preenchimento.
+
+### Implementação disponível para homologação — 30/08/2026
+
+- o editor Qt agora carrega e salva CPF/CNPJ, e-mail fiscal, inscrição estadual,
+  indicador de contribuinte do ICMS, logradouro, número, bairro, município,
+  código IBGE, UF e CEP fiscal sem acesso direto da interface ao banco;
+- novos clientes recebem município, código IBGE e UF da configuração fiscal do
+  emitente como sugestão editável. Clientes existentes mantêm seus próprios
+  valores e não são sobrescritos;
+- criação e edição persistem os campos na mesma transação cadastral e a projeção
+  de consulta devolve os dados novamente ao editor;
+- código IBGE deve ter sete dígitos e pertencer à UF informada; UF deve ter duas
+  letras. CEP, quando preenchido, deve ter oito dígitos, mas permanece opcional
+  conforme o schema oficial vigente do endereço do destinatário;
+- validação focada do cadastro, integração SQLite, destinatário NF-e e painel Qt:
+  `97 passed`, `5 subtests passed`; `compileall` e `git diff --check` aprovados;
+- ainda não foi implementado o atalho `Completar cadastro agora`; nesta etapa o
+  operador abre o editor normal, salva e retorna ao teste fiscal.
+
+## Painel Nabi enxuto durante o teste fiscal
+
+- recursos ainda indisponíveis não devem aparecer como controles bloqueados:
+  o botão `Voz — em preparação` fica oculto até existir implementação funcional;
+- `Revisar XML de entrada` deixa de ocupar permanentemente o painel do PDV. O
+  serviço e o fluxo seguro permanecem preservados para acionamento contextual
+  pela Nabi e pelos módulos próprios de entrada/importação;
+- a mudança é somente de apresentação e não altera emissão, consulta,
+  cancelamento ou recuperação fiscal.
+
+## Continuidade assistida — cliente fiscal incompleto
+
+- ao selecionar/finalizar com cliente cujo cadastro fiscal esteja incompleto,
+  oferecer `Completar cadastro agora` em vez de apenas encerrar com erro;
+- a Nabi pode apresentar a mesma opção em linguagem direta, mas a edição deve
+  continuar explícita e confirmada pelo operador;
+- abrir o editor já posicionado no cliente e destacar somente os campos
+  faltantes ou incoerentes. Depois de salvar, retornar à mesma venda, preservar
+  itens, quantidades, preços e pagamentos ainda não confirmados, atualizar o
+  cliente selecionado e repetir a pré-validação fiscal;
+- cancelar a edição deve voltar ao PDV sem perder a venda e sem emitir documento;
+  nenhuma informação cadastral pode ser inventada ou salva silenciosamente.
+
+## Central Fiscal — XML suspenso; pendências e contingência separadas
+
+- **não implementar nem alterar agora o fluxo de XML de entrada**. Seletor de
+  arquivo/pasta, revisão, importação e eventual continuação de lançamento serão
+  definidos em conversa específica com o proprietário;
+- até essa definição, manter o atalho de XML oculto no painel da Nabi e preservar
+  os serviços existentes sem conectá-los a um novo fluxo;
+- documentos fiscais de saída pendentes, com resposta desconhecida ou emitidos
+  em contingência devem ser sinalizados na Central Fiscal, com ação adequada ao
+  estado: consultar/concluir, corrigir rejeição segura, transmitir contingência
+  pendente ou encaminhar para revisão manual;
+- nunca tratar todos esses estados como simples `Reenviar`: resposta desconhecida
+  exige consulta prévia e uma NF-e pendente de retorno não pode virar outra
+  emissão/numeração sem aplicar o procedimento oficial de contingência;
+- preservar venda, chave, série, número, XML e histórico de tentativas durante
+  qualquer recuperação.
+
+## Dashboard — caixa fora do histórico geral do dia
+
+- retirar do `Histórico de movimentações do dia` os registros estritamente
+  operacionais do caixa, evitando misturá-los com vendas, recebimentos de ficha
+  e demais acontecimentos comerciais;
+- criar um card próprio de `Caixa` no dashboard. Ao acioná-lo, abrir a aba/tela
+  detalhada do caixa com sessão, abertura, vendas por forma de pagamento,
+  recebimentos, suprimentos, sangrias, saídas documentadas, saldo esperado,
+  valor contado e diferença;
+- o card deve mostrar um resumo curto e não duplicar valores já exibidos em
+  faturamento ou recebimentos. A separação é visual/analítica e não pode apagar
+  movimentos, auditoria ou dados usados no fechamento;
+- filtros, permissões e período do detalhe devem ser coerentes com o caixa e o
+  usuário autenticado.
+
 ## Cancelamento fiscal da venda #8 — estorno local pendente
 
 - o cancelamento da NF-e homologada da venda `#8` foi aceito pela SEFAZ e o
@@ -5381,3 +5491,117 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - a auditoria ampla e o teste de estresse integral solicitados continuam como
   etapa separada; esta entrega fecha especificamente o vazamento de registros
   cancelados para histórico, faturamento e caixa.
+
+## Próxima edição — simplificação do cadastro de clientes
+
+- reorganizar o editor para eliminar campos duplicados ou equivalentes, em
+  especial o campo genérico `Endereço` quando logradouro, número, bairro,
+  município e UF já estiverem disponíveis separadamente;
+- retirar o sufixo técnico `fiscal` dos rótulos visíveis. Exibir no início uma
+  orientação curta: `Campos com * são obrigatórios para emissão fiscal`;
+- adaptar os campos ao tipo de pessoa. Para pessoa física, não destacar
+  inscrição estadual nem situação de contribuinte do ICMS sem necessidade;
+  para pessoa jurídica/contribuinte, disponibilizar esses dados conforme o
+  perfil cadastral aplicável;
+- manter município, UF e código IBGE sugeridos pela cidade da instalação, mas
+  sempre editáveis e validados. Para Piritiba/BA, o código oficial é `2924801`;
+- reduzir altura, espaços vazios e rolagem desnecessária, preservando acesso a
+  todos os dados e sem esconder campo realmente exigido pela NF-e;
+- esta reorganização é visual e cadastral; não apagar nem fundir dados antigos
+  sem migração compatível e testes de ida e volta.
+
+## Próxima edição — validação antecipada do limite no crediário
+
+- ao escolher `Crediário`, calcular imediatamente o crédito disponível do
+  cliente contra o total atual/estimado da venda, antes de confirmar pagamento
+  e antes de criar ou transmitir qualquer documento fiscal;
+- se o total superar o limite disponível, avisar claramente e oferecer
+  `Vender mesmo assim` ou `Voltar`, sem cancelar nem limpar a venda;
+- preservar carrinho, cliente, ajustes e pagamentos durante a decisão. A venda
+  somente segue para a SEFAZ após a confirmação comercial;
+- registrar operador e eventual administrador que autorizaram a exceção, sem
+  transformar limite insuficiente em erro fiscal tardio;
+- divergência observada no ensaio de 30/08/2026: o operador esperava uma venda
+  próxima de `R$ 20,00`, mas a última venda persistida (`#9`) totalizou
+  `R$ 9,60`; conferir quantidade, preço, total apresentado e total persistido
+  no próximo teste acompanhado.
+
+## Próxima edição — autenticação segura do cancelamento fiscal
+
+- o cancelamento não deve solicitar novamente ao operador a senha do
+  certificado A1 já configurado. O serviço deve usar exclusivamente a
+  credencial fiscal gerenciada em sessão/cofre, sem expô-la à interface;
+- antes de iniciar o evento fiscal, exigir autenticação ou confirmação de um
+  usuário administrador com permissão específica de cancelamento, mantendo o
+  motivo obrigatório para a SEFAZ e a confirmação humana final;
+- autoria e auditoria devem registrar o usuário administrativo real, nunca o
+  texto genérico `Sistema`; senha administrativa e senha do A1 possuem funções
+  distintas e não podem ser armazenadas, reutilizadas ou exibidas uma pela
+  outra;
+- se a credencial A1 gerenciada estiver ausente ou inválida, bloquear com
+  orientação para Configurações Fiscais, sem abrir campo improvisado de senha
+  dentro da venda.
+
+### Evidência somente leitura — venda a prazo #9 cancelada
+
+- venda `#9` do cliente Gustavo foi persistida por `R$ 9,60` em duas parcelas
+  de `R$ 4,80`, autorizada em HOMOLOGAÇÃO e posteriormente cancelada;
+- venda e duas parcelas estão `CANCELADO`, título financeiro de `R$ 9,60` foi
+  cancelado e o saldo do cliente retornou a `R$ 0,00`;
+- duas unidades saíram do estoque (`40 → 38`) e retornaram uma única vez
+  (`38 → 40`); não houve movimento de dinheiro no caixa, coerente com crediário;
+- documento fiscal está `CANCELADO`, com chave e protocolo preservados. Não
+  alterar nem reenviar esse documento durante as próximas correções.
+
+## Próxima edição — limpeza visual do PDV fiscal
+
+- simplificar o cabeçalho para o operador. Informações técnicas como
+  `FISCAL OBRIGATÓRIO` e `NF-e 55` devem ficar em status contextual discreto ou
+  detalhe fiscal, sem dominar permanentemente a tela de venda; manter visível
+  apenas a indicação indispensável de ambiente `TESTE` durante homologação;
+- remover da tela principal a mensagem interna `Descrição livre, sem baixa de
+  estoque`; produto avulso/descrição livre deve aparecer somente quando a opção
+  correspondente estiver realmente ativa e com texto voltado ao operador;
+- remover o separador redundante `AÇÕES COMERCIAIS` quando os próprios botões já
+  identificarem as ações;
+- não repetir `Nenhum cliente selecionado` abaixo do seletor quando o próprio
+  campo já comunica o estado. Após selecionar, manter somente nome/identificação
+  necessária e acesso rápido à edição;
+- revisar o rodapé de atalhos para evitar repetir informações já impressas nos
+  botões, preservando os atalhos úteis e a acessibilidade por teclado;
+- manter `Orçamento`, `Vendas do dia`, `Vendas suspensas`, total, edição,
+  remoção e finalização porque possuem função operacional real; a limpeza não
+  pode esconder estados fiscais críticos, falhas ou bloqueios necessários.
+
+## Próxima edição — orçamento como ação final, sem modo liga/desliga
+
+- decisão atualizada do proprietário: remover do topo do PDV a opção
+  `ORÇAMENTO LIGADO/DESLIGADO [F5]`. O operador não deve precisar mudar o modo
+  da tela antes de começar a montar o atendimento;
+- substituir a ação visível `Suspender venda [F6]` por uma ação inequívoca como
+  `Salvar como orçamento`. O termo `suspender` transmite a impressão de falha
+  ou problema na venda e não representa o uso desejado;
+- a montagem do orçamento deve continuar igual à venda normal até a decisão
+  final: selecionar cliente, incluir/editar/remover itens, aplicar ajustes e
+  informar como o cliente pretende pagar;
+- permitir registrar no orçamento condições apenas informativas: formas de
+  pagamento pretendidas, valor de entrada, quantidade de parcelas, valores e
+  vencimentos simulados. Essas condições não constituem pagamento, recebível ou
+  dívida e devem ser recalculadas/confirmadas quando o orçamento virar venda;
+- ao concluir essa ação, o documento e qualquer impressão/PDF devem trazer
+  `ORÇAMENTO` de forma destacada e não podem ser apresentados como comprovante
+  de venda, documento fiscal ou confirmação de pagamento;
+- salvar orçamento não pode gerar venda, NF-e/NFC-e, numeração fiscal, outbox,
+  baixa ou reserva de estoque, entrada/saída de caixa, recebimento, título
+  financeiro, parcela real, saldo na ficha, faturamento ou comissão;
+- o orçamento salvo deve permanecer pesquisável e reabrível. Ao convertê-lo em
+  venda, carregar uma cópia para o carrinho, revalidar cliente, produtos,
+  estoque, preços, descontos, limite de crédito e condições de pagamento e só
+  então passar pelo checkout oficial;
+- preservar os registros antigos de vendas suspensas e orçamentos durante a
+  migração. Definir compatibilidade e destino desses registros antes de remover
+  botões, tabelas ou serviços existentes;
+- revisar os atalhos `F5` e `F6` depois da mudança, evitando atalhos sem ação ou
+  conflito com outros módulos. A alteração exige testes de teclado, mouse,
+  persistência após reinício, impressão/PDF, conversão e prova de ausência de
+  efeitos em estoque, caixa, financeiro e Fiscal/SEFAZ.

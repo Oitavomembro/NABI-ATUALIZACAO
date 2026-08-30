@@ -171,6 +171,7 @@ class NabiAssistantPanel(QWidget):
         self.send = QPushButton("Enviar")
         self.voice = QPushButton("Voz — em preparação")
         self.voice.setEnabled(False)
+        self.voice.setVisible(False)
         self.voice.setToolTip("A primeira versão da Nabi funciona somente por texto.")
         entry.addWidget(self.message, 1)
         entry.addWidget(self.send)
@@ -178,7 +179,9 @@ class NabiAssistantPanel(QWidget):
         root.addWidget(self.voice)
 
         self.prepare_nfe_entry_button = QPushButton("REVISAR XML DE ENTRADA")
-        self.prepare_nfe_entry_button.setVisible(nfe_entry_service is not None)
+        # A revisão continua disponível pela intenção contextual da Nabi e pelos
+        # módulos de entrada. Não deve ocupar permanentemente o painel do PDV.
+        self.prepare_nfe_entry_button.setVisible(False)
         self.prepare_nfe_entry_button.setToolTip(
             "Lê um XML local como dado não confiável; não importa nem acessa a SEFAZ."
         )

@@ -286,6 +286,15 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(recipient["state"], "SP")
         self.assertEqual(destination, 2)
 
+    def test_cep_do_destinatario_e_opcional_na_nfe_55(self):
+        connection = sqlite3.connect(self.db)
+        connection.execute("UPDATE clientes SET fiscal_cep='' WHERE id=1")
+        connection.commit(); connection.close()
+        recipient, destination = self.service.recipient_for_customer(1, model="55")
+        self.assertNotIn("zip_code", recipient)
+        self.assertEqual(recipient["city_code"], "3550308")
+        self.assertEqual(destination, 2)
+
     def test_consumidor_final_na_nfce_nao_exige_documento(self):
         recipient, destination = self.service.recipient_for_customer(2, model="65")
         self.assertEqual(recipient, {})

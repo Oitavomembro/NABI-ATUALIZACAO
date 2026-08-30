@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import json
 from contextlib import closing
 from concurrent.futures import ThreadPoolExecutor
 import tempfile
@@ -28,6 +29,10 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
                     nome TEXT NOT NULL,
                     cpf TEXT, rg TEXT, telefone TEXT, endereco TEXT,
                     observacoes TEXT, limite REAL, saldo_devedor REAL
+                    ,email TEXT, inscricao_estadual TEXT, contribuinte_icms INTEGER,
+                    fiscal_logradouro TEXT, fiscal_numero TEXT, fiscal_bairro TEXT,
+                    fiscal_codigo_municipio TEXT, fiscal_municipio TEXT,
+                    fiscal_uf TEXT, fiscal_cep TEXT
                 );
                 CREATE TABLE assistant_operation_journal (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +74,36 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
         self.assertEqual(row, ("CLI174321", 5500, "Maria da Silva", "123", "9999", 1234.56, 0.0))
         self.assertEqual(self.config["proxima_ficha"], "5501")
         self.assertEqual(self.history, [(customer_id, "CADASTRO", "Cadastro criado.")])
+
+    def test_padrao_fiscal_vem_da_instalacao_e_perfil_editado_e_persistido(self) -> None:
+        self.config["fiscal.config.v1"] = json.dumps({
+            "state": "BA",
+            "issuer": {"city": "ITABUNA", "city_code": "2914802", "state": "BA"},
+        })
+        self.assertEqual(self.service.fiscal_address_defaults(), {
+            "fiscal_city": "ITABUNA", "fiscal_city_code": "2914802", "fiscal_state": "BA",
+        })
+        customer_id = self.service.criar(
+            nome="Cliente Fiscal", codigo="FISCAL", fiscal_logradouro="RUA A",
+            fiscal_numero="10", fiscal_bairro="CENTRO", fiscal_municipio="ILHÉUS",
+            fiscal_codigo_municipio="2913606", fiscal_uf="BA", fiscal_cep="",
+        )
+        self.service.editar(
+            customer_id, nome="Cliente Fiscal", codigo="FISCAL",
+            fiscal_logradouro="RUA B", fiscal_numero="20", fiscal_bairro="BAIRRO",
+            fiscal_municipio="ITABUNA", fiscal_codigo_municipio="2914802",
+            fiscal_uf="ba", fiscal_cep="45600000", email="fiscal@example.com",
+        )
+        with closing(sqlite3.connect(self.db_path)) as connection:
+            row = connection.execute(
+                """SELECT email,fiscal_logradouro,fiscal_numero,fiscal_bairro,
+                          fiscal_codigo_municipio,fiscal_municipio,fiscal_uf,fiscal_cep
+                     FROM clientes WHERE id=?""", (customer_id,),
+            ).fetchone()
+        self.assertEqual(row, (
+            "fiscal@example.com", "RUA B", "20", "BAIRRO", "2914802",
+            "ITABUNA", "BA", "45600000",
+        ))
 
     def test_cadastro_assistido_e_idempotente_e_atomico(self) -> None:
         fingerprint = "a" * 64
@@ -125,6 +160,13 @@ class CustomerRegistrationServiceTests(unittest.TestCase):
             self.service.criar(nome="Segundo", numero_ficha=10, codigo="C2")
         with self.assertRaisesRegex(ValueError, "não pode ser negativo"):
             self.service.criar(nome="Terceiro", limite="-1")
+
+    def test_codigo_ibge_precisa_pertencer_a_uf_informada(self) -> None:
+        with self.assertRaisesRegex(ValueError, "não pertence"):
+            self.service.criar(
+                nome="Localidade inválida", fiscal_municipio="ITABUNA",
+                fiscal_codigo_municipio="2914802", fiscal_uf="SP",
+            )
 
     def test_edicao_rejeita_nome_ficha_e_limite_invalidos(self) -> None:
         primeiro = self.service.criar(nome="Primeiro", numero_ficha=10, codigo="C1")

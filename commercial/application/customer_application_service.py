@@ -21,6 +21,13 @@ class CustomerApplicationService:
             nome=command.name, codigo=command.code, numero_ficha=command.record_number,
             cpf=command.cpf, rg=command.rg, telefone=command.phone,
             endereco=command.address, observacoes=command.notes, limite=command.credit_limit,
+            email=command.email, inscricao_estadual=command.state_registration,
+            contribuinte_icms=command.icms_taxpayer,
+            fiscal_logradouro=command.fiscal_street, fiscal_numero=command.fiscal_number,
+            fiscal_bairro=command.fiscal_district,
+            fiscal_codigo_municipio=command.fiscal_city_code,
+            fiscal_municipio=command.fiscal_city, fiscal_uf=command.fiscal_state,
+            fiscal_cep=command.fiscal_zip_code,
         )
         return self.get_customer(customer_id)
 
@@ -44,12 +51,23 @@ class CustomerApplicationService:
     def next_record_number(self) -> int:
         return self._registration.next_record_number()
 
+    def fiscal_address_defaults(self) -> dict[str, str]:
+        provider = getattr(self._registration, "fiscal_address_defaults", None)
+        return dict(provider() if callable(provider) else {})
+
     def update_customer(self, command: CustomerUpdateCommand) -> CustomerDetails:
         self._registration.editar(
             command.customer_id, nome=command.name, codigo=command.code,
             numero_ficha=command.record_number, cpf=command.cpf, rg=command.rg,
             telefone=command.phone, endereco=command.address,
             observacoes=command.notes, limite=command.credit_limit,
+            email=command.email, inscricao_estadual=command.state_registration,
+            contribuinte_icms=command.icms_taxpayer,
+            fiscal_logradouro=command.fiscal_street, fiscal_numero=command.fiscal_number,
+            fiscal_bairro=command.fiscal_district,
+            fiscal_codigo_municipio=command.fiscal_city_code,
+            fiscal_municipio=command.fiscal_city, fiscal_uf=command.fiscal_state,
+            fiscal_cep=command.fiscal_zip_code,
         )
         return self.get_customer(command.customer_id)
 

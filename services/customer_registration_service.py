@@ -8,6 +8,7 @@ import json
 from typing import Any
 
 from repositories import ClienteRepository
+from services.fiscal_state_catalog import STATE_CODES
 from validators import CustomerValidator
 
 
@@ -32,6 +33,23 @@ class CustomerRegistrationService:
     def next_record_number(self) -> int:
         """Retorna a próxima ficha configurada pela autoridade cadastral."""
         return max(1, int(self.get_config("proxima_ficha") or 5500))
+
+    def fiscal_address_defaults(self) -> dict[str, str]:
+        """Sugere somente localidade da instalação; o operador pode alterar."""
+        try:
+            config = json.loads(self.get_config("fiscal.config.v1") or "{}")
+        except (TypeError, ValueError):
+            config = {}
+        if not isinstance(config, dict):
+            config = {}
+        issuer = dict(config.get("issuer") or {})
+        return {
+            "fiscal_city": str(issuer.get("city") or "").strip(),
+            "fiscal_city_code": "".join(
+                char for char in str(issuer.get("city_code") or "") if char.isdigit()
+            ),
+            "fiscal_state": str(issuer.get("state") or config.get("state") or "").strip().upper(),
+        }
 
     def criar(
         self,
@@ -86,6 +104,8 @@ class CustomerRegistrationService:
             raise ValueError("UF fiscal do cliente deve possuir duas letras.")
         if dados["fiscal_codigo_municipio"] and len(dados["fiscal_codigo_municipio"]) != 7:
             raise ValueError("Código IBGE do município deve possuir 7 dígitos.")
+        if dados["fiscal_uf"] and dados["fiscal_codigo_municipio"] and STATE_CODES.get(dados["fiscal_uf"]) != dados["fiscal_codigo_municipio"][:2]:
+            raise ValueError("Código IBGE do município não pertence à UF fiscal informada.")
         if dados["fiscal_cep"] and len(dados["fiscal_cep"]) != 8:
             raise ValueError("CEP fiscal deve possuir 8 dígitos.")
         with self.repository.transaction() as connection:
@@ -205,6 +225,16 @@ class CustomerRegistrationService:
         endereco: str = "",
         observacoes: str = "",
         limite: Decimal | float | str = Decimal("0"),
+        email: str = "",
+        inscricao_estadual: str = "",
+        contribuinte_icms: bool = False,
+        fiscal_logradouro: str = "",
+        fiscal_numero: str = "",
+        fiscal_bairro: str = "",
+        fiscal_codigo_municipio: str = "",
+        fiscal_municipio: str = "",
+        fiscal_uf: str = "",
+        fiscal_cep: str = "",
     ) -> None:
         normalized_id = int(cliente_id)
         if normalized_id <= 0:
@@ -219,7 +249,27 @@ class CustomerRegistrationService:
             "endereco": str(endereco or "").strip(),
             "observacoes": str(observacoes or "").strip(),
             "limite": CustomerValidator.parse_credit_limit(limite),
+            "email": str(email or "").strip(),
+            "inscricao_estadual": str(inscricao_estadual or "").strip(),
+            "contribuinte_icms": 1 if contribuinte_icms else 0,
+            "fiscal_logradouro": str(fiscal_logradouro or "").strip(),
+            "fiscal_numero": str(fiscal_numero or "").strip(),
+            "fiscal_bairro": str(fiscal_bairro or "").strip(),
+            "fiscal_codigo_municipio": "".join(ch for ch in str(fiscal_codigo_municipio or "") if ch.isdigit()),
+            "fiscal_municipio": str(fiscal_municipio or "").strip(),
+            "fiscal_uf": str(fiscal_uf or "").strip().upper(),
+            "fiscal_cep": "".join(ch for ch in str(fiscal_cep or "") if ch.isdigit()),
         }
+        if dados["fiscal_uf"] and len(dados["fiscal_uf"]) != 2:
+            raise ValueError("UF fiscal do cliente deve possuir duas letras.")
+        if dados["fiscal_codigo_municipio"] and len(dados["fiscal_codigo_municipio"]) != 7:
+            raise ValueError("Código IBGE do município deve possuir 7 dígitos.")
+        if dados["fiscal_uf"] and dados["fiscal_codigo_municipio"] and STATE_CODES.get(dados["fiscal_uf"]) != dados["fiscal_codigo_municipio"][:2]:
+            raise ValueError("Código IBGE do município não pertence à UF fiscal informada.")
+        if dados["fiscal_cep"] and len(dados["fiscal_cep"]) != 8:
+            raise ValueError("CEP fiscal deve possuir 8 dígitos.")
+        if dados["contribuinte_icms"] and not dados["inscricao_estadual"]:
+            raise ValueError("Cliente contribuinte de ICMS exige inscrição estadual.")
         with self.repository.transaction() as connection:
             if dados["numero_ficha"] is not None and self.repository.ficha_existe(
                 dados["numero_ficha"],
@@ -259,6 +309,8 @@ class CustomerRegistrationService:
             raise ValueError("UF fiscal do cliente deve possuir duas letras.")
         if data["fiscal_codigo_municipio"] and len(data["fiscal_codigo_municipio"]) != 7:
             raise ValueError("Código IBGE do município deve possuir 7 dígitos.")
+        if data["fiscal_uf"] and data["fiscal_codigo_municipio"] and STATE_CODES.get(data["fiscal_uf"]) != data["fiscal_codigo_municipio"][:2]:
+            raise ValueError("Código IBGE do município não pertence à UF fiscal informada.")
         if data["fiscal_cep"] and len(data["fiscal_cep"]) != 8:
             raise ValueError("CEP fiscal deve possuir 8 dígitos.")
         if data["contribuinte_icms"] and not data["inscricao_estadual"]:

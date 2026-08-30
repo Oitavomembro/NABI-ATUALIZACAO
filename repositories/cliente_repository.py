@@ -287,17 +287,17 @@ class ClienteRepository:
     def atualizar_cadastro(
         self, cliente_id: int, dados: dict[str, Any], *, connection
     ) -> None:
+        columns = {str(row[1]) for row in connection.execute("PRAGMA table_info(clientes)")}
+        ordered = (
+            "numero_ficha", "codigo", "nome", "cpf", "rg", "telefone", "endereco",
+            "limite", "observacoes", "email", "inscricao_estadual", "contribuinte_icms",
+            "fiscal_logradouro", "fiscal_numero", "fiscal_bairro",
+            "fiscal_codigo_municipio", "fiscal_municipio", "fiscal_uf", "fiscal_cep",
+        )
+        selected = [field for field in ordered if field in columns]
         cursor = connection.execute(
-            """UPDATE clientes
-                  SET numero_ficha=?,codigo=?,nome=?,cpf=?,rg=?,telefone=?,endereco=?,
-                      limite=?,observacoes=?
-                WHERE id=?""",
-            (
-                dados.get("numero_ficha"), dados.get("codigo", ""), dados.get("nome", ""),
-                dados.get("cpf", ""), dados.get("rg", ""), dados.get("telefone", ""),
-                dados.get("endereco", ""), dados.get("limite", 0),
-                dados.get("observacoes", ""), int(cliente_id),
-            ),
+            "UPDATE clientes SET " + ",".join(f"{field}=?" for field in selected) + " WHERE id=?",
+            tuple(dados.get(field, "") for field in selected) + (int(cliente_id),),
         )
         if cursor.rowcount != 1:
             raise ValueError("Cliente não encontrado.")

@@ -99,7 +99,7 @@ class QtApplicationAssistantTests(unittest.TestCase):
             )
         panel = window.nabi_assistant.widget()
         self.assertIs(panel._nfe_entry_service, nfe_entry)
-        self.assertFalse(panel.prepare_nfe_entry_button.isHidden())
+        self.assertTrue(panel.prepare_nfe_entry_button.isHidden())
         self.assertFalse(panel.prepare_nfe_entry_button.isEnabled())
         window.close()
 

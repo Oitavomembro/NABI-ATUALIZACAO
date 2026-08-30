@@ -263,14 +263,16 @@ class FiscalSaleService:
                 "street": customer.get("fiscal_logradouro"), "number": customer.get("fiscal_numero"),
                 "district": customer.get("fiscal_bairro"), "city_code": customer.get("fiscal_codigo_municipio"),
                 "city": customer.get("fiscal_municipio"), "state": customer_state,
-                "zip_code": customer.get("fiscal_cep"),
             }
             if any(not str(value or "").strip() for value in required.values()):
                 raise ValueError(
                     "NF-e exige o endereço fiscal completo do cliente. Preencha logradouro, número, "
-                    "bairro, município, código IBGE, UF e CEP no cadastro."
+                    "bairro, município, código IBGE e UF no cadastro."
                 )
             recipient.update(required)
+            zip_code = str(customer.get("fiscal_cep") or "").strip()
+            if zip_code:
+                recipient["zip_code"] = zip_code
         state_registration = str(customer.get("inscricao_estadual") or "").strip()
         taxpayer = bool(customer.get("contribuinte_icms"))
         recipient.update({

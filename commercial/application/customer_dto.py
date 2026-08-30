@@ -18,6 +18,16 @@ class CustomerCreateCommand:
     address: str = ""
     notes: str = ""
     credit_limit: Decimal = Decimal("0.00")
+    email: str = ""
+    state_registration: str = ""
+    icms_taxpayer: bool = False
+    fiscal_street: str = ""
+    fiscal_number: str = ""
+    fiscal_district: str = ""
+    fiscal_city_code: str = ""
+    fiscal_city: str = ""
+    fiscal_state: str = ""
+    fiscal_zip_code: str = ""
 
     def __post_init__(self) -> None:
         object.__setattr__(self, "credit_limit", MoneyCodec.parse(self.credit_limit, field="limite"))
@@ -35,6 +45,16 @@ class CustomerUpdateCommand:
     address: str = ""
     notes: str = ""
     credit_limit: Decimal = Decimal("0.00")
+    email: str = ""
+    state_registration: str = ""
+    icms_taxpayer: bool = False
+    fiscal_street: str = ""
+    fiscal_number: str = ""
+    fiscal_district: str = ""
+    fiscal_city_code: str = ""
+    fiscal_city: str = ""
+    fiscal_state: str = ""
+    fiscal_zip_code: str = ""
 
     def __post_init__(self) -> None:
         if int(self.customer_id) <= 0:
@@ -57,6 +77,16 @@ class CustomerDetails:
     credit_limit: Decimal
     debt_balance: Decimal
     available_credit: Decimal
+    email: str = ""
+    state_registration: str = ""
+    icms_taxpayer: bool = False
+    fiscal_street: str = ""
+    fiscal_number: str = ""
+    fiscal_district: str = ""
+    fiscal_city_code: str = ""
+    fiscal_city: str = ""
+    fiscal_state: str = ""
+    fiscal_zip_code: str = ""
 
     def __post_init__(self) -> None:
         limit = MoneyCodec.parse(self.credit_limit, field="limite")

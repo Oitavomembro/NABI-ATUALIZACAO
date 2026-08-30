@@ -92,11 +92,12 @@ class NabiAssistantPanelTests(unittest.TestCase):
     def tearDown(self):
         self.panel.close()
 
-    def test_texto_vazio_nao_dispara_e_voz_permanece_desativada(self):
+    def test_texto_vazio_nao_dispara_e_voz_indisponivel_nao_aparece(self):
         generation = self.panel._generation
         self.panel.submit()
         self.assertEqual(self.panel._generation, generation)
         self.assertFalse(self.panel.voice.isEnabled())
+        self.assertTrue(self.panel.voice.isHidden())
         self.assertIn("Digite", self.panel.status.text())
         self.assertEqual(self.panel.status.property("nabiState"), "warning")
 

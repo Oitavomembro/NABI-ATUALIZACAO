@@ -25,9 +25,17 @@ class NabiCodeCustomerAccountGateway:
         balance_canonical = (
             "saldo_devedor_decimal" if "saldo_devedor_decimal" in columns else "NULL"
         )
+        fiscal_fields = ",".join(
+            field if field in columns else ("0" if field == "contribuinte_icms" else "''")
+            for field in (
+                "email", "inscricao_estadual", "contribuinte_icms", "fiscal_logradouro",
+                "fiscal_numero", "fiscal_bairro", "fiscal_codigo_municipio",
+                "fiscal_municipio", "fiscal_uf", "fiscal_cep",
+            )
+        )
         row = self.database.fetch_one(
             f"""SELECT id,codigo,numero_ficha,nome,cpf,rg,telefone,endereco,observacoes,
-                       limite,saldo_devedor,{limit_canonical},{balance_canonical}
+                       limite,saldo_devedor,{limit_canonical},{balance_canonical},{fiscal_fields}
                   FROM clientes WHERE id=?""",
             (int(customer_id),),
         )
@@ -42,6 +50,11 @@ class NabiCodeCustomerAccountGateway:
             phone=str(row[6] or ""), address=str(row[7] or ""), notes=str(row[8] or ""),
             credit_limit=limit, debt_balance=balance,
             available_credit=max(MoneyCodec.ZERO, limit - balance),
+            email=str(row[13] or ""), state_registration=str(row[14] or ""),
+            icms_taxpayer=bool(row[15]), fiscal_street=str(row[16] or ""),
+            fiscal_number=str(row[17] or ""), fiscal_district=str(row[18] or ""),
+            fiscal_city_code=str(row[19] or ""), fiscal_city=str(row[20] or ""),
+            fiscal_state=str(row[21] or ""), fiscal_zip_code=str(row[22] or ""),
         )
 
     def details_many(self, customer_ids: tuple[int, ...]) -> tuple[CustomerDetails, ...]:
@@ -53,10 +66,18 @@ class NabiCodeCustomerAccountGateway:
         balance_canonical = (
             "saldo_devedor_decimal" if "saldo_devedor_decimal" in columns else "NULL"
         )
+        fiscal_fields = ",".join(
+            field if field in columns else ("0" if field == "contribuinte_icms" else "''")
+            for field in (
+                "email", "inscricao_estadual", "contribuinte_icms", "fiscal_logradouro",
+                "fiscal_numero", "fiscal_bairro", "fiscal_codigo_municipio",
+                "fiscal_municipio", "fiscal_uf", "fiscal_cep",
+            )
+        )
         placeholders = ",".join("?" for _ in ids)
         rows = self.database.fetch_all(
             f"""SELECT id,codigo,numero_ficha,nome,cpf,rg,telefone,endereco,observacoes,
-                       limite,saldo_devedor,{limit_canonical},{balance_canonical}
+                       limite,saldo_devedor,{limit_canonical},{balance_canonical},{fiscal_fields}
                   FROM clientes WHERE id IN ({placeholders})""",
             ids,
         )
@@ -71,6 +92,11 @@ class NabiCodeCustomerAccountGateway:
                 phone=str(row[6] or ""), address=str(row[7] or ""), notes=str(row[8] or ""),
                 credit_limit=limit, debt_balance=balance,
                 available_credit=max(MoneyCodec.ZERO, limit - balance),
+                email=str(row[13] or ""), state_registration=str(row[14] or ""),
+                icms_taxpayer=bool(row[15]), fiscal_street=str(row[16] or ""),
+                fiscal_number=str(row[17] or ""), fiscal_district=str(row[18] or ""),
+                fiscal_city_code=str(row[19] or ""), fiscal_city=str(row[20] or ""),
+                fiscal_state=str(row[21] or ""), fiscal_zip_code=str(row[22] or ""),
             )
         return tuple(details_by_id[value] for value in ids if value in details_by_id)
 
