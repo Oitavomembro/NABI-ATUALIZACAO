@@ -174,8 +174,12 @@ class ReceiptService:
             "=" * width,
             f"Data: {self._now():%d/%m/%Y %H:%M:%S}",
             f"Cliente: {customer.name}",
-            f"Código: {customer.code or '-'}   Ficha: {customer.record_number or '-'}",
         ]
+        final_consumer = str(customer.code or "").strip().upper() == "CONSUMIDOR_FINAL"
+        if not final_consumer:
+            lines.append(
+                f"Código: {customer.code or '-'}   Ficha: {customer.record_number or '-'}"
+            )
         if kind == "ENTREGA":
             lines.extend(
                 [

@@ -1097,9 +1097,6 @@ class PDVWindow(QMainWindow):
             message = result.message
             if result.secondary_effect_failed:
                 QMessageBox.warning(self, title, message)
-            self.customer_selected.setText("Nenhum cliente selecionado")
-            self.customer_search.clear()
-            self.refresh_cart()
             try:
                 fiscal_info = getattr(
                     self.view_model.application.checkout_gateway,
@@ -1124,6 +1121,14 @@ class PDVWindow(QMainWindow):
                     f"{message}\n\nNão foi possível abrir as opções de comprovante:\n{error}\n\n"
                     "Não finalize esta venda novamente.",
                 )
+            finally:
+                # A venda já foi confirmada, mas a tela não deve aparentar um
+                # retorno prematuro ao PDV enquanto o acompanhamento fiscal
+                # modal está sendo exibido. Limpe a sessão visual somente ao
+                # encerrar esse acompanhamento.
+                self.customer_selected.setText("Nenhum cliente selecionado")
+                self.customer_search.clear()
+                self.refresh_cart()
         else:
             QMessageBox.warning(self, "Venda recusada", result.message)
             self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)

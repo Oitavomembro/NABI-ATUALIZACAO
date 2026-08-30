@@ -2,7 +2,9 @@ from __future__ import annotations
 
 from PySide6.QtCore import QUrl, Qt, QTimer
 from PySide6.QtGui import QDesktopServices
-from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushButton, QVBoxLayout
+from PySide6.QtWidgets import (
+    QDialog, QHBoxLayout, QLabel, QMessageBox, QProgressBar, QPushButton, QVBoxLayout,
+)
 
 from commercial.application.dto import CheckoutResult
 from commercial.domain.money import MoneyCodec
@@ -41,6 +43,10 @@ class PostSaleDialog(QDialog):
         self.fiscal_status.setWordWrap(True)
         self.fiscal_status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         root.addWidget(self.fiscal_status)
+        self.fiscal_progress = QProgressBar()
+        self.fiscal_progress.setRange(0, 0)
+        self.fiscal_progress.setTextVisible(False)
+        root.addWidget(self.fiscal_progress)
         self._render_fiscal_status(self.fiscal_info)
         total = QLabel(f"Total: R$ {MoneyCodec.format_br(result.total)}")
         total.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -92,6 +98,7 @@ class PostSaleDialog(QDialog):
             )
             return
         status = str(info.get("status") or "ENFILEIRADO").upper()
+        processing = status in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}
         key = str(info.get("access_key") or "")
         protocol = str(info.get("protocol") or "")
         message = str(info.get("last_message") or info.get("last_error") or "")
@@ -112,6 +119,8 @@ class PostSaleDialog(QDialog):
         )
         if hasattr(self, "danfe_button"):
             self.danfe_button.setEnabled(status == "AUTORIZADO")
+        if hasattr(self, "fiscal_progress"):
+            self.fiscal_progress.setVisible(bool(info) and processing)
 
     def _refresh_fiscal_status(self) -> None:
         sale_id = int(self.fiscal_info.get("sale_id") or 0)

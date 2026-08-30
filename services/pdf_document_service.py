@@ -57,6 +57,14 @@ class PDFDocumentService:
     def _wrapped_line_count(cls, text: object, model: str) -> int:
         return len(wrap_lines(text, cls._model_width_chars(model)))
 
+    @staticmethod
+    def _is_final_consumer(*, name: Any, code: Any, record: Any) -> bool:
+        normalized_code = str(code or "").strip().upper()
+        normalized_name = str(name or "").strip().upper()
+        return normalized_code == "CONSUMIDOR_FINAL" or (
+            normalized_name == "CONSUMIDOR FINAL" and not str(record or "").strip()
+        )
+
     def _estimate_sale_height_mm(
         self,
         *,
@@ -71,9 +79,11 @@ class PDFDocumentService:
             return 175
 
         name, code, record, phone, address, reference, _balance = customer
+        final_consumer = self._is_final_consumer(name=name, code=code, record=record)
         lines = 8
         lines += self._wrapped_line_count(f"Cliente: {name}", model)
-        lines += self._wrapped_line_count(f"Código: {code or '-'}   Ficha: {record or '-'}", model)
+        if not final_consumer:
+            lines += self._wrapped_line_count(f"Código: {code or '-'}   Ficha: {record or '-'}", model)
         if document_type == "ENTREGA":
             lines += self._wrapped_line_count(f"Telefone: {phone or '-'}", model)
             lines += self._wrapped_line_count(f"Endereço: {address or '-'}", model)
@@ -154,6 +164,7 @@ class PDFDocumentService:
     ) -> str:
         customer = self._customer(customer_id)
         name, code, record, phone, address, reference, balance = customer
+        final_consumer = self._is_final_consumer(name=name, code=code, record=record)
         category = "entrega" if document_type == "ENTREGA" else "recibo"
         model = self.document_model(category)
         title = {
@@ -192,7 +203,8 @@ class PDFDocumentService:
         line(f"Data: {datetime.now():%d/%m/%Y %H:%M:%S}")
         line(f"Documento: {document_id or '-'}")
         line(f"Cliente: {name}", True)
-        line(f"Código: {code or '-'}   Ficha: {record or '-'}")
+        if not final_consumer:
+            line(f"Código: {code or '-'}   Ficha: {record or '-'}")
         if document_type == "ENTREGA":
             line(f"Telefone: {phone or '-'}")
             line(f"Endereço: {address or '-'}")
@@ -213,7 +225,9 @@ class PDFDocumentService:
         y -= step
         renderer.y = y
         line(f"TOTAL: R$ {self._money(total, field='total do documento')}", True)
-        line(f"Saldo atual da ficha: R$ {self._money(balance, field='saldo da ficha')}")
+        financed = bool(payment_plan and payment_plan.get("financiado"))
+        if not final_consumer or financed:
+            line(f"Saldo atual da ficha: R$ {self._money(balance, field='saldo da ficha')}")
         if payment_plan:
             y -= 3
             canvas.line(margin, y, width - margin, y)
@@ -243,7 +257,8 @@ class PDFDocumentService:
             canvas, width, y, margin, mm,
             f"NABICODE|{category}|{document_id or ''}|{name}|{self._money(total, field='total do documento')}|{datetime.now():%Y-%m-%d %H:%M:%S}",
         )
-        if self.config_bool("impressao_mostrar_assinatura", True):
+        needs_signature = document_type == "ENTREGA" or financed
+        if needs_signature and self.config_bool("impressao_mostrar_assinatura", True):
             y = max(margin + 18 * mm, y - 18 * mm)
             canvas.line(margin, y, width - margin, y)
             canvas.setFont(font, max(7, size - 1))

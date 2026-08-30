@@ -25,6 +25,7 @@ class PDFDocumentServiceTests(unittest.TestCase):
                 forma_pagamento TEXT, responsavel TEXT, cliente_id INTEGER
             );
             INSERT INTO clientes VALUES (1,'CLIENTE TESTE','C1','10','9999','RUA A','PORTAO AZUL',25.5);
+            INSERT INTO clientes VALUES (2,'CONSUMIDOR FINAL','CONSUMIDOR_FINAL',NULL,'','','',0);
             INSERT INTO movimentacoes VALUES (7,'RECEBIMENTO','Parcela',80,'2026-08-02','PIX','ANA',1);
             """
         )
@@ -98,6 +99,15 @@ class PDFDocumentServiceTests(unittest.TestCase):
         self.assertTrue(Path(path).is_file())
         self.assertGreater(Path(path).stat().st_size, 100)
         self.assertEqual(99, self.registered[0][0])
+
+    def test_consumidor_final_e_identificado_sem_dados_de_ficha(self):
+        customer = self.service._customer(2)
+        self.assertTrue(self.service._is_final_consumer(
+            name=customer[0], code=customer[1], record=customer[2],
+        ))
+        self.assertFalse(self.service._is_final_consumer(
+            name="CLIENTE TESTE", code="C1", record="10",
+        ))
 
     def test_generate_movement_closes_connection_and_creates_pdf(self):
         path = self.service.generate_movement(7)

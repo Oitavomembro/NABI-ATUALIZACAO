@@ -215,10 +215,12 @@ class FakePostSaleDialog:
     calls = []
 
     def __init__(self, _view_model, result, parent=None, **_kwargs):
+        self.view_model = _view_model
+        self.parent = parent
         type(self).calls.append(("init", result.sale_id, parent))
 
     def exec(self):
-        type(self).calls.append(("exec",))
+        type(self).calls.append(("exec", self.parent.cart.rowCount()))
         return QDialog.DialogCode.Accepted
 
 
@@ -877,15 +879,17 @@ class PostSaleDialogTests(unittest.TestCase):
         fiscal = SimpleNamespace(list_sales=lambda: [])
         dialog = PostSaleDialog(
             view_model, result,
-            fiscal_info={"sale_id": 41, "status": "RESPOSTA_DESCONHECIDA"},
+            fiscal_info={"sale_id": 41, "status": "PENDENTE"},
             fiscal_sale_service=fiscal,
         )
         self.assertEqual(dialog.print_button.text(), "Imprimir comprovante comercial")
         self.assertEqual(dialog.pdf_button.text(), "Gerar comprovante em PDF")
         self.assertEqual(dialog.danfe_button.text(), "Gerar e abrir DANFE")
         self.assertFalse(dialog.danfe_button.isEnabled())
+        self.assertFalse(dialog.fiscal_progress.isHidden())
         dialog._render_fiscal_status({"sale_id": 41, "status": "AUTORIZADO"})
         self.assertTrue(dialog.danfe_button.isEnabled())
+        self.assertTrue(dialog.fiscal_progress.isHidden())
 
 
 @unittest.skipUnless(QT_AVAILABLE, f"Runtime Qt indisponível: {QT_UNAVAILABLE_REASON}")
@@ -1722,6 +1726,7 @@ class PDVQtTests(unittest.TestCase):
         self.assertEqual(
             [call[0] for call in FakePostSaleDialog.calls], ["init", "exec"]
         )
+        self.assertGreater(FakePostSaleDialog.calls[1][1], 0)
         self.assertTrue(self.view_model.session.cart.is_empty)
 
     def test_f9_opens_same_dialog(self):

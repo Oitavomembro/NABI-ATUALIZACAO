@@ -5307,3 +5307,17 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   mudou. O defeito 486 e o acompanhamento visual estão validados; não repetir
   essa transmissão. A venda `#7`, rejeitada com `244` por série incompatível,
   permanece corretamente sem reenvio automático.
+
+## Continuidade visual pós-venda e comprovante enxuto — 30/08/2026
+
+- depois da confirmação atômica do pagamento, o PDV não limpa mais a lista
+  visual antes de abrir o acompanhamento fiscal modal. A tela permanece no
+  contexto da venda e mostra progresso indeterminado enquanto o estado é
+  `PENDENTE`, `ENFILEIRADO` ou `PROCESSANDO`; a limpeza visual ocorre somente
+  quando o acompanhamento é encerrado;
+- o comprovante de venda à vista para `CONSUMIDOR FINAL` omite código/ficha e
+  saldo zero. A assinatura passa a ser mostrada apenas em entrega ou venda
+  realmente financiada; dados completos continuam preservados para cliente
+  cadastrado, crediário e comprovante de entrega;
+- validação focada: `127 passed`, `2 subtests passed` para PDV Qt, documento PDF
+  e recibo textual.

@@ -22,6 +22,9 @@ class ReceiptServiceTests(unittest.TestCase):
             connection.execute(
                 "INSERT INTO clientes VALUES (1, 'CLIENTE TESTE', 'C001', 12, '75999990000', 'RUA A')"
             )
+            connection.execute(
+                "INSERT INTO clientes VALUES (2, 'CONSUMIDOR FINAL', 'CONSUMIDOR_FINAL', NULL, '', '')"
+            )
             connection.commit()
         finally:
             connection.close()
@@ -56,6 +59,17 @@ class ReceiptServiceTests(unittest.TestCase):
         )
         self.assertIn("Telefone: 75999990000", text)
         self.assertIn("Endereço: RUA A", text)
+
+    def test_consumidor_final_omite_codigo_e_ficha(self) -> None:
+        text = self.service.build_sale_text(
+            2,
+            [{"item": "PRODUTO", "qtd": 1, "preco": 3.0, "subtotal": 3.0}],
+            3.0,
+            "VENDA",
+        )
+        self.assertIn("Cliente: CONSUMIDOR FINAL", text)
+        self.assertNotIn("Código:", text)
+        self.assertNotIn("Ficha:", text)
 
     def test_rejects_total_mismatch(self) -> None:
         with self.assertRaisesRegex(ValueError, "não corresponde"):
