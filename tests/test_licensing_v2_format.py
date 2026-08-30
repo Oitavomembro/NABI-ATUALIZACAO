@@ -86,3 +86,28 @@ def test_fingerprint_bruto_nao_faz_parte_do_documento():
     raw = create_envelope(payload(), key_id="owner-2026", signer=private)
     assert b"machine-guid" not in raw
     assert b"volume-serial" not in raw
+
+
+def test_produto_assinado_impede_licenca_cruzada_e_preserva_v2_nabicode():
+    private, public = keys()
+    legacy = payload()
+    legacy_raw = create_envelope(legacy, key_id="owner-2026", signer=private)
+    assert verify_envelope(
+        legacy_raw, public, expected_product_id="NABICODE"
+    ).product_id == "NABICODE"
+
+    notas = LicensePayload(
+        schema=3, license_id=legacy.license_id, edition=LicenseEdition.COMPLETE,
+        customer_name=legacy.customer_name,
+        machine_fingerprint=legacy.machine_fingerprint,
+        issued_at=legacy.issued_at, valid_until=legacy.valid_until,
+        grace_days=10, features=("core",), product_id="NOTAS_IGLBALT",
+    )
+    notas_raw = create_envelope(notas, key_id="owner-2026", signer=private)
+    assert verify_envelope(
+        notas_raw, public, expected_product_id="NOTAS_IGLBALT"
+    ).product_id == "NOTAS_IGLBALT"
+    with pytest.raises(ValueError, match="outro produto"):
+        verify_envelope(notas_raw, public, expected_product_id="NABICODE")
+    with pytest.raises(ValueError, match="outro produto"):
+        verify_envelope(legacy_raw, public, expected_product_id="NOTAS_IGLBALT")

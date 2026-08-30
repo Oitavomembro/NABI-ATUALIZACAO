@@ -18,6 +18,7 @@ _PAYLOAD_FIELDS = {
     "schema", "license_id", "edition", "customer_name", "machine_fingerprint",
     "issued_at", "valid_until", "grace_days", "features", "revoked",
 }
+_PAYLOAD_FIELDS_V3 = _PAYLOAD_FIELDS | {"product_id"}
 
 
 def canonical_json(value: object) -> bytes:
@@ -63,7 +64,7 @@ def b64url_decode(value: str) -> bytes:
 
 
 def payload_mapping(payload: LicensePayload) -> dict:
-    return {
+    value = {
         "schema": payload.schema,
         "license_id": payload.license_id,
         "edition": payload.edition.value,
@@ -75,10 +76,17 @@ def payload_mapping(payload: LicensePayload) -> dict:
         "features": list(payload.features),
         "revoked": payload.revoked,
     }
+    if payload.schema >= 3:
+        value["product_id"] = payload.product_id
+    return value
 
 
 def payload_from_mapping(value: object) -> LicensePayload:
-    if not isinstance(value, dict) or set(value) != _PAYLOAD_FIELDS:
+    if not isinstance(value, dict):
+        raise ValueError("Campos do payload de licença inválidos.")
+    schema = value.get("schema")
+    expected_fields = _PAYLOAD_FIELDS_V3 if schema == 3 else _PAYLOAD_FIELDS
+    if set(value) != expected_fields:
         raise ValueError("Campos do payload de licença inválidos.")
     try:
         issued_text = str(value["issued_at"])
@@ -91,12 +99,15 @@ def payload_from_mapping(value: object) -> LicensePayload:
             issued_at=issued, valid_until=date.fromisoformat(str(value["valid_until"])),
             grace_days=value["grace_days"], features=tuple(value["features"]),
             revoked=value["revoked"],
+            product_id=value.get("product_id", "NABICODE"),
         )
     except (KeyError, TypeError, ValueError) as exc:
         raise ValueError("Payload de licença inválido.") from exc
 
 
-def verify_envelope(raw: bytes, public_keys: Mapping[str, bytes]) -> LicensePayload:
+def verify_envelope(
+    raw: bytes, public_keys: Mapping[str, bytes], *, expected_product_id: str | None = None,
+) -> LicensePayload:
     envelope = strict_json(raw)
     if not isinstance(envelope, dict) or set(envelope) != _ENVELOPE_FIELDS:
         raise ValueError("Envelope de licença inválido.")
@@ -117,7 +128,10 @@ def verify_envelope(raw: bytes, public_keys: Mapping[str, bytes]) -> LicensePayl
         Ed25519PublicKey.from_public_bytes(public_bytes).verify(signature, payload_raw)
     except (InvalidSignature, ValueError) as exc:
         raise ValueError("Assinatura Ed25519 inválida.") from exc
-    return payload_from_mapping(payload_value)
+    payload = payload_from_mapping(payload_value)
+    if expected_product_id is not None and payload.product_id != str(expected_product_id).upper():
+        raise ValueError("Licença pertence a outro produto.")
+    return payload
 
 
 def create_envelope(payload: LicensePayload, *, key_id: str, signer) -> bytes:

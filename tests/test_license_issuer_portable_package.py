@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 from build_tools.package_license_issuer_usb import (
-    EXECUTABLE_NAME, HASHES_NAME, MANUAL_NAME, create_portable_package,
+    EXECUTABLE_NAME, FORBIDDEN_SUFFIXES, HASHES_NAME, MANUAL_NAME, create_portable_package,
     validate_portable_directory, write_sbom,
 )
 
@@ -17,6 +17,10 @@ ROOT = Path(__file__).resolve().parents[1]
 def test_machine_fingerprint_nao_importa_services() -> None:
     source = (ROOT / "licensing" / "machine.py").read_text(encoding="utf-8")
     assert "from services" not in source
+
+
+def test_pacote_portatil_bloqueia_documentos_de_ativacao_de_cliente() -> None:
+    assert {".nabilic", ".nabicap", ".iglbalt-activation"} <= FORBIDDEN_SUFFIXES
 
 
 def test_pacote_portatil_contem_somente_executavel_manual_e_hashes(tmp_path) -> None:

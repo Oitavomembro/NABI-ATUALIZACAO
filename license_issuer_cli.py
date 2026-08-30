@@ -24,6 +24,7 @@ def main(argv=None) -> int:
     keygen.add_argument("--key-id", required=True)
     issue = subcommands.add_parser("issue")
     issue.add_argument("--private", required=True)
+    issue.add_argument("--product", default="NABICODE")
     issue.add_argument("--key-id")
     issue.add_argument("--machine-fingerprint")
     issue.add_argument("--customer")
@@ -50,7 +51,8 @@ def main(argv=None) -> int:
     if options.command == "verify":
         payload = verify_license_file(options.license, options.public_catalog)
         print(json.dumps({
-            "assinatura": "VALIDA", "cliente": payload.customer_name,
+            "assinatura": "VALIDA", "produto": payload.product_id,
+            "cliente": payload.customer_name,
             "edicao": payload.edition.value, "validade": payload.valid_until.isoformat(),
             "license_id": payload.license_id, "revogada": payload.revoked,
         }, ensure_ascii=False, sort_keys=True))
@@ -76,6 +78,7 @@ def main(argv=None) -> int:
             parser.error("campos obrigatórios para nova licença: " + ", ".join(missing))
         request = IssuanceRequest(
             key_id=options.key_id, machine_fingerprint=options.machine_fingerprint,
+            product_id=options.product,
             customer_name=options.customer, edition=LicenseEdition(options.edition),
             valid_until=date.fromisoformat(options.valid_until),
             features=tuple(options.feature), license_id=options.license_id,

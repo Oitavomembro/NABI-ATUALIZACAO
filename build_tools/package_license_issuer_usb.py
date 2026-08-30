@@ -15,7 +15,10 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 EXECUTABLE_NAME = "NabiCode_Emissor_Licencas_V2.exe"
 MANUAL_NAME = "LEIA-ME-EMISSOR.txt"
 HASHES_NAME = "SHA256SUMS.txt"
-FORBIDDEN_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".nabilic"}
+FORBIDDEN_SUFFIXES = {
+    ".pem", ".key", ".p12", ".pfx", ".nabilic", ".nabicap",
+    ".iglbalt-activation",
+}
 RUNTIME_COMPONENTS = ("PySide6", "shiboken6", "cryptography")
 
 

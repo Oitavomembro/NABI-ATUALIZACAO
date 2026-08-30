@@ -43,6 +43,7 @@ user_data/
 build/
 dist/
 build_output/
+artifacts/
 wheelhouse/
 *.exe
 *.msi

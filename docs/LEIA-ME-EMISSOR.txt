@@ -2,6 +2,9 @@ NABICODE — EMISSOR ADMINISTRATIVO DE LICENÇAS V2
 
 USO SEGURO
 1. Execute NabiCode_Emissor_Licencas_V2.exe somente em computador administrativo confiável.
+   Para Notas IglBalt, selecione o produto e use "Gerar pacote de ativação".
+   Nova instalação/renovação incluem licença e capacidade; aumento de plano
+   exige a licença V2 válida atual e emite somente nova capacidade.
 2. Selecione externamente a chave privada PEM criptografada e o catálogo público correspondente.
 3. A senha da chave privada não deve ficar neste pendrive, em arquivo de texto ou no computador do cliente.
 4. Carregue a solicitação da máquina ou informe o fingerprint completo, o titular, a edição FICHÁRIO e o prazo contratado.

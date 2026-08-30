@@ -19,6 +19,11 @@ padding, e a assinatura cobre seus bytes exatos. Campos desconhecidos,
 duplicados, codificação não canônica, chave desconhecida e assinatura inválida
 são recusados.
 
+Licenças históricas com schema 2 pertencem implicitamente ao produto
+`NABICODE`. Novas licenças multiproduto usam schema 3 e incluem `product_id`
+na parte assinada. O runtime deve informar seu produto esperado ao verificador;
+uma licença válida de outro produto é recusada antes de qualquer operação.
+
 O payload assinado inclui:
 
 - schema e UUID da licença;

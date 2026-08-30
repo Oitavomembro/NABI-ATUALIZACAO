@@ -18,6 +18,7 @@ class LicenseState(str, Enum):
 
 class LicenseEdition(str, Enum):
     COMMERCIAL = "COMERCIAL"
+    COMPLETE = "COMPLETA"
     FICHARIO = "FICHARIO"
     EVALUATION = "AVALIACAO"
 
@@ -38,14 +39,20 @@ class LicensePayload:
     grace_days: int
     features: tuple[str, ...]
     revoked: bool = False
+    product_id: str = "NABICODE"
 
     FORMAT_SCHEMA = 2
     NORMATIVE_GRACE_DAYS = 10
     EVALUATION_MAX_DAYS = 30
 
     def __post_init__(self) -> None:
-        if int(self.schema) != self.FORMAT_SCHEMA:
+        if int(self.schema) not in {self.FORMAT_SCHEMA, 3}:
             raise ValueError("Schema de licença incompatível.")
+        product_id = str(self.product_id or "").strip().upper()
+        if not re.fullmatch(r"[A-Z][A-Z0-9_]{2,39}", product_id):
+            raise ValueError("Identificador do produto inválido.")
+        if int(self.schema) == self.FORMAT_SCHEMA and product_id != "NABICODE":
+            raise ValueError("Licença V2 pertence exclusivamente ao NabiCode.")
         normalized_id = str(uuid.UUID(str(self.license_id)))
         customer = str(self.customer_name or "").strip()
         if not customer or len(customer) > 160:
@@ -74,6 +81,7 @@ class LicensePayload:
         object.__setattr__(self, "issued_at", issued)
         object.__setattr__(self, "grace_days", int(self.grace_days))
         object.__setattr__(self, "features", normalized_features)
+        object.__setattr__(self, "product_id", product_id)
 
 
 @dataclass(frozen=True, slots=True)
