@@ -12,6 +12,15 @@ class FiscalOutboxService:
     MIGRATION_KEY = "fiscal.outbox.migracao_fila_v1"
     CLAIMABLE = {"PENDENTE", "ERRO"}
     TERMINAL = {"CONCLUIDO", "CANCELADO"}
+    _PERSISTED_FIELDS = {
+        "id", "sale_id", "fiscal_document_id", "access_key", "environment",
+        "operation", "status", "attempts", "max_attempts", "retry_minutes",
+        "next_attempt_at", "worker_id", "claimed_at", "lease_until", "receipt",
+        "last_error_code", "last_error_message", "model", "reservation_id",
+        "xml_b64", "original_xml_b64", "actor", "contingency",
+        "contingency_deadline_at", "legacy_id", "metadata_json", "created_at",
+        "updated_at", "last_error", "last_status_code", "last_message",
+    }
 
     def __init__(self, connection_factory) -> None:
         self.connection_factory = connection_factory
@@ -71,7 +80,10 @@ class FiscalOutboxService:
                 str(xml_b64), str(original_xml_b64 or xml_b64),
                 str(actor or "").strip(), 1 if contingency else 0,
                 str(contingency_deadline_at or ""), str(legacy_id or ""),
-                json.dumps(dict(metadata or {}), ensure_ascii=False, sort_keys=True), now, now,
+                json.dumps(
+                    FiscalOutboxService._metadata_payload(metadata or {}),
+                    ensure_ascii=False, sort_keys=True, default=str,
+                ), now, now,
             ),
         )
         if fiscal_document_id:
@@ -201,7 +213,8 @@ class FiscalOutboxService:
                      str(record.get("last_error") or record.get("last_error_message") or record.get("last_message") or ""),
                      str(record.get("xml_b64") or ""), str(record.get("original_xml_b64") or ""),
                      1 if record.get("contingency") else 0, str(record.get("contingency_deadline_at") or ""),
-                     json.dumps(dict(record), ensure_ascii=False, sort_keys=True, default=str),
+                     json.dumps(self._metadata_payload(record), ensure_ascii=False,
+                                sort_keys=True, default=str),
                      now, int(record["id"]), expected_updated_at),
                 ).rowcount
                 if changed != 1:
@@ -246,7 +259,8 @@ class FiscalOutboxService:
                     str(record.get("xml_b64") or ""), str(record.get("original_xml_b64") or ""),
                     1 if record.get("contingency") else 0,
                     str(record.get("contingency_deadline_at") or ""),
-                    json.dumps(dict(record), ensure_ascii=False, sort_keys=True, default=str),
+                    json.dumps(self._metadata_payload(record), ensure_ascii=False,
+                               sort_keys=True, default=str),
                     now, int(record["id"]), str(worker_id),
                 ),
             ).rowcount
@@ -542,7 +556,8 @@ class FiscalOutboxService:
                     str(record.get("xml_b64") or ""), str(record.get("original_xml_b64") or ""),
                     str(record.get("actor") or ""), 1 if record.get("contingency") else 0,
                     str(record.get("contingency_deadline_at") or ""), legacy_id,
-                    json.dumps(record, ensure_ascii=False, sort_keys=True, default=str), now,
+                    json.dumps(cls._metadata_payload(record), ensure_ascii=False,
+                               sort_keys=True, default=str), now,
                     datetime.now(timezone.utc).isoformat(),
                 ),
             )
@@ -599,12 +614,25 @@ class FiscalOutboxService:
         if isinstance(metadata, dict):
             metadata.update(result)
             result = metadata
+        # Nunca devolva o JSON bruto junto com o registro lógico. Caso ele seja
+        # salvo novamente, isso criaria uma cópia recursiva de si mesmo e faria
+        # o campo crescer exponencialmente a cada passagem do worker.
+        result.pop("metadata_json", None)
         result["id"] = str(result["id"])
         result["last_error"] = str(result.get("last_error_message") or "")
         result["last_status_code"] = str(result.get("last_error_code") or "")
         result["last_message"] = str(result.get("last_error_message") or "")
         result["contingency"] = bool(result.get("contingency"))
         return result
+
+    @classmethod
+    def _metadata_payload(cls, record: Mapping[str, Any]) -> dict[str, Any]:
+        """Retém apenas extensões da fila, sem duplicar colunas ou XMLs."""
+        return {
+            str(key): value
+            for key, value in dict(record).items()
+            if str(key) not in cls._PERSISTED_FIELDS
+        }
 
     @staticmethod
     def _table_exists(connection: Any, name: str) -> bool:

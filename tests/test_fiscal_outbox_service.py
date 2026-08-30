@@ -149,6 +149,27 @@ class FiscalOutboxServiceTests(unittest.TestCase):
         self.assertEqual(current["status"], "PROCESSANDO")
         self.assertEqual(current["worker_id"], "worker-real")
 
+    def test_metadata_nao_inclui_copia_recursiva_do_registro(self):
+        self._enqueue()
+        for index in range(6):
+            records = self.service.list_items()
+            records[0]["reconciliation_for"] = "autorizacao"
+            records[0]["custom_counter"] = index
+            self.service.save_records(records)
+
+        connection = self.factory()
+        raw = connection.execute(
+            "SELECT metadata_json FROM fiscal_outbox WHERE id=1"
+        ).fetchone()[0]
+        connection.close()
+        metadata = json.loads(raw)
+        self.assertNotIn("metadata_json", metadata)
+        self.assertNotIn("xml_b64", metadata)
+        self.assertNotIn("original_xml_b64", metadata)
+        self.assertEqual(metadata["reconciliation_for"], "autorizacao")
+        self.assertEqual(metadata["custom_counter"], 5)
+        self.assertLess(len(raw), 1024)
+
     def test_concluido_nao_e_reivindicado_novamente(self):
         self._enqueue(); claimed = self.service.claim_next(worker_id="w1")
         self.service.complete(int(claimed["id"]), worker_id="w1", receipt="123")

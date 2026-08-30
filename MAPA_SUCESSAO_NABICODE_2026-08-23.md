@@ -5079,3 +5079,23 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação específica: `3 passed`; regressão de serviço fiscal, fila, worker,
   gateway e Vendas do dia: `224 passed`, `10 subtests passed`. Nenhum banco
   ativo, certificado real ou acesso à SEFAZ foi utilizado.
+
+## Crescimento recursivo do metadata da outbox — 29/08/2026
+
+- a leitura somente leitura do banco TESTE explicou o erro posterior da venda
+  nº 2: `metadata_json` chegou a aproximadamente 541 MB e o SQLite recusou a
+  gravação com `string or blob too big`;
+- a causa era autorreferência: a conversão da linha devolvia o próprio
+  `metadata_json` e cada salvamento serializava novamente a cópia anterior,
+  produzindo crescimento exponencial;
+- a outbox agora separa colunas persistidas dos metadados extensíveis, nunca
+  devolve o JSON bruto como parte do registro lógico e não duplica XMLs nos
+  metadados. Marcadores fiscais adicionais continuam preservados;
+- teste de regressão executa seis ciclos de leitura/gravação, confirma a
+  preservação dos marcadores e mantém o JSON abaixo de 1 KiB;
+- validação focada: `3 passed`; regressão de outbox, worker, serviço fiscal,
+  gateway e Vendas do dia: `225 passed`, `10 subtests passed`;
+- o banco TESTE ainda não foi alterado. A última resposta fiscal comprovada da
+  venda nº 2 permanece `297`; o erro local ocorreu antes do novo envio. A
+  reparação deve compactar somente o metadata auxiliar e alinhar documento/fila
+  a `FALHA 297`, mediante backup e autorização explícita.
