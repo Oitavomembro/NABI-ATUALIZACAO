@@ -2306,8 +2306,10 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(queued[first["id"]]["status"], "PENDENTE")
 
     def test_reenvio_manual_reabre_item_falhado(self):
+        key = "29" + "5" * 42
         item = self.service.enqueue_transmission(
-            operation="consulta", xml="<consSitNFe/>", max_attempts=1
+            operation="autorizacao",
+            xml=f'<NFe><infNFe Id="NFe{key}"/></NFe>', max_attempts=1,
         )
         original = self.service.transmit
         self.service.transmit = lambda **kwargs: (_ for _ in ()).throw(RuntimeError("indisponível"))
@@ -2319,6 +2321,40 @@ class FiscalServiceTests(unittest.TestCase):
         reopened = self.service.retry_transmission(item["id"])
         self.assertEqual(reopened["status"], "PENDENTE")
         self.assertEqual(reopened["retried_by"], "gerente")
+
+    def test_consulta_217_restaura_autorizacao_original_com_mesma_chave(self):
+        key = "29" + "7" * 42
+        original = f'<NFe><infNFe Id="NFe{key}"/></NFe>'.encode()
+        item = self.service.enqueue_transmission(operation="autorizacao", xml=original)
+        rows = self.service.list_transmission_queue()
+        rows[0].update({
+            "status": "FALHA", "operation": "consulta", "last_status_code": "217",
+            "reconciliation_for": "autorizacao",
+            "xml_b64": base64.b64encode(self.service.build_query_xml(access_key=key)).decode(),
+        })
+        self.service._save_transmission_queue(rows)
+
+        reopened = self.service.retry_transmission(item["id"])
+
+        self.assertEqual(reopened["status"], "PENDENTE")
+        self.assertEqual(reopened["operation"], "autorizacao")
+        self.assertEqual(base64.b64decode(reopened["xml_b64"]), original)
+        self.assertNotIn("reconciliation_for", reopened)
+
+    def test_consulta_sem_217_nunca_e_convertida_em_autorizacao(self):
+        key = "29" + "6" * 42
+        item = self.service.enqueue_transmission(
+            operation="autorizacao", xml=f'<NFe><infNFe Id="NFe{key}"/></NFe>'
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0].update({
+            "status": "FALHA", "operation": "consulta", "last_status_code": "999",
+            "reconciliation_for": "autorizacao",
+        })
+        self.service._save_transmission_queue(rows)
+
+        with self.assertRaisesRegex(ValueError, "não confirmou ausência"):
+            self.service.retry_transmission(item["id"])
 
     def test_reenvio_manual_nao_aceita_actor_livre(self):
         with self.assertRaisesRegex(TypeError, "actor"):

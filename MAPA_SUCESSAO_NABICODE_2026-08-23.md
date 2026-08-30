@@ -4977,3 +4977,24 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação focada: `26 passed`; regressão ampliada de interface, gateways,
   serviço fiscal, venda fiscal, outbox e worker: `353 passed`, `12 subtests
   passed`. Nenhum banco ativo, certificado real ou comunicação SEFAZ foi usado.
+
+## Reenvio seguro após confirmação SEFAZ 217 — 29/08/2026
+
+- a consulta real das vendas nº 2 e nº 6 retornou `217 — NF-e não consta na
+  base de dados da SEFAZ`, encerrando corretamente o estado desconhecido e
+  comprovando que as autorizações não chegaram à base da SEFAZ;
+- a auditoria antes do clique encontrou que a fila permanecia com operação
+  `consulta`; o reenvio antigo apenas repetiria a consulta indefinidamente e
+  nunca restauraria a autorização original;
+- quando, e somente quando, uma reconciliação de autorização termina com código
+  217, o reenvio agora valida a chave, restaura o XML original preservado,
+  remove os marcadores da consulta e agenda `autorizacao` com a mesma venda,
+  chave e numeração;
+- consultas com qualquer outro código, XML original ausente/adulterado,
+  divergência de chave, estado pendente/desconhecido ou transmissão já iniciada
+  continuam bloqueadas; ao agendar corretamente, o vínculo da venda muda para
+  `PENDENTE` em vez de continuar exibindo `FALHA`;
+- validação focada: `5 passed`; regressão ampliada de serviço fiscal, venda,
+  outbox, worker, gateways, Vendas do dia e PDV: `355 passed`, `12 subtests
+  passed`. A leitura diagnóstica do banco TESTE foi somente leitura e nenhuma
+  transmissão adicional foi realizada.
