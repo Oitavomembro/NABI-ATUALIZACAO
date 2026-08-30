@@ -5300,3 +5300,10 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   integral executou `2811 passed`, `1 skipped`, `504 subtests passed`, com a
   única falha ambiental já conhecida no smoke Tcl/Tk do Python temporário
   (`tcl_library`/`tk_library` físicos ausentes). `git diff --check` aprovado.
+- evidência manual posterior em HOMOLOGAÇÃO: a venda `#8`, NF-e 55 série `3`,
+  número `1`, antes rejeitada com `486`, foi recuperada pela nova rotina e
+  retornou `AUTORIZADO` na SEFAZ. A tela exibiu o progresso, impediu novo clique
+  concorrente, atualizou a linha automaticamente e informou que o retorno
+  mudou. O defeito 486 e o acompanhamento visual estão validados; não repetir
+  essa transmissão. A venda `#7`, rejeitada com `244` por série incompatível,
+  permanece corretamente sem reenvio automático.
