@@ -10,7 +10,10 @@ from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SPEC = PROJECT_ROOT / "build_tools" / "pyinstaller" / "nabicode_license_issuer.spec"
-FORBIDDEN_SOURCE_SUFFIXES = {".pem", ".key", ".p12", ".pfx", ".nabilic"}
+FORBIDDEN_SOURCE_SUFFIXES = {
+    ".pem", ".key", ".p12", ".pfx", ".nabilic", ".nabicap",
+    ".iglbalt-activation",
+}
 
 
 def validate_emitter_source(root: Path = PROJECT_ROOT) -> None:

@@ -393,7 +393,28 @@ def test_interface_cadastra_notas_iglbalt_com_contrato_fechado(tmp_path, monkeyp
     assert window.features.text() == "core"
     assert not window.fiscal_enabled.isEnabled()
     assert "notas-iglbalt-completa" in window.output.text()
+    assert window.output.text().endswith(".iglbalt-activation")
+    assert not window.iglbalt_panel.isHidden()
+    assert window.sign_button.text() == "2. Gerar pacote de ativação"
+    assert not window.existing_notas_license.isEnabled()
+    window.activation_operation.setCurrentIndex(
+        window.activation_operation.findData("AUMENTO_PLANO")
+    )
+    assert window.existing_notas_license.isEnabled()
+    assert not window.private_key.isEnabled()
     window.close(); app.processEvents()
+
+
+def test_build_do_emissor_recusa_pacotes_e_capacidades_de_cliente(tmp_path):
+    from build_tools import build_license_issuer
+
+    (tmp_path / "cliente.nabicap").write_text("não versionar", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Segredo/licença"):
+        build_license_issuer.validate_emitter_source(tmp_path)
+    (tmp_path / "cliente.nabicap").unlink()
+    (tmp_path / "cliente.iglbalt-activation").write_text("não versionar", encoding="utf-8")
+    with pytest.raises(RuntimeError, match="Segredo/licença"):
+        build_license_issuer.validate_emitter_source(tmp_path)
 
 
 def test_notas_iglbalt_recusa_chave_nabicode_e_recursos_manipulados():

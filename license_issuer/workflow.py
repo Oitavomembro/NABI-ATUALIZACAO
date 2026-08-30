@@ -122,7 +122,7 @@ class IssuanceReview:
 class IssuedArtifact:
     path: Path
     sha256: str
-    payload: LicensePayload
+    payload: object
 
 
 def review_request(request: IssuanceRequest) -> IssuanceReview:
@@ -212,21 +212,15 @@ def _envelope_key_id(raw: bytes) -> str:
     return key_id
 
 
-def sign_review(
+def sign_review_bytes(
     review: IssuanceReview,
     *,
     private_key_path: str | os.PathLike[str],
     public_catalog_path: str | os.PathLike[str],
     password: bytes,
-    output_path: str | os.PathLike[str],
-) -> IssuedArtifact:
+) -> tuple[bytes, object, bytes]:
     if review_request(review.request).digest != review.digest:
         raise ValueError("A revisão mudou; revise novamente antes de assinar.")
-    output = Path(output_path).expanduser().resolve()
-    if output.suffix.lower() != ".nabilic":
-        raise ValueError("O arquivo emitido deve usar a extensão .nabilic.")
-    if output.exists():
-        raise FileExistsError("O arquivo de saída já existe e não será sobrescrito.")
     private_key = load_private_key(private_key_path, password=password)
     request = review.request
     public = private_key.public_key().public_bytes(Encoding.Raw, PublicFormat.Raw)
@@ -252,6 +246,26 @@ def sign_review(
             revoked=request.revoked, product_id=request.product_id,
         )
         payload = verify_envelope(raw, {request.key_id: public})
+    return raw, payload, public
+
+
+def sign_review(
+    review: IssuanceReview,
+    *,
+    private_key_path: str | os.PathLike[str],
+    public_catalog_path: str | os.PathLike[str],
+    password: bytes,
+    output_path: str | os.PathLike[str],
+) -> IssuedArtifact:
+    output = Path(output_path).expanduser().resolve()
+    if output.suffix.lower() != ".nabilic":
+        raise ValueError("O arquivo emitido deve usar a extensão .nabilic.")
+    if output.exists():
+        raise FileExistsError("O arquivo de saída já existe e não será sobrescrito.")
+    raw, payload, _public = sign_review_bytes(
+        review, private_key_path=private_key_path,
+        public_catalog_path=public_catalog_path, password=password,
+    )
     output.parent.mkdir(parents=True, exist_ok=True)
     descriptor = os.open(output, os.O_CREAT | os.O_EXCL | os.O_WRONLY, 0o600)
     try:
