@@ -5063,3 +5063,19 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   gateway e Vendas do dia: `223 passed`, `10 subtests passed`. Apenas uma venda
   real foi reenviada antes desta segunda correção; as demais permaneceram sem
   novo envio.
+
+## Consulta fiscal idempotente durante processamento — 29/08/2026
+
+- na homologação da venda nº 2, a tabela ainda exibia
+  `RESPOSTA_DESCONHECIDA`, mas o clique em consultar informou que somente
+  respostas desconhecidas poderiam ser reconciliadas;
+- a causa foi uma corrida segura: o worker reivindicou a resposta desconhecida
+  e iniciou a consulta oficial entre a renderização da tabela e o clique do
+  operador;
+- `reconcile_unknown` agora considera sucesso idempotente quando a mesma
+  reconciliação de autorização já está `PENDENTE` ou `PROCESSANDO` como
+  `consulta`/`recibo`; nenhuma autorização é retransmitida e a proteção contra
+  estados incompatíveis permanece fechada;
+- validação específica: `3 passed`; regressão de serviço fiscal, fila, worker,
+  gateway e Vendas do dia: `224 passed`, `10 subtests passed`. Nenhum banco
+  ativo, certificado real ou acesso à SEFAZ foi utilizado.

@@ -3881,7 +3881,17 @@ class FiscalService:
         target = next((row for row in rows if str(row.get("id")) == str(queue_id)), None)
         if target is None:
             raise ValueError("Item da fila fiscal não encontrado.")
-        if str(target.get("status") or "").upper() != "RESPOSTA_DESCONHECIDA":
+        current_status = str(target.get("status") or "").upper()
+        if (
+            current_status in {"PENDENTE", "PROCESSANDO"}
+            and str(target.get("reconciliation_for") or "") == "autorizacao"
+            and str(target.get("operation") or "").lower() in {"consulta", "recibo"}
+        ):
+            # O worker pode reivindicar a resposta desconhecida entre a
+            # renderização da tabela e o clique. A consulta já em andamento é
+            # sucesso idempotente, não erro e jamais motivo para retransmitir.
+            return dict(target)
+        if current_status != "RESPOSTA_DESCONHECIDA":
             raise ValueError("Somente respostas desconhecidas exigem reconciliação segura.")
         key = self._normalize_access_key(target.get("access_key", ""))
         receipt = self._digits(target.get("receipt", ""))

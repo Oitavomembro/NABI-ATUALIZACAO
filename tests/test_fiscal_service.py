@@ -2234,6 +2234,28 @@ class FiscalServiceTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "ainda não possui recibo"):
             self.service.force_receipt_check(item["id"])
 
+    def test_reconciliacao_ja_processando_e_idempotente(self):
+        key = "8" * 44
+        item = self.service.enqueue_transmission(
+            operation="autorizacao",
+            xml=f'<NFe><infNFe Id="NFe{key}"/></NFe>',
+            access_key=key,
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0].update({
+            "status": "PROCESSANDO",
+            "operation": "consulta",
+            "reconciliation_for": "autorizacao",
+            "worker_id": "worker-seguro",
+        })
+        self.service._save_transmission_queue(rows)
+
+        result = self.service.reconcile_unknown(item["id"])
+
+        self.assertEqual(result["status"], "PROCESSANDO")
+        self.assertEqual(result["operation"], "consulta")
+        self.assertEqual(result["worker_id"], "worker-seguro")
+
     def test_consulta_forcada_nao_aceita_actor_livre(self):
         with self.assertRaisesRegex(TypeError, "actor"):
             self.service.force_receipt_check("fila", actor="forjado")
