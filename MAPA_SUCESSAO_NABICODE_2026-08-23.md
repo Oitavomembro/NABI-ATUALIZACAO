@@ -3914,3 +3914,46 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - O pacote público de integração foi regenerado em `9bcb8c2` conforme o contrato
   final; qualquer ZIP/hash anterior está substituído. SHA-256 vigente do ZIP
   local: `5C734A676F36F961AB3FD519CB9BC59944520F7A2EAF192A368E1AA0B5CF8F7B`.
+
+## Checkpoint — pacote de ativação unificado Notas IglBalt (2026-08-30)
+
+- branch/worktree isolados: `codex/emissor-pacote-ativacao-iglbalt` em
+  `NabiCode-QT-EmissorPacoteIglBalt-codex`, derivados de
+  `codex/emissor-multiproduto-notas-iglbalt@96fee7e`;
+- implementação funcional em `ef5c1b9`: o Emissor V2 preserva licença schema 3,
+  produto `NOTAS_IGLBALT`, edição `COMPLETA`, feature `core`, código de máquina
+  e assinatura Ed25519 já homologados, acrescentando o pacote externo
+  `.iglbalt-activation` sem alterar o aplicativo Notas IglBalt;
+- a capacidade mantém contrato schema 1, produto
+  `NOTAS_IGLBALT_CAPACITY` e campo assinado `max_registered_cnpjs`. Planos
+  Individual, Duplo e Empresarial equivalem a 1, 2 e 3; Personalizado aceita
+  1..10.000. CNPJ desativado não libera vaga;
+- Nova instalação e Renovação contêm a licença V2 original, capacidade e
+  manifesto de hashes. Aumento de plano exige verificar a licença V2 vigente da
+  mesma máquina e emite somente nova capacidade. Segunda máquina exige nova
+  licença; arquivos existentes nunca são sobrescritos;
+- montagem, pós-verificação das duas assinaturas, hashes, máquina e histórico
+  são fail-closed. Falha remove o pacote parcial. Histórico registra somente
+  metadados administrativos, hashes, caminho e operador;
+- a chave privada de capacidade permanece externa. O emissor apenas descobre o
+  caminho conhecido para facilitar o uso; executável, pacote, histórico, log e
+  Git não contêm chave privada, senha, catálogo secreto ou licença de cliente;
+- manual operacional em `fdb79e4`; endurecimento do pacote administrativo em
+  `feef528`, bloqueando também `.nabicap` e `.iglbalt-activation`;
+- validação final: 48 testes ampliados aprovados; `compileall` e
+  `git diff --check` aprovados. A primeira tentativa de smoke revelou falha de
+  `QtWidgets` causada por DLLs UCRT de uma ferramenta auxiliar do host herdadas
+  pelo `PATH`. `cc37f6d` higieniza o ambiente do PyInstaller para aceitar apenas
+  Python e Windows; o novo bundle não contém caminho/DLL de Codex ou libheif e
+  abriu comprovadamente a janela real do Emissor no Windows;
+- executável local: `build_output/license_issuer/NabiCode_Emissor_Licencas_V2.exe`,
+  50.378.616 bytes, SHA-256
+  `08E6DC0E443EEF75FD059CB4B95EE3D62DDF213740E9E89AE0230473E5E28212`;
+- pasta administrativa pronta, sem segredo:
+  `build_output/Emissor_NabiCode_Administrativo`; contém somente executável,
+  manual e `SHA256SUMS.txt`. SBOM local registra Python 3.14.7, PyInstaller
+  6.21.0, PySide6/shiboken6 6.11.2 e cryptography 46.0.7;
+- pendência física: homologar visualmente a emissão com as chaves externas reais
+  na máquina administrativa e testar a importação do pacote no Notas IglBalt.
+  A chave privada nunca deve acompanhar o cliente ou permanecer no computador
+  dele. Nenhum push ou alteração no aplicativo Notas IglBalt ocorreu.
