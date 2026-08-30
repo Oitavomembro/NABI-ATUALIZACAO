@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 from commercial.application.dto import BudgetDocument
 from commercial.application.query_dto import DailySaleSummary
 from commercial.domain.money import MoneyCodec
+from services.sefaz_response_policy import SefazResponsePolicy
 
 from .budget_dialog import BudgetPreviewDialog
 
@@ -225,6 +226,8 @@ class DailySalesDialog(QDialog):
         fiscal = record.fiscal_status or (
             "ERRO — SEM VÍNCULO FISCAL" if self.fiscal_mode else "NÃO FISCAL"
         )
+        if record.fiscal_last_error and str(record.fiscal_status).upper() in {"FALHA", "ERRO"}:
+            fiscal = f"{record.fiscal_status} — {record.fiscal_last_error}"
         return (
             "VENDA", f"#{record.sale_id}", record.occurred_at,
             record.customer_name or str(record.customer_id or "CONSUMIDOR FINAL"),
@@ -245,10 +248,20 @@ class DailySalesDialog(QDialog):
         status = (
             str(selected[1].fiscal_status or "").upper() if enabled else ""
         )
+        error_code = ""
+        if enabled:
+            error_code = "".join(
+                character for character in str(selected[1].fiscal_last_error or "")
+                if character.isdigit()
+            )[:3]
+        retry_allowed = (
+            status in {"FALHA", "ERRO"}
+            and (not error_code or SefazResponsePolicy.decide(error_code).allows_resend)
+        )
         self.recover_button.setVisible(status == "RESPOSTA_DESCONHECIDA")
         self.recover_button.setEnabled(status == "RESPOSTA_DESCONHECIDA")
-        self.retry_button.setVisible(status in {"FALHA", "ERRO"})
-        self.retry_button.setEnabled(status in {"FALHA", "ERRO"})
+        self.retry_button.setVisible(retry_allowed)
+        self.retry_button.setEnabled(retry_allowed)
 
     def _preview(self) -> None:
         selected = self._selected()
@@ -303,6 +316,10 @@ class DailySalesDialog(QDialog):
             selected_status == "RESPOSTA_DESCONHECIDA" and action == "CONSULTAR"
         ) or (
             selected_status in {"FALHA", "ERRO"} and action == "REENVIAR"
+            and (
+                not record.fiscal_last_error
+                or SefazResponsePolicy.decide(record.fiscal_last_error).allows_resend
+            )
         )
         if not allowed:
             QMessageBox.warning(

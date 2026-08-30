@@ -221,7 +221,31 @@ class FiscalSaleService:
         # parcialmente: quando há destinatário, CPF/CNPJ e endereço continuam
         # obrigatórios para NF-e 55.
         if technical_consumer:
-            return {}, 1
+            if fiscal_model == "65":
+                return {}, 1
+            environment = str(config.get("environment") or "HOMOLOGACAO").upper()
+            if environment != "HOMOLOGACAO":
+                raise ValueError(
+                    "NF-e modelo 55 exige destinatário identificado. Selecione um cliente "
+                    "com CPF/CNPJ e endereço fiscal completo."
+                )
+            issuer = dict(config.get("issuer") or {})
+            required = {
+                "street": issuer.get("street"), "number": issuer.get("number"),
+                "district": issuer.get("district"), "city_code": issuer.get("city_code"),
+                "city": issuer.get("city"), "state": issuer.get("state") or config.get("state"),
+                "zip_code": issuer.get("zip_code"),
+            }
+            if any(not str(value or "").strip() for value in required.values()):
+                raise ValueError(
+                    "Homologação da NF-e 55 exige endereço completo no cadastro do emitente."
+                )
+            return {
+                "document": self.fiscal_service.HOMOLOGATION_RECIPIENT_CNPJ,
+                "name": self.fiscal_service.HOMOLOGATION_RECIPIENT_NAME,
+                "state_taxpayer_indicator": 9,
+                **required,
+            }, 1
         document = self.fiscal_service._normalize_tax_document(customer.get("cpf"))
         valid_document = (
             self.fiscal_service._is_valid_cnpj(document) if len(document) == 14

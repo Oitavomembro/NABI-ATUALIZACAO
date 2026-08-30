@@ -362,7 +362,8 @@ class PDVTransactionService:
             } if fiscal_exists else set()
             fiscal_field = lambda name: f"COALESCE(f.{name},'')" if name in fiscal_columns else "''"
             fiscal_fields = ",".join(fiscal_field(name) for name in (
-                "status", "model", "access_key", "protocol", "environment", "created_at"
+                "status", "model", "access_key", "protocol", "environment", "created_at",
+                "last_error",
             ))
             rows = conn.execute(
                 f"""
@@ -391,6 +392,7 @@ class PDVTransactionService:
                 "access_key": str(row[9] or ""), "protocol": str(row[10] or ""),
                 "fiscal_environment": str(row[11] or ""),
                 "fiscal_authorized_at": str(row[12] or ""),
+                "fiscal_last_error": str(row[13] or ""),
             }
             for row in rows
         ]

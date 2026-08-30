@@ -50,6 +50,7 @@ class DailySaleSummary:
     fiscal_environment: str = ""
     fiscal_authorized_at: str = ""
     customer_name: str = ""
+    fiscal_last_error: str = ""
 
     def __post_init__(self) -> None:
         if int(self.sale_id) <= 0:

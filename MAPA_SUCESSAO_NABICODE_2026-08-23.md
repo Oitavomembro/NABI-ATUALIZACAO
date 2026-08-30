@@ -5151,3 +5151,29 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   `tk_library`; `compileall` e `git diff --check` aprovados;
 - o Nabi permaneceu fechado durante a alteração e nenhum banco ativo, venda,
   documento fiscal ou comunicação SEFAZ foi modificado.
+
+## Rejeição 719 e política central de retornos SEFAZ — 30/08/2026
+
+- o reenvio manual da venda nº 2 foi efetivamente processado: a SEFAZ deixou de
+  retornar 297 e respondeu 719, comprovando que a assinatura corrigida passou
+  para a validação seguinte; a interface escondia a evolução porque mostrava
+  somente `FALHA`;
+- o histórico agora carrega e exibe `last_error` do documento fiscal, incluindo
+  código e motivo reais;
+- para NF-e 55 em HOMOLOGAÇÃO, o consumidor técnico usa exclusivamente o CNPJ e
+  nome oficiais de teste, com endereço completo derivado do emitente; a
+  recuperação 719 preserva venda, chave e numeração, substitui somente o XML
+  rejeitado e reassina. Em PRODUÇÃO, consumidor técnico sem CPF/CNPJ e endereço
+  é bloqueado;
+- `SefazResponsePolicy` centraliza autorização, indisponibilidade, consulta
+  obrigatória, correções conhecidas, denegação e retorno desconhecido. Códigos
+  novos falham fechados e não exibem reenvio. A matriz está em
+  `docs/POLITICA_RETORNOS_SEFAZ.md`;
+- validação focada: `232 passed`, `10 subtests passed`; regressão fiscal/PDV
+  ampliada: `612 passed`, `12 subtests passed`; nenhum reenvio, banco ativo ou
+  comunicação SEFAZ foi executado pela correção;
+- a auditoria somente leitura da tarefa `Nabicode` confirmou que ainda é preciso
+  integrar a trilha `codex/fiscal-conformidade-pre-homologacao@f8d8604`, executar
+  smoke empacotado com Tcl/Tk, completar a matriz manual 55/65, validar A1,
+  credenciamento e regras com contador e manter PRODUÇÃO bloqueada até dossiê e
+  aprovações formais.

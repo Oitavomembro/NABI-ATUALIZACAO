@@ -50,6 +50,7 @@ class NabiCodeDailySalesGateway:
             fiscal_environment=str(row.get("fiscal_environment") or ""),
             fiscal_authorized_at=str(row.get("fiscal_authorized_at") or ""),
             customer_name=customer_name,
+            fiscal_last_error=str(row.get("fiscal_last_error") or ""),
         )
 
     def list_today(self) -> tuple[DailySaleSummary, ...]:

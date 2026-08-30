@@ -2726,6 +2726,50 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(len(sign_calls), 1)
         self.assertEqual(self.service._extract_access_key_from_xml(sent), key)
 
+    def test_reenvio_apos_719_inclui_destinatario_completo_so_em_homologacao(self):
+        key = "29260812345678000195550010000000011000000010"
+        unsigned = f'''<NFe xmlns="http://www.portalfiscal.inf.br/nfe">
+          <infNFe Id="NFe{key}" versao="4.00">
+            <ide/><emit><CNPJ>12345678000195</CNPJ><xNome>EMPRESA</xNome>
+              <enderEmit><xLgr>RUA A</xLgr><nro>10</nro><xBairro>CENTRO</xBairro>
+                <cMun>2920007</cMun><xMun>PIRITIBA</xMun><UF>BA</UF><CEP>44830000</CEP>
+              </enderEmit><IE>123</IE><CRT>1</CRT></emit>
+          </infNFe>
+        </NFe>'''.encode()
+        rejected = self.service.sign_xml(
+            unsigned, reference_id=f"NFe{key}",
+            pfx_path=self.pfx_path, password=self.password,
+        )
+        self.service.enqueue_transmission(
+            operation="autorizacao", xml=rejected, access_key=key, model="55"
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0].update({
+            "status": "PENDENTE", "last_status_code": "719",
+            "environment": "HOMOLOGACAO",
+        })
+        self.service._save_transmission_queue(rows)
+        captured = {}
+        self.service.transmit = lambda **kwargs: (
+            captured.setdefault("xml", kwargs["xml"])
+            and FiscalResponse(False, "999", "parar depois da captura")
+        )
+        self.service.validate_ready = lambda **_kwargs: []
+        self.service.validate_official_xml = lambda *_args, **_kwargs: []
+        self.service.load_config = lambda: {
+            "default_model": "55", "environment": "HOMOLOGACAO",
+            "certificate_path": str(self.pfx_path),
+        }
+
+        self.service.process_transmission_queue(password=self.password, limit=1)
+
+        root = etree.fromstring(captured["xml"])
+        self.assertEqual(root.xpath("string(//*[local-name()='dest']/*[local-name()='CNPJ'])"), self.service.HOMOLOGATION_RECIPIENT_CNPJ)
+        self.assertEqual(root.xpath("string(//*[local-name()='dest']/*[local-name()='xNome'])"), self.service.HOMOLOGATION_RECIPIENT_NAME)
+        self.assertEqual(root.xpath("string(//*[local-name()='enderDest']/*[local-name()='cMun'])"), "2920007")
+        self.assertEqual(root.xpath("string(//*[local-name()='dest']/*[local-name()='indIEDest'])"), "9")
+        self.assertTrue(self.service.verify_xml_signature(captured["xml"])["valid"])
+
     def test_fault_soap_12_e_reduzido_a_mensagem_segura(self):
         fault = b'''<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
           <soap:Body><soap:Fault><soap:Reason><soap:Text xml:lang="pt-BR">

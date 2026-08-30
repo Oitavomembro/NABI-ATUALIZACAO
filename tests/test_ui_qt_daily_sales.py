@@ -167,6 +167,28 @@ class DailySalesDialogTests(unittest.TestCase):
         self.assertTrue(self.dialog.retry_button.isVisible())
         self.assertEqual(self.dialog.retry_button.text(), "Reenviar NF-e")
 
+    def test_denegacao_ou_codigo_desconhecido_nunca_oferece_reenvio(self):
+        for error in (
+            "301: Uso denegado: irregularidade fiscal do emitente",
+            "999: Retorno novo sem política aprovada",
+        ):
+            self.view_model.sales = (DailySaleSummary(
+                42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+                fiscal_status="FALHA", fiscal_last_error=error,
+            ),)
+            self.dialog.reload()
+            self.assertFalse(self.dialog.retry_button.isVisible())
+
+    def test_719_exibe_motivo_e_permite_correcao_controlada(self):
+        self.view_model.sales = (DailySaleSummary(
+            42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
+            fiscal_status="FALHA",
+            fiscal_last_error="719: NF-e sem identificação do destinatário",
+        ),)
+        self.dialog.reload()
+        self.assertIn("719", self.dialog.table.item(0, 6).text())
+        self.assertTrue(self.dialog.retry_button.isVisible())
+
     def test_modo_fiscal_destaca_registro_antigo_sem_vinculo(self):
         dialog = DailySalesDialog(self.view_model, fiscal_mode=True)
         try:

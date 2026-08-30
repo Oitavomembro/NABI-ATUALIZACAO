@@ -16,6 +16,8 @@ class FakeFiscalService:
     _normalize_tax_document = staticmethod(FiscalService._normalize_tax_document)
     _is_valid_cnpj = staticmethod(FiscalService._is_valid_cnpj)
     _is_valid_cpf = staticmethod(FiscalService._is_valid_cpf)
+    HOMOLOGATION_RECIPIENT_CNPJ = FiscalService.HOMOLOGATION_RECIPIENT_CNPJ
+    HOMOLOGATION_RECIPIENT_NAME = FiscalService.HOMOLOGATION_RECIPIENT_NAME
 
     def __init__(self, db):
         self.db = db
@@ -33,7 +35,11 @@ class FakeFiscalService:
         return {
             "default_model": "65", "environment": "HOMOLOGACAO", "state": "BA",
             "cnpj": "12345678000195", "tax_regime": "SIMPLES_NACIONAL",
-            "issuer": {"name": "EMPRESA"}, "sale_series_65": 1,
+            "issuer": {
+                "name": "EMPRESA", "street": "RUA PRINCIPAL", "number": "1",
+                "district": "CENTRO", "city_code": "2920007", "city": "PIRITIBA",
+                "state": "BA", "zip_code": "44830000",
+            }, "sale_series_65": 1,
         }
 
     def validate_ready(self, **_kwargs):
@@ -285,10 +291,18 @@ class FiscalSaleServiceTests(unittest.TestCase):
         self.assertEqual(recipient, {})
         self.assertEqual(destination, 1)
 
-    def test_consumidor_final_na_nfe_55_nao_cria_destinatario_falso(self):
+    def test_consumidor_final_na_nfe_55_usa_destinatario_oficial_so_em_homologacao(self):
         recipient, destination = self.service.recipient_for_customer(2, model="55")
-        self.assertEqual(recipient, {})
+        self.assertEqual(recipient["document"], FiscalService.HOMOLOGATION_RECIPIENT_CNPJ)
+        self.assertEqual(recipient["name"], FiscalService.HOMOLOGATION_RECIPIENT_NAME)
+        self.assertEqual(recipient["city_code"], "2920007")
         self.assertEqual(destination, 1)
+
+    def test_consumidor_final_na_nfe_55_producao_exige_cliente_identificado(self):
+        original = self.fiscal.load_config
+        self.fiscal.load_config = lambda: {**original(), "environment": "PRODUCAO"}
+        with self.assertRaisesRegex(ValueError, "destinatário identificado"):
+            self.service.recipient_for_customer(2, model="55")
 
     def test_cancelamento_pendente_cancela_fila_e_libera_numero(self):
         draft = FiscalSaleDraft("RES-1", "29" + "0" * 42, "65", "HOMOLOGACAO", b"<NFe/>")

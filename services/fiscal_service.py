@@ -2298,7 +2298,7 @@ class FiscalService:
                 recipient_name = self.HOMOLOGATION_RECIPIENT_NAME
             if recipient_name:
                 el(dest, "xNome", recipient_name)
-            if not is_homologation and any(
+            if any(
                 recipient.get(key) for key in ("street", "city_code", "state", "zip_code")
             ):
                 address = etree.SubElement(dest, etree.QName(ns, "enderDest"))
@@ -3483,7 +3483,8 @@ class FiscalService:
                             raise ValueError("A chave do XML não corresponde ao item da fila fiscal.")
                         already_signed = bool(root.xpath(".//*[local-name()='Signature']"))
                         if already_signed:
-                            if str(record.get("last_status_code") or "").strip() == "297":
+                            rejection_code = str(record.get("last_status_code") or "").strip()
+                            if rejection_code in {"297", "719"}:
                                 # A SEFAZ rejeitou especificamente o valor da
                                 # assinatura. O reenvio deve preservar a NF-e,
                                 # chave e numeração, mas não pode reutilizar o
@@ -3503,6 +3504,55 @@ class FiscalService:
                                         "A assinatura rejeitada não referencia a chave enfileirada."
                                     )
                                 signatures[0].getparent().remove(signatures[0])
+                                if rejection_code == "719":
+                                    if model != "55" or str(
+                                        record.get("environment") or config.get("environment") or ""
+                                    ).upper() != "HOMOLOGACAO":
+                                        raise ValueError(
+                                            "A rejeição 719 exige destinatário fiscal válido; "
+                                            "correção automática é restrita à homologação da NF-e 55."
+                                        )
+                                    inf_nodes = root.xpath(".//*[local-name()='infNFe']")
+                                    emit_nodes = root.xpath(".//*[local-name()='infNFe']/*[local-name()='emit']")
+                                    if len(inf_nodes) != 1 or len(emit_nodes) != 1:
+                                        raise ValueError("NF-e rejeitada não possui emitente único.")
+                                    if inf_nodes[0].xpath("./*[local-name()='dest']"):
+                                        raise ValueError(
+                                            "A rejeição 719 não corresponde ao XML, que já possui destinatário."
+                                        )
+                                    emit = emit_nodes[0]
+                                    issuer_address = emit.xpath("./*[local-name()='enderEmit']")
+                                    if len(issuer_address) != 1:
+                                        raise ValueError(
+                                            "Emitente sem endereço completo para destinatário de homologação."
+                                        )
+                                    namespace = etree.QName(inf_nodes[0]).namespace
+                                    dest = etree.Element(etree.QName(namespace, "dest"))
+                                    def add_dest(name, value):
+                                        node = etree.SubElement(dest, etree.QName(namespace, name))
+                                        node.text = str(value)
+                                    add_dest("CNPJ", self.HOMOLOGATION_RECIPIENT_CNPJ)
+                                    add_dest("xNome", self.HOMOLOGATION_RECIPIENT_NAME)
+                                    ender_dest = etree.SubElement(
+                                        dest, etree.QName(namespace, "enderDest")
+                                    )
+                                    required_address = (
+                                        "xLgr", "nro", "xBairro", "cMun", "xMun", "UF", "CEP"
+                                    )
+                                    for field in required_address:
+                                        source = issuer_address[0].xpath(
+                                            f"./*[local-name()='{field}']"
+                                        )
+                                        if len(source) != 1 or not str(source[0].text or "").strip():
+                                            raise ValueError(
+                                                "Emitente sem endereço completo para destinatário de homologação."
+                                            )
+                                        copied = etree.SubElement(
+                                            ender_dest, etree.QName(namespace, field)
+                                        )
+                                        copied.text = str(source[0].text)
+                                    add_dest("indIEDest", 9)
+                                    emit.addnext(dest)
                                 unsigned = etree.tostring(
                                     root, xml_declaration=True, encoding="utf-8", standalone=False
                                 )
