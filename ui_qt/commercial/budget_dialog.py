@@ -2,12 +2,88 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QDialog, QHBoxLayout, QHeaderView, QLabel, QMessageBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QTextBrowser, QVBoxLayout,
+    QApplication, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
+    QLabel, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
+    QTextBrowser, QVBoxLayout,
 )
 
 from commercial.application.dto import BudgetDocument
 from commercial.domain.money import MoneyCodec
+from .widgets.money_edit import MoneyEdit
+
+
+class BudgetTermsDialog(QDialog):
+    """Coleta somente uma simulação; nunca cria pagamento ou título."""
+
+    def __init__(self, total, parent=None) -> None:
+        super().__init__(parent)
+        self.total = MoneyCodec.parse(total, field="total do orçamento")
+        self.setWindowTitle("Condições estimadas do orçamento")
+        self.setModal(True)
+        self.resize(480, 280)
+        root = QVBoxLayout(self)
+        warning = QLabel(
+            "Isto é apenas uma proposta. Não registra recebimento, crediário, "
+            "Caixa, estoque, ficha ou documento fiscal."
+        )
+        warning.setWordWrap(True)
+        root.addWidget(warning)
+        form = QFormLayout()
+        self.method = QComboBox()
+        self.method.addItems(("A COMBINAR", "DINHEIRO", "PIX", "DÉBITO", "CRÉDITO", "CREDIÁRIO", "OUTROS"))
+        self.entry = MoneyEdit()
+        self.entry.set_value(0)
+        self.installments = QSpinBox()
+        self.installments.setRange(1, 120)
+        self.summary = QLabel()
+        form.addRow("Forma pretendida", self.method)
+        form.addRow("Entrada estimada", self.entry)
+        form.addRow("Quantidade de parcelas", self.installments)
+        form.addRow("Simulação", self.summary)
+        root.addLayout(form)
+        self.buttons = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Save | QDialogButtonBox.StandardButton.Cancel
+        )
+        self.buttons.button(QDialogButtonBox.StandardButton.Save).setText("Salvar orçamento")
+        root.addWidget(self.buttons)
+        self.entry.textChanged.connect(self._refresh)
+        self.installments.valueChanged.connect(self._refresh)
+        self.buttons.accepted.connect(self._accept_validated)
+        self.buttons.rejected.connect(self.reject)
+        self._refresh()
+
+    def _refresh(self, *_args) -> None:
+        entry = self.entry.value()
+        financed = max(MoneyCodec.ZERO, self.total - entry)
+        count = self.installments.value()
+        installment = (financed / count).quantize(MoneyCodec.CENT) if count else financed
+        self.summary.setText(
+            f"R$ {MoneyCodec.format_br(entry)} de entrada + {count}x de "
+            f"aprox. R$ {MoneyCodec.format_br(installment)}"
+        )
+
+    def _accept_validated(self) -> None:
+        if self.entry.value() > self.total:
+            QMessageBox.warning(
+                self, "Orçamento", "A entrada estimada não pode superar o total."
+            )
+            self.entry.setFocus(Qt.FocusReason.OtherFocusReason)
+            return
+        self.accept()
+
+    def exec(self) -> int:
+        # Testes headless não devem aguardar uma janela modal real.
+        if QApplication.platformName().casefold() == "offscreen":
+            return int(QDialog.DialogCode.Accepted)
+        return super().exec()
+
+    @property
+    def terms(self) -> dict:
+        return {
+            "payment_method": self.method.currentText(),
+            "entry_amount": self.entry.value(),
+            "installments": self.installments.value(),
+        }
 
 
 class _BudgetDialogBase(QDialog):
@@ -59,6 +135,14 @@ class BudgetPreviewDialog(_BudgetDialogBase):
         title.setStyleSheet("font-size:20px; font-weight:700; color:#d29922;")
         root.addWidget(title)
         root.addWidget(QLabel("Visualize, gere o PDF ou imprima somente quando desejar."))
+        financed = budget.total - budget.entry_amount
+        terms = QLabel(
+            f"Condição estimada: {budget.payment_method} • "
+            f"entrada R$ {MoneyCodec.format_br(budget.entry_amount)} • "
+            f"saldo R$ {MoneyCodec.format_br(financed)} em {budget.installments}x"
+        )
+        terms.setWordWrap(True)
+        root.addWidget(terms)
         self.preview = QTextBrowser()
         self.preview.setPlainText(view_model.budget_preview_text(budget))
         root.addWidget(self.preview, 1)

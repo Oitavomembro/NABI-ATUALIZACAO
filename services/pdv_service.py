@@ -18,6 +18,7 @@ class VendaSuspensa:
     itens: tuple[dict[str, Any], ...]
     total: Decimal
     tipo: str = "SUSPENSA"
+    metadata: dict[str, Any] | None = None
 
 
 class PDVService:
@@ -293,11 +294,14 @@ class PDVService:
         return self._registrar(self.CONFIG_KEY, "SUSPENSA", itens, cliente_id, cliente_nome)
 
     def salvar_documento(self, tipo: str, itens: list[dict[str, Any]], *, cliente_id: int | None = None,
-                         cliente_nome: str = "") -> VendaSuspensa:
+                         cliente_nome: str = "", metadata: dict[str, Any] | None = None) -> VendaSuspensa:
         tipo = str(tipo).strip().upper()
         if tipo not in self.DOCUMENT_TYPES:
             raise ValueError("Tipo de documento do PDV inválido.")
-        return self._registrar(self.DOCUMENTS_KEY, tipo, itens, cliente_id, cliente_nome)
+        return self._registrar(
+            self.DOCUMENTS_KEY, tipo, itens, cliente_id, cliente_nome,
+            metadata=metadata,
+        )
 
     def reabrir(self, venda_id: str) -> VendaSuspensa:
         return self._retirar(self.CONFIG_KEY, venda_id, "SUSPENSA")
@@ -317,13 +321,15 @@ class PDVService:
                     cliente_id=int(registro["cliente_id"]) if registro.get("cliente_id") is not None else None,
                     cliente_nome=str(registro.get("cliente_nome", "")), itens=itens, total=total,
                     tipo=str(registro.get("tipo", tipo_padrao)).upper(),
+                    metadata=dict(registro.get("metadata") or {}),
                 ))
             except (KeyError, TypeError, ValueError):
                 continue
         return sorted(vendas, key=lambda venda: venda.criada_em, reverse=True)
 
     def _registrar(self, chave: str, tipo: str, itens: list[dict[str, Any]],
-                   cliente_id: int | None, cliente_nome: str) -> VendaSuspensa:
+                   cliente_id: int | None, cliente_nome: str,
+                   metadata: dict[str, Any] | None = None) -> VendaSuspensa:
         if not itens:
             raise ValueError("Não há itens para preservar.")
         copia_itens = [dict(item) for item in itens]
@@ -334,6 +340,7 @@ class PDVService:
             "id": identificador, "tipo": tipo, "criada_em": criada_em,
             "cliente_id": int(cliente_id) if cliente_id is not None else None,
             "cliente_nome": str(cliente_nome or "").strip(), "itens": copia_itens,
+            "metadata": dict(metadata or {}),
         }
         dados = self._load(chave)
         dados.append(registro)
@@ -341,6 +348,7 @@ class PDVService:
         return VendaSuspensa(
             id=identificador, criada_em=criada_em, cliente_id=registro["cliente_id"],
             cliente_nome=registro["cliente_nome"], itens=tuple(copia_itens), total=total, tipo=tipo,
+            metadata=dict(registro["metadata"]),
         )
 
     def _retirar(self, chave: str, identificador: str, tipo_padrao: str) -> VendaSuspensa:
@@ -356,6 +364,7 @@ class PDVService:
             cliente_id=int(registro["cliente_id"]) if registro.get("cliente_id") is not None else None,
             cliente_nome=str(registro.get("cliente_nome", "")), itens=itens,
             total=self.totalizar(list(itens)), tipo=str(registro.get("tipo", tipo_padrao)).upper(),
+            metadata=dict(registro.get("metadata") or {}),
         )
 
     def _load(self, chave: str) -> list[dict[str, Any]]:

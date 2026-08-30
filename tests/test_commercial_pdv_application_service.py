@@ -120,13 +120,18 @@ class FakeBudgets:
         self.saved = []
         self.open = []
 
-    def save(self, *, customer_id, customer_name, items):
+    def save(
+        self, *, customer_id, customer_name, items,
+        payment_method="A COMBINAR", entry_amount=0, installments=1,
+    ):
         if self.error:
             raise self.error
         budget = BudgetDocument(
             budget_id="ORC-1", created_at="2026-08-23T12:00:00",
             customer_id=customer_id, customer_name=customer_name,
             items=items, total=sum(item.subtotal for item in items),
+            payment_method=payment_method, entry_amount=entry_amount,
+            installments=installments,
         )
         self.saved.append(budget)
         self.open.append(budget)

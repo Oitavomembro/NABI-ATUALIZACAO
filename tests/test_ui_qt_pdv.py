@@ -102,7 +102,10 @@ class FakeBudgets:
         self.open = []
         self.output_calls = []
 
-    def save(self, *, customer_id, customer_name, items):
+    def save(
+        self, *, customer_id, customer_name, items,
+        payment_method="A COMBINAR", entry_amount=0, installments=1,
+    ):
         budget = BudgetDocument(
             budget_id=f"B{len(self.open) + 1}",
             created_at="2026-08-23T12:00:00",
@@ -110,6 +113,9 @@ class FakeBudgets:
             customer_name=customer_name,
             items=items,
             total=sum(item.subtotal for item in items),
+            payment_method=payment_method,
+            entry_amount=entry_amount,
+            installments=installments,
         )
         self.open.append(budget)
         return budget
@@ -1130,12 +1136,14 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("ITENS DA VENDA", labels)
         self.assertIn("RESUMO DA VENDA", labels)
         self.assertIn("Vendas do dia  [F7]", buttons)
-        self.assertIn("ORÇAMENTO DESLIGADO  [F5]", buttons)
+        self.assertTrue(self.window.budget_button.isHidden())
+        self.assertTrue(self.window.suspended_sales_button.isHidden())
+        self.assertIn("Salvar como orçamento  [F6]", buttons)
         self.assertIn("FINALIZAR VENDA  [F9]", buttons)
         self.assertNotIn("EM EVOLUÇÃO", labels)
         self.assertFalse(hasattr(self.window, "_unavailable_action"))
         shortcuts = {shortcut.key().toString() for shortcut in self.window._shortcuts}
-        self.assertEqual(shortcuts, {"Esc", "F2", "F4", "F5", "F6", "F7", "F9", "F10"})
+        self.assertEqual(shortcuts, {"Esc", "F2", "F4", "F6", "F7", "F9", "F10"})
         f6 = next(
             shortcut for shortcut in self.window._shortcuts
             if shortcut.key().toString() == "F6"
@@ -1178,33 +1186,36 @@ class PDVQtTests(unittest.TestCase):
         finally:
             fiscal_window.close()
 
-    def test_f6_suspende_sem_cliente_sem_checkout_e_limpa_sessao(self):
+    def test_f6_salva_orcamento_sem_checkout_e_limpa_sessao(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
         self.window.refresh_cart()
-        self._key_window_shortcut(Qt.Key.Key_F6)
-        suspended = self.view_model.application.suspended_sales.open
-        self.assertEqual(len(suspended), 1)
-        self.assertIsNone(suspended[0].customer_id)
+        FakeBudgetPreviewDialog.calls = []
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            self._key_window_shortcut(Qt.Key.Key_F6)
+        budgets = self.view_model.application.budgets.open
+        self.assertEqual(len(budgets), 1)
+        self.assertEqual(budgets[0].customer_id, 1)
         self.assertTrue(self.view_model.session.cart.is_empty)
         self.assertEqual(self.gateway.commands, [])
         self.assertTrue(self.window.product_search.hasFocus())
 
-    def test_clique_suspende_cliente_real_item_cadastrado_e_desconto(self):
+    def test_clique_salva_orcamento_com_cliente_item_e_desconto(self):
         self._select_customer()
         self.view_model.session.add_item(
             CartItem("PRODUTO NOVE", 2, "10", product_id=9, discount_percent="5")
         )
         self.window.refresh_cart()
-        QTest.mouseClick(self.window.suspend_button, Qt.MouseButton.LeftButton)
-        suspended = self.view_model.application.suspended_sales.open[0]
-        self.assertEqual(suspended.customer_id, 7)
-        self.assertEqual(suspended.items[0].product_id, 9)
-        self.assertEqual(suspended.items[0].discount_percent, Decimal("5.00"))
+        with patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog", FakeBudgetPreviewDialog):
+            QTest.mouseClick(self.window.suspend_button, Qt.MouseButton.LeftButton)
+        budget = self.view_model.application.budgets.open[0]
+        self.assertEqual(budget.customer_id, 7)
+        self.assertEqual(budget.items[0].product_id, 9)
+        self.assertEqual(budget.items[0].discount_percent, Decimal("5.00"))
         self.assertEqual(self.gateway.commands, [])
 
-    def test_carrinho_vazio_bloqueia_suspensao_e_foca_item(self):
+    def test_carrinho_vazio_bloqueia_orcamento_direto_e_foca_item(self):
         self._key_window_shortcut(Qt.Key.Key_F6)
-        self.assertEqual(self.view_model.application.suspended_sales.open, [])
+        self.assertEqual(self.view_model.application.budgets.open, [])
         self.assertTrue(self.window.product_search.hasFocus())
 
     def test_reabrir_sem_cliente_restaura_carrinho_e_foca_cliente(self):

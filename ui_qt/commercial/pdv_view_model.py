@@ -159,8 +159,16 @@ class PDVViewModel:
             discount_percent=discount_percent,
         )
 
-    def save_budget(self) -> BudgetDocument:
-        budget = self.application.save_budget(self.session)
+    def save_budget(
+        self, *, payment_method: str = "A COMBINAR", entry_amount=0,
+        installments: int = 1,
+    ) -> BudgetDocument:
+        budget = self.application.save_budget(
+            self.session,
+            payment_method=payment_method,
+            entry_amount=entry_amount,
+            installments=installments,
+        )
         self.selected_customer = None
         self.selected_product = None
         return budget

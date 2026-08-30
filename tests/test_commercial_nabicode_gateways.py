@@ -167,12 +167,15 @@ class FakeBudgetPDVService:
     def __init__(self):
         self.documents = []
 
-    def salvar_documento(self, tipo, items, *, cliente_id, cliente_nome):
+    def salvar_documento(
+        self, tipo, items, *, cliente_id, cliente_nome, metadata=None,
+    ):
         document = SimpleNamespace(
             id="B1", criada_em="2026-08-23T12:00:00", cliente_id=cliente_id,
             cliente_nome=cliente_nome, itens=tuple(items),
             total=sum(Decimal(str(item["qtd"])) * Decimal(str(item["preco"])) for item in items),
             tipo=tipo,
+            metadata=dict(metadata or {}),
         )
         self.documents.append(document)
         return document
@@ -250,11 +253,19 @@ class NabiCodeGatewayTests(unittest.TestCase):
         budget = gateway.save(
             customer_id=7, customer_name="CLIENTE",
             items=(CartItem("PRODUTO", 2, "10", product_id=9, discount_percent="10"),),
+            payment_method="CREDIÁRIO", entry_amount="3.00", installments=3,
         )
         self.assertEqual(budget.total, Decimal("18.00"))
         self.assertEqual(budget.items[0].product_id, 9)
         self.assertEqual(budget.items[0].discount_percent, Decimal("10.00"))
-        self.assertEqual(gateway.preview_text(budget), "COMPROVANTE")
+        self.assertEqual(budget.payment_method, "CREDIÁRIO")
+        self.assertEqual(budget.entry_amount, Decimal("3.00"))
+        self.assertEqual(budget.installments, 3)
+        preview = gateway.preview_text(budget)
+        self.assertIn("COMPROVANTE", preview)
+        self.assertIn("CONDIÇÃO ESTIMADA", preview)
+        self.assertIn("NÃO É RECEBIMENTO", preview)
+        self.assertIn("Saldo estimado: R$ 15,00 em 3x", preview)
         self.assertEqual(gateway.print_thermal(budget), "IMPRESSORA")
         self.assertEqual(gateway.generate_pdf(budget), "C:/teste/venda.pdf")
         gateway.open_file("C:/teste/venda.pdf")

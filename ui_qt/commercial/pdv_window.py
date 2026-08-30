@@ -13,7 +13,7 @@ from commercial.domain.money import MoneyCodec
 
 from .checkout_dialog import CheckoutDialog
 from .cart_item_dialog import CartItemDialog
-from .budget_dialog import BudgetListDialog, BudgetPreviewDialog
+from .budget_dialog import BudgetListDialog, BudgetPreviewDialog, BudgetTermsDialog
 from .suspended_sale_dialog import SuspendedSaleListDialog
 from .daily_sales_dialog import DailySalesDialog
 from .post_sale_dialog import PostSaleDialog
@@ -175,10 +175,12 @@ class PDVWindow(QMainWindow):
         self.saved_budgets_button.clicked.connect(self._open_budgets)
         self.suspended_sales_button = QPushButton("Vendas suspensas")
         self.suspended_sales_button.clicked.connect(self._open_suspended_sales)
-        for button in (
-            self.daily_sales_button, self.budget_button, self.saved_budgets_button,
-            self.suspended_sales_button,
-        ):
+        # Os controles antigos permanecem apenas como compatibilidade interna para
+        # rascunhos já gravados. O operador trabalha com uma única venda e escolhe
+        # explicitamente "Salvar como orçamento" no resumo.
+        self.budget_button.hide()
+        self.suspended_sales_button.hide()
+        for button in (self.daily_sales_button, self.saved_budgets_button):
             row.addWidget(button, 1)
         return frame
 
@@ -346,8 +348,11 @@ class PDVWindow(QMainWindow):
         )
         self.checkout_button.setObjectName("checkout")
         self.checkout_button.clicked.connect(lambda _checked=False: self._conclude_action())
-        self.suspend_button = QPushButton("Suspender venda  [F6]")
-        self.suspend_button.clicked.connect(self._suspend_sale)
+        self.suspend_button = QPushButton("Salvar como orçamento  [F6]")
+        self.suspend_button.setToolTip(
+            "Salva somente uma proposta: não movimenta estoque, Caixa, ficha ou fiscal"
+        )
+        self.suspend_button.clicked.connect(self._save_budget)
         summary_layout.addWidget(self.suspend_button)
         summary_layout.addWidget(self.checkout_button)
         layout.addWidget(summary)
@@ -372,8 +377,7 @@ class PDVWindow(QMainWindow):
         for sequence, callback in (
             ("Esc", self.close), ("F4", self._edit_selected_item),
             ("F2", self._open_expanded_product_search),
-            ("F5", self._toggle_budget_mode),
-            ("F6", self._suspend_sale),
+            ("F6", self._save_budget),
             ("F7", self._open_daily_sales),
             ("F10", self._edit_selected_item), ("F9", self._conclude_action),
         ):
@@ -573,6 +577,8 @@ class PDVWindow(QMainWindow):
         self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _conclude_action(self) -> None:
+        # `_budget_mode` existe somente para compatibilidade com sessões/testes
+        # antigos. A interface atual não oferece mais como ativá-lo.
         if self._budget_mode:
             self._save_budget()
         else:
@@ -603,7 +609,11 @@ class PDVWindow(QMainWindow):
             return
         self._budget_saving = True
         try:
-            budget = self.view_model.save_budget()
+            terms_dialog = BudgetTermsDialog(self.view_model.total, self)
+            if terms_dialog.exec() != QDialog.DialogCode.Accepted:
+                self._focus_after_cart_operation()
+                return
+            budget = self.view_model.save_budget(**terms_dialog.terms)
         except Exception as error:
             self._show_error(error)
             self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)

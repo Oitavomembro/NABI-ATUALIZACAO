@@ -87,6 +87,9 @@ class BudgetDocument:
     customer_name: str
     items: tuple[CartItem, ...]
     total: Decimal
+    payment_method: str
+    entry_amount: Decimal
+    installments: int
 
     def __init__(
         self,
@@ -97,6 +100,9 @@ class BudgetDocument:
         customer_name: str,
         items: Iterable[CartItem],
         total: Decimal | int | str,
+        payment_method: str = "A COMBINAR",
+        entry_amount: Decimal | int | str = 0,
+        installments: int = 1,
     ) -> None:
         object.__setattr__(self, "budget_id", str(budget_id or "").strip())
         object.__setattr__(self, "created_at", str(created_at or "").strip())
@@ -104,6 +110,9 @@ class BudgetDocument:
         object.__setattr__(self, "customer_name", str(customer_name or "").strip())
         object.__setattr__(self, "items", tuple(items))
         object.__setattr__(self, "total", total)
+        object.__setattr__(self, "payment_method", str(payment_method or "A COMBINAR").strip().upper())
+        object.__setattr__(self, "entry_amount", entry_amount)
+        object.__setattr__(self, "installments", installments)
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -124,8 +133,16 @@ class BudgetDocument:
         )
         if total != calculated:
             raise ValueError("O total do orçamento diverge dos itens.")
+        entry = MoneyCodec.parse(self.entry_amount, field="entrada do orçamento")
+        if entry < 0 or entry > total:
+            raise ValueError("A entrada estimada deve ficar entre zero e o total do orçamento.")
+        installments = int(self.installments)
+        if installments < 1 or installments > 120:
+            raise ValueError("As parcelas estimadas devem ficar entre 1 e 120.")
         object.__setattr__(self, "customer_id", int(self.customer_id))
         object.__setattr__(self, "total", total)
+        object.__setattr__(self, "entry_amount", entry)
+        object.__setattr__(self, "installments", installments)
 
 
 @dataclass(frozen=True, slots=True)

@@ -128,7 +128,10 @@ class PDVApplicationService:
             raise RuntimeError("O serviço de orçamentos não está configurado.")
         return self.budgets
 
-    def save_budget(self, session: PDVSession) -> BudgetDocument:
+    def save_budget(
+        self, session: PDVSession, *, payment_method: str = "A COMBINAR",
+        entry_amount=0, installments: int = 1,
+    ) -> BudgetDocument:
         session.ensure_open()
         if session.cart.is_empty:
             raise ValueError("Inclua ao menos um item antes de salvar o orçamento.")
@@ -143,6 +146,9 @@ class PDVApplicationService:
             customer_id=customer.customer_id,
             customer_name=customer.name,
             items=session.cart.items,
+            payment_method=payment_method,
+            entry_amount=entry_amount,
+            installments=installments,
         )
         session.reset()
         return budget

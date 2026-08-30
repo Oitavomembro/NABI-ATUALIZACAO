@@ -5830,3 +5830,19 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - a busca de cliente no PDV recebeu seta de lista rápida equivalente à busca de
   produtos. Ela abre resultados mesmo sem texto, preservando seleção por teclado;
 - regressão focada do cadastro e PDV: `125 passed`, `2 subtests passed`.
+
+### Orçamento direto e condições apenas estimadas
+
+- o operador não vê mais o modo `ORÇAMENTO LIGADO/DESLIGADO` nem a aba de
+  vendas suspensas. A ação lateral e o atalho F6 agora são explicitamente
+  `Salvar como orçamento`; F9 continua sempre finalizando venda;
+- antes de salvar, uma janela coleta forma pretendida, entrada estimada e de 1
+  a 120 parcelas. A janela e a prévia deixam claro que isso é uma simulação e
+  não constitui pagamento ou recebimento;
+- os termos são persistidos como metadados do documento aberto, com leitura
+  retrocompatível (`A COMBINAR`, entrada zero e uma parcela) para orçamentos
+  antigos;
+- salvar continua usando exclusivamente o repositório de documentos abertos:
+  não chama checkout e não movimenta venda, estoque, Caixa, ficha, financeiro
+  ou fiscal;
+- regressão dos serviços/gateways/PDV Qt: `183 passed`, `5 subtests passed`.

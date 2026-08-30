@@ -4,6 +4,7 @@ from decimal import Decimal
 
 from commercial.application.dto import BudgetDocument
 from commercial.domain.cart import CartItem
+from commercial.domain.money import MoneyCodec
 from services.pdf_document_service import PDFDocumentService
 from services.pdv_service import PDVService
 from services.printing_service import PrintingService
@@ -60,6 +61,7 @@ class NabiCodeBudgetGateway:
     def _document(self, stored) -> BudgetDocument:
         customer_id = stored.cliente_id or self._final_consumer_id
         customer = self._receipts.customer(customer_id)
+        metadata = dict(getattr(stored, "metadata", None) or {})
         return BudgetDocument(
             budget_id=stored.id,
             created_at=stored.criada_em,
@@ -67,16 +69,25 @@ class NabiCodeBudgetGateway:
             customer_name=stored.cliente_nome or customer.name,
             items=tuple(self._cart_item(item) for item in stored.itens),
             total=stored.total,
+            payment_method=metadata.get("payment_method", "A COMBINAR"),
+            entry_amount=metadata.get("entry_amount", 0),
+            installments=metadata.get("installments", 1),
         )
 
     def save(
-        self, *, customer_id: int, customer_name: str, items: tuple[CartItem, ...]
+        self, *, customer_id: int, customer_name: str, items: tuple[CartItem, ...],
+        payment_method: str = "A COMBINAR", entry_amount=0, installments: int = 1,
     ) -> BudgetDocument:
         stored = self._pdv.salvar_documento(
             "ORCAMENTO",
             [self._stored_item(item) for item in items],
             cliente_id=customer_id,
             cliente_nome=customer_name,
+            metadata={
+                "payment_method": str(payment_method),
+                "entry_amount": str(entry_amount),
+                "installments": int(installments),
+            },
         )
         return self._document(stored)
 
@@ -95,8 +106,16 @@ class NabiCodeBudgetGateway:
         return [self._stored_item(item) for item in budget.items]
 
     def preview_text(self, budget: BudgetDocument) -> str:
-        return self._receipts.build_sale_text(
+        base = self._receipts.build_sale_text(
             budget.customer_id, self._receipt_items(budget), budget.total, "ORCAMENTO"
+        )
+        financed = budget.total - budget.entry_amount
+        return (
+            f"{base.rstrip()}\n\nCONDIÇÃO ESTIMADA (NÃO É RECEBIMENTO)\n"
+            f"Forma: {budget.payment_method}\n"
+            f"Entrada: R$ {MoneyCodec.format_br(budget.entry_amount)}\n"
+            f"Saldo estimado: R$ {MoneyCodec.format_br(financed)} em "
+            f"{budget.installments}x\n"
         )
 
     def print_thermal(self, budget: BudgetDocument) -> str:

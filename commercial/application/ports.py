@@ -113,7 +113,8 @@ class BudgetPort(Protocol):
     """Persistência não fiscal de orçamentos abertos do PDV."""
 
     def save(
-        self, *, customer_id: int, customer_name: str, items: tuple
+        self, *, customer_id: int, customer_name: str, items: tuple,
+        payment_method: str = "A COMBINAR", entry_amount=0, installments: int = 1,
     ) -> BudgetDocument: ...
 
     def list_open(self) -> tuple[BudgetDocument, ...]: ...
