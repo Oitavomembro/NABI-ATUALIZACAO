@@ -35,7 +35,8 @@ class CheckoutDialog(QDialog):
         self._credit_limit_override = False
         self.setWindowTitle("Pagamentos")
         self.setModal(True)
-        self.resize(820, 680)
+        self.setMinimumSize(640, 520)
+        self.resize(720, 590)
         root = QVBoxLayout(self)
         self.total_label = QLabel()
         self.total_label.setStyleSheet("font-size: 20px; font-weight: 700;")

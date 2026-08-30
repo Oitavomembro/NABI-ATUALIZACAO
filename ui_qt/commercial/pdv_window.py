@@ -145,7 +145,9 @@ class PDVWindow(QMainWindow):
         row.setContentsMargins(22, 10, 18, 10)
         brand = QLabel("▰  NABI VENDAS")
         brand.setObjectName("brand")
-        status = QLabel(f"{cash_label}  •  {profile_label}")
+        environment = "TESTE" if "TESTE" in str(profile_label).upper() else ""
+        status = QLabel("  •  ".join(part for part in (cash_label, environment) if part))
+        status.setToolTip(str(profile_label))
         status.setObjectName("muted")
         status.setStyleSheet("font-size: 13px; font-weight: 700;")
         close = QPushButton("Fechar  [Esc]")
@@ -205,6 +207,7 @@ class PDVWindow(QMainWindow):
         self.customer_results.hide()
         self.customer_selected = QLabel("Nenhum cliente selecionado")
         self.customer_selected.setWordWrap(True)
+        self.customer_selected.hide()
         dropdown = QPushButton("▼")
         self._customer_dropdown_button = dropdown
         dropdown.setToolTip("Abrir lista rápida de clientes")
@@ -264,8 +267,9 @@ class PDVWindow(QMainWindow):
         self.add_button.setObjectName("primary")
         self.add_button.setMinimumWidth(155)
         self.loose_item = QCheckBox("Produto avulso — não cadastra e não movimenta estoque")
-        loose_hint = QLabel("Descrição livre, sem baixa de estoque")
-        loose_hint.setObjectName("muted")
+        self.loose_hint = QLabel("Item avulso não movimenta estoque")
+        self.loose_hint.setObjectName("muted")
+        self.loose_hint.hide()
         self.loose_item.toggled.connect(self._toggle_loose)
         self.product_search.textChanged.connect(self._product_text_changed)
         self.product_results.itemActivated.connect(self._select_product)
@@ -282,7 +286,7 @@ class PDVWindow(QMainWindow):
         layout.addWidget(self.price, 2, 3)
         layout.addWidget(self.add_button, 2, 4, 1, 2)
         layout.addWidget(self.loose_item, 3, 1, 1, 4)
-        layout.addWidget(loose_hint, 3, 6, 1, 3, Qt.AlignmentFlag.AlignRight)
+        layout.addWidget(self.loose_hint, 3, 6, 1, 3, Qt.AlignmentFlag.AlignRight)
         layout.setColumnStretch(1, 1)
         return box
 
@@ -339,10 +343,6 @@ class PDVWindow(QMainWindow):
         remove.setToolTip("Selecione uma linha em Itens da venda para remover")
         remove.clicked.connect(self._remove_selected_item)
         summary_layout.addWidget(remove)
-        future = QLabel("AÇÕES COMERCIAIS")
-        future.setObjectName("muted")
-        future.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        summary_layout.addWidget(future)
         self.checkout_button = QPushButton(
             "FINALIZAR VENDA  [F9]"
         )
@@ -663,6 +663,7 @@ class PDVWindow(QMainWindow):
         self.customer_selected.setText(
             f"Selecionado: {budget.customer_name}"
         )
+        self.customer_selected.show()
         self._set_budget_mode(False)
         self.refresh_cart()
         self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -729,6 +730,7 @@ class PDVWindow(QMainWindow):
         if customer is None:
             self.customer_search.clear()
             self.customer_selected.setText("Nenhum cliente selecionado")
+            self.customer_selected.hide()
         else:
             reference = (
                 customer.record_number
@@ -736,6 +738,7 @@ class PDVWindow(QMainWindow):
             )
             self.customer_search.setText(f"{reference} — {customer.name}")
             self.customer_selected.setText(f"Selecionado: {customer.name}")
+            self.customer_selected.show()
         self.customer_search.blockSignals(False)
         self._set_budget_mode(False)
         self.refresh_cart()
@@ -762,6 +765,7 @@ class PDVWindow(QMainWindow):
         self.customer_search.setText(customer_text)
         self.customer_search.blockSignals(False)
         self.customer_selected.setText(f"Selecionado: {customer_text}")
+        self.customer_selected.show()
         self.refresh_cart()
         self.statusBar().showMessage(
             "Rascunho da Nabi carregado. Revise e finalize pelo fluxo oficial do PDV.",
@@ -810,6 +814,7 @@ class PDVWindow(QMainWindow):
         if self.view_model.selected_customer is not None:
             self.view_model.clear_customer()
             self.customer_selected.setText("Nenhum cliente selecionado")
+            self.customer_selected.hide()
         self._search_customers(term)
 
     def _unique_customer_result(self, term: str) -> QListWidgetItem | None:
@@ -831,6 +836,7 @@ class PDVWindow(QMainWindow):
             customer = self.view_model.select_customer(int(item.data(Qt.ItemDataRole.UserRole)))
             reference = customer.record_number if customer.record_number is not None else customer.code
             self.customer_selected.setText(f"Selecionado: {reference} — {customer.name}")
+            self.customer_selected.show()
             self.customer_search.blockSignals(True)
             self.customer_search.setText(f"{reference} — {customer.name}")
             self.customer_search.blockSignals(False)
@@ -844,6 +850,7 @@ class PDVWindow(QMainWindow):
         try:
             customer = self.view_model.select_final_consumer()
             self.customer_selected.setText(customer.name)
+            self.customer_selected.show()
             self.customer_search.blockSignals(True)
             self.customer_search.setText(customer.name)
             self.customer_search.blockSignals(False)
@@ -857,6 +864,7 @@ class PDVWindow(QMainWindow):
         self.view_model.clear_customer()
         self.customer_search.clear()
         self.customer_selected.setText("Nenhum cliente selecionado")
+        self.customer_selected.hide()
 
     def _search_products(self, term: str, *, allow_empty: bool = False) -> None:
         self.product_results.clear()
@@ -978,6 +986,7 @@ class PDVWindow(QMainWindow):
         self.price.setReadOnly(not enabled)
         self.description.clear()
         self.price.clear_value()
+        self.loose_hint.setVisible(bool(enabled))
         if enabled:
             self.item_input_label.setText("Descrição do avulso")
             self.item_input.setCurrentWidget(self.description)
@@ -1159,6 +1168,7 @@ class PDVWindow(QMainWindow):
                 # modal está sendo exibido. Limpe a sessão visual somente ao
                 # encerrar esse acompanhamento.
                 self.customer_selected.setText("Nenhum cliente selecionado")
+                self.customer_selected.hide()
                 self.customer_search.clear()
                 self.refresh_cart()
         else:

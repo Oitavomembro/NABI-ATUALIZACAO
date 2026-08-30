@@ -5846,3 +5846,16 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   não chama checkout e não movimenta venda, estoque, Caixa, ficha, financeiro
   ou fiscal;
 - regressão dos serviços/gateways/PDV Qt: `183 passed`, `5 subtests passed`.
+
+### Limpeza do PDV e compactação de Pagamentos
+
+- o cabeçalho principal mostra Caixa e, durante a homologação, somente
+  `TESTE`; o detalhe técnico completo do perfil continua acessível no tooltip;
+- a mensagem interna de descrição livre foi substituída por orientação curta
+  que aparece apenas quando item avulso está realmente ativo;
+- o separador redundante `AÇÕES COMERCIAIS` foi removido e o texto `Nenhum
+  cliente selecionado` deixa de duplicar o estado do campo; a identificação
+  reaparece quando existe cliente real selecionado;
+- a janela de Pagamentos passou de 820x680 para 720x590, com mínimo 640x520,
+  preservando tabela, ajustes, crediário, ordem de foco e botão principal;
+- regressão Qt do PDV/Pagamentos: `116 passed`, `2 subtests passed`.
