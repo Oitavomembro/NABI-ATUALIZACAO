@@ -121,22 +121,25 @@ class DailySalesDialog(QDialog):
         )
         root.addWidget(self.guidance)
         buttons = QHBoxLayout()
-        self.recover_button = QPushButton("Consultar / recuperar na SEFAZ")
+        self.recover_button = QPushButton("Consultar situação na SEFAZ")
+        self.retry_button = QPushButton("Reenviar NF-e")
         self.cancel_button = QPushButton("Cancelar venda selecionada")
         self.preview_button = QPushButton("Visualizar / segunda via")
         self.close_button = QPushButton("Fechar  [Esc]")
-        self.recover_button.clicked.connect(self._recover)
+        self.recover_button.clicked.connect(lambda _checked=False: self._recover("CONSULTAR"))
+        self.retry_button.clicked.connect(lambda _checked=False: self._recover("REENVIAR"))
         self.cancel_button.clicked.connect(self._cancel)
         self.preview_button.clicked.connect(self._preview)
         self.close_button.clicked.connect(self.reject)
         buttons.addStretch()
         buttons.addWidget(self.recover_button)
+        buttons.addWidget(self.retry_button)
         buttons.addWidget(self.cancel_button)
         buttons.addWidget(self.preview_button)
         buttons.addWidget(self.close_button)
         root.addLayout(buttons)
         for widget in (
-            self.search, self.table, self.refresh_button, self.recover_button, self.cancel_button,
+            self.search, self.table, self.refresh_button, self.recover_button, self.retry_button, self.cancel_button,
             self.preview_button, self.close_button,
         ):
             widget.installEventFilter(self)
@@ -201,19 +204,13 @@ class DailySalesDialog(QDialog):
             selected is not None and selected[0] == "VENDA"
             and selected[1].has_fiscal_document
         )
-        self.recover_button.setEnabled(enabled)
         status = (
             str(selected[1].fiscal_status or "").upper() if enabled else ""
         )
-        if status == "RESPOSTA_DESCONHECIDA":
-            label = "Consultar situação na SEFAZ"
-        elif status in {"FALHA", "ERRO"}:
-            label = "Reenviar NF-e"
-        elif status in {"PENDENTE", "ENFILEIRADO", "PROCESSANDO"}:
-            label = "Processar NF-e pendente"
-        else:
-            label = "Consultar / recuperar na SEFAZ"
-        self.recover_button.setText(label)
+        self.recover_button.setVisible(status == "RESPOSTA_DESCONHECIDA")
+        self.recover_button.setEnabled(status == "RESPOSTA_DESCONHECIDA")
+        self.retry_button.setVisible(status in {"FALHA", "ERRO"})
+        self.retry_button.setEnabled(status in {"FALHA", "ERRO"})
 
     def _preview(self) -> None:
         selected = self._selected()
@@ -257,12 +254,25 @@ class DailySalesDialog(QDialog):
         self.reload()
         self.table.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _recover(self) -> None:
+    def _recover(self, action: str) -> None:
         selected = self._selected()
         if selected is None or selected[0] != "VENDA":
             QMessageBox.information(self, "Recuperação fiscal", "Selecione uma venda fiscal.")
             return
         record = selected[1]
+        selected_status = str(record.fiscal_status or "").upper()
+        allowed = (
+            selected_status == "RESPOSTA_DESCONHECIDA" and action == "CONSULTAR"
+        ) or (
+            selected_status in {"FALHA", "ERRO"} and action == "REENVIAR"
+        )
+        if not allowed:
+            QMessageBox.warning(
+                self, "Recuperação fiscal",
+                "A ação não corresponde à situação exibida. A lista será atualizada.",
+            )
+            self.reload()
+            return
         if not record.has_fiscal_document:
             QMessageBox.information(
                 self, "Recuperação fiscal", "Esta venda não possui documento fiscal para recuperar."
@@ -272,11 +282,14 @@ class DailySalesDialog(QDialog):
             QMessageBox.warning(self, "Recuperação fiscal", "O serviço fiscal não está disponível.")
             return
         try:
-            message = self.fiscal_gateway.recover_fiscal_sale(record.sale_id)
+            message = self.fiscal_gateway.recover_fiscal_sale(
+                record.sale_id, expected_status=selected_status, allowed_action=action,
+            )
             if self.fiscal_outbox_worker is not None:
                 self.fiscal_outbox_worker.wake()
         except Exception as error:
             QMessageBox.warning(self, "Recuperação fiscal", str(error))
+            self.reload()
             return
         QMessageBox.information(self, "Recuperação fiscal", message)
         self.reload()

@@ -134,12 +134,16 @@ class DailySalesDialogTests(unittest.TestCase):
         ),)
         self.dialog.reload()
         self.assertEqual(self.dialog.recover_button.text(), "Consultar situação na SEFAZ")
+        self.assertTrue(self.dialog.recover_button.isVisible())
+        self.assertFalse(self.dialog.retry_button.isVisible())
         self.view_model.sales = (DailySaleSummary(
             42, 7, "ITEM", Decimal("10"), "2026-08-23", "PAGO", False,
             fiscal_status="FALHA",
         ),)
         self.dialog.reload()
-        self.assertEqual(self.dialog.recover_button.text(), "Reenviar NF-e")
+        self.assertFalse(self.dialog.recover_button.isVisible())
+        self.assertTrue(self.dialog.retry_button.isVisible())
+        self.assertEqual(self.dialog.retry_button.text(), "Reenviar NF-e")
 
     def test_modo_fiscal_destaca_registro_antigo_sem_vinculo(self):
         dialog = DailySalesDialog(self.view_model, fiscal_mode=True)

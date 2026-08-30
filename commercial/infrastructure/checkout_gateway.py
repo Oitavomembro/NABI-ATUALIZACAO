@@ -21,7 +21,10 @@ class NabiCodeCheckoutGateway:
         self.fiscal_sale_service = fiscal_sale_service
         self.fiscal_required = bool(required)
 
-    def recover_fiscal_sale(self, sale_id: int) -> str:
+    def recover_fiscal_sale(
+        self, sale_id: int, *, expected_status: str | None = None,
+        allowed_action: str | None = None,
+    ) -> str:
         """Agenda a única recuperação segura para o estado fiscal atual."""
 
         if self.fiscal_sale_service is None:
@@ -36,13 +39,23 @@ class NabiCodeCheckoutGateway:
         if document is None:
             raise ValueError("A venda selecionada não possui vínculo fiscal.")
         status = str(document.get("status") or "").upper()
+        expected = str(expected_status or "").strip().upper()
+        if expected and status != expected:
+            raise ValueError(
+                f"A situação fiscal mudou de {expected} para {status or 'SEM STATUS'}. "
+                "A lista foi atualizada; confira antes de executar outra ação."
+            )
         queue_id = str(document.get("queue_id") or "").strip()
         if status == "RESPOSTA_DESCONHECIDA":
+            if allowed_action not in {None, "CONSULTAR"}:
+                raise ValueError("Resposta desconhecida aceita somente consulta à SEFAZ.")
             if not queue_id:
                 raise ValueError("A resposta é desconhecida, mas a fila fiscal não foi localizada.")
             self.fiscal_sale_service.fiscal_service.reconcile_unknown(queue_id)
             return "Consulta oficial agendada. A autorização não será retransmitida."
         if status in {"FALHA", "ERRO"}:
+            if allowed_action not in {None, "REENVIAR"}:
+                raise ValueError("Falha fiscal exige a ação explícita Reenviar NF-e.")
             if not queue_id:
                 self.fiscal_sale_service.enqueue_pending(sale_id=int(sale_id))
             else:

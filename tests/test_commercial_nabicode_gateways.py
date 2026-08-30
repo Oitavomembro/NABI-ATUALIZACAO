@@ -400,6 +400,34 @@ class NabiCodeGatewayTests(unittest.TestCase):
         self.assertIn("Reenvio fiscal", message)
         self.assertEqual(fiscal.calls, [("retry", "Q44")])
 
+    def test_estado_exibido_desconhecido_nunca_vira_reenvio_se_estado_mudar(self):
+        fiscal = FakeFiscalSaleService()
+        fiscal.documents = [{"sale_id": 44, "status": "FALHA", "queue_id": "Q44"}]
+        gateway = NabiCodeCheckoutGateway(FakeTransactionService(), FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+
+        with self.assertRaisesRegex(ValueError, "situação fiscal mudou"):
+            gateway.recover_fiscal_sale(
+                44, expected_status="RESPOSTA_DESCONHECIDA", allowed_action="CONSULTAR"
+            )
+
+        self.assertEqual(fiscal.calls, [])
+
+    def test_resposta_desconhecida_recusa_acao_de_reenvio(self):
+        fiscal = FakeFiscalSaleService()
+        fiscal.documents = [{
+            "sale_id": 44, "status": "RESPOSTA_DESCONHECIDA", "queue_id": "Q44",
+        }]
+        gateway = NabiCodeCheckoutGateway(FakeTransactionService(), FakeLegacyPDVService())
+        gateway.bind_fiscal(fiscal, required=True)
+
+        with self.assertRaisesRegex(ValueError, "somente consulta"):
+            gateway.recover_fiscal_sale(
+                44, expected_status="RESPOSTA_DESCONHECIDA", allowed_action="REENVIAR"
+            )
+
+        self.assertEqual(fiscal.calls, [])
+
     def test_cancelamento_fiscal_reverte_local_somente_depois_da_sefaz(self):
         transaction = FakeTransactionService()
         fiscal = FakeFiscalSaleService()

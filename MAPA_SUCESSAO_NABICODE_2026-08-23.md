@@ -4957,3 +4957,23 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão ampliada de serviço fiscal, DF-e, outbox, worker, pré-voo, gateway
   e PDV: `357 passed`, `12 subtests passed`; nenhum banco ativo, A1 real, XML
   real ou transmissão de documento foi utilizado.
+
+## Separação fail-closed entre consulta e reenvio — 29/08/2026
+
+- na homologação física, o operador selecionou uma venda exibida como
+  `RESPOSTA_DESCONHECIDA`, mas recebeu a confirmação textual de reenvio. A
+  interface utilizava um único botão mutável e o gateway consultava novamente
+  o estado no momento da ação; uma mudança concorrente para `FALHA` podia,
+  portanto, transformar o clique visual de consulta em reenvio;
+- a interface agora possui ações fisicamente separadas: `Consultar situação na
+  SEFAZ` aparece somente para `RESPOSTA_DESCONHECIDA`, enquanto `Reenviar NF-e`
+  aparece somente para `FALHA` ou `ERRO`;
+- o clique transporta para o gateway tanto a ação explícita quanto o estado que
+  o operador viu. Se o estado real tiver mudado, nenhuma operação é agendada,
+  a lista é atualizada e o operador precisa conferir novamente;
+- o gateway recusa reenvio para resposta desconhecida e recusa consulta como
+  substituta de reenvio. Assim, falha de seleção, sinal Qt atrasado ou mudança
+  concorrente de estado não consegue atravessar a fronteira fiscal;
+- validação focada: `26 passed`; regressão ampliada de interface, gateways,
+  serviço fiscal, venda fiscal, outbox e worker: `353 passed`, `12 subtests
+  passed`. Nenhum banco ativo, certificado real ou comunicação SEFAZ foi usado.
