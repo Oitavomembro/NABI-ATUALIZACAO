@@ -5687,3 +5687,42 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   na máquina administrativa e testar a importação do pacote no Notas IglBalt.
   A chave privada nunca deve acompanhar o cliente ou permanecer no computador
   dele. Nenhum push ou alteração no aplicativo Notas IglBalt ocorreu.
+
+## Consolidação segura da versão ativa — 30/08/2026
+
+- worktree único eleito para continuidade:
+  `NabiCode-QT-Teste/.worktrees/NabiCode-Atual-codex`, branch
+  `codex/consolidacao-nabicode-atual`;
+- base funcional preservada em `80cd470`: inclui a candidata fiscal mais nova,
+  a correção de histórico/caixa, o cadastro fiscal completo de clientes, os
+  testes correspondentes e todas as decisões recentes deste mapa;
+- `f81a00c` integra por merge normal a única trilha exclusiva comprovada nesta
+  auditoria, o emissor/ativação unificado do Notas IglBalt. O conflito limitou-se
+  ao mapa e foi resolvido aditivamente, preservando as duas histórias;
+- conformidade fiscal `f8d8604`, integração fiscal/dashboard `34a7c1c`, primeiro
+  uso `52ae726`, fechamento `2518b9b`, produtos/unidades `a333097`,
+  Caixa/Contador `fa1f9ee`, migração/restauração `0de094b` e Nabi contextual
+  `def2cda` são ancestrais comprovados da candidata; não devem ser copiados ou
+  mergeados novamente;
+- validação combinada inicial: `99 passed`, `5 subtests passed`; regressão
+  integral consolidada: `2851 passed`, `1 skipped`, `504 subtests passed` em
+  419,39 segundos; `compileall`, `git diff --check` e importação do
+  `main_qt_launcher.py` aprovados;
+- o atalho público atual ainda aponta para o executável antigo em
+  `C:\Program Files\NabiCode\NabiCode_v2_5_1.exe`. Não substituí-lo antes de
+  gerar build novo, registrar versão/HEAD/SHA-256, executar smoke real do EXE e
+  obter homologação humana;
+- `C:\NB\NCFinal`, `C:\NB\NCZip`, `NabiCode-QT-Final-codex` e os demais
+  worktrees/builds antigos passam a ser tratados somente como candidatos a
+  arquivo histórico, nunca como fonte de desenvolvimento ou lançamento;
+- estratégia aprovada para a etapa seguinte: criar inventário com caminho,
+  branch, HEAD, estado, tamanho e hashes; preservar o histórico Git em bundle
+  verificável; arquivar builds/instaladores separadamente; testar restauração e
+  manter duas cópias antes de propor qualquer remoção;
+- nunca incluir no arquivo histórico comum bancos ativos, APPDATA, PFX, chaves,
+  senhas, licenças de clientes ou `NabiCode-Segredos`. Esses materiais possuem
+  política e backup criptografado próprios;
+- nenhuma exclusão, limpeza de worktree, alteração do atalho público ou push foi
+  realizada nesta consolidação. Remoção futura exige lista exata, zero commits
+  exclusivos, árvore limpa, backup verificado, nenhum atalho/processo apontando
+  para a origem e autorização explícita do proprietário.
