@@ -5273,3 +5273,15 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   exclusiva `3`, iniciada no número `1`. Isso não autoriza a mesma série em
   PRODUÇÃO, que continua dependendo de conferência do emissor anterior,
   contador, credenciamento e aprovação formal.
+
+## Rejeição 486 da Bahia — 30/08/2026
+
+- a NF-e 55 de HOMOLOGAÇÃO na série `3`, número `1`, alcançou a SEFAZ/BA
+  e superou a validação de série, recebendo `486` por ausência do grupo
+  `autXML` exigido pela Bahia;
+- `autXML` não é `infRespTec`: ele autoriza o escritório contábil a acessar o
+  XML. Sem CPF/CNPJ contábil configurado, a mensagem da SEFAZ determina o CNPJ
+  institucional da SEFAZ-BA `13.937.073/0001-56`;
+- novos XMLs da Bahia incluem o grupo na ordem oficial. A recuperação 486
+  preserva venda, chave, série e número, insere somente `autXML` e reassina;
+  fora da Bahia, correção automática permanece bloqueada.

@@ -850,6 +850,36 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='infNFe']/@Id)"), f"NFe{key}")
         self.assertEqual(root.xpath("string(//*[local-name()='xProd'])"), "PRODUTO TESTE")
         self.assertEqual(root.xpath("string(//*[local-name()='vNF'])"), "20.00")
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='autXML']/*[local-name()='CNPJ'])"),
+            self.service.BAHIA_SEFAZ_AUTHORIZED_XML_CNPJ,
+        )
+
+    def test_bahia_prioriza_documento_contabil_configurado_no_autxml(self):
+        xml, _key = self.service.build_document_xml(
+            issuer={
+                "cnpj": "12345678000195", "name": "EMPRESA TESTE",
+                "city_code": "2925105", "city": "SALVADOR", "state": "BA",
+                "street": "RUA TESTE", "number": "10", "district": "CENTRO",
+                "zip_code": "40000000", "state_registration": "123",
+                "tax_regime_code": 1,
+            },
+            recipient={"document": "12345678901", "name": "CLIENTE TESTE"},
+            items=[{
+                "code": "P1", "description": "produto teste", "quantity": 1,
+                "unit_price": 10, "ncm": "94036000", "cfop": "5102", "unit": "UN",
+            }],
+            document={
+                "model": "55", "series": 3, "number": 1, "state_code": "29",
+                "environment": "HOMOLOGACAO", "numeric_code": "12345678",
+                "authorized_xml_documents": ["12.345.678/0001-95"],
+            },
+        )
+        root = etree.fromstring(xml)
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='autXML']/*[local-name()='CNPJ'])"),
+            "12345678000195",
+        )
 
     def test_gera_ibs_cbs_normal_e_totais_conforme_schema_oficial(self):
         xml, _key = self.service.build_document_xml(

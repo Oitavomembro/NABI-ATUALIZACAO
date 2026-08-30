@@ -6,6 +6,7 @@ def test_autorizacao_indisponibilidade_duplicidade_correcao_e_denegacao():
     assert SefazResponsePolicy.decide("108").action is SefazAction.WAIT_AND_RETRY
     assert SefazResponsePolicy.decide("204").action is SefazAction.QUERY_BEFORE_RETRY
     assert SefazResponsePolicy.decide("297").allows_resend
+    assert SefazResponsePolicy.decide("486").allows_resend
     assert SefazResponsePolicy.decide("719").allows_resend
     assert SefazResponsePolicy.decide("301").action is SefazAction.TERMINAL_DENIAL
 

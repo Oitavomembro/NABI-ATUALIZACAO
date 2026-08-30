@@ -31,7 +31,7 @@ class SefazResponsePolicy:
     AUTHORIZED = frozenset({"100", "150"})
     TEMPORARY = frozenset({"108", "109"})
     QUERY_FIRST = frozenset({"105", "204", "539"})
-    SAFE_CORRECTIONS = frozenset({"217", "297", "719"})
+    SAFE_CORRECTIONS = frozenset({"217", "297", "486", "719"})
     SERIES_INCOMPATIBLE = frozenset({"244"})
     DENIED = frozenset({"110", "301", "302", "303"})
 

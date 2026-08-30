@@ -131,6 +131,7 @@ class FiscalService:
         "NF-E EMITIDA EM AMBIENTE DE HOMOLOGACAO - SEM VALOR FISCAL"
     )
     HOMOLOGATION_RECIPIENT_CNPJ = "99999999000191"
+    BAHIA_SEFAZ_AUTHORIZED_XML_CNPJ = "13937073000156"
     VALID_MODELS = {"55", "65"}
     VALID_EVENTS = {"CANCELAMENTO", "CCE"}
     STATE_CODES = STATE_CODES
@@ -2363,6 +2364,15 @@ class FiscalService:
                 el(dest, "IE", recipient_ie)
             if not is_homologation and recipient.get("email"):
                 el(dest, "email", str(recipient.get("email")).strip())
+        authorized_documents = list(document.get("authorized_xml_documents") or [])
+        if str(issuer.get("state") or "").strip().upper() == "BA" and not authorized_documents:
+            authorized_documents = [self.BAHIA_SEFAZ_AUTHORIZED_XML_CNPJ]
+        for authorized_document in authorized_documents:
+            normalized = self._normalize_tax_document(authorized_document)
+            if len(normalized) not in {11, 14}:
+                raise ValueError("CPF/CNPJ autorizado a acessar o XML é inválido.")
+            aut_xml = etree.SubElement(inf, etree.QName(ns, "autXML"))
+            el(aut_xml, "CPF" if len(normalized) == 11 else "CNPJ", normalized)
         total_products = Decimal("0")
         total_icms_base = Decimal("0")
         total_icms = Decimal("0")
@@ -3523,7 +3533,7 @@ class FiscalService:
                         already_signed = bool(root.xpath(".//*[local-name()='Signature']"))
                         if already_signed:
                             rejection_code = str(record.get("last_status_code") or "").strip()
-                            if rejection_code in {"297", "719"}:
+                            if rejection_code in {"297", "486", "719"}:
                                 # A SEFAZ rejeitou especificamente o valor da
                                 # assinatura. O reenvio deve preservar a NF-e,
                                 # chave e numeração, mas não pode reutilizar o
@@ -3592,6 +3602,30 @@ class FiscalService:
                                         copied.text = str(source[0].text)
                                     add_dest("indIEDest", 9)
                                     emit.addnext(dest)
+                                if rejection_code == "486":
+                                    if str(config.get("state") or "").upper() != "BA":
+                                        raise ValueError(
+                                            "A correção automática da rejeição 486 é exclusiva da Bahia."
+                                        )
+                                    inf_nodes = root.xpath(".//*[local-name()='infNFe']")
+                                    if len(inf_nodes) != 1:
+                                        raise ValueError("NF-e rejeitada não possui infNFe único.")
+                                    if inf_nodes[0].xpath("./*[local-name()='autXML']"):
+                                        raise ValueError(
+                                            "A rejeição 486 não corresponde ao XML, que já possui autXML."
+                                        )
+                                    namespace = etree.QName(inf_nodes[0]).namespace
+                                    aut_xml = etree.Element(etree.QName(namespace, "autXML"))
+                                    cnpj = etree.SubElement(aut_xml, etree.QName(namespace, "CNPJ"))
+                                    cnpj.text = self.BAHIA_SEFAZ_AUTHORIZED_XML_CNPJ
+                                    destinations = inf_nodes[0].xpath("./*[local-name()='dest']")
+                                    issuers = inf_nodes[0].xpath("./*[local-name()='emit']")
+                                    anchor = destinations[-1] if destinations else (
+                                        issuers[-1] if issuers else None
+                                    )
+                                    if anchor is None:
+                                        raise ValueError("NF-e rejeitada não possui emitente.")
+                                    anchor.addnext(aut_xml)
                                 unsigned = etree.tostring(
                                     root, xml_declaration=True, encoding="utf-8", standalone=False
                                 )

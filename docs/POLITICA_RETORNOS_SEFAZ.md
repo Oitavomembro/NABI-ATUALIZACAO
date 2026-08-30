@@ -13,7 +13,7 @@ manual/consulta oficial e permanece fail-closed.
 | Autorizado | 100, 150 | persistir protocolo e concluir |
 | Serviço temporariamente indisponível | 108, 109 | aguardar; não criar outra venda/numeração |
 | Consultar antes de retransmitir | 105, 204, 539 | consultar recibo/chave; não reenviar cegamente |
-| Correção controlada da mesma NF-e | 217, 297, 719 | preservar venda, chave e numeração; corrigir causa comprovada |
+| Correção controlada da mesma NF-e | 217, 297, 486, 719 | preservar venda, chave e numeração; corrigir causa comprovada |
 | Série incompatível | 244 | bloquear reenvio da mesma chave; corrigir série e exigir recuperação fiscal controlada |
 | Uso denegado | 110, 301, 302, 303 | terminal; não reenviar, cancelar ou reutilizar número |
 | Demais rejeições/códigos novos | qualquer outro | revisão manual e regra oficial; botão de reenvio oculto |
@@ -27,6 +27,11 @@ fiscal completo.
 `244` muda um componente da chave de acesso. Por isso nunca entra na correção
 automática da mesma NF-e: a venda permanece fiscal/rejeitada, o reenvio fica
 oculto e a série precisa ser corrigida antes de uma recuperação dedicada.
+
+`486`, na Bahia, exige `autXML` com CPF/CNPJ do escritório contábil. Quando
+esse documento não estiver configurado, a orientação da própria SEFAZ-BA
+determina o CNPJ institucional `13.937.073/0001-56`. A correção preserva
+chave, série e número, acrescenta somente `autXML` e reassina o XML.
 
 ## Falhas sem resposta conclusiva
 
