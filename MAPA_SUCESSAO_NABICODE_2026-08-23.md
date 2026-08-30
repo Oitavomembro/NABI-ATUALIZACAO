@@ -5765,3 +5765,22 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - o atalho público continua intocado. A promoção ao usuário depende de testes
   focados, novo commit-fonte imutável, build lockado, smoke empacotado e
   homologação visual no perfil TESTE.
+
+#### Evidência do build 2.5.2 R22
+
+- commit-fonte: `5f43593e80a79101189dd79d553bbbdb689dc8b0`;
+- regressão focada de versão, empacotamento, dossiê e splash: `75 passed`,
+  `5 subtests passed`; `compileall` e `git diff --check` aprovados;
+- fonte imutável: `C:\NB\Build-5f43593.zip`, SHA-256
+  `1E3B8D143FD394AD8E318B63259E80558FAA2B9C8A04F712DDAFB07ACD13816E`;
+- o build reutilizou o wheelhouse validado de 72 artefatos, instalados offline
+  em ambiente Python 3.14 isolado com `--require-hashes`;
+- distribuição aprovada pelo pipeline oficial em
+  `C:\NB\Build-5f43593\build_output\dist\NabiCode_v2_5_2`;
+- executável `NabiCode_v2_5_2.exe`, 23.777.360 bytes, SHA-256
+  `E9CC38FC704A7093EB6F74AC18FA788F5BC75FF7CDB28C45353FA8E97E3DDE3A`;
+- `manifest.json`, `SHA256SUMS.txt`, arquivos proibidos e versão interna
+  `2.5.2 R22` aprovados. O smoke empacotado confirmou launcher Qt, splash
+  canônica pygame-ce, perfil físico `PRODUCAO` e conclusão em 1.044 ms;
+- o artefato ainda não foi instalado e o atalho público permanece apontando
+  para 2.5.1. Próximo portão: homologação visual da candidata no perfil TESTE.
