@@ -181,6 +181,7 @@ class CheckoutCommand:
     credit_terms: CreditTerms | None = None
     discount_amount: Decimal = Decimal("0.00")
     surcharge_amount: Decimal = Decimal("0.00")
+    credit_limit_override: bool = False
 
     def __init__(
         self,
@@ -191,6 +192,7 @@ class CheckoutCommand:
         credit_terms: CreditTerms | None = None,
         discount_amount: Decimal | int | str = Decimal("0.00"),
         surcharge_amount: Decimal | int | str = Decimal("0.00"),
+        credit_limit_override: bool = False,
     ) -> None:
         object.__setattr__(self, "customer_id", customer_id)
         object.__setattr__(self, "items", tuple(items))
@@ -198,6 +200,7 @@ class CheckoutCommand:
         object.__setattr__(self, "credit_terms", credit_terms)
         object.__setattr__(self, "discount_amount", discount_amount)
         object.__setattr__(self, "surcharge_amount", surcharge_amount)
+        object.__setattr__(self, "credit_limit_override", bool(credit_limit_override))
         self.__post_init__()
 
     def __post_init__(self) -> None:

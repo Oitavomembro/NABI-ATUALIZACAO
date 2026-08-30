@@ -41,6 +41,7 @@ class PDVWindow(QMainWindow):
         fiscal_mode: bool = False,
         fiscal_sale_service=None,
         fiscal_outbox_worker=None,
+        fiscal_cancellation_authorizer=None,
     ) -> None:
         super().__init__()
         self.view_model = view_model
@@ -49,6 +50,7 @@ class PDVWindow(QMainWindow):
         self._fiscal_mode = bool(fiscal_mode)
         self._fiscal_sale_service = fiscal_sale_service
         self._fiscal_outbox_worker = fiscal_outbox_worker
+        self._fiscal_cancellation_authorizer = fiscal_cancellation_authorizer
         # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
         # montada. O filtro precisa existir em estado válido desde o início.
         self._enter_widgets = ()
@@ -394,6 +396,7 @@ class PDVWindow(QMainWindow):
                 fiscal_mode=self._fiscal_mode,
                 fiscal_gateway=self.view_model.application.checkout_gateway,
                 fiscal_outbox_worker=self._fiscal_outbox_worker,
+                fiscal_cancellation_authorizer=self._fiscal_cancellation_authorizer,
             ).exec()
         except Exception as error:
             self._show_error(error)

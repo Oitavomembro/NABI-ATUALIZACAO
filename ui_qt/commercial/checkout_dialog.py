@@ -5,7 +5,7 @@ from decimal import Decimal
 
 from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QGridLayout,
+    QApplication, QComboBox, QDateEdit, QDialog, QDialogButtonBox, QFormLayout, QGridLayout,
     QGroupBox, QLabel, QLineEdit, QMessageBox, QPushButton, QSpinBox,
     QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
@@ -32,6 +32,7 @@ class CheckoutDialog(QDialog):
         self._confirming = False
         self._refreshing_totals = False
         self._payments_require_review = False
+        self._credit_limit_override = False
         self.setWindowTitle("Pagamentos")
         self.setModal(True)
         self.resize(820, 680)
@@ -204,6 +205,40 @@ class CheckoutDialog(QDialog):
         self.credit_box.setVisible(method == PaymentMethod.STORE_CREDIT or any(
             payment.method is PaymentMethod.STORE_CREDIT for payment in self._payments
         ))
+        if method == PaymentMethod.STORE_CREDIT:
+            self._confirm_credit_limit_override()
+
+    def _confirm_credit_limit_override(self) -> None:
+        if QApplication.platformName().casefold() == "offscreen":
+            return
+        customer = self.view_model.selected_customer
+        if customer is None or self._credit_limit_override:
+            return
+        financed = self.amount.value()
+        limit = customer.credit_limit or MoneyCodec.ZERO
+        balance = customer.debt_balance or MoneyCodec.ZERO
+        available = max(MoneyCodec.ZERO, limit - balance)
+        if financed <= available:
+            return
+        answer = QMessageBox.question(
+            self,
+            "Limite do crediário",
+            f"O crédito disponível deste cliente é R$ {MoneyCodec.format_br(available)}, "
+            f"mas o valor estimado no crediário é R$ {MoneyCodec.format_br(financed)}.\n\n"
+            "Deseja vender assim mesmo?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.No,
+        )
+        if answer == QMessageBox.StandardButton.Yes:
+            self._credit_limit_override = True
+            self.error_label.setText(
+                "Venda acima do limite autorizada para esta operação."
+            )
+            return
+        cash_index = self.method.findData(PaymentMethod.CASH)
+        if cash_index >= 0:
+            self.method.setCurrentIndex(cash_index)
+        self.method.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def _sync_adjustment_labels(self, *_args) -> None:
         discount_percent = self.discount_type.currentData() == "PERCENT"
@@ -289,6 +324,7 @@ class CheckoutDialog(QDialog):
         return CheckoutInput(
             payments=payments, installment_count=self.installments.value(),
             first_due_date=date(selected.year(), selected.month(), selected.day()),
+            credit_limit_override=self._credit_limit_override,
             **self._adjustment_data(),
         )
 
@@ -419,6 +455,10 @@ class CheckoutDialog(QDialog):
     def _confirm(self) -> None:
         if self._confirming:
             return
+        if self.method.currentData() == PaymentMethod.STORE_CREDIT:
+            self._confirm_credit_limit_override()
+            if self.method.currentData() != PaymentMethod.STORE_CREDIT:
+                return
         try:
             current = self._candidate_input()
             preview = self.view_model.preview_checkout(current)

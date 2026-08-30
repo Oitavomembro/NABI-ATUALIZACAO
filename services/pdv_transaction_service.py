@@ -59,7 +59,10 @@ class PDVTransactionService:
         self.pdv_service = pdv_service
 
     @staticmethod
-    def _credit_customer(connection: Any, customer_id: int, financed_value: Decimal) -> dict[str, Any]:
+    def _credit_customer(
+        connection: Any, customer_id: int, financed_value: Decimal,
+        *, allow_limit_override: bool = False,
+    ) -> dict[str, Any]:
         columns = {
             str(row[1]).casefold()
             for row in connection.execute("PRAGMA table_info(clientes)").fetchall()
@@ -97,7 +100,7 @@ class PDVTransactionService:
         available = max(Decimal("0.00"), limit - balance).quantize(
             Decimal("0.01"), rounding=ROUND_HALF_UP
         )
-        if financed_value > available:
+        if financed_value > available and not allow_limit_override:
             raise CreditLimitExceededError(
                 limit=limit,
                 balance=balance,
@@ -123,6 +126,7 @@ class PDVTransactionService:
         user: str,
         now: datetime | None = None,
         after_sale_in_transaction: Callable[[Any, int], None] | None = None,
+        allow_credit_override: bool = False,
     ) -> FinalizedSale:
         if int(customer_id) <= 0:
             raise ValueError("Cliente inválido para finalizar a venda.")
@@ -170,7 +174,10 @@ class PDVTransactionService:
         try:
             conn.execute("BEGIN IMMEDIATE" if financed_value > 0 else "BEGIN")
             credit_customer = (
-                self._credit_customer(conn, int(customer_id), financed_value)
+                self._credit_customer(
+                    conn, int(customer_id), financed_value,
+                    allow_limit_override=allow_credit_override,
+                )
                 if financed_value > 0
                 else None
             )

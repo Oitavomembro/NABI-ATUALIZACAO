@@ -23,6 +23,7 @@ class PDVSession:
         self.customer_id: int | None = None
         self.payment_plan: PaymentPlan | None = None
         self.credit_terms: CreditTerms | None = None
+        self.credit_limit_override = False
         self.discount_amount = MoneyCodec.ZERO
         self.surcharge_amount = MoneyCodec.ZERO
         self.checkout_state = CheckoutState.OPEN
@@ -37,6 +38,7 @@ class PDVSession:
     def _invalidate_payment(self) -> None:
         self.payment_plan = None
         self.credit_terms = None
+        self.credit_limit_override = False
 
     @property
     def items_total(self) -> Decimal:
@@ -135,6 +137,7 @@ class PDVSession:
         payment_plan: PaymentPlan,
         *,
         credit_terms: CreditTerms | None = None,
+        credit_limit_override: bool = False,
     ) -> None:
         self._ensure_open()
         if not isinstance(payment_plan, PaymentPlan):
@@ -151,6 +154,7 @@ class PDVSession:
             raise ValueError("Condições de crédito foram informadas sem crediário.")
         self.payment_plan = payment_plan
         self.credit_terms = credit_terms
+        self.credit_limit_override = bool(credit_limit_override)
 
     def build_checkout_command(self) -> CheckoutCommand:
         self._ensure_open()
@@ -167,6 +171,7 @@ class PDVSession:
             credit_terms=self.credit_terms,
             discount_amount=self.discount_amount,
             surcharge_amount=self.surcharge_amount,
+            credit_limit_override=self.credit_limit_override,
         )
 
     def begin_checkout(self) -> None:
@@ -186,6 +191,7 @@ class PDVSession:
         self.customer_id = None
         self.payment_plan = None
         self.credit_terms = None
+        self.credit_limit_override = False
         self.discount_amount = MoneyCodec.ZERO
         self.surcharge_amount = MoneyCodec.ZERO
         self.checkout_state = CheckoutState.OPEN

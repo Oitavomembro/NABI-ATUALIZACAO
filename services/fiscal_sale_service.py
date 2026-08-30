@@ -583,12 +583,37 @@ class FiscalSaleService:
             return {"recovery": True, "access_key": str(row[0])}
         if not row or str(row[2]) != "AUTORIZADO":
             raise ValueError("A venda selecionada não possui documento autorizado para cancelar.")
+        managed_password = str(password or "").strip() or str(
+            self.fiscal_service.session_certificate_password() or ""
+        ).strip()
+        if not managed_password:
+            raise ValueError(
+                "A senha do certificado A1 não está disponível na sessão segura. "
+                "Valide o certificado na Central Fiscal antes de cancelar."
+            )
+        consultation = self.fiscal_service.consult_document(
+            access_key=str(row[0]), password=managed_password,
+        )
+        if str(consultation.status_code) not in self.fiscal_service.AUTHORIZED_STATUS:
+            raise ValueError(
+                "A SEFAZ ainda não confirmou esta chave como autorizada para eventos "
+                f"({consultation.status_code} — {consultation.message}). "
+                "A venda permanece autorizada localmente e nenhum estorno foi feito. "
+                "Aguarde a sincronização e consulte novamente."
+            )
         response, event = self.fiscal_service.send_event(
             event_type="CANCELAMENTO", access_key=str(row[0]), sequence=1,
-            password=password, protocol=str(row[1]),
+            password=managed_password, protocol=str(row[1]),
             justification=str(justification or "").strip(),
         )
         if not response.success:
+            if str(response.status_code) == "494":
+                raise ValueError(
+                    "A autorização existe, mas o serviço de eventos da SEFAZ ainda não "
+                    "reconheceu a chave (494). Nenhum estoque, Caixa ou ficha foi "
+                    "estornado. Aguarde alguns instantes, atualize a situação e tente "
+                    "o cancelamento novamente."
+                )
             raise ValueError(f"Cancelamento rejeitado pela SEFAZ: {response.status_code} — {response.message}")
         connection = self.fiscal_service.connection_factory()
         try:

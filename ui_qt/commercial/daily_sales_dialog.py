@@ -82,12 +82,14 @@ class DailySalesDialog(QDialog):
     def __init__(
         self, view_model, parent=None, *, fiscal_mode=False,
         fiscal_gateway=None, fiscal_outbox_worker=None,
+        fiscal_cancellation_authorizer=None,
     ) -> None:
         super().__init__(parent)
         self.view_model = view_model
         self.fiscal_mode = bool(fiscal_mode)
         self.fiscal_gateway = fiscal_gateway
         self.fiscal_outbox_worker = fiscal_outbox_worker
+        self.fiscal_cancellation_authorizer = fiscal_cancellation_authorizer
         self._records: list[tuple[str, DailySaleSummary | BudgetDocument]] = []
         self.setWindowTitle("Vendas do dia — reimpressão e cancelamento")
         self.resize(1080, 680)
@@ -457,14 +459,17 @@ class DailySalesDialog(QDialog):
                 self, "Cancelamento fiscal", "O motivo deve possuir entre 15 e 255 caracteres."
             )
             return
-        password, accepted = QInputDialog.getText(
-            self, "Certificado A1", "Senha do certificado A1:",
-            QLineEdit.EchoMode.Password,
-        )
-        if not accepted:
+        if self.fiscal_cancellation_authorizer is None:
+            QMessageBox.warning(
+                self, "Cancelamento fiscal",
+                "A autorização administrativa para cancelamento não está configurada.",
+            )
             return
-        if not str(password):
-            QMessageBox.warning(self, "Cancelamento fiscal", "Informe a senha do certificado A1.")
+        try:
+            if not bool(self.fiscal_cancellation_authorizer(self)):
+                return
+        except Exception as error:
+            QMessageBox.warning(self, "Cancelamento fiscal", str(error))
             return
         if QMessageBox.question(
             self, "Confirmar cancelamento fiscal",
@@ -474,7 +479,7 @@ class DailySalesDialog(QDialog):
             return
         try:
             self._begin_cancel_wait(
-                record.sale_id, password=password, justification=reason, user="Sistema"
+                record.sale_id, password="", justification=reason, user="Sistema"
             )
         except Exception as error:
             QMessageBox.warning(self, "Cancelamento fiscal não iniciado", str(error))

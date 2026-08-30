@@ -28,6 +28,7 @@ class CheckoutInput:
     entrance_amount: Decimal = Decimal("0.00")
     installment_count: int = 1
     first_due_date: date | None = None
+    credit_limit_override: bool = False
 
 
 class PDVViewModel:
@@ -245,6 +246,7 @@ class PDVViewModel:
             installment_count=data.installment_count,
             first_due_date=data.first_due_date,
             apply=False,
+            credit_limit_override=data.credit_limit_override,
         )
 
     def checkout(self, data: CheckoutInput, *, user: str) -> CheckoutResult:
@@ -257,6 +259,7 @@ class PDVViewModel:
             surcharge_type=data.surcharge_type,
             installment_count=data.installment_count,
             first_due_date=data.first_due_date,
+            credit_limit_override=data.credit_limit_override,
         )
         result = self.application.checkout(self.session, user=user)
         if result.session_consumed:

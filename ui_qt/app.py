@@ -152,6 +152,20 @@ def create_shell_application(
     qt_application.setApplicationName("NabiCode")
     qt_application.setOrganizationName("NabiCode")
 
+    def authorize_fiscal_cancellation(parent) -> bool:
+        if reauthenticate is None or not bool(reauthenticate(parent)):
+            raise PermissionError(
+                "Informe a senha de um administrador autorizado para cancelar documentos fiscais."
+            )
+        if security.session is None or security.is_expired():
+            raise PermissionError("A autenticação administrativa não foi confirmada.")
+        if not security.require("fiscal", "transmit"):
+            raise PermissionError(
+                "O usuário autenticado não possui permissão para cancelamento fiscal."
+            )
+        security.touch()
+        return True
+
     def pdv_factory():
         return PDVWindow(
             PDVViewModel(application),
@@ -160,6 +174,7 @@ def create_shell_application(
             fiscal_mode=fiscal_mode,
             fiscal_sale_service=fiscal_sale_service,
             fiscal_outbox_worker=fiscal_outbox_worker,
+            fiscal_cancellation_authorizer=authorize_fiscal_cancellation,
             require_registered_customer=False,
         )
 

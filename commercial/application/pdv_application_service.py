@@ -390,6 +390,7 @@ class PDVApplicationService:
         installment_count: int = 1,
         first_due_date: date | None = None,
         apply: bool = True,
+        credit_limit_override: bool = False,
     ):
         discount_amount, surcharge_amount, final_total = cls.resolve_adjustments(
             session.items_total,
@@ -415,7 +416,10 @@ class PDVApplicationService:
             session.set_adjustments(
                 discount_amount=discount_amount, surcharge_amount=surcharge_amount
             )
-            session.set_payment_plan(plan, credit_terms=terms)
+            session.set_payment_plan(
+                plan, credit_terms=terms,
+                credit_limit_override=credit_limit_override,
+            )
         return plan, validation, terms, discount_amount, surcharge_amount, final_total
 
     @staticmethod

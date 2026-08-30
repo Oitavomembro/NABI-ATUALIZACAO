@@ -135,6 +135,32 @@ class PDVTransactionServiceTests(unittest.TestCase):
         finally:
             conn.close()
 
+    def test_superacao_de_limite_exige_override_explicito_e_registra_ficha(self):
+        self._set_credit(limit=5, balance=0)
+        result = self.service.finalize_sale(
+            customer_id=1, customer_name="CLIENTE", items=[self.item],
+            payments=[{"forma": "CREDIARIO", "valor": 10, "parcelas": 2}],
+            received=10, change=0, user="admin", allow_credit_override=True,
+        )
+        conn = sqlite3.connect(self.db)
+        try:
+            movement = conn.execute(
+                "SELECT status_pagamento,valor_aberto FROM movimentacoes WHERE id=?",
+                (result.sale_id,),
+            ).fetchone()
+            installments = conn.execute(
+                "SELECT COUNT(*),SUM(valor_parcela) FROM parcelas WHERE movimentacao_id=?",
+                (result.sale_id,),
+            ).fetchone()
+            balance = conn.execute(
+                "SELECT saldo_devedor FROM clientes WHERE id=1"
+            ).fetchone()[0]
+        finally:
+            conn.close()
+        self.assertEqual(movement, ("PENDENTE", 10.0))
+        self.assertEqual(installments, (2, 10.0))
+        self.assertEqual(balance, 10.0)
+
     def test_limite_esgotado_bloqueia_financiamento_sem_persistencia(self):
         self._set_credit(limit=500, balance=500)
         with self.assertRaises(CreditLimitExceededError):

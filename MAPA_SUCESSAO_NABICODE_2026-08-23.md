@@ -5784,3 +5784,35 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   canônica pygame-ce, perfil físico `PRODUCAO` e conclusão em 1.044 ms;
 - o artefato ainda não foi instalado e o atalho público permanece apontando
   para 2.5.1. Próximo portão: homologação visual da candidata no perfil TESTE.
+
+### Cancelamento fiscal — sincronização SEFAZ e autorização administrativa
+
+- a rejeição 494 observada na venda #10 foi auditada sem alterar dados: a NF-e
+  estava autorizada (`cStat 100`), com chave, protocolo e XML íntegros, mas o
+  cancelamento foi enviado 29 segundos depois e o serviço de eventos da
+  SEFAZ-BA ainda respondeu “Chave de acesso inexistente”;
+- antes de montar/enviar um cancelamento, o sistema agora consulta oficialmente
+  a chave no mesmo ambiente. Se a autorização ainda não estiver visível, o
+  evento não é enviado e estoque, Caixa, ficha e financeiro permanecem intactos;
+- uma eventual rejeição 494 também mantém o documento `AUTORIZADO`, explica a
+  janela de sincronização e orienta aguardar, atualizar e tentar novamente;
+- a tela deixou de pedir novamente a senha do A1. Usa exclusivamente a senha
+  gerenciada da sessão segura e bloqueia se ela não estiver disponível;
+- todo cancelamento exige nova autenticação de usuário com permissão
+  `fiscal/transmit`, separando autorização administrativa do segredo do A1;
+- motivo continua obrigatório e pré-preenchido com `PROBLEMAS TÉCNICOS`;
+- regressão focada dos serviços fiscais, gateway comercial e janelas Qt:
+  `217 passed`, `2 subtests passed`; `compileall` e `git diff --check` aprovados.
+
+### Crediário — aviso antecipado e exceção explícita de limite
+
+- ao selecionar Crediário, a tela compara imediatamente o valor financiado com
+  `limite - saldo devedor` e mostra limite disponível e valor estimado;
+- o operador pode voltar à forma Dinheiro ou confirmar “vender assim mesmo”. A
+  autorização vale somente para a venda corrente e é invalidada quando o plano
+  de pagamento da sessão é descartado;
+- a camada transacional continua bloqueando excesso de limite por padrão. A
+  exceção precisa atravessar explicitamente comando, sessão, gateway e serviço;
+- mesmo com exceção, movimento pendente, parcelas, título financeiro, ficha,
+  saldo do cliente e estoque continuam sendo gravados na mesma transação;
+- regressão comercial/Qt inicial: `191 passed`, `394 subtests passed`.

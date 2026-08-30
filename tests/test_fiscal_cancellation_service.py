@@ -12,12 +12,14 @@ from services.fiscal_cancellation_service import FiscalCancellationService
 
 class FakeFiscal:
     STATE_CODES = {"BA": "29"}
+    AUTHORIZED_STATUS = {"100", "150"}
 
     def __init__(self, database: Path, stored: dict):
         self.database = database
         self.stored = stored
         self.environment = "HOMOLOGACAO"
         self.network_calls = 0
+        self.consultation_status = "100"
 
     def connection_factory(self):
         return sqlite3.connect(self.database)
@@ -38,6 +40,16 @@ class FakeFiscal:
             "cnpj": "12345678000195",
             "certificate_path": "certificado-teste.pfx",
         }
+
+    def session_certificate_password(self):
+        return "senha-gerenciada"
+
+    def consult_document(self, **_kwargs):
+        self.network_calls += 1
+        return type("Response", (), {
+            "status_code": self.consultation_status,
+            "message": "Autorizado o uso da NF-e" if self.consultation_status == "100" else "Chave não encontrada",
+        })()
 
     def validate_event_eligibility(self, **_kwargs):
         return dict(self.stored)

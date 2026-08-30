@@ -18,6 +18,7 @@ class FakeFiscalService:
     _is_valid_cpf = staticmethod(FiscalService._is_valid_cpf)
     HOMOLOGATION_RECIPIENT_CNPJ = FiscalService.HOMOLOGATION_RECIPIENT_CNPJ
     HOMOLOGATION_RECIPIENT_NAME = FiscalService.HOMOLOGATION_RECIPIENT_NAME
+    AUTHORIZED_STATUS = FiscalService.AUTHORIZED_STATUS
 
     def __init__(self, db):
         self.db = db
@@ -27,6 +28,8 @@ class FakeFiscalService:
         self.contingency_calls = []
         self.authorized = True
         self.prepare_item_kwargs = {}
+        self.consultation_status = "100"
+        self.event_status = "135"
 
     def connection_factory(self):
         return sqlite3.connect(self.db)
@@ -65,7 +68,24 @@ class FakeFiscalService:
         return {"id": str(row[0]), "status": row[1]}
 
     def send_event(self, **_kwargs):
-        return SimpleNamespace(success=True, protocol="PROTO-CANCEL", status_code="135", message="Evento registrado"), {"event": "CANCELAMENTO"}
+        success = self.event_status == "135"
+        return SimpleNamespace(
+            success=success, protocol="PROTO-CANCEL" if success else "",
+            status_code=self.event_status,
+            message="Evento registrado" if success else "Chave de acesso inexistente",
+        ), {"event": "CANCELAMENTO"}
+
+    def session_certificate_password(self):
+        return "senha-gerenciada"
+
+    def consult_document(self, **_kwargs):
+        return SimpleNamespace(
+            status_code=self.consultation_status,
+            message=(
+                "Autorizado o uso da NF-e"
+                if self.consultation_status == "100" else "Chave não encontrada"
+            ),
+        )
 
     def build_document_xml(self, **kwargs):
         self.document = kwargs["document"]
@@ -410,6 +430,52 @@ class FiscalSaleServiceTests(unittest.TestCase):
         status = connection.execute("SELECT status FROM fiscal_sale_documents WHERE sale_id=22").fetchone()[0]
         connection.close()
         self.assertEqual(status, "CANCELADO_FISCAL")
+
+    def test_cancelamento_consulta_chave_e_bloqueia_sem_estorno_se_nao_propagou(self):
+        draft = FiscalSaleDraft("RES-4", "29" + "3" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 23, draft)
+        connection.execute(
+            "UPDATE fiscal_sale_documents SET status='AUTORIZADO',protocol='P3' WHERE sale_id=23"
+        )
+        connection.commit(); connection.close()
+        self.fiscal.consultation_status = "217"
+
+        with self.assertRaisesRegex(ValueError, "nenhum estorno foi feito"):
+            self.service.cancel_authorized(
+                sale_id=23, password="",
+                justification="Cancelamento solicitado corretamente.",
+            )
+
+        connection = sqlite3.connect(self.db)
+        status = connection.execute(
+            "SELECT status FROM fiscal_sale_documents WHERE sale_id=23"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "AUTORIZADO")
+
+    def test_rejeicao_494_mantem_autorizado_e_expoe_sincronizacao(self):
+        draft = FiscalSaleDraft("RES-5", "29" + "4" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 26, draft)
+        connection.execute(
+            "UPDATE fiscal_sale_documents SET status='AUTORIZADO',protocol='P4' WHERE sale_id=26"
+        )
+        connection.commit(); connection.close()
+        self.fiscal.event_status = "494"
+
+        with self.assertRaisesRegex(ValueError, "serviço de eventos.*494"):
+            self.service.cancel_authorized(
+                sale_id=26, password="",
+                justification="Cancelamento solicitado corretamente.",
+            )
+
+        connection = sqlite3.connect(self.db)
+        status = connection.execute(
+            "SELECT status FROM fiscal_sale_documents WHERE sale_id=26"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "AUTORIZADO")
 
 
 if __name__ == "__main__":

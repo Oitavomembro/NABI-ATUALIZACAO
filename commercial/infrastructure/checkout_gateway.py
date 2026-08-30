@@ -158,6 +158,7 @@ class NabiCodeCheckoutGateway:
                 received=validation.received,
                 change=validation.change,
                 user=user,
+                allow_credit_override=command.credit_limit_override,
                 after_sale_in_transaction=(
                     (lambda connection, sale_id: self.fiscal_sale_service.persist_draft(
                         connection, sale_id, draft
