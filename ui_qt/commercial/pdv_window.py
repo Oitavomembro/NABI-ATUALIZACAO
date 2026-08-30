@@ -203,18 +203,24 @@ class PDVWindow(QMainWindow):
         self.customer_results.hide()
         self.customer_selected = QLabel("Nenhum cliente selecionado")
         self.customer_selected.setWordWrap(True)
+        dropdown = QPushButton("▼")
+        self._customer_dropdown_button = dropdown
+        dropdown.setToolTip("Abrir lista rápida de clientes")
+        dropdown.setFixedWidth(42)
         clear = QPushButton("×")
         clear.setToolTip("Limpar cliente selecionado")
         clear.setFixedWidth(42)
         self.customer_search.textChanged.connect(self._customer_text_changed)
         self.customer_results.itemActivated.connect(self._select_customer)
         self.customer_results.itemClicked.connect(self._select_customer)
+        dropdown.clicked.connect(self._show_quick_customer_results)
         clear.clicked.connect(self._clear_customer)
-        layout.addWidget(title, 0, 0, 1, 2)
+        layout.addWidget(title, 0, 0, 1, 3)
         layout.addWidget(self.customer_search, 1, 0)
-        layout.addWidget(clear, 1, 1)
-        layout.addWidget(self.customer_results, 2, 0, 1, 2)
-        layout.addWidget(self.customer_selected, 3, 0, 1, 2)
+        layout.addWidget(dropdown, 1, 1)
+        layout.addWidget(clear, 1, 2)
+        layout.addWidget(self.customer_results, 2, 0, 1, 3)
+        layout.addWidget(self.customer_selected, 3, 0, 1, 3)
         layout.setColumnStretch(0, 1)
         return box
 
@@ -753,9 +759,9 @@ class PDVWindow(QMainWindow):
         )
         self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
 
-    def _search_customers(self, term: str) -> None:
+    def _search_customers(self, term: str, *, allow_empty: bool = False) -> None:
         self.customer_results.clear()
-        if not term.strip():
+        if not term.strip() and not allow_empty:
             self.customer_results.hide()
             return
         try:
@@ -776,6 +782,19 @@ class PDVWindow(QMainWindow):
         self.customer_results.setVisible(self.customer_results.count() > 0)
         if self.customer_results.count():
             self.customer_results.setCurrentRow(0)
+
+    def _show_quick_customer_results(self) -> None:
+        self.customer_search.setFocus(Qt.FocusReason.ShortcutFocusReason)
+        term = self.customer_search.text()
+        self._search_customers(term, allow_empty=True)
+        self.customer_results.setVisible(self.customer_results.count() > 0)
+        if not self.customer_results.count():
+            message = (
+                "O cadastro de clientes está vazio."
+                if not term.strip()
+                else "Nenhum cliente encontrado para esta busca."
+            )
+            self.statusBar().showMessage(message, 3500)
 
     def _customer_text_changed(self, term: str) -> None:
         if self.view_model.selected_customer is not None:

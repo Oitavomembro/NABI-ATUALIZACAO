@@ -72,7 +72,7 @@ class CustomerEditorDialog(QDialog):
         self.rg = QLineEdit(customer.rg if customer else "")
         self.phone = QLineEdit(customer.phone if customer else "")
         self.address = QLineEdit(customer.address if customer else "")
-        defaults = getattr(service, "fiscal_address_defaults", lambda: {})() if customer is None else {}
+        defaults = getattr(service, "fiscal_address_defaults", lambda: {})()
         self.email = QLineEdit(getattr(customer, "email", "") if customer else "")
         self.state_registration = QLineEdit(
             getattr(customer, "state_registration", "") if customer else ""
@@ -83,15 +83,16 @@ class CustomerEditorDialog(QDialog):
         self.fiscal_number = QLineEdit(getattr(customer, "fiscal_number", "") if customer else "")
         self.fiscal_district = QLineEdit(getattr(customer, "fiscal_district", "") if customer else "")
         self.fiscal_city = QLineEdit(
-            getattr(customer, "fiscal_city", "") if customer else defaults.get("fiscal_city", "")
+            (getattr(customer, "fiscal_city", "") if customer else "")
+            or defaults.get("fiscal_city", "")
         )
         self.fiscal_city_code = QLineEdit(
-            getattr(customer, "fiscal_city_code", "")
-            if customer else defaults.get("fiscal_city_code", "")
+            (getattr(customer, "fiscal_city_code", "") if customer else "")
+            or defaults.get("fiscal_city_code", "")
         )
         self.fiscal_state = QLineEdit(
-            getattr(customer, "fiscal_state", "")
-            if customer else defaults.get("fiscal_state", "")
+            (getattr(customer, "fiscal_state", "") if customer else "")
+            or defaults.get("fiscal_state", "")
         )
         self.fiscal_zip_code = QLineEdit(
             getattr(customer, "fiscal_zip_code", "") if customer else ""
@@ -103,21 +104,28 @@ class CustomerEditorDialog(QDialog):
         self.notes.setMaximumHeight(90)
         self.limit = MoneyEdit()
         self.limit.set_value(customer.credit_limit if customer else Decimal("0"))
+        required_help = QLabel(
+            "* Campos obrigatórios para emitir documento fiscal. "
+            "Inscrição Estadual e ICMS aparecem somente para pessoa jurídica."
+        )
+        required_help.setWordWrap(True)
+        required_help.setStyleSheet("color:#8b949e;padding:4px 0 8px 0")
+        form.addRow(required_help)
         for label, widget in (
             ("NÚMERO DA FICHA*", self.record), ("Código", self.code), ("Nome*", self.name),
             ("CPF/CNPJ", self.cpf), ("RG", self.rg), ("Telefone", self.phone),
-            ("Endereço", self.address), ("Observações", self.notes),
-            ("Limite de crédito", self.limit),
-            ("E-mail fiscal", self.email), ("Inscrição estadual", self.state_registration),
+            ("Observações", self.notes), ("Limite de crédito", self.limit),
+            ("E-mail", self.email), ("Inscrição estadual", self.state_registration),
             ("Situação no ICMS", self.icms_taxpayer),
-            ("Logradouro fiscal*", self.fiscal_street),
-            ("Número fiscal*", self.fiscal_number),
-            ("Bairro fiscal*", self.fiscal_district),
-            ("Município fiscal*", self.fiscal_city),
-            ("Código IBGE*", self.fiscal_city_code), ("UF fiscal*", self.fiscal_state),
-            ("CEP fiscal (opcional)", self.fiscal_zip_code),
+            ("Logradouro*", self.fiscal_street), ("Número*", self.fiscal_number),
+            ("Bairro*", self.fiscal_district), ("Município*", self.fiscal_city),
+            ("Código IBGE*", self.fiscal_city_code), ("UF*", self.fiscal_state),
+            ("CEP", self.fiscal_zip_code),
         ):
             form.addRow(label, widget)
+        self._form = form
+        self.cpf.textChanged.connect(self._sync_person_type)
+        self._sync_person_type()
         scroll.setWidget(form_body)
         layout.addWidget(scroll, 1)
         buttons = QHBoxLayout()
@@ -132,7 +140,7 @@ class CustomerEditorDialog(QDialog):
         layout.addLayout(buttons)
         self._fields = (
             self.record, self.code, self.name, self.cpf, self.rg, self.phone,
-            self.address, self.notes, self.limit, self.email, self.state_registration,
+            self.notes, self.limit, self.email, self.state_registration,
             self.icms_taxpayer, self.fiscal_street, self.fiscal_number,
             self.fiscal_district, self.fiscal_city, self.fiscal_city_code,
             self.fiscal_state, self.fiscal_zip_code, self.save_button,
@@ -142,17 +150,37 @@ class CustomerEditorDialog(QDialog):
         self.record.setFocus(Qt.FocusReason.OtherFocusReason)
         self.record.selectAll()
 
+    def _sync_person_type(self, *_args) -> None:
+        digits = "".join(character for character in self.cpf.text() if character.isdigit())
+        company = len(digits) > 11
+        self._form.setRowVisible(self.state_registration, company)
+        self._form.setRowVisible(self.icms_taxpayer, company)
+        if not company:
+            self.icms_taxpayer.setChecked(False)
+
+    def _legacy_address_value(self) -> str:
+        parts = [
+            self.fiscal_street.text().strip(), self.fiscal_number.text().strip(),
+            self.fiscal_district.text().strip(), self.fiscal_city.text().strip(),
+            self.fiscal_state.text().strip().upper(),
+        ]
+        composed = ", ".join(part for part in parts if part)
+        return composed or self.address.text().strip()
+
     def eventFilter(self, watched, event) -> bool:
         if event.type() == QEvent.Type.KeyPress and event.key() in {Qt.Key.Key_Return, Qt.Key.Key_Enter}:
             if event.isAutoRepeat():
                 event.accept(); return True
-            index = self._fields.index(watched)
+            fields = tuple(
+                widget for widget in self._fields if widget.isVisible() and widget.isEnabled()
+            )
+            index = fields.index(watched)
             if event.modifiers() & Qt.KeyboardModifier.ShiftModifier:
-                self._fields[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
+                fields[max(0, index - 1)].setFocus(Qt.FocusReason.BacktabFocusReason)
             elif watched is self.save_button:
                 self._save()
             else:
-                self._fields[min(len(self._fields) - 1, index + 1)].setFocus(
+                fields[min(len(fields) - 1, index + 1)].setFocus(
                     Qt.FocusReason.TabFocusReason
                 )
             event.accept(); return True
@@ -164,7 +192,7 @@ class CustomerEditorDialog(QDialog):
             values = dict(
                 name=self.name.text(), code=self.code.text(), record_number=record,
                 cpf=self.cpf.text(), rg=self.rg.text(), phone=self.phone.text(),
-                address=self.address.text(), notes=self.notes.toPlainText(),
+                address=self._legacy_address_value(), notes=self.notes.toPlainText(),
                 credit_limit=self.limit.value(),
                 email=self.email.text(), state_registration=self.state_registration.text(),
                 icms_taxpayer=self.icms_taxpayer.isChecked(),

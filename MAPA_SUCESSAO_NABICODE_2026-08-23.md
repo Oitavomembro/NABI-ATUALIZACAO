@@ -5816,3 +5816,17 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - mesmo com exceção, movimento pendente, parcelas, título financeiro, ficha,
   saldo do cliente e estoque continuam sendo gravados na mesma transação;
 - regressão comercial/Qt inicial: `191 passed`, `394 subtests passed`.
+
+### Cadastro fiscal de cliente e busca rápida no PDV
+
+- o editor deixou de exibir o campo legado duplicado `Endereço`; ele continua
+  sendo composto internamente a partir de logradouro, número, bairro, município,
+  UF e CEP para manter compatibilidade com relatórios antigos;
+- município, código IBGE e UF vazios herdam os dados da instalação, mas
+  permanecem editáveis. Os rótulos foram simplificados e a tela explica que `*`
+  identifica os campos necessários ao documento fiscal;
+- inscrição estadual e contribuinte do ICMS aparecem somente para CNPJ. Para
+  CPF esses controles ficam ocultos e não induzem preenchimento indevido;
+- a busca de cliente no PDV recebeu seta de lista rápida equivalente à busca de
+  produtos. Ela abre resultados mesmo sem texto, preservando seleção por teclado;
+- regressão focada do cadastro e PDV: `125 passed`, `2 subtests passed`.

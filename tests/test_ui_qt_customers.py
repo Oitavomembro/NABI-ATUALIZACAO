@@ -188,6 +188,19 @@ def test_editor_expoe_e_salva_endereco_fiscal_com_cep_opcional(app):
     assert dialog.result() == QDialog.DialogCode.Accepted
 
 
+def test_editor_simplifica_endereco_e_mostra_icms_somente_para_cnpj(app):
+    dialog = CustomerEditorDialog(Service())
+    dialog.show(); app.processEvents()
+    assert not dialog.address.isVisible()
+    assert not dialog.state_registration.isVisible()
+    assert not dialog.icms_taxpayer.isVisible()
+    dialog.cpf.setText("47.584.215/0001-60")
+    app.processEvents()
+    assert dialog.state_registration.isVisible()
+    assert dialog.icms_taxpayer.isVisible()
+    dialog.close()
+
+
 def test_gui_nao_importa_banco_repositorio_ou_fiscal():
     source = (__import__("pathlib").Path(__file__).parents[1] / "ui_qt/commercial/customer_dialog.py").read_text()
     for forbidden in (

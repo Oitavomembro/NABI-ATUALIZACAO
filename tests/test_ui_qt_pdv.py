@@ -1492,6 +1492,23 @@ class PDVQtTests(unittest.TestCase):
         self.assertIn("CONSUMIDOR FINAL", self.window.customer_selected.text())
         self.assertTrue(self.window.product_search.hasFocus())
 
+    def test_customer_dropdown_opens_quick_results_like_product_dropdown(self):
+        with patch.object(
+            self.window.view_model,
+            "search_customers",
+            return_value=(FakeCustomers.record, FakeCustomers.other),
+        ) as search:
+            QTest.mouseClick(
+                self.window._customer_dropdown_button,
+                Qt.MouseButton.LeftButton,
+            )
+            QApplication.processEvents()
+
+        search.assert_called_once_with("")
+        self.assertEqual(self.window.customer_results.count(), 2)
+        self.assertFalse(self.window.customer_results.isHidden())
+        self.assertTrue(self.window.customer_search.hasFocus())
+
     def test_empty_customer_enter_with_cart_focuses_checkout(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
         self.window.refresh_cart()
