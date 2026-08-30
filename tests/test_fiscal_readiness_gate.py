@@ -17,6 +17,14 @@ class Catalog:
         return SimpleNamespace(total=self.total, blocked=self.blocked)
 
 
+class Regulatory:
+    def __init__(self, *problems):
+        self.problems = tuple(problems)
+
+    def audit(self, **_kwargs):
+        return SimpleNamespace(problems=self.problems)
+
+
 class GateFiscal:
     TAX_REGIME_CODES = {"SIMPLES": 1}
 
@@ -46,7 +54,9 @@ def test_gate_rejeita_a1_de_outro_cnpj_catalogo_e_numeracao_pendentes():
         expired=False, document="99999999000199"
     )
     fiscal.numbering_scope = lambda **_kwargs: {"initialized": False}
-    result = FiscalReadinessGate(fiscal, Catalog(total=1, blocked=1)).evaluate(
+    result = FiscalReadinessGate(
+        fiscal, Catalog(total=1, blocked=1), Regulatory()
+    ).evaluate(
         operation="autorizacao", model="65", password="senha", series=1,
         require_catalog=True, require_numbering=True,
     )
@@ -137,3 +147,16 @@ def test_gate_limpo_exige_cnpj_certificado_e_configuracao():
     assert any("CNPJ obrigatório" in problem for problem in result.problems)
     assert any("certificado" in problem for problem in result.problems)
     assert any("regime obrigatório" in problem for problem in result.problems)
+
+
+def test_gate_rejeita_catalogo_regulatorio_ausente_ou_vencido():
+    fiscal = GateFiscal()
+    missing = FiscalReadinessGate(fiscal, Catalog()).evaluate(
+        operation="status", model="55", password="senha"
+    )
+    expired = FiscalReadinessGate(
+        fiscal, Catalog(), Regulatory("Revisão regulatória vencida")
+    ).evaluate(operation="status", model="55", password="senha")
+
+    assert any("não está configurado" in problem for problem in missing.problems)
+    assert any("Revisão regulatória vencida" in problem for problem in expired.problems)

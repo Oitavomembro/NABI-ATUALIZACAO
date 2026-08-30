@@ -1,0 +1,85 @@
+{
+  "schema": "nabicode.fiscal-regulatory-catalog.v1",
+  "jurisdiction": "BR-BA",
+  "reviewed_at": "2026-08-29",
+  "review_due_at": "2026-09-30",
+  "production_approved": false,
+  "models": ["55", "65"],
+  "endpoint_catalog_sha256": "DF7C12357738720FB3A5B72A6ADA74AD8EE204FA4FF26778FC5F9DC7C5AEFDCB",
+  "installed_trees": {
+    "resources/fiscal/schemas/nfe_010e_v1.02": "0BFBB4F352A41D8C71BAE1F76228ADA74FAF17A381C3536DADD6AF6670C69D1B",
+    "resources/fiscal/schemas/eventos_010d_v1.03": "E19D4B7A18251E153B9F064B08F491392A00877B6B3E6DDB6830EA6C18FBEE87",
+    "resources/fiscal/schemas/servicos_010d_v1.03": "EA413C4C7DB81978E9CEBFF90B4CE6E09ABF3CBB424466D5C225DFB7C956B3B6",
+    "resources/fiscal/schemas/cadastro_010d_v1.03": "38EFD9A5E65A41CF2CF21522F501B9E30E787ACCD02664175DC4B4BD0B2CD9F6"
+  },
+  "artifacts": [
+    {
+      "id": "nfe-schemas-010e-v1.02",
+      "kind": "SCHEMA_PACKAGE",
+      "version": "010e v1.02",
+      "published_at": "2026-07-10",
+      "source_url": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=akib2DRpJN4%3D",
+      "source_sha256": "D44AE5AA6A0D1CABF6235D2D2D47B75BE5DD87BC6B90A7EC3DCEC99C3D41BDA1",
+      "installed_path": "resources/fiscal/schemas/nfe_010e_v1.02/nfe_v4.00.xsd"
+    },
+    {
+      "id": "nfe-services-010d-v1.03",
+      "kind": "SERVICE_SCHEMA_PACKAGE",
+      "version": "010d v1.03",
+      "published_at": "2026-07-10",
+      "source_url": "https://www.nfe.fazenda.gov.br/portal/exibirArquivo.aspx?conteudo=%2BpBOYTXBtbk%3D",
+      "source_sha256": "45CEEFE4DFBBFEC93958283B650A2F1E1734784F4770D070B9907754DE081D9B",
+      "installed_path": "resources/fiscal/schemas/eventos_010d_v1.03/envEvento_v1.00.xsd"
+    },
+    {
+      "id": "moc-7.0",
+      "kind": "MANUAL",
+      "version": "7.0",
+      "source_url": "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=ndIjl+iEFdE%3D"
+    },
+    {
+      "id": "rtc-nt-2025.002",
+      "kind": "TECHNICAL_NOTE",
+      "version": "vigente em 2026-08-29",
+      "source_url": "https://www.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=04BIflQt1aY%3D"
+    },
+    {
+      "id": "rtc-classification-2025.002-v1.60",
+      "kind": "OFFICIAL_TABLE",
+      "version": "1.60",
+      "published_at": "2026-06-23",
+      "source_url": "https://hom.nfe.fazenda.gov.br/portal/listaConteudo.aspx?tipoConteudo=B%2F6oigHgyAw%3D"
+    },
+    {
+      "id": "sefaz-ba-nfe-services",
+      "kind": "STATE_ENDPOINT_CATALOG",
+      "version": "consultado em 2026-08-29",
+      "source_url": "https://www.sefaz.ba.gov.br/inspetoria-eletronica/icms/documentos-fiscais/nota-fiscal-eletronica/"
+    },
+    {
+      "id": "sefaz-ba-nfce-requirements",
+      "kind": "STATE_REQUIREMENTS",
+      "version": "consultado em 2026-08-29",
+      "source_url": "https://www.sefaz.ba.gov.br/docs/inspetoria-eletronica/icms/nfce_perguntas_respostas_.pdf"
+    }
+  ],
+  "supported_operations": {
+    "sale": true,
+    "return": true,
+    "cancellation": true,
+    "correction_letter": true,
+    "number_invalidation": true,
+    "dfe_distribution": true,
+    "recipient_manifestation": true,
+    "nfce_offline_contingency": true,
+    "nfe_epec": true,
+    "general_tax_matrix": false,
+    "rtc_special_regimes": false,
+    "selective_tax": false
+  },
+  "notes": [
+    "Catálogo técnico; não substitui aprovação contábil nem homologação SEFAZ.",
+    "Produção permanece bloqueada até dossiê real, contador e proprietário aprovarem.",
+    "Operações não marcadas como suportadas devem falhar fechadas."
+  ]
+}

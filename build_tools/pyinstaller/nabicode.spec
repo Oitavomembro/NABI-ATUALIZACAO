@@ -19,6 +19,7 @@ datas = [
     (str(project_root / "resources" / "fiscal" / "schemas"), "resources/fiscal/schemas"),
     (str(project_root / "resources" / "fiscal" / "catalogs"), "resources/fiscal/catalogs"),
     (str(project_root / "resources" / "fiscal" / "icp_brasil"), "resources/fiscal/icp_brasil"),
+    (str(project_root / "resources" / "fiscal" / "regulatory_catalog.json"), "resources/fiscal"),
 ]
 binaries = []
 hiddenimports = [

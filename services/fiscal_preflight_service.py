@@ -5,6 +5,9 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
 
+from services.fiscal_conformance_report_service import FiscalConformanceReportService
+from services.fiscal_regulatory_catalog_service import FiscalRegulatoryCatalogService
+
 
 @dataclass(frozen=True)
 class FiscalPreflightResult:
@@ -16,6 +19,8 @@ class FiscalPreflightResult:
     xml_sha256: str
     xml_sha256_by_model: tuple[tuple[str, str], ...]
     problems: tuple[str, ...]
+    conformance_snapshot_sha256: str = ""
+    blocked_operations: tuple[str, ...] = ()
 
     @property
     def success(self) -> bool:
@@ -25,9 +30,18 @@ class FiscalPreflightResult:
 class FiscalPreflightService:
     """Prova local de prontidão fiscal sem rede, reserva ou persistência."""
 
-    def __init__(self, fiscal_service: Any, catalog_service: Any) -> None:
+    def __init__(
+        self, fiscal_service: Any, catalog_service: Any,
+        regulatory_service: Any | None = None,
+    ) -> None:
         self.fiscal_service = fiscal_service
         self.catalog_service = catalog_service
+        self.regulatory_service = regulatory_service or FiscalRegulatoryCatalogService(
+            runtime_root=getattr(fiscal_service, "runtime_root", None)
+        )
+        self.conformance_service = FiscalConformanceReportService(
+            self.regulatory_service
+        )
 
     def run(self, *, password: str) -> FiscalPreflightResult:
         config = self.fiscal_service.load_config()
@@ -38,6 +52,10 @@ class FiscalPreflightService:
         if not models:
             models = (model,)
         problems: list[str] = []
+        regulatory = self.regulatory_service.audit(environment=environment)
+        problems.extend(regulatory.problems)
+        conformance = self.conformance_service.snapshot()
+        problems.extend(conformance.regulatory_problems)
         if environment != "HOMOLOGACAO":
             problems.append(
                 "O pré-voo fiscal só pode ser executado no ambiente de homologação."
@@ -50,13 +68,22 @@ class FiscalPreflightService:
                     operation="autorizacao", model=current_model
                 )
             )
-            series = int(config.get(f"sale_series_{current_model}", 1))
+            series_value = config.get(f"sale_series_{current_model}")
+            try:
+                series = int(series_value)
+            except (TypeError, ValueError):
+                problems.append(f"{label}: série fiscal não configurada ou inválida.")
+                continue
+            if not 0 <= series <= 999:
+                problems.append(f"{label}: série fiscal deve estar entre 0 e 999.")
+                continue
             numbering = self.fiscal_service.numbering_scope(
-                model=current_model, series=series, environment=environment,
+                model=current_model, series=series, environment=environment
             )
             if not numbering.get("initialized"):
                 problems.append(
-                    f"{label}: a numeração fiscal ainda não foi inicializada "
+                    f"{label}: numeração fiscal não inicializada; "
+                    f"a numeração fiscal ainda não foi inicializada "
                     f"para a série {series}."
                 )
         crt = self.fiscal_service.TAX_REGIME_CODES.get(
@@ -120,6 +147,14 @@ class FiscalPreflightService:
                     recipient = {} if current_model == "65" else {
                         "document": self.fiscal_service.HOMOLOGATION_RECIPIENT_CNPJ,
                         "name": self.fiscal_service.HOMOLOGATION_RECIPIENT_NAME,
+                        "street": issuer.get("street", ""),
+                        "number": issuer.get("number", ""),
+                        "district": issuer.get("district", ""),
+                        "city_code": issuer.get("city_code", ""),
+                        "city": issuer.get("city", ""),
+                        "state": issuer.get("state", ""),
+                        "zip_code": issuer.get("zip_code", ""),
+                        "state_taxpayer_indicator": 9,
                     }
                     issued_at = datetime(2026, 1, 1, 12, 0, tzinfo=timezone.utc)
                     xml, access_key = self.fiscal_service.build_document_xml(
@@ -153,4 +188,6 @@ class FiscalPreflightService:
             certificate_document=certificate_document, xml_sha256=xml_hash,
             xml_sha256_by_model=tuple(model_hashes),
             problems=tuple(dict.fromkeys(problem for problem in problems if problem)),
+            conformance_snapshot_sha256=conformance.snapshot_sha256,
+            blocked_operations=conformance.blocked_operations,
         )

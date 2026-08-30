@@ -55,11 +55,13 @@ class FakeFiscalService:
             "enabled": True, "default_model": "65", "tax_regime": "SIMPLES_NACIONAL",
             "enabled_models": ["55", "65"],
             "cnpj": "12345678000195", "state": "BA", "certificate_path": "cert.pfx",
+            "sale_series_55": 1, "sale_series_65": 1,
             "issuer": {},
         }
 
     def load_config(self): return self.config
     def validate_ready(self, **_kwargs): return []
+    def numbering_scope(self, **_kwargs): return {"initialized": True, "next_number": 1}
     def inspect_certificate(self, path, password):
         assert (path, password) == ("cert.pfx", "senha")
         return Certificate()
@@ -97,6 +99,8 @@ def test_pre_voo_assina_e_valida_localmente_sem_transmitir():
     assert len(result.xml_sha256) == 64
     assert result.validated_models == ("55", "65")
     assert len(result.xml_sha256_by_model) == 2
+    assert len(result.conformance_snapshot_sha256) == 64
+    assert "general_tax_matrix" in result.blocked_operations
     assert fiscal.built_models == ["55", "65"]
     assert fiscal.transmitted is False
 
@@ -181,4 +185,46 @@ def test_pre_voo_recusa_configuracao_de_producao():
     result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
     assert result.success is False
     assert any("só pode ser executado" in problem for problem in result.problems)
+    assert fiscal.built_models == []
+
+
+def test_pre_voo_bloqueia_catalogo_regulatorio_vencido():
+    fiscal = FakeFiscalService()
+    regulatory = SimpleNamespace(
+        audit=lambda **_kwargs: SimpleNamespace(
+            problems=("Revisão regulatória vencida",), jurisdiction="BR-BA",
+            production_approved=False, supported_operations=(),
+            unsupported_operations=("general_tax_matrix",),
+        )
+    )
+    result = FiscalPreflightService(
+        fiscal, FakeCatalogService(), regulatory_service=regulatory
+    ).run(password="senha")
+
+    assert result.success is False
+    assert "Revisão regulatória vencida" in result.problems
+    assert result.validated_models == ()
+    assert fiscal.built_models == []
+
+
+def test_pre_voo_exige_numeracao_inicializada_para_cada_modelo():
+    fiscal = FakeFiscalService()
+    fiscal.numbering_scope = lambda **kwargs: {
+        "initialized": kwargs["model"] == "55", "next_number": 1
+    }
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert any(
+        "NFC-e 65: numeração fiscal não inicializada" in problem
+        for problem in result.problems
+    )
+    assert fiscal.built_models == []
+
+
+def test_pre_voo_rejeita_serie_fora_do_intervalo_oficial():
+    fiscal = FakeFiscalService()
+    fiscal.config["sale_series_55"] = 1000
+    result = FiscalPreflightService(fiscal, FakeCatalogService()).run(password="senha")
+    assert result.success is False
+    assert any("NF-e 55: série fiscal deve estar" in problem for problem in result.problems)
     assert fiscal.built_models == []
