@@ -5106,3 +5106,28 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   bytes e um novo `integrity_check` retornou `ok`. Nenhuma venda, estoque,
   pagamento, chave, numeração ou XML foi recriado, e nenhuma comunicação com
   a SEFAZ ocorreu durante a reparação.
+
+## Canonicalização independente da assinatura NF-e — 30/08/2026
+
+- o reenvio controlado posterior à reparação ainda recebeu `297`; novos
+  reenvios foram interrompidos e a venda nº 2 permaneceu em `FALHA`;
+- o verificador interno aceitava o XML, mas o `SignedXml` independente do .NET
+  o recusou, reproduzindo o resultado da SEFAZ e comprovando que assinar e
+  validar com a mesma canonicalização escondia o defeito;
+- causa raiz: aplicar C14N diretamente ao objeto `infNFe` destacado fazia o
+  `lxml` introduzir `xmlns=\"\"` artificiais em descendentes. O XML serializado
+  recebido pela SEFAZ não continha esses esvaziamentos, portanto o digest e o
+  `SignatureValue` eram calculados sobre representações diferentes;
+- a canonicalização agora materializa primeiro a subárvore serializada e a
+  analisa isoladamente antes do C14N, tanto para a referência quanto para
+  `SignedInfo`; qualquer `xmlns=\"\"` inesperado bloqueia a assinatura;
+- após uma rejeição 297, a assinatura antiga comprovadamente inválida não é
+  reutilizada nem exigida como válida: chave, referência única e estrutura são
+  conferidas, somente o XMLDSig rejeitado é removido e a mesma NF-e é
+  reassinada com o A1 configurado;
+- uma assinatura temporária produzida pela rotina corrigida foi aceita pelo
+  `.NET SignedXml` (`CheckSignature=True`). Testes focados: `6 passed`;
+  regressão fiscal/PDV ampliada: `378 passed`, `12 subtests passed`;
+- nenhum banco ativo, certificado real ou comunicação SEFAZ foi usado pela
+  correção. O próximo teste real exige reinício na versão corrigida e somente
+  um reenvio manual e acompanhado da venda nº 2.

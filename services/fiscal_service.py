@@ -828,7 +828,7 @@ class FiscalService:
             raise ValueError("Elemento fiscal com Id informado não foi localizado de forma única.")
         target = matches[0]
         digest = hashes.Hash(hashes.SHA1())
-        digest.update(etree.tostring(target, method="c14n", exclusive=False, with_comments=False))
+        digest.update(self._canonicalize_xml_dsig_node(target))
         digest_value = base64.b64encode(digest.finalize()).decode("ascii")
 
         signature = etree.Element(etree.QName(self.DS_NS, "Signature"), nsmap={None: self.DS_NS})
@@ -851,13 +851,39 @@ class FiscalService:
         etree.SubElement(reference, etree.QName(self.DS_NS, "DigestMethod"), Algorithm="http://www.w3.org/2000/09/xmldsig#sha1")
         etree.SubElement(reference, etree.QName(self.DS_NS, "DigestValue")).text = digest_value
 
-        signed_info_c14n = etree.tostring(signed_info, method="c14n", exclusive=False, with_comments=False)
+        signed_info_c14n = self._canonicalize_xml_dsig_node(signed_info)
         signature_value = key.sign(signed_info_c14n, padding.PKCS1v15(), hashes.SHA1())
         etree.SubElement(signature, etree.QName(self.DS_NS, "SignatureValue")).text = base64.b64encode(signature_value).decode("ascii")
         key_info = etree.SubElement(signature, etree.QName(self.DS_NS, "KeyInfo"))
         x509_data = etree.SubElement(key_info, etree.QName(self.DS_NS, "X509Data"))
         etree.SubElement(x509_data, etree.QName(self.DS_NS, "X509Certificate")).text = base64.b64encode(cert.public_bytes(serialization.Encoding.DER)).decode("ascii")
         return etree.tostring(root, xml_declaration=True, encoding="utf-8", standalone=False)
+
+    @staticmethod
+    def _canonicalize_xml_dsig_node(node: Any) -> bytes:
+        """Canonicaliza a subárvore com os namespaces que serão recebidos.
+
+        O ``lxml`` pode manter no subelemento destacado associações internas
+        de namespace herdadas que não coincidem com o XML serializado. Aplicar
+        C14N diretamente nesse objeto introduz ``xmlns=\"\"`` artificiais. A
+        serialização e nova análise isolada materializam o contexto real que
+        um validador externo (inclusive a SEFAZ) reconstruirá ao receber o XML.
+        """
+        raw = etree.tostring(node, encoding="utf-8")
+        detached = etree.fromstring(
+            raw,
+            parser=etree.XMLParser(
+                remove_blank_text=False, resolve_entities=False, no_network=True
+            ),
+        )
+        canonical = etree.tostring(
+            detached, method="c14n", exclusive=False, with_comments=False
+        )
+        if b'xmlns=""' in canonical:
+            raise ValueError(
+                "Canonicalização XMLDSig produziu esvaziamento inesperado de namespace."
+            )
+        return canonical
 
     def verify_xml_signature(self, xml: bytes | str) -> dict[str, Any]:
         """Valida a assinatura XMLDSig incorporada ao documento fiscal.
@@ -892,7 +918,7 @@ class FiscalService:
         if not digest_text:
             raise ValueError("Assinatura fiscal não contém DigestValue.")
         digest = hashes.Hash(hashes.SHA1())
-        digest.update(etree.tostring(target, method="c14n", exclusive=False, with_comments=False))
+        digest.update(self._canonicalize_xml_dsig_node(target))
         calculated_digest = base64.b64encode(digest.finalize()).decode("ascii")
         if calculated_digest != digest_text:
             raise ValueError("Digest da assinatura fiscal não corresponde ao conteúdo do XML.")
@@ -907,9 +933,7 @@ class FiscalService:
             signature_value = base64.b64decode(signature_text, validate=True)
         except Exception as exc:
             raise ValueError("Certificado ou assinatura XMLDSig possui codificação inválida.") from exc
-        signed_info_c14n = etree.tostring(
-            signed_info_nodes[0], method="c14n", exclusive=False, with_comments=False
-        )
+        signed_info_c14n = self._canonicalize_xml_dsig_node(signed_info_nodes[0])
         try:
             cert.public_key().verify(signature_value, signed_info_c14n, padding.PKCS1v15(), hashes.SHA1())
         except Exception as exc:
@@ -3459,9 +3483,6 @@ class FiscalService:
                             raise ValueError("A chave do XML não corresponde ao item da fila fiscal.")
                         already_signed = bool(root.xpath(".//*[local-name()='Signature']"))
                         if already_signed:
-                            signature = self.verify_xml_signature(xml)
-                            if signature.get("reference_id") != f"NFe{queued_key}":
-                                raise ValueError("A assinatura da contingência não referencia a chave enfileirada.")
                             if str(record.get("last_status_code") or "").strip() == "297":
                                 # A SEFAZ rejeitou especificamente o valor da
                                 # assinatura. O reenvio deve preservar a NF-e,
@@ -3474,6 +3495,13 @@ class FiscalService:
                                 )
                                 if len(signatures) != 1:
                                     raise ValueError("NF-e rejeitada não possui assinatura única para renovação.")
+                                references = signatures[0].xpath(
+                                    "./*[local-name()='SignedInfo']/*[local-name()='Reference']/@URI"
+                                )
+                                if references != [f"#NFe{queued_key}"]:
+                                    raise ValueError(
+                                        "A assinatura rejeitada não referencia a chave enfileirada."
+                                    )
                                 signatures[0].getparent().remove(signatures[0])
                                 unsigned = etree.tostring(
                                     root, xml_declaration=True, encoding="utf-8", standalone=False
@@ -3483,6 +3511,11 @@ class FiscalService:
                                     pfx_path=config.get("certificate_path", ""), password=password,
                                 )
                             else:
+                                signature = self.verify_xml_signature(xml)
+                                if signature.get("reference_id") != f"NFe{queued_key}":
+                                    raise ValueError(
+                                        "A assinatura da contingência não referencia a chave enfileirada."
+                                    )
                                 signed = xml
                         else:
                             if model == "65":

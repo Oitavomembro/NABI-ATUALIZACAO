@@ -726,6 +726,42 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertEqual(root.xpath("string(//*[local-name()='Reference']/@URI)"), "#NFe123")
         self.assertTrue(root.xpath("string(//*[local-name()='SignatureValue'])"))
 
+    def test_canonicalizacao_materializa_namespace_sem_xmlns_vazio(self):
+        root = etree.fromstring(
+            b'<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+            b'<infNFe Id="NFe123"><ide><cUF>29</cUF></ide></infNFe></NFe>'
+        )
+        target = root.xpath("//*[local-name()='infNFe']")[0]
+
+        canonical = self.service._canonicalize_xml_dsig_node(target)
+
+        self.assertNotIn(b'xmlns=""', canonical)
+        self.assertEqual(
+            canonical,
+            b'<infNFe xmlns="http://www.portalfiscal.inf.br/nfe" Id="NFe123">'
+            b'<ide><cUF>29</cUF></ide></infNFe>',
+        )
+
+    def test_assinatura_usa_digest_da_arvore_recebida_e_nao_do_objeto_destacado(self):
+        unsigned = (
+            '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+            '<infNFe Id="NFe123"><ide><cUF>29</cUF></ide></infNFe></NFe>'
+        )
+        signed = self.service.sign_xml(
+            unsigned, reference_id="NFe123",
+            pfx_path=self.pfx_path, password=self.password,
+        )
+        root = etree.fromstring(signed)
+        target = root.xpath("//*[local-name()='infNFe']")[0]
+        expected = base64.b64encode(
+            hashlib.sha1(self.service._canonicalize_xml_dsig_node(target)).digest()
+        ).decode("ascii")
+
+        self.assertEqual(
+            root.xpath("string(//*[local-name()='DigestValue'])"), expected
+        )
+        self.assertTrue(self.service.verify_xml_signature(signed)["valid"])
+
     def test_resposta_so_autoriza_com_protocolo(self):
         without_protocol = self.service.parse_response("<ret><cStat>100</cStat><xMotivo>Autorizado</xMotivo></ret>")
         self.assertFalse(without_protocol.success)
@@ -2640,6 +2676,16 @@ class FiscalServiceTests(unittest.TestCase):
         old_value = etree.fromstring(old_signed).xpath(
             "string(//*[local-name()='SignatureValue'])"
         )
+        old_root = etree.fromstring(old_signed)
+        old_root.xpath("//*[local-name()='SignatureValue']")[0].text = base64.b64encode(
+            b"assinatura comprovadamente rejeitada"
+        ).decode("ascii")
+        rejected_value = old_root.xpath("string(//*[local-name()='SignatureValue'])")
+        old_signed = etree.tostring(
+            old_root, xml_declaration=True, encoding="utf-8", standalone=False
+        )
+        with self.assertRaisesRegex(ValueError, "Assinatura criptográfica"):
+            self.service.verify_xml_signature(old_signed)
         item = self.service.enqueue_transmission(
             operation="autorizacao", xml=old_signed, access_key=key, model="55"
         )
@@ -2676,6 +2722,7 @@ class FiscalServiceTests(unittest.TestCase):
         )
         self.assertTrue(old_value)
         self.assertTrue(new_value)
+        self.assertNotEqual(rejected_value, new_value)
         self.assertEqual(len(sign_calls), 1)
         self.assertEqual(self.service._extract_access_key_from_xml(sent), key)
 
