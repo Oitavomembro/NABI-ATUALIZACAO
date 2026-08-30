@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor
 from datetime import date, timedelta
 
 from PySide6.QtCore import QDate, QEvent, QTimer, Qt
@@ -152,6 +153,12 @@ class DailySalesDialog(QDialog):
         self._fiscal_poll_sale_id: int | None = None
         self._fiscal_poll_previous = ""
         self._fiscal_poll_ticks = 0
+        self._cancel_executor: ThreadPoolExecutor | None = None
+        self._cancel_future = None
+        self._cancel_sale_id: int | None = None
+        self._cancel_timer = QTimer(self)
+        self._cancel_timer.setInterval(150)
+        self._cancel_timer.timeout.connect(self._poll_cancel_result)
         buttons = QHBoxLayout()
         self.recover_button = QPushButton("Consultar situação na SEFAZ")
         self.retry_button = QPushButton("Reenviar NF-e")
@@ -466,17 +473,63 @@ class DailySalesDialog(QDialog):
         ) != QMessageBox.StandardButton.Yes:
             return
         try:
-            self.fiscal_gateway.cancel_fiscal_sale(
+            self._begin_cancel_wait(
                 record.sale_id, password=password, justification=reason, user="Sistema"
             )
         except Exception as error:
-            QMessageBox.warning(self, "Cancelamento fiscal não concluído", str(error))
+            QMessageBox.warning(self, "Cancelamento fiscal não iniciado", str(error))
+
+    def _begin_cancel_wait(self, sale_id: int, **kwargs) -> None:
+        if self._cancel_future is not None:
+            raise RuntimeError("Já existe um cancelamento fiscal em processamento.")
+        self._cancel_sale_id = int(sale_id)
+        self.fiscal_progress.setVisible(True)
+        self.guidance.setText(
+            "Enviando o cancelamento à SEFAZ e aguardando a confirmação do estorno local…"
+        )
+        for button in (
+            self.recover_button, self.retry_button, self.cancel_button,
+            self.refresh_button, self.preview_button, self.close_button,
+        ):
+            button.setEnabled(False)
+        self._cancel_executor = ThreadPoolExecutor(
+            max_workers=1, thread_name_prefix="NabiCodeFiscalCancel"
+        )
+        self._cancel_future = self._cancel_executor.submit(
+            self.fiscal_gateway.cancel_fiscal_sale, int(sale_id), **kwargs
+        )
+        self._cancel_timer.start()
+
+    def _poll_cancel_result(self) -> None:
+        future = self._cancel_future
+        if future is None or not future.done():
             return
-        QMessageBox.information(
-            self, "Cancelamento fiscal concluído",
-            f"Venda #{record.sale_id} cancelada na SEFAZ e revertida localmente.",
+        self._cancel_timer.stop()
+        executor = self._cancel_executor
+        self._cancel_future = None
+        self._cancel_executor = None
+        sale_id = int(self._cancel_sale_id or 0)
+        self._cancel_sale_id = None
+        if executor is not None:
+            executor.shutdown(wait=False)
+        self.fiscal_progress.setVisible(False)
+        self.guidance.setText(
+            "Documento fiscal: consulte/recupere ou cancele por esta aba. "
+            "Resposta desconhecida nunca é reenviada antes da consulta à SEFAZ."
         )
         self.reload()
+        try:
+            future.result()
+        except Exception as error:
+            QMessageBox.warning(self, "Cancelamento fiscal não concluído", str(error))
+        else:
+            QMessageBox.information(
+                self, "Cancelamento fiscal concluído",
+                f"Venda #{sale_id} cancelada na SEFAZ e revertida localmente.",
+            )
+        self._update_fiscal_action()
+        self.preview_button.setEnabled(True)
+        self.close_button.setEnabled(True)
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() != QEvent.Type.KeyPress or event.key() not in (

@@ -496,7 +496,10 @@ class FiscalSaleService:
             )
         if status == "CANCELADO":
             raise ValueError("O documento fiscal desta venda já está cancelado.")
-        outbox_exists = connection.execute(
+        # Depois que a SEFAZ aceitou o cancelamento, transmissões históricas da
+        # autorização não podem bloquear o estorno comercial. A trava da fila
+        # continua obrigatória para todos os estados anteriores à confirmação.
+        outbox_exists = status != "CANCELADO_FISCAL" and connection.execute(
             "SELECT 1 FROM sqlite_master WHERE type='table' AND name='fiscal_outbox'"
         ).fetchone()
         if outbox_exists:

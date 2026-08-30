@@ -5321,3 +5321,40 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   cadastrado, crediário e comprovante de entrega;
 - validação focada: `127 passed`, `2 subtests passed` para PDV Qt, documento PDF
   e recibo textual.
+
+## Próxima demonstração visual — login integrado ao splash
+
+- após concluir o teste fiscal de cancelamento da NF-e autorizada `#8`, criar
+  uma demonstração funcional isolada, sem substituir inicialmente o fluxo
+  oficial;
+- o splash deve iniciar e permanecer animado enquanto o sistema carrega em
+  segundo plano; após apresentar o nome NabiCode, deve exibir abaixo dele o
+  formulário de usuário e senha integrado ao próprio splash;
+- se o usuário demorar, a animação e o carregamento continuam normalmente. O
+  splash somente termina quando o login for aceito **e** o sistema estiver
+  pronto;
+- permitir lembrar apenas o nome do usuário, nunca a senha;
+- falhas de autenticação ou carregamento devem aparecer no próprio painel, sem
+  janela intermediária, flash branco ou exposição de detalhes sensíveis;
+- antes de integrar ao produto, validar a demonstração visual e funcional com
+  o proprietário. Não misturar esta etapa com as correções SEFAZ em andamento.
+
+## Cancelamento fiscal da venda #8 — estorno local pendente
+
+- o cancelamento da NF-e homologada da venda `#8` foi aceito pela SEFAZ e o
+  documento está em `CANCELADO_FISCAL`, mas a interface exibiu incorretamente
+  “cancelamento não concluído” porque a trava local considerou a transmissão
+  histórica da autorização como se ainda estivesse pendente;
+- auditoria somente leitura confirmou que o estorno comercial não ocorreu: a
+  movimentação `#8` permanece `PAGO` em `R$ 5,11`, a parcela técnica permanece
+  paga e o estoque possui apenas a saída de uma unidade, sem entrada de
+  devolução. Não reenviar o evento de cancelamento à SEFAZ;
+- a trava foi corrigida para que `CANCELADO_FISCAL` ignore exclusivamente a
+  autorização histórica já concluída e permita o estorno comercial atômico.
+  Estados anteriores continuam bloqueados;
+- a tela agora executa o cancelamento em segundo plano, mostra progresso e só
+  comunica sucesso depois da confirmação fiscal e do estorno local. Validação
+  focada: `53 passed`;
+- próximo passo operacional: com o NabiCode fechado, criar backup e concluir
+  somente o estorno local da venda `#8` pelo serviço transacional; depois
+  conferir novamente venda, parcela, estoque e documento fiscal.

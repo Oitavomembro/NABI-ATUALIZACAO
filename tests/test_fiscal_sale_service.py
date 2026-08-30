@@ -340,6 +340,28 @@ class FiscalSaleServiceTests(unittest.TestCase):
             self.service.prepare_local_cancellation(connection, 21)
         connection.close()
 
+    def test_cancelamento_fiscal_aceito_ignora_fila_historica_e_libera_estorno(self):
+        draft = FiscalSaleDraft("RES-C", "29" + "8" * 42, "55", "HOMOLOGACAO", b"<NFe/>")
+        connection = sqlite3.connect(self.db)
+        self.service.persist_draft(connection, 25, draft)
+        connection.execute(
+            "UPDATE fiscal_sale_documents SET status='CANCELADO_FISCAL',protocol='P25' WHERE sale_id=25"
+        )
+        connection.execute(
+            "UPDATE fiscal_outbox SET status='CONCLUIDO',attempts=1 WHERE access_key=?",
+            (draft.access_key,),
+        )
+        connection.commit()
+
+        self.service.prepare_local_cancellation(connection, 25)
+        connection.commit()
+
+        status = connection.execute(
+            "SELECT status FROM fiscal_sale_documents WHERE sale_id=25"
+        ).fetchone()[0]
+        connection.close()
+        self.assertEqual(status, "CANCELADO")
+
     def test_cancelamento_local_bloqueia_resposta_fiscal_desconhecida(self):
         draft = FiscalSaleDraft("RES-U", "29" + "4" * 42, "65", "HOMOLOGACAO", b"<NFe/>")
         connection = sqlite3.connect(self.db)
