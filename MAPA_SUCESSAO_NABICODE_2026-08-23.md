@@ -5726,3 +5726,29 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   realizada nesta consolidação. Remoção futura exige lista exata, zero commits
   exclusivos, árvore limpa, backup verificado, nenhum atalho/processo apontando
   para a origem e autorização explícita do proprietário.
+
+### Build probatório da candidata consolidada
+
+- para respeitar o limite de caminho do PyInstaller, foi criado a partir do
+  commit `e995dfc` um arquivo-fonte imutável e uma árvore curta de build em
+  `C:\NB\Build-e995dfc`, sem `.git`, banco ou dados locais;
+- SHA-256 do arquivo-fonte: `5908B1AA98A25D57EB10F9B2836B547F730F632A7A8558AFE77CCD8E6E03E45E`;
+- o Python global foi corretamente recusado por possuir cinco dependências
+  divergentes do lock. Foi criado wheelhouse de 72 artefatos com hashes
+  obrigatórios, validado pela cadeia de suprimentos, e ambiente Python 3.14
+  isolado com as versões exatas aprovadas;
+- distribuição onedir criada em
+  `C:\NB\Build-e995dfc\build_output\dist\NabiCode_v2_5_1`; executável com
+  23.777.360 bytes e SHA-256
+  `6ACC186E86E925927124B9A339208020A1A3E26DD2C87AA9127B25D29E3456A6`;
+- o próprio pipeline aprovou inventário da distribuição, lista de arquivos
+  proibidos, `manifest.json`, `SHA256SUMS.txt` e smoke empacotado. O trace
+  confirmou `main_qt_launcher.py`, motor canônico `pygame-ce`, perfil físico
+  `PRODUCAO` e conclusão em aproximadamente 949 ms, sem inicializar banco,
+  janela Legacy ou runtime operacional;
+- este é somente build probatório: como `VERSAO.txt` ainda contém `2.5.1`, não
+  substituir o executável/atalho antigo de mesmo nome. Antes de instalar ou
+  distribuir, incrementar versão/revisão, reconstruir no mesmo ambiente
+  isolado, repetir smoke e homologar visualmente;
+- produção fiscal permanece bloqueada conforme os portões anteriores. O smoke
+  não usou banco, certificado, XML, chave privada, licença de cliente ou SEFAZ.
