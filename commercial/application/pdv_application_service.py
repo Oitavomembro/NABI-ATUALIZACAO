@@ -53,8 +53,9 @@ class PDVApplicationService:
             raise RuntimeError("O serviço de vendas do dia não está configurado.")
         return self.daily_sales
 
-    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
-        return self._daily_sales_port().list_today()
+    def list_daily_sales(self, day: date | None = None) -> tuple[DailySaleSummary, ...]:
+        port = self._daily_sales_port()
+        return port.list_for_day(day) if day is not None else port.list_today()
 
     def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
         return self._daily_sales_port().preview_text(sale)
@@ -67,8 +68,10 @@ class PDVApplicationService:
         self._daily_sales_port().open_file(path)
         return path
 
-    def cancel_daily_sale(self, sale_id: int, *, user: str) -> None:
-        self._daily_sales_port().cancel_local(sale_id, user=user)
+    def cancel_daily_sale(
+        self, sale_id: int, *, user: str, day: date | None = None
+    ) -> None:
+        self._daily_sales_port().cancel_local(sale_id, user=user, day=day)
 
     def _suspended_sale_port(self) -> SuspendedSalePort:
         if self.suspended_sales is None:

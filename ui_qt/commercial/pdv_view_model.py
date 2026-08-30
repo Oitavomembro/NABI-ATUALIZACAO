@@ -204,8 +204,8 @@ class PDVViewModel:
         self.selected_product = None
         return suspended
 
-    def list_daily_sales(self) -> tuple[DailySaleSummary, ...]:
-        return self.application.list_daily_sales()
+    def list_daily_sales(self, day=None) -> tuple[DailySaleSummary, ...]:
+        return self.application.list_daily_sales(day)
 
     def daily_sale_preview_text(self, sale: DailySaleSummary) -> str:
         return self.application.daily_sale_preview_text(sale)
@@ -216,8 +216,8 @@ class PDVViewModel:
     def generate_daily_sale_pdf(self, sale: DailySaleSummary) -> str:
         return self.application.generate_daily_sale_pdf(sale)
 
-    def cancel_daily_sale(self, sale_id: int, *, user: str = "Sistema") -> None:
-        self.application.cancel_daily_sale(sale_id, user=user)
+    def cancel_daily_sale(self, sale_id: int, *, user: str = "Sistema", day=None) -> None:
+        self.application.cancel_daily_sale(sale_id, user=user, day=day)
 
     @staticmethod
     def _payments(data: CheckoutInput) -> tuple[Payment, ...]:

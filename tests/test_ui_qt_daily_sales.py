@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import unittest
+from datetime import date, timedelta
 from decimal import Decimal
 from unittest.mock import patch
 
@@ -10,7 +11,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 from commercial.application.query_dto import DailySaleSummary
 
 try:
-    from PySide6.QtCore import QEvent, Qt
+    from PySide6.QtCore import QDate, QEvent, Qt
     from PySide6.QtGui import QKeyEvent
     from PySide6.QtTest import QTest
     from PySide6.QtWidgets import QApplication, QDialog, QMessageBox
@@ -31,8 +32,10 @@ class _ViewModel:
         ),)
         self.previewed = []
         self.cancelled = []
+        self.requested_days = []
 
-    def list_daily_sales(self):
+    def list_daily_sales(self, day=None):
+        self.requested_days.append(day)
         return self.sales
 
     def list_budgets(self):
@@ -48,8 +51,8 @@ class _ViewModel:
     def generate_daily_sale_pdf(self, sale):
         return "C:/teste.pdf"
 
-    def cancel_daily_sale(self, sale_id, *, user="Sistema"):
-        self.cancelled.append((sale_id, user))
+    def cancel_daily_sale(self, sale_id, *, user="Sistema", day=None):
+        self.cancelled.append((sale_id, user, day))
         self.sales = ()
 
 
@@ -102,7 +105,10 @@ class DailySalesDialogTests(unittest.TestCase):
             QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
         ):
             self.dialog._cancel()
-        self.assertEqual(self.view_model.cancelled, [(41, "Sistema")])
+        self.assertEqual(
+            self.view_model.cancelled,
+            [(41, "Sistema", self.dialog.selected_day)],
+        )
         self.assertEqual(self.dialog.table.rowCount(), 0)
 
     def test_cancelamento_recusado_preserva_venda(self):
@@ -126,6 +132,22 @@ class DailySalesDialogTests(unittest.TestCase):
 
     def test_motivo_fiscal_padrao_e_problemas_tecnicos(self):
         self.assertEqual(self.dialog.DEFAULT_CANCELLATION_REASON, "PROBLEMAS TÉCNICOS")
+
+    def test_seletor_consulta_data_antiga_sem_limite_de_historico_recente(self):
+        selected = date(2019, 3, 14)
+        self.dialog.date_selector.setDate(QDate(2019, 3, 14))
+        QApplication.processEvents()
+        self.assertEqual(self.dialog.selected_day, selected)
+        self.assertEqual(self.view_model.requested_days[-1], selected)
+        self.assertIn("14/03/2019", self.dialog.title.text())
+
+    def test_botoes_navegam_e_hoje_retorna_para_data_atual(self):
+        original = self.dialog.selected_day
+        self.dialog.previous_day_button.click()
+        self.assertEqual(self.dialog.selected_day, original - timedelta(days=1))
+        self.dialog.today_button.click()
+        self.assertEqual(self.dialog.selected_day, date.today())
+        self.assertFalse(self.dialog.next_day_button.isEnabled())
 
     def test_acao_fiscal_muda_de_consulta_para_reenvio_somente_em_falha(self):
         self.view_model.sales = (DailySaleSummary(

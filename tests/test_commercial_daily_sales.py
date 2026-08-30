@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import unittest
+from datetime import date
 from decimal import Decimal
 
 from commercial.infrastructure.daily_sales_gateway import NabiCodeDailySalesGateway
@@ -10,8 +11,10 @@ class _Transactions:
     def __init__(self, rows):
         self.rows = list(rows)
         self.cancelled = []
+        self.requested_days = []
 
-    def list_sales_for_day(self):
+    def list_sales_for_day(self, *, day=None):
+        self.requested_days.append(day)
         return [dict(row) for row in self.rows]
 
     def cancel_sale(self, sale_id, *, user):
@@ -87,8 +90,13 @@ class DailySalesGatewayTests(unittest.TestCase):
         self.assertEqual(self.gateway.generate_pdf(sale), "C:/teste/venda.pdf")
         self.assertEqual(self.gateway.open_file("C:/teste/venda.pdf"), "C:/teste/venda.pdf")
 
+    def test_lista_data_antiga_delega_dia_exato_ao_banco(self):
+        sale = self.gateway.list_for_day(date(2019, 3, 14))[0]
+        self.assertEqual(sale.sale_id, 41)
+        self.assertEqual(self.transactions.requested_days[-1].date(), date(2019, 3, 14))
+
     def test_cancelamento_local_delega_uma_vez(self):
-        self.gateway.cancel_local(41, user="operador")
+        self.gateway.cancel_local(41, user="operador", day=date(2019, 3, 14))
         self.assertEqual(self.transactions.cancelled, [(41, "operador")])
 
     def test_cancelamento_fiscal_e_bloqueado_sem_chamar_backend(self):

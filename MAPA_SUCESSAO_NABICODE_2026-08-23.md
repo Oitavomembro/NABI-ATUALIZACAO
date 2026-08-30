@@ -5131,3 +5131,23 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - nenhum banco ativo, certificado real ou comunicação SEFAZ foi usado pela
   correção. O próximo teste real exige reinício na versão corrigida e somente
   um reenvio manual e acompanhado da venda nº 2.
+
+## Histórico comercial por data — 30/08/2026
+
+- a janela antes consultava exclusivamente `date.today()`, deixando vendas de
+  dias anteriores inacessíveis para reimpressão, consulta e cancelamento;
+- foi acrescentada seleção direta por calendário, com atalhos para dia
+  anterior, hoje e próximo dia, e o título passa a indicar claramente a data
+  que está sendo exibida;
+- não existe janela móvel nem limite de anos: datas antigas, como 2019, são
+  consultadas diretamente no banco um dia por vez, evitando carregar todo o
+  histórico e mantendo a pesquisa rápida;
+- vendas e orçamentos usam a mesma data escolhida, e o cancelamento local recebe
+  essa data explicitamente para não consultar ou operar acidentalmente o dia
+  atual;
+- validação focada: `157 passed`, `2 subtests passed`; suíte completa:
+  `2782 passed`, `1 skipped`, `492 subtests passed`, com uma única falha externa
+  à alteração porque o runtime temporário não contém `tcl_library` e
+  `tk_library`; `compileall` e `git diff --check` aprovados;
+- o Nabi permaneceu fechado durante a alteração e nenhum banco ativo, venda,
+  documento fiscal ou comunicação SEFAZ foi modificado.

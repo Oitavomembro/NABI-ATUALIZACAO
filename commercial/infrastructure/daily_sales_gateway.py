@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import date, datetime
 from decimal import Decimal
 
 from commercial.application.query_dto import DailySaleSummary
@@ -53,7 +53,14 @@ class NabiCodeDailySalesGateway:
         )
 
     def list_today(self) -> tuple[DailySaleSummary, ...]:
-        return tuple(self._summary(row) for row in self._transactions.list_sales_for_day())
+        return self.list_for_day(date.today())
+
+    def list_for_day(self, day: date) -> tuple[DailySaleSummary, ...]:
+        selected = datetime.combine(day, datetime.min.time())
+        return tuple(
+            self._summary(row)
+            for row in self._transactions.list_sales_for_day(day=selected)
+        )
 
     @classmethod
     def _items(cls, sale: DailySaleSummary) -> list[dict]:
@@ -102,11 +109,19 @@ class NabiCodeDailySalesGateway:
     def open_file(self, path: str) -> str:
         return self._opener.open(path)
 
-    def cancel_local(self, sale_id: int, *, user: str) -> None:
+    def cancel_local(
+        self, sale_id: int, *, user: str, day: date | None = None
+    ) -> None:
         normalized_id = int(sale_id)
-        sale = next((item for item in self.list_today() if item.sale_id == normalized_id), None)
+        sale = next(
+            (
+                item for item in self.list_for_day(day or date.today())
+                if item.sale_id == normalized_id
+            ),
+            None,
+        )
         if sale is None:
-            raise ValueError("Venda não encontrada nas vendas do dia.")
+            raise ValueError("Venda não encontrada na data selecionada.")
         if sale.cancelled:
             raise ValueError("A venda já está cancelada.")
         if sale.has_fiscal_document:

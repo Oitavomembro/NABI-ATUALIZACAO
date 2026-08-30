@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, timedelta
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
-    QAbstractItemView, QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
+    QAbstractItemView, QDateEdit, QDialog, QHBoxLayout, QInputDialog, QLabel, QLineEdit, QMessageBox,
     QPlainTextEdit, QPushButton, QTableWidget, QTableWidgetItem, QVBoxLayout,
 )
 
@@ -90,9 +90,29 @@ class DailySalesDialog(QDialog):
         self.setWindowTitle("Vendas do dia — reimpressão e cancelamento")
         self.resize(1080, 680)
         root = QVBoxLayout(self)
-        self.title = QLabel(f"VENDAS DE HOJE — {date.today():%d/%m/%Y}")
+        self.selected_day = date.today()
+        self.title = QLabel()
         self.title.setStyleSheet("font-size: 21px; font-weight: 700; color: #00d084;")
         root.addWidget(self.title)
+        date_row = QHBoxLayout()
+        self.previous_day_button = QPushButton("◀ Dia anterior")
+        self.date_selector = QDateEdit()
+        self.date_selector.setCalendarPopup(True)
+        self.date_selector.setDisplayFormat("dd/MM/yyyy")
+        self.date_selector.setDate(QDate.currentDate())
+        self.today_button = QPushButton("Hoje")
+        self.next_day_button = QPushButton("Próximo dia ▶")
+        self.previous_day_button.clicked.connect(lambda: self._move_day(-1))
+        self.today_button.clicked.connect(self._select_today)
+        self.next_day_button.clicked.connect(lambda: self._move_day(1))
+        self.date_selector.dateChanged.connect(self._date_changed)
+        date_row.addWidget(QLabel("Data das vendas"))
+        date_row.addWidget(self.previous_day_button)
+        date_row.addWidget(self.date_selector)
+        date_row.addWidget(self.today_button)
+        date_row.addWidget(self.next_day_button)
+        date_row.addStretch()
+        root.addLayout(date_row)
         search_row = QHBoxLayout()
         self.search = QLineEdit()
         self.search.setPlaceholderText(
@@ -143,15 +163,16 @@ class DailySalesDialog(QDialog):
             self.preview_button, self.close_button,
         ):
             widget.installEventFilter(self)
+        self._refresh_date_heading()
         self.reload()
         self.search.setFocus(Qt.FocusReason.OtherFocusReason)
 
     def reload(self) -> None:
         try:
-            sales = self.view_model.list_daily_sales()
+            sales = self.view_model.list_daily_sales(self.selected_day)
             budgets = tuple(
                 item for item in self.view_model.list_budgets()
-                if str(item.created_at).startswith(date.today().isoformat())
+                if str(item.created_at).startswith(self.selected_day.isoformat())
             )
         except Exception as error:
             QMessageBox.warning(self, "Vendas do dia", str(error))
@@ -159,6 +180,23 @@ class DailySalesDialog(QDialog):
         self._records = [("VENDA", item) for item in sales]
         self._records.extend(("ORÇAMENTO", item) for item in budgets)
         self._apply_filter()
+
+    def _date_changed(self, selected: QDate) -> None:
+        self.selected_day = date(selected.year(), selected.month(), selected.day())
+        self._refresh_date_heading()
+        self.reload()
+
+    def _move_day(self, offset: int) -> None:
+        selected = self.selected_day + timedelta(days=offset)
+        self.date_selector.setDate(QDate(selected.year, selected.month, selected.day))
+
+    def _select_today(self) -> None:
+        self.date_selector.setDate(QDate.currentDate())
+
+    def _refresh_date_heading(self) -> None:
+        prefix = "VENDAS DE HOJE" if self.selected_day == date.today() else "VENDAS DO DIA"
+        self.title.setText(f"{prefix} — {self.selected_day:%d/%m/%Y}")
+        self.next_day_button.setEnabled(self.selected_day < date.today())
 
     def _apply_filter(self) -> None:
         wanted = self.search.text().strip().casefold()
@@ -246,7 +284,7 @@ class DailySalesDialog(QDialog):
             self.table.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         try:
-            self.view_model.cancel_daily_sale(record.sale_id)
+            self.view_model.cancel_daily_sale(record.sale_id, day=self.selected_day)
         except Exception as error:
             QMessageBox.warning(self, "Cancelar venda", str(error))
             self.table.setFocus(Qt.FocusReason.OtherFocusReason)
