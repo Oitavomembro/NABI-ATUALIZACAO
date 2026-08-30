@@ -5095,7 +5095,14 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   preservação dos marcadores e mantém o JSON abaixo de 1 KiB;
 - validação focada: `3 passed`; regressão de outbox, worker, serviço fiscal,
   gateway e Vendas do dia: `225 passed`, `10 subtests passed`;
-- o banco TESTE ainda não foi alterado. A última resposta fiscal comprovada da
-  venda nº 2 permanece `297`; o erro local ocorreu antes do novo envio. A
-  reparação deve compactar somente o metadata auxiliar e alinhar documento/fila
-  a `FALHA 297`, mediante backup e autorização explícita.
+- após autorização explícita, foi criado o backup
+  `fichario_moveis_compartilhado.backup-fiscal-venda2-20260829-223812.db`;
+  a transação conferiu venda, fila, chave e estados esperados antes de alterar
+  somente o metadata auxiliar e alinhar documento/fila a `FALHA 297`;
+- os hashes SHA-256 de `xml_b64` e `original_xml_b64` permaneceram idênticos
+  antes/depois (`baeb67e3...04a7`), o metadata caiu para 173 bytes e o
+  `integrity_check` retornou `ok`;
+- o `VACUUM` posterior reduziu o banco TESTE de 1.153.126.400 para 69.005.312
+  bytes e um novo `integrity_check` retornou `ok`. Nenhuma venda, estoque,
+  pagamento, chave, numeração ou XML foi recriado, e nenhuma comunicação com
+  a SEFAZ ocorreu durante a reparação.
