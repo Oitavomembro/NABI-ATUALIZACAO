@@ -5043,3 +5043,23 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - validação focada: `160 passed`, `10 subtests passed`; regressão fiscal/Qt:
   `367 passed`, `12 subtests passed`. Nenhuma transmissão, alteração do banco
   ativo ou reenvio foi realizado durante a correção.
+
+## Reassinatura controlada após rejeição 297 — 29/08/2026
+
+- o primeiro reteste controlado da venda nº 2 ainda retornou 297 porque a fila
+  restaurava corretamente a autorização original, porém reutilizava o bloco
+  XMLDSig criado pela versão antiga;
+- foi confirmada uma segunda divergência em relação ao NFePHP: `SignedInfo` era
+  canonicalizado antes de `Signature` entrar no documento definitivo. O bloco
+  agora é inserido antes do cálculo de `SignatureValue`, preservando o contexto
+  exigido pela canonicalização inclusiva;
+- em reenvio de autorização que tenha falhado especificamente com cStat 297, o
+  worker valida a assinatura e sua referência, remove somente o XMLDSig
+  rejeitado e reassina a mesma NF-e com o A1 configurado. Chave, numeração,
+  venda, itens e conteúdo fiscal permanecem os mesmos;
+- assinaturas válidas em outros estados não são substituídas, e qualquer chave
+  divergente ou assinatura não única continua bloqueada;
+- validação específica: `2 passed`; regressão de serviço, fila, worker,
+  gateway e Vendas do dia: `223 passed`, `10 subtests passed`. Apenas uma venda
+  real foi reenviada antes desta segunda correção; as demais permaneceram sem
+  novo envio.

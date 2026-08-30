@@ -2604,6 +2604,59 @@ class FiscalServiceTests(unittest.TestCase):
         self.assertNotIn("soap12", inf_nfe.nsmap)
         self.assertFalse(any(str(prefix or "").startswith("ns") for prefix in inf_nfe.nsmap))
 
+    def test_reenvio_apos_297_substitui_assinatura_rejeitada(self):
+        key = "29260812345678000195550010000000011000000010"
+        unsigned = (
+            '<NFe xmlns="http://www.portalfiscal.inf.br/nfe">'
+            f'<infNFe Id="NFe{key}" versao="4.00"><ide/></infNFe>'
+            '</NFe>'
+        )
+        old_signed = self.service.sign_xml(
+            unsigned, reference_id=f"NFe{key}",
+            pfx_path=self.pfx_path, password=self.password,
+        )
+        old_value = etree.fromstring(old_signed).xpath(
+            "string(//*[local-name()='SignatureValue'])"
+        )
+        item = self.service.enqueue_transmission(
+            operation="autorizacao", xml=old_signed, access_key=key, model="55"
+        )
+        rows = self.service.list_transmission_queue()
+        rows[0].update({"status": "PENDENTE", "last_status_code": "297"})
+        self.service._save_transmission_queue(rows)
+        captured = {}
+
+        def fake_transmit(**kwargs):
+            captured["xml"] = kwargs["xml"]
+            return FiscalResponse(False, "999", "parar depois da captura")
+
+        self.service.transmit = fake_transmit
+        self.service.validate_ready = lambda **_kwargs: []
+        self.service.validate_official_xml = lambda *_args, **_kwargs: []
+        sign_calls = []
+        original_sign = self.service.sign_xml
+
+        def tracked_sign(*args, **kwargs):
+            sign_calls.append((args, kwargs))
+            return original_sign(*args, **kwargs)
+
+        self.service.sign_xml = tracked_sign
+        self.service.load_config = lambda: {
+            "default_model": "55", "environment": "HOMOLOGACAO",
+            "certificate_path": str(self.pfx_path),
+        }
+        self.service.process_transmission_queue(password=self.password, limit=1)
+
+        sent = captured["xml"]
+        self.assertTrue(self.service.verify_xml_signature(sent)["valid"])
+        new_value = etree.fromstring(sent).xpath(
+            "string(//*[local-name()='SignatureValue'])"
+        )
+        self.assertTrue(old_value)
+        self.assertTrue(new_value)
+        self.assertEqual(len(sign_calls), 1)
+        self.assertEqual(self.service._extract_access_key_from_xml(sent), key)
+
     def test_fault_soap_12_e_reduzido_a_mensagem_segura(self):
         fault = b'''<soap:Envelope xmlns:soap="http://www.w3.org/2003/05/soap-envelope">
           <soap:Body><soap:Fault><soap:Reason><soap:Text xml:lang="pt-BR">
