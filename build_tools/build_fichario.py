@@ -20,9 +20,9 @@ INNO = ROOT / "build_tools" / "inno" / "NabiCode_Fichario_Offline.iss"
 OUTPUT = ROOT / "build_output" / "fichario"
 FICHARIO_SOURCE_CONTRACT = {
     "main_fichario_qt.py": "d998c7b588069411b080a4da5b3f1eb6488de9a5fabaec0e4e1f8733153deba3",
-    "fichario": "7c542d7e39c18db53b0b4a9276f0fc81066a05f58f2c59243f36338d1ae44889",
+    "fichario": "6f995ac3750c31372b8b62cd9460d2b6508bae1e83aabd930559dd20d75f70ec",
     "commercial": "958cb34e396dc6436b07a4a4c943799b2f24c16d9fdaa889fe928a484845c1da",
-    "ui_qt/commercial": "8ead05d34625043c47656f338d2e48efb5c6fddc2739f1b2e3a0e5f539f32f5d",
+    "ui_qt/commercial": "c844c2d3e6f0fcc4490a626059677c015b7749ca8c1d8b060e075d3bfdc16936",
     "licensing": "7c331803c5bdb1ba79c8a817f7c63c9ba1f71cbbc604a27057c8b7ea00a15d0d",
 }
 

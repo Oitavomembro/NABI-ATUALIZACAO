@@ -24,8 +24,8 @@ from .widgets.money_edit import MoneyEdit
 
 class PDVWindow(QMainWindow):
     COLORS = {
-        "background": "#0d1117", "panel": "#161b22", "field": "#0d1117",
-        "border": "#30363d", "text": "#f0f6fc", "muted": "#8b949e",
+        "background": "#101419", "panel": "#1b2127", "field": "#12171c",
+        "border": "#65717d", "text": "#f0f4f8", "muted": "#aab5bf",
         "green": "#2ea043", "green_hover": "#238636", "nabi": "#00d084",
         "blue": "#1f6feb", "blue_hover": "#1158c7", "red": "#da3633",
     }
@@ -110,10 +110,15 @@ class PDVWindow(QMainWindow):
                 border-bottom: 1px solid {c['border']}; padding: 9px; font-weight: 700;
             }}
             QPushButton {{
-                background: #30363d; color: {c['text']}; border: 0; border-radius: 6px;
+                background: qlineargradient(x1:0,y1:0,x2:0,y2:1,
+                    stop:0 #4a5560, stop:0.10 #343d46, stop:1 #1b2127);
+                color: {c['text']}; border: 1px solid #697683;
+                border-bottom: 3px solid #0b0e11; border-radius: 7px;
                 min-height: 36px; padding: 0 14px; font-weight: 700;
             }}
-            QPushButton:hover {{ background: #484f58; }}
+            QPushButton:hover {{ background: #35434e; border-color:#75ddff; }}
+            QPushButton:focus {{ border:2px solid #58d5ff; }}
+            QPushButton:pressed {{ background:#141a20; border-bottom:1px solid #697683; }}
             QPushButton#primary {{ background: {c['blue']}; }}
             QPushButton#primary:hover {{ background: {c['blue_hover']}; }}
             QPushButton#checkout {{ background: {c['green']}; min-height: 50px; font-size: 15px; }}

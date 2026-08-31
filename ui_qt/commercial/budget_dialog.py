@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from commercial.application.dto import BudgetDocument
 from commercial.domain.money import MoneyCodec
+from .customer_dialog import STYLE
 
 
 class _BudgetDialogBase(QDialog):
@@ -49,11 +50,7 @@ class BudgetPreviewDialog(_BudgetDialogBase):
         self.setWindowTitle("Orçamento salvo")
         self.setModal(True)
         self.resize(660, 620)
-        self.setStyleSheet(
-            "QDialog { background:#0d1117; color:#f0f6fc; } "
-            "QLabel { color:#f0f6fc; } QTextBrowser { background:#161b22; color:#f0f6fc; "
-            "border:1px solid #30363d; } QPushButton { padding:9px 14px; }"
-        )
+        self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel("ORÇAMENTO SALVO — SEM VALOR FISCAL")
         title.setStyleSheet("font-size:20px; font-weight:700; color:#d29922;")

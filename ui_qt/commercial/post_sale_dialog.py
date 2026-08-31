@@ -5,6 +5,7 @@ from PySide6.QtWidgets import QDialog, QHBoxLayout, QLabel, QMessageBox, QPushBu
 
 from commercial.application.dto import CheckoutResult
 from commercial.domain.money import MoneyCodec
+from .customer_dialog import STYLE
 from .pdv_view_model import PDVViewModel
 
 
@@ -20,6 +21,7 @@ class PostSaleDialog(QDialog):
         self.setWindowTitle("Venda finalizada")
         self.setModal(True)
         self.resize(460, 260)
+        self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel("✓ Venda finalizada")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)

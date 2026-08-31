@@ -11,6 +11,7 @@ from PySide6.QtWidgets import (
 
 from commercial.application.dto import ProductRecord
 from commercial.domain.money import MoneyCodec
+from .customer_dialog import STYLE
 
 
 class ProductSearchDialog(QDialog):
@@ -91,22 +92,16 @@ class ProductSearchDialog(QDialog):
 
     @staticmethod
     def _style_sheet() -> str:
-        return """
-            QDialog { background: #0d1117; color: #f0f6fc; }
+        return STYLE + """
             QLabel { color: #f0f6fc; font-size: 16px; }
-            QLabel#title { color: #00d084; font-size: 27px; font-weight: 800; }
+            QLabel#title { color: #e8edf2; font-size: 27px; font-weight: 900; }
             QLabel#hint, QLabel#status { color: #c9d1d9; font-size: 16px; }
-            QLineEdit { background: #0d1117; color: #f0f6fc; border: 2px solid #484f58;
+            QLineEdit { background: #151b21; color: #f0f6fc; border: 2px solid #687581;
                 border-radius: 8px; min-height: 50px; padding: 0 14px; font-size: 19px; }
-            QLineEdit:focus { border-color: #1f6feb; }
-            QTableWidget { background: #0d1117; color: #f0f6fc; border: 2px solid #30363d;
-                gridline-color: #30363d; font-size: 18px; selection-background-color: #1f6feb; }
-            QHeaderView::section { background: #21262d; color: #f0f6fc; padding: 10px;
-                border: 0; border-right: 1px solid #30363d; font-size: 16px; font-weight: 800; }
-            QPushButton { background: #30363d; color: #f0f6fc; border: 0; border-radius: 7px;
-                min-height: 46px; padding: 0 20px; font-size: 16px; font-weight: 700; }
-            QPushButton#primary { background: #1f6feb; }
-            QPushButton:focus { border: 2px solid #ffffff; }
+            QLineEdit:focus { border-color: #58d5ff; }
+            QTableWidget { font-size: 18px; }
+            QHeaderView::section { font-size: 16px; }
+            QPushButton { min-height: 46px; padding: 0 20px; font-size: 16px; }
         """
 
     @staticmethod

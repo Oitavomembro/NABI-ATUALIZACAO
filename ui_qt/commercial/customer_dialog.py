@@ -16,16 +16,55 @@ from .widgets.money_edit import MoneyEdit
 
 
 STYLE = """
-QDialog { background:#0d1117; color:#f0f6fc; }
-QLabel { color:#f0f6fc; }
-QLineEdit,QTextEdit,QTableWidget { background:#161b22; color:#f0f6fc;
- border:1px solid #30363d; border-radius:6px; selection-background-color:#1f6feb; }
-QLineEdit { min-height:38px; padding:0 9px; }
-QPushButton { background:#30363d; color:#f0f6fc; border:0; border-radius:6px;
- min-height:38px; padding:0 14px; font-weight:700; }
-QPushButton#primary { background:#1f6feb; }
-QHeaderView::section { background:#21262d; color:#f0f6fc; padding:9px;
- border:0; border-right:1px solid #30363d; font-weight:700; }
+QMainWindow,QDialog,QWidget { background:#101419; color:#eef2f6; }
+QMenuBar { background:#20262d; color:#eef2f6; border-bottom:1px solid #65717d; }
+QMenuBar::item { padding:8px 13px; background:transparent; }
+QMenuBar::item:selected,QMenu { background:#2b333c; color:#ffffff; }
+QMenu::item { padding:8px 26px 8px 14px; }
+QMenu::item:selected { background:#35424d; border-left:3px solid #58d5ff; }
+QLabel { color:#eef2f6; background:transparent; }
+QLineEdit,QTextEdit,QPlainTextEdit,QComboBox,QDateEdit,QSpinBox,QDoubleSpinBox,
+QListWidget,QTableWidget {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #20262c,stop:1 #12171c);
+ color:#f5f7fa; border:1px solid #65717d; border-radius:7px;
+ selection-background-color:#246f91; selection-color:#ffffff;
+}
+QLineEdit,QComboBox,QDateEdit,QSpinBox,QDoubleSpinBox { min-height:40px; padding:0 10px; }
+QLineEdit:focus,QTextEdit:focus,QPlainTextEdit:focus,QComboBox:focus,
+QDateEdit:focus,QSpinBox:focus,QDoubleSpinBox:focus,QTableWidget:focus {
+ border:2px solid #58d5ff; background:#171e24;
+}
+QComboBox::drop-down,QDateEdit::drop-down { border:0; width:32px; }
+QPushButton {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,
+  stop:0 #4a5560,stop:0.08 #353e47,stop:0.55 #242b32,stop:1 #171c21);
+ color:#f4f7fa; border:1px solid #697683; border-bottom:3px solid #0b0e11;
+ border-radius:8px; min-height:40px; padding:0 16px; font-weight:800;
+}
+QPushButton:hover { border:1px solid #75ddff; background:#35434e; }
+QPushButton:focus { border:2px solid #58d5ff; border-left:5px solid #58d5ff; }
+QPushButton:pressed { padding-top:2px; background:#141a20; border-bottom:1px solid #697683; }
+QPushButton:disabled { color:#7d8790; background:#20252a; border-color:#343b42; }
+QPushButton#primary {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #2787ad,stop:1 #15506a);
+ border-color:#64d9ff; border-bottom-color:#092f40;
+}
+QPushButton#destructive,QPushButton#close {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #b74646,stop:1 #6f2020);
+ border-color:#e26b6b; border-bottom-color:#3c1010;
+}
+QHeaderView::section {
+ background:qlineargradient(x1:0,y1:0,x2:0,y2:1,stop:0 #3b444d,stop:1 #252c33);
+ color:#f4f7fa; padding:10px; border:0; border-right:1px solid #59636d;
+ border-bottom:2px solid #11161a; font-weight:800;
+}
+QTableWidget { gridline-color:#3f4851; alternate-background-color:#1b2228; }
+QTableWidget::item { padding:7px; }
+QTableWidget::item:selected { background:#255c73; color:#ffffff; }
+QScrollBar:vertical { background:#151a1f; width:13px; margin:0; }
+QScrollBar::handle:vertical { background:#56616b; min-height:30px; border-radius:6px; }
+QScrollBar::handle:vertical:hover { background:#69cce9; }
+QStatusBar { background:#20262d; color:#b8c2cc; border-top:1px solid #56616b; }
 """
 
 
@@ -272,6 +311,7 @@ class CustomerManagementDialog(QDialog):
         self.edit_button = QPushButton("Editar selecionado  [F4]")
         self.statement_button = QPushButton("Abrir ficha  [Enter]")
         self.delete_button = QPushButton("Excluir cadastro vazio  [Del]")
+        self.delete_button.setObjectName("destructive")
         close = QPushButton("Fechar  [Esc]")
         self.new_button.setObjectName("primary")
         self.new_button.clicked.connect(self.new_customer)

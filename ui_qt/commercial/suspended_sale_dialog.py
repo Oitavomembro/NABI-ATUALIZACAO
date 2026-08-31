@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
 
 from commercial.application.dto import SuspendedSale
 from commercial.domain.money import MoneyCodec
+from .customer_dialog import STYLE
 
 
 class SuspendedSaleListDialog(QDialog):
@@ -22,11 +23,7 @@ class SuspendedSaleListDialog(QDialog):
         self.setWindowTitle("Vendas suspensas")
         self.setModal(True)
         self.resize(800, 500)
-        self.setStyleSheet(
-            "QDialog { background:#0d1117; color:#f0f6fc; } "
-            "QTableWidget { background:#161b22; color:#f0f6fc; gridline-color:#30363d; } "
-            "QPushButton { padding:9px 14px; }"
-        )
+        self.setStyleSheet(STYLE)
         root = QVBoxLayout(self)
         title = QLabel("VENDAS SUSPENSAS")
         title.setStyleSheet("font-size:20px; font-weight:700; color:#58a6ff;")

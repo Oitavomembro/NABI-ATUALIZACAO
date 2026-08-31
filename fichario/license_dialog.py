@@ -8,6 +8,7 @@ from PySide6.QtWidgets import (
     QPushButton, QVBoxLayout,
 )
 
+from ui_qt.commercial.customer_dialog import STYLE
 from .license_policy import FicharioLicensePolicy
 
 
@@ -19,6 +20,7 @@ class FicharioLicenseDialog(QDialog):
         self._service = license_service
         self.setWindowTitle("Ativar NabiCode Fichário")
         self.setMinimumWidth(520)
+        self.setStyleSheet(STYLE)
         self.status = QLabel()
         self.status.setWordWrap(True)
         self.machine_code = QLabel()
@@ -26,6 +28,7 @@ class FicharioLicenseDialog(QDialog):
         self.copy_button = QPushButton("Copiar código da máquina")
         self.copy_button.setToolTip("Copia os 64 caracteres completos exigidos pelo emissor.")
         self.activate_button = QPushButton("Selecionar licença .nabilic")
+        self.activate_button.setObjectName("primary")
         self.close_button = QPushButton("Fechar")
         buttons = QHBoxLayout()
         buttons.addWidget(self.close_button)
