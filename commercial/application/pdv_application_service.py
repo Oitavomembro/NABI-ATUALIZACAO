@@ -170,12 +170,13 @@ class PDVApplicationService:
         customer = self.get_customer(budget.customer_id)
         if customer is None:
             raise ValueError("O cliente do orçamento não está mais disponível.")
-        consumed = self._budget_port().consume(budget.budget_id)
+        # Abrir uma proposta não a exclui: cancelar o atendimento não pode
+        # destruir o orçamento original. Pagamentos serão confirmados na venda.
         session.reset()
-        for item in consumed.items:
+        for item in budget.items:
             session.add_item(item)
         session.select_customer(customer.customer_id)
-        return consumed
+        return budget
 
     def budget_preview_text(self, budget: BudgetDocument) -> str:
         if self.budget_output is None:

@@ -343,7 +343,12 @@ class PDVApplicationSessionTests(unittest.TestCase):
         self.assertEqual(loaded.customer_id, 7)
         self.assertEqual(target.customer_id, 7)
         self.assertEqual(target.cart.items[0].product_id, 10)
-        self.assertEqual(application.list_budgets(), ())
+        self.assertEqual(application.list_budgets(), (budget,))
+        target.reset()
+        self.assertEqual(application.list_budgets(), (budget,))
+        application.load_budget(target, budget.budget_id)
+        self.assertEqual(target.cart.items, budget.items)
+        self.assertIsNone(target.payment_plan)
 
     def test_fronteira_de_produtos_do_pdv_e_somente_consulta(self):
         public_operations = {

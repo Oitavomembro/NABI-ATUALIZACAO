@@ -1056,6 +1056,12 @@ class PDVQtTests(unittest.TestCase):
         cls.qt = QApplication.instance() or QApplication([])
 
     def setUp(self):
+        terms_confirmation = patch(
+            "ui_qt.commercial.budget_dialog.BudgetTermsDialog.exec",
+            return_value=QDialog.DialogCode.Accepted,
+        )
+        terms_confirmation.start()
+        self.addCleanup(terms_confirmation.stop)
         # A WindowShortcut is meaningful only with one active operational
         # window. Tests from other modules must not leave a visible top-level
         # competing with the PDV under audit.
@@ -1236,6 +1242,21 @@ class PDVQtTests(unittest.TestCase):
         self.assertTrue(self.view_model.session.cart.is_empty)
         self.assertEqual(self.gateway.commands, [])
         self.assertTrue(self.window.product_search.hasFocus())
+
+    def test_cancelar_condicoes_do_orcamento_preserva_carrinho(self):
+        self._cart_with_customer()
+        items = self.view_model.session.cart.items
+        with patch(
+            "ui_qt.commercial.budget_dialog.BudgetTermsDialog.exec",
+            return_value=QDialog.DialogCode.Rejected,
+        ), patch("ui_qt.commercial.pdv_window.BudgetPreviewDialog") as preview:
+            self.window._save_budget()
+        self.assertEqual(self.view_model.session.cart.items, items)
+        self.assertEqual(self.view_model.session.customer_id, 7)
+        self.assertEqual(self.view_model.application.budgets.open, [])
+        self.assertEqual(self.gateway.commands, [])
+        preview.assert_not_called()
+        self.assertFalse(self.window._budget_saving)
 
     def test_clique_salva_orcamento_com_cliente_item_e_desconto(self):
         self._select_customer()

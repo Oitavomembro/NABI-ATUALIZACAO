@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from PySide6.QtCore import QEvent, Qt
 from PySide6.QtWidgets import (
-    QApplication, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
+    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
     QLabel, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QTextBrowser, QVBoxLayout,
 )
@@ -70,12 +70,6 @@ class BudgetTermsDialog(QDialog):
             self.entry.setFocus(Qt.FocusReason.OtherFocusReason)
             return
         self.accept()
-
-    def exec(self) -> int:
-        # Testes headless não devem aguardar uma janela modal real.
-        if QApplication.platformName().casefold() == "offscreen":
-            return int(QDialog.DialogCode.Accepted)
-        return super().exec()
 
     @property
     def terms(self) -> dict:

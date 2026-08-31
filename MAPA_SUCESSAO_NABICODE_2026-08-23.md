@@ -5909,3 +5909,18 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   passed`; `compileall` e `git diff --check` aprovados;
 - próximo portão: homologar visualmente a demonstração com o proprietário.
   Somente depois decidir se o conceito será integrado ao processo oficial.
+
+### Retomada após 74dd296 — confirmação e preservação de orçamento
+
+- removida a confirmação automática de BudgetTermsDialog em plataforma
+  offscreen. A simulação de aceite existe somente nos testes; a janela real
+  sempre exige decisão do operador;
+- cancelar as condições preserva cliente e carrinho, não salva orçamento,
+  não abre prévia e não chama checkout;
+- carregar orçamento para venda não chama mais consume: o original permanece
+  pesquisável mesmo quando o atendimento é abandonado. A sessão carrega os
+  itens sem assumir pagamentos confirmados;
+- validação combinada: `145 passed`, `2 subtests passed`. Nenhuma alteração
+  de banco ativo ou transmissão SEFAZ;
+- ainda pendentes: condições completas no PDF, vencimentos simulados,
+  acesso aos rascunhos suspensos antigos, validação visual e novo build.
