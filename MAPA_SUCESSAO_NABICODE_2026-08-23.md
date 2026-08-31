@@ -1523,3 +1523,28 @@ importação no banco de produção antes da aprovação visual e de um backup m
   permissões e todos os fluxos do Fichário R21 permanecem iguais.
 - Testes focados: `29 passed`; compileall e diff-check aprovados. Homologação
   visual nativa continua necessária no computador do proprietário.
+
+### 2026-08-31 — Bloqueio técnico contra mistura NabiCode/Fichário
+
+- causa comprovada: o Fichário reutiliza módulos de `commercial` e
+  `ui_qt/commercial`, porém a validação anterior do build verificava apenas
+  palavras fiscais proibidas no entrypoint e em `fichario/*.py`; ela não
+  conferia a identidade dos módulos compartilhados;
+- por isso, executar o build na consolidação posterior pôde transportar telas e
+  comportamentos do NabiCode para o Fichário sem interromper a geração;
+- foi acrescentado um contrato criptográfico de composição ao build do Fichário
+  R21. Ele confere inventário e conteúdo de `main_fichario_qt.py`, `fichario`,
+  `commercial`, `ui_qt/commercial` e `licensing`, incluindo inclusão, remoção ou
+  alteração de código e recursos de interface;
+- qualquer divergência agora falha fechada antes do PyInstaller, com mensagem
+  explícita de possível mistura entre edições. Alteração legítima futura exige
+  revisão deliberada e atualização conjunta do contrato;
+- prova adversarial: a composição R21 aprovada passou; o checkout consolidado
+  contaminado foi recusado com divergência em `fichario`, `commercial`,
+  `ui_qt/commercial` e `licensing`;
+- validação focada: `19 passed`; suíte completa: `1.924 passed`, `1 skipped`,
+  `2 warnings`, `412 subtests passed`; comando oficial
+  `python build_tools/build_fichario.py validate`, `compileall` e
+  `git diff --check` aprovados;
+- nenhum instalador foi gerado, nenhum artefato existente foi substituído,
+  nenhuma versão foi apagada e nenhum push foi realizado.
