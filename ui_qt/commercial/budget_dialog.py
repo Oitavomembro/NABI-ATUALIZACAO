@@ -180,6 +180,7 @@ class BudgetListDialog(_BudgetDialogBase):
         self.view_model = view_model
         self.budgets = budgets
         self.selected_budget_id: str | None = None
+        self.open_legacy_drafts = False
         self.setWindowTitle("Orçamentos salvos")
         self.setModal(True)
         self.resize(780, 480)
@@ -207,21 +208,29 @@ class BudgetListDialog(_BudgetDialogBase):
         root.addWidget(self.table, 1)
         actions = QHBoxLayout()
         self.close_button = QPushButton("Fechar")
+        self.legacy_button = QPushButton("Rascunhos antigos")
+        self.legacy_button.setToolTip("Recuperar vendas suspensas salvas na versão anterior")
         self.preview_button = QPushButton("Visualizar")
         self.load_button = QPushButton("Carregar para venda")
         actions.addWidget(self.close_button)
+        actions.addWidget(self.legacy_button)
         actions.addStretch()
         actions.addWidget(self.preview_button)
         actions.addWidget(self.load_button)
         root.addLayout(actions)
         self.close_button.clicked.connect(self.reject)
+        self.legacy_button.clicked.connect(self._open_legacy)
         self.preview_button.clicked.connect(self._preview)
         self.load_button.clicked.connect(self._load)
         self.table.doubleClicked.connect(self._preview)
         self._keyboard_widgets(
-            self.table, self.close_button, self.preview_button, self.load_button
+            self.table, self.close_button, self.legacy_button, self.preview_button, self.load_button
         )
         self.table.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _open_legacy(self) -> None:
+        self.open_legacy_drafts = True
+        self.accept()
 
     def _selected(self) -> BudgetDocument | None:
         row = self.table.currentRow()

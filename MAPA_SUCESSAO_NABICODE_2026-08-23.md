@@ -5924,3 +5924,12 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   de banco ativo ou transmissão SEFAZ;
 - ainda pendentes: condições completas no PDF, vencimentos simulados,
   acesso aos rascunhos suspensos antigos, validação visual e novo build.
+
+### Recuperação dos rascunhos antigos pela lista de orçamentos
+
+- `Orçamentos salvos` agora oferece `Rascunhos antigos`, inclusive quando não
+  existem orçamentos. A escolha abre a recuperação existente de vendas suspensas;
+- nenhuma migração, exclusão ou nova gravação é feita ao abrir essa opção.
+  A criação de novas vendas suspensas continua fora da interface;
+- regressão Qt: `119 passed`, `2 subtests passed`. PDF com condições e
+  vencimentos continua pendente; este checkpoint fecha somente o acesso legado.

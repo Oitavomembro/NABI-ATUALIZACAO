@@ -916,6 +916,14 @@ class BudgetDialogTests(unittest.TestCase):
         dialog.reject()
         self.assertEqual(output.output_calls, [("preview", "B1")])
 
+    def test_rascunhos_antigos_acessiveis_sem_orcamentos(self):
+        dialog = BudgetListDialog(self.view_model, ())
+        dialog.legacy_button.click()
+        self.assertTrue(dialog.open_legacy_drafts)
+        self.assertIsNone(dialog.selected_budget_id)
+        self.assertEqual(dialog.result(), QDialog.DialogCode.Accepted)
+        dialog.close()
+
     def test_enter_shift_enter_e_auto_repeat_na_previa(self):
         output = self.view_model.application.budget_output
         dialog = BudgetPreviewDialog(self.view_model, self.budget)

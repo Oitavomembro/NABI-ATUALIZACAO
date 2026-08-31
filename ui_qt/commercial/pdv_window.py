@@ -632,12 +632,12 @@ class PDVWindow(QMainWindow):
         except Exception as error:
             self._show_error(error)
             return
-        if not budgets:
-            QMessageBox.information(self, "Orçamentos", "Não existem orçamentos abertos.")
-            self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
-            return
         dialog = BudgetListDialog(self.view_model, budgets, self)
-        if dialog.exec() != QDialog.DialogCode.Accepted or not dialog.selected_budget_id:
+        accepted = dialog.exec() == QDialog.DialogCode.Accepted
+        if accepted and getattr(dialog, "open_legacy_drafts", False):
+            self._open_suspended_sales()
+            return
+        if not accepted or not dialog.selected_budget_id:
             self._active_item_input().setFocus(Qt.FocusReason.OtherFocusReason)
             return
         replace = not self.view_model.session.cart.is_empty
