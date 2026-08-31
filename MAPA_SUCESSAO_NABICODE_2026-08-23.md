@@ -1568,3 +1568,25 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `F98C6ECFB7D811FA88B8450A038A7A07BEC6230116CBA7BF1AA3224172A5306E`;
 - o pendrive `E:` não estava conectado no fechamento; cópia física permanece
   pendente e deve ser seguida por conferência do mesmo SHA-256.
+
+### 2026-08-31 — Fichário R21 com linguagem visual metálica unificada
+
+- implementação visual: `429d677` — `style(fichario): unify metallic visual
+  language`;
+- o tema aço/grafite/prata aprovado foi aplicado às telas compartilhadas do
+  Fichário, incluindo clientes, fichas, produtos, PDV, pesquisa ampliada,
+  orçamentos, vendas suspensas, pós-venda, recebimento e ativação;
+- a mudança é somente de apresentação: ordem, posições operacionais, textos,
+  atalhos, IDs, permissões, serviços e regras comerciais foram preservados;
+- campos e tabelas ganharam contraste metálico e foco ciano discreto; vermelho
+  permanece reservado a cancelamento, exclusão e alertas destrutivos;
+- validação focada: `136 passed, 2 subtests passed`; regressão ampliada:
+  `389 passed, 340 subtests passed`; `compileall`, contrato oficial do build e
+  `git diff --check` aprovados;
+- o executável empacotado retornou código `0` no smoke `--license-status`, contém
+  o atualizador e não contém as DLLs ICU estrangeiras que causavam `WinError 127`;
+- instalador offline final: `NabiCode_Fichario_2.5.1_Setup_Offline.exe`,
+  `123.290.755` bytes, SHA-256
+  `E1B14965E850C3397241002873780F3A9375B26685D171F66FBFFBB55611675F`;
+- homologação visual humana continua necessária nas resoluções e escalas de tela
+  usadas pelo proprietário. Nenhum push foi realizado.
