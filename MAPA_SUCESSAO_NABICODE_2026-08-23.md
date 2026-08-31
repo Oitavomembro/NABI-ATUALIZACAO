@@ -5859,3 +5859,13 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - a janela de Pagamentos passou de 820x680 para 720x590, com mínimo 640x520,
   preservando tabela, ajustes, crediário, ordem de foco e botão principal;
 - regressão Qt do PDV/Pagamentos: `116 passed`, `2 subtests passed`.
+
+### Regressão integral após os blocos comerciais
+
+- a versão consolidada com cancelamento protegido, crediário antecipado,
+  cadastro fiscal simplificado, busca rápida de clientes, orçamento direto e
+  Pagamentos compacto foi submetida à suíte integral;
+- resultado: `2856 passed`, `1 skipped`, `504 subtests passed` em 424,12
+  segundos, sem banco ativo, certificado, XML real ou comunicação SEFAZ;
+- esta evidência fecha o checkpoint comercial antes das etapas maiores de
+  dashboard, continuidade assistida do cliente e demonstração do splash.
