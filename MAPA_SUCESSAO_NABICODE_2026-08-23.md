@@ -5980,3 +5980,22 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - próximo passo: regressão integral atualizada, auditoria dos casos extensos
   e preparação do build canônico para teste acompanhado. A instalação não foi
   atualizada nem aberta, e não houve push. PDFs de QA ficam fora do commit.
+
+### Auditoria de documentos extensos e candidata 2.5.2 R23
+
+- suíte integral iniciada na base `28bd60a`: `2873 passed`, `1 skipped`,
+  `506 subtests passed`, 474,05 s. Essa execução não certifica o ajuste abaixo,
+  desenvolvido depois da coleta dos testes; nova regressão integral necessária;
+- teste adicional de 100 produtos em orçamento A4 revelou 144 linhas abaixo
+  da página. A quebra agora acompanha todas as linhas de generate_sale, não
+  apenas as condições. Descrição e preço permanecem juntos quando cabem;
+- teste de regressão verifica os 100 produtos exatamente uma vez, total,
+  coordenadas e continuidade do preço na mesma página. Amostra de cinco páginas
+  renderizada e inspecionada sem cortes. Testes documentais intermediários:
+  `55 passed`, `2 subtests passed`;
+- revisão incrementada de R22 para R23, mantendo versão 2.5.2. A instalação e
+  os atalhos permanecem intocados. Ambiente isolado anterior corresponde às
+  dependências requeridas do lock; o checkout longo exige arquivo-fonte em
+  caminho curto para empacotar. Nenhum segredo/dado ativo entra nesse arquivo;
+- próxima etapa deste checkpoint: regressão integral da R23 e build isolado
+  pelo pipeline oficial, com hash/manifesto/smoke antes de homologação humana.

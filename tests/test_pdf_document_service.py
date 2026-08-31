@@ -130,6 +130,45 @@ class PDFDocumentServiceTests(unittest.TestCase):
         self.assertTrue(all(y > 0 for y in positions))
         self.assertEqual([], self.registered)
 
+    def test_a4_budget_with_100_products_keeps_every_item_inside_page(self):
+        original = self.service._create_canvas
+        positions = []
+        pages = []
+        text_pages = []
+
+        def instrument(*args):
+            canvas, page, mm = original(*args)
+            draw = canvas.drawString
+            show = canvas.showPage
+
+            def record(x, y, text, *args, **kwargs):
+                positions.append((y, text))
+                text_pages.append((canvas.getPageNumber(), text))
+                return draw(x, y, text, *args, **kwargs)
+
+            def next_page():
+                pages.append(True)
+                return show()
+
+            canvas.drawString = record
+            canvas.showPage = next_page
+            return canvas, page, mm
+
+        with patch.object(self.service, "_create_canvas", side_effect=instrument):
+            self.service.generate_sale(
+                1, [{"qtd": 1, "item": f"PRODUTO {n:03d}", "preco": 1, "subtotal": 1}
+                    for n in range(100)], 100, "ORCAMENTO",
+            )
+        self.assertGreater(len(pages), 1)
+        self.assertTrue(all(y > 0 for y, text in positions))
+        for n in range(100):
+            self.assertEqual(sum(f"PRODUTO {n:03d}" in text for _, text in positions), 1)
+        self.assertTrue(any("TOTAL: R$ 100.00" in text for _, text in positions))
+        for index, (page_number, text) in enumerate(text_pages):
+            if "PRODUTO" in text:
+                self.assertEqual(text_pages[index + 1][0], page_number)
+                self.assertIn("R$ 1.00", text_pages[index + 1][1])
+
     def test_config_bool_accepts_legacy_and_text_values(self):
         self.config["flag"] = "sim"
         self.assertTrue(self.service.config_bool("flag", False))
