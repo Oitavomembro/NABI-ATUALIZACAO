@@ -1590,3 +1590,43 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `E1B14965E850C3397241002873780F3A9375B26685D171F66FBFFBB55611675F`;
 - homologação visual humana continua necessária nas resoluções e escalas de tela
   usadas pelo proprietário. Nenhum push foi realizado.
+
+### 2026-08-31 — Fichário: usuários individuais, seleção ampla e resumo diário
+
+- checkpoint funcional local `f14b3c1`, na branch
+  `codex/fichario-r21-licenca-completa`; retomou integralmente as alterações
+  preservadas na pausa, sem descartar histórico ou dados.
+- autorização explícita do proprietário para substituir acesso automático por
+  login individual. Cadastro, edição de nome/perfil/senha e desativação em
+  Sistema → Usuários, apenas para administrador; login permanece identificador
+  estável para preservar autoria. Último administrador ativo é protegido.
+- primeiro acesso permite definir administrador quando não há usuários ou
+  existe apenas o admin padrão legado reconhecido. Senhas personalizadas
+  existentes não são substituídas. Cancelar configuração/login não abre o shell.
+  A configuração real deve ser feita pelo proprietário, nunca por credencial
+  criada pelo agente.
+- serviço de segurança exclusivo do Fichário não usa senha mestre nem entrada
+  sem senha; lembra somente nome do login nas preferências locais. A cada
+  mutação revalida sessão, expiração, usuário ativo e perfil/permissão corrente.
+- venda grava responsável e auditoria na mesma transação do serviço oficial;
+  recebimento grava responsável/auditoria no repositório da mesma transação.
+  Texto de usuário recebido da GUI não determina autoria. Registros anteriores
+  não são reatribuídos. Troca de usuário exige fechar Vendas.
+- cards Recebido hoje e Fiado gerado hoje abrem detalhamento com usuário e ID;
+  venda de 500 com entrada 100 registra 100 recebido e 400 financiado.
+  Recebimento posterior de 40 aumenta recebido para 140 sem alterar crédito
+  originalmente gerado. Canceladas são excluídas e datas legadas/ISO aceitas.
+  Dados antigos ambíguos exibem indisponibilidade, não um total inventado.
+- seleção ampla de clientes em Vendas e Recebimentos mostra ficha, nome,
+  telefone, saldo e situação, com seleção explícita por ID, Enter/Shift+Enter/Esc
+  e recusa de auto-repeat. Busca limitada a 100 com aviso para refinar.
+- validações: 175 testes focados + 2 subtestes; regressão ampliada 387 testes +
+  335 subtestes; suíte final de autoria com ensaio real em SQLite descartável
+  11 testes aprovados. Compileall, diff-check e guard de composição aprovados.
+  Falha de auditoria reverte integralmente a venda; usuário desativado, expirado
+  ou sem permissão é recusado antes do recebimento.
+- nenhum banco ativo, chave privada ou componente de comunicação foi usado;
+  nenhuma alteração na licença. Nenhum push.
+- pendências: homologação visual e novo empacotamento. O instalador metálico
+  anterior E1B14965... permanece anterior a este checkpoint e NÃO contém login,
+  usuários, novos cards ou seletor amplo. Não o apresentar como atualizado.
