@@ -4,8 +4,9 @@ from datetime import date
 
 from PySide6.QtCore import QDate, QEvent, Qt, QTimer
 from PySide6.QtWidgets import (
-    QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout, QHBoxLayout, QLabel,
-    QLineEdit, QMessageBox, QPushButton, QTextEdit, QVBoxLayout,
+    QComboBox, QDateEdit, QDialog, QFileDialog, QFormLayout, QFrame, QGridLayout,
+    QHBoxLayout, QLabel, QLineEdit, QMessageBox, QPushButton, QTextEdit,
+    QVBoxLayout,
 )
 
 from commercial.application.action_dto import ActionContext, ActionOrigin
@@ -85,33 +86,100 @@ class CustomerReceiptDialog(QDialog):
         self.last_result = None
         self._reviewed_command = None
         self._reviewed_balance_before = None
+        self._current_balance = None
         self._saving = False
         self.setWindowTitle("Recebimento de cliente")
-        self.setMinimumWidth(650)
+        self.setMinimumSize(980, 680)
+        self.resize(1120, 760)
         self.setStyleSheet(STYLE)
         layout = QVBoxLayout(self)
-        title = QLabel("RECEBIMENTO NO FICHARIO")
-        title.setStyleSheet("font-size:22px;font-weight:800;color:#00d084")
+        layout.setContentsMargins(24, 20, 24, 20)
+        layout.setSpacing(16)
+        title = QLabel("RECEBIMENTO DE CLIENTE")
+        title.setStyleSheet("font-size:28px;font-weight:900;color:#e8edf2")
         layout.addWidget(title)
-        form = QFormLayout()
+        subtitle = QLabel(
+            "Localize a ficha, informe o pagamento e revise o novo saldo antes de salvar."
+        )
+        subtitle.setStyleSheet("font-size:14px;color:#aeb8c4")
+        layout.addWidget(subtitle)
+
+        search_card = QFrame()
+        search_card.setObjectName("receiptSearchCard")
+        search_layout = QVBoxLayout(search_card)
+        search_label = QLabel("CLIENTE / FICHA")
+        search_label.setStyleSheet("font-size:13px;font-weight:800;color:#69d8ff")
+        search_layout.addWidget(search_label)
         self.customer = QComboBox()
         self.customer.setEditable(True)
         self.customer.setInsertPolicy(QComboBox.InsertPolicy.NoInsert)
         self.customer.lineEdit().setPlaceholderText("Digite a ficha ou o nome")
+        self.customer.setMinimumHeight(46)
+        search_layout.addWidget(self.customer)
+        layout.addWidget(search_card)
+
+        content = QGridLayout()
+        content.setHorizontalSpacing(18)
+        content.setColumnStretch(0, 3)
+        content.setColumnStretch(1, 2)
+
+        payment_card = QFrame()
+        payment_card.setObjectName("receiptPaymentCard")
+        payment_layout = QVBoxLayout(payment_card)
+        self.selected_customer = QLabel("Nenhum cliente selecionado")
+        self.selected_customer.setWordWrap(True)
+        self.selected_customer.setStyleSheet("font-size:20px;font-weight:900;color:#f4f7fa")
+        payment_layout.addWidget(self.selected_customer)
+        self.balance = QLabel("DÍVIDA ATUAL\nR$ 0,00")
+        self.balance.setObjectName("receiptCurrentBalance")
+        self.balance.setStyleSheet("font-size:25px;font-weight:900;color:#ffcc55")
+        payment_layout.addWidget(self.balance)
+
+        form = QFormLayout()
+        form.setVerticalSpacing(14)
+        form.setLabelAlignment(Qt.AlignmentFlag.AlignLeft)
         self.amount = MoneyEdit()
+        self.amount.setMinimumHeight(56)
+        self.amount.setStyleSheet("font-size:26px;font-weight:900")
         self.method = QComboBox(); self.method.addItems(self.METHODS)
         self.payment_date = QDateEdit(QDate.currentDate())
         self.payment_date.setCalendarPopup(True)
         self.notes = QLineEdit()
-        form.addRow("Cliente*", self.customer)
         form.addRow("Valor recebido*", self.amount)
         form.addRow("Forma*", self.method)
         form.addRow("Data*", self.payment_date)
-        form.addRow("Observacao", self.notes)
-        layout.addLayout(form)
-        self.balance = QLabel("Saldo atual: R$ 0,00")
-        self.balance.setStyleSheet("font-size:18px;font-weight:800")
-        layout.addWidget(self.balance)
+        form.addRow("Observação", self.notes)
+        payment_layout.addLayout(form)
+        payment_layout.addStretch()
+        content.addWidget(payment_card, 0, 0)
+
+        calculation_card = QFrame()
+        calculation_card.setObjectName("receiptCalculationCard")
+        calculation_layout = QVBoxLayout(calculation_card)
+        calculation_title = QLabel("REVISÃO DO SALDO")
+        calculation_title.setStyleSheet("font-size:15px;font-weight:900;color:#69d8ff")
+        calculation_layout.addWidget(calculation_title)
+        self.balance_before_label = QLabel("Saldo anterior\nR$ 0,00")
+        self.received_value_label = QLabel("Valor informado\nR$ 0,00")
+        self.resulting_balance_label = QLabel("Novo saldo previsto\nR$ 0,00")
+        for label in (
+            self.balance_before_label,
+            self.received_value_label,
+            self.resulting_balance_label,
+        ):
+            label.setStyleSheet(
+                "font-size:20px;font-weight:850;color:#e8edf2;padding:12px;"
+                "border-bottom:1px solid #46515d"
+            )
+            calculation_layout.addWidget(label)
+        self.resulting_balance_label.setStyleSheet(
+            "font-size:25px;font-weight:900;color:#66e392;padding:14px;"
+            "border:1px solid #4a8f69;border-radius:8px"
+        )
+        calculation_layout.addStretch()
+        content.addWidget(calculation_card, 0, 1)
+        layout.addLayout(content, 1)
+
         self.review_summary = QLabel()
         self.review_summary.setWordWrap(True)
         self.review_summary.setStyleSheet(
@@ -138,6 +206,7 @@ class CustomerReceiptDialog(QDialog):
         self.customer.currentIndexChanged.connect(self._refresh_balance)
         self.customer.currentIndexChanged.connect(self._invalidate_review)
         self.amount.textChanged.connect(self._invalidate_review)
+        self.amount.textChanged.connect(self._update_calculation)
         self.method.currentIndexChanged.connect(self._invalidate_review)
         self.payment_date.dateChanged.connect(self._invalidate_review)
         self.notes.textChanged.connect(self._invalidate_review)
@@ -147,6 +216,18 @@ class CustomerReceiptDialog(QDialog):
         self.customer.lineEdit().textEdited.connect(lambda _text: self._search_timer.start())
         self._load_customers()
         self.customer.setFocus(Qt.FocusReason.OtherFocusReason)
+        self.setStyleSheet(self.styleSheet() + """
+            QFrame#receiptSearchCard, QFrame#receiptPaymentCard,
+            QFrame#receiptCalculationCard {
+                background:qlineargradient(x1:0,y1:0,x2:1,y2:1,
+                    stop:0 #252b31, stop:0.5 #171c21, stop:1 #2c333a);
+                border:1px solid #68737e; border-radius:10px; padding:10px;
+            }
+            QFrame#receiptSearchCard:focus-within,
+            QFrame#receiptPaymentCard:focus-within {
+                border:1px solid #55d6ff;
+            }
+        """)
 
     def _load_customers(self, term: str = "") -> None:
         self._customers = self.customer_service.list_customers(term, limit=100)
@@ -167,13 +248,33 @@ class CustomerReceiptDialog(QDialog):
     def _refresh_balance(self) -> None:
         customer_id = self.customer.currentData()
         if customer_id is None:
-            self.balance.setText("Saldo atual: R$ 0,00"); return
+            self._current_balance = None
+            self.selected_customer.setText("Nenhum cliente selecionado")
+            self.balance.setText("DÍVIDA ATUAL\nR$ 0,00")
+            self._update_calculation()
+            return
         details = next(
             (item for item in self._customers if item.customer_id == int(customer_id)), None
         )
         if details is None:
             details = self.customer_service.get_customer(int(customer_id))
-        self.balance.setText(f"Saldo atual: {_money(details.debt_balance)}")
+        self._current_balance = details.debt_balance
+        self.selected_customer.setText(
+            f"Ficha {details.record_number or '—'} — {details.name}"
+        )
+        self.balance.setText(f"DÍVIDA ATUAL\n{_money(details.debt_balance)}")
+        self._update_calculation()
+
+    def _update_calculation(self, *_args) -> None:
+        zero = self.amount.value() * 0
+        balance = self._current_balance if self._current_balance is not None else zero
+        received = self.amount.value()
+        resulting = max(balance - received, zero)
+        self.balance_before_label.setText(f"Saldo anterior\n{_money(balance)}")
+        self.received_value_label.setText(f"Valor informado\n{_money(received)}")
+        self.resulting_balance_label.setText(
+            f"Novo saldo previsto\n{_money(resulting)}"
+        )
 
     def eventFilter(self, watched, event) -> bool:
         if event.type() == QEvent.Type.KeyPress and event.key() in {

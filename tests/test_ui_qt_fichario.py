@@ -99,6 +99,23 @@ def test_cancelar_nao_persiste(app):
     assert actions.calls == []
 
 
+def test_recebimento_amplo_destaca_cliente_e_calculo_sem_gravar(app):
+    service = CustomerService()
+    actions = Actions(service)
+    dialog = CustomerReceiptDialog(service, actions, "operador")
+
+    assert dialog.minimumWidth() >= 980
+    assert dialog.minimumHeight() >= 680
+    assert "Ficha 7007" in dialog.selected_customer.text()
+    assert "R$ 50,00" in dialog.balance_before_label.text()
+
+    dialog.amount.set_value(Decimal("20"))
+
+    assert "R$ 20,00" in dialog.received_value_label.text()
+    assert "R$ 30,00" in dialog.resulting_balance_label.text()
+    assert actions.calls == []
+
+
 def test_ficha_e_primeiro_campo_destacado_e_pre_preenchido(app):
     dialog = CustomerEditorDialog(CustomerService())
     assert dialog._fields[0] is dialog.record
