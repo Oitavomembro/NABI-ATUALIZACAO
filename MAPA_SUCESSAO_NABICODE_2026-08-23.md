@@ -1548,3 +1548,23 @@ importação no banco de produção antes da aprovação visual e de um backup m
   `git diff --check` aprovados;
 - nenhum instalador foi gerado, nenhum artefato existente foi substituído,
   nenhuma versão foi apagada e nenhum push foi realizado.
+
+### 2026-08-31 — Fichário R21: recebimento amplo e instalador corrigido
+
+- a tela de recebimento preserva ID real, pesquisa por ficha/nome, revisão humana,
+  confirmação única, comprovante e atalhos, mas passa a usar janela ampla com
+  cliente/dívida destacados e cálculo visível do saldo previsto;
+- os quatro cartões principais permanecem na ordem aprovada e agora usam maior
+  altura e acabamento metálico grafite/prata, sem alterar suas ações;
+- o smoke do primeiro empacotamento revelou `WinError 127` em `QtCore`: o
+  PyInstaller havia recolhido `icuuc.dll`/`icudt78.dll` do Poppler externo do
+  ambiente Codex. O spec passou a excluir essas DLLs estrangeiras e o pacote
+  corrigido iniciou em caminho equivalente à instalação, retornando código 0;
+- validações: `372 passed, 340 subtests passed`; suíte completa independente
+  `1924 passed, 1 skipped, 412 subtests`; testes do spec/guard, `compileall`,
+  validação oficial e `git diff --check` aprovados;
+- instalador offline gerado sem sobrescrever release anterior:
+  `NabiCode_Fichario_2.5.1_Setup_Offline.exe`, SHA-256
+  `F98C6ECFB7D811FA88B8450A038A7A07BEC6230116CBA7BF1AA3224172A5306E`;
+- o pendrive `E:` não estava conectado no fechamento; cópia física permanece
+  pendente e deve ser seguida por conferência do mesmo SHA-256.
