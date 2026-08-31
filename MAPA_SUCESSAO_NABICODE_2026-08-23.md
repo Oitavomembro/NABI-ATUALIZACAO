@@ -6302,3 +6302,48 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   quarentena e decidir integrar ou arquivar. Não remover o diretório órfão de
   migração/restauração antes de identificar os arquivos ignorados que o Git
   protegeu.
+
+#### Triagem dos patches exclusivos preservados
+
+- **histórico/arquivar sem integração funcional**:
+  `correcoes-raiz-fichario` altera somente o mapa; `splash-nabi-teste` contém um
+  experimento, sua reversão e documentação, terminando sem mudança funcional;
+- **produto separado — não integrar no NabiCode principal**:
+  `emissor-facil-fichario`, `emissor-comercial-completo` e as correções antigas
+  do Fichário permanecem isolados até comparação com o emissor e o Fichário
+  canônicos;
+- **candidatos funcionais para auditoria e integração individual**:
+  `dossie-homologacao-fiscal`, `entrega-contabil-confiavel`,
+  `integracao-final-candidata`, `financeiro-relatorios-paginados`,
+  `fiscal-actor-sessao`, `principal-modulos-qt`,
+  `sessao-mutacoes-clientes-financeiro`, `sqlite-pragmas-fail-closed` e
+  `ux-global-segura`;
+- **alternativas visuais conflitantes — não mesclar em bloco**:
+  `administracao-qt-visual`, `clientes-produtos-qt-visual`,
+  `compras-relatorios-qt-visual`, `dashboard-qt-visual-atual`,
+  `financeiro-caixa-qt-visual`, `pdv-botoes-metalicos-atual` e
+  `shell-metalico-esqueleto-legacy`. Cada tela deve ser comparada com a versão
+  homologada atual antes de reaproveitar qualquer patch;
+- `integracao-nabi-pdv` deriva da antiga candidata e acrescenta documentação de
+  build; `integracao-final-candidata` e os snapshots `C:/NB/NCFinal`/
+  `C:/NB/NCZip` compartilham a mesma família histórica e continuam preservados
+  até validação de alcance do commit destacado `06f3c51`;
+- nenhuma dessas branches foi mesclada automaticamente. A ordem segura de
+  retomada é: SQLite fail-closed, sessão por mutação/paginação, dossiê fiscal,
+  entrega contábil, composição administrativa e somente depois alternativas
+  visuais.
+
+#### Integração individual 1 — política SQLite fail-closed
+
+- integrados somente os commits funcionais `7284065` (origem `6d9f8a1`) e
+  `d19680f` (origem `fe2098e`); o commit documental antigo não foi trazido;
+- conexões agora comprovam os valores efetivos de `foreign_keys`,
+  `journal_mode`, `synchronous`, `busy_timeout` e `query_only` antes de liberar
+  o banco; recusa ou divergência falha fechada com mensagem acionável;
+- leitura/diagnóstico usa `query_only` e não pode ser promovida a escrita;
+  backup abre a origem como leitura e mantém o destino gravável;
+- a aplicação concorrente de WAL tolera somente disputa transitória e ainda
+  exige confirmação do modo efetivo;
+- regressão dirigida de conexão, manutenção, backup/restauração, Fichário e
+  integração comercial: `65 passed`; nenhum banco ativo foi utilizado;
+- alterações locais preexistentes de splash, PDV e Fichário foram preservadas.
