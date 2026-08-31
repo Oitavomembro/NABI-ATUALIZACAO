@@ -6055,3 +6055,250 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   apenas no ensaio visual. Campos legíveis, posicionados abaixo do nome;
 - próximo passo: proprietário testar visualmente esta demonstração. Nenhum
   build/instalador/push adicional realizado nesta etapa.
+
+### Integração autorizada do login no splash — 31/08/2026
+
+- Base: `11676fb`, branch `codex/consolidacao-nabicode-atual`. Proprietário
+  aprovou o visual e autorizou integração ao código com melhorias de fluidez.
+- Startup Qt agora usa autenticação real sobre o splash original em processo
+  separado. Campos discretos surgem abaixo do nome após 8,8 s. Senha é limpa
+  após cada tentativa e nunca persistida. Readiness verifica PID do helper.
+- Sem helper funcional, há retorno ao login convencional, nunca dispensa de
+  autenticação. Primeiro cadastro e migração mantêm seus diálogos obrigatórios.
+  O splash permanece até a composição e exibição da janela principal.
+- Otimizações: cache do brilho/posição final das estrelas, composição das
+  estrelas raras em superfícies pequenas e frame Qt reutilizado nos repaints
+  da demonstração. Motor canônico original não foi modificado. Comparação de
+  pixels cobre estrelas originais versus otimizadas em diferentes instantes.
+- Regressão focal: `60 passed`, `3 subtests passed`; compileall aprovado.
+  Dois testes antigos foram atualizados para o adaptador otimizado e novos
+  metadados de readiness. Nenhum banco ativo, certificado ou SEFAZ utilizado.
+- Pendente: validação visual nativa do posicionamento/foco em Windows/DPI e
+  fluidez no computador do proprietário. Não declarar eliminação completa de
+  travadas com base apenas em testes offscreen. Suíte integral não repetida.
+- Alterações somente no código; nenhum instalador/build, push, atalho ou
+  abertura operacional. O EXE R23 anterior NÃO contém esta integração.
+
+### Auditoria posterior do início integrado — pendências confirmadas
+
+- Auditoria solicitada pelo proprietário após a integração; base permanece
+  `11676fb` com alterações locais preservadas. Nenhuma promoção autorizada.
+- Reproduzido com QTest/offscreen: um Enter na senha chama authenticate duas
+  vezes (primeiro com senha digitada, depois vazia). Conflito entre returnPressed
+  e botão padrão do QDialog. Corrigir antes de liberar: uma ação deve produzir
+  uma única tentativa, inclusive senha inválida, para não consumir o limite.
+- O timer de monitoramento para assim que o painel aparece: perda posterior do
+  helper não aciona fallback. Manter monitoramento sem reaplicar fade/foco e
+  sem impor limite de 25 s ao usuário que já está preenchendo o formulário.
+- Confirmado com QWidget instrumentado: nenhum paintEvent ocorreu quando
+  startup_ready foi chamado. O callback atual espera o helper por até 15 s
+  antes do event loop principal. Revisar transição/readiness sem espera
+  bloqueante na thread gráfica e verificar fechamento sem órfãos.
+- Testes ampliados: `90 passed`, `3 subtests passed`, uma falha de timeout
+  (20 s) em startup smoke. Não tratar como suíte aprovada. Testes anteriores
+  não cobriam Enter real nem perda do helper após revelação do painel.
+  Repetição isolada do smoke também excedeu 20 s: `1 passed`, `1 failed`,
+  `3 subtests passed`. Causa desse timeout ainda não determinada.
+- Nesta auditoria não foram aplicadas correções funcionais. Pendências devem
+  ser corrigidas/testadas antes de considerar a integração pronta. Nenhum
+  instalador, push, dado ativo, certificado ou comunicação SEFAZ.
+
+### Correções autorizadas após auditoria do splash/login
+
+- Proprietário autorizou resolver os achados. Alterações locais sobre
+  `11676fb` preservadas, sem mudança de branch ou limpeza de arquivos.
+- Botão do login não é mais autoDefault: Enter no campo senha produz uma só
+  autenticação, comprovado com QTest e senha inválida.
+- Monitoramento do helper continua após revelar o login. O prazo de 25 s vale
+  apenas para a preparação do painel, não para o usuário digitar. Encerramento
+  posterior do helper solicita o login convencional e limpa a senha.
+- Readiness é sinalizada após primeiro Paint da janela principal; o recolhimento
+  do helper ocorre em thread dedicada não daemon, com espera limitada e coleta
+  já existentes. Não há espera de até 15 s na thread gráfica nessa transição.
+- Timeout investigado com faulthandler: importação indireta de fpdf/NumPy pelo
+  núcleo/busca global. Exports de busca global agora são carregados sob demanda,
+  preservando a API. Novo teste verifica que importar startup_metrics não
+  carrega services, fpdf ou numpy. Smoke original passou sem ampliar timeout.
+- Regressão ampliada: `95 passed`, `3 subtests passed`; busca global, tarefas,
+  entrada Qt e assistente: `33 passed`. compileall e git diff --check aprovados.
+- Não foi repetida a suíte integral do produto. Falta teste visual nativo de
+  foco, DPI e fluidez com o proprietário. Não afirmar ausência absoluta de bugs.
+- Nenhum instalador/build/push ou abertura operacional; banco real e SEFAZ
+  intocados. EXE anterior continua sem essas alterações de código.
+
+### 2026-08-31 — Fichário: identificação completa para ativação remota
+
+- Causa comprovada: a ativação copiava apenas a identificação resumida NABI2,
+  incompatível com os 64 hex exigidos pelo emissor NabiCode. Não é possível
+  reconstruir o fingerprint completo a partir desse resumo.
+- Commit `2afdf5df4e8524a4f20ccfb10e2554371f59913b`: botão passa a copiar o
+  fingerprint da própria máquina por porta pública somente leitura do serviço;
+  aviso explica a diferença. Falha não altera clipboard nem anuncia sucesso.
+- Algoritmo, assinatura, chaves, vínculo, tolerância e verificações preservados.
+  Não houve leitura de segredo, banco real, emissão de licença ou transmissão.
+- Validação: 79 testes aprovados em 10,03 s (ativação Fichário, edição, serviço/
+  formato/runtime V2, UI Fichário e emissor); compileall e diff-check aprovados.
+  Primeira execução interrompida: dado sintético do teste tinha 65 caracteres e
+  abria aviso modal; fixture corrigida e aviso interceptado para evitar bloqueio.
+- Pendência explícita: empacotar/validar atualização e transferir ao outro PC;
+  executável instalado permanece antigo. Nenhum instalador, build ou push feito.
+- Alterações preexistentes de splash/login e mapa preservadas; esta entrada
+  documental permanece local para reconciliação, sem commitar texto de outra trilha.
+
+### Regressão integral da integração splash/login sobre 2afdf5d
+
+- Retomada confirmou HEAD `2afdf5d`, correção Fichário preservada e alterações
+  splash/login locais. Nenhum arquivo de ativação ou build foi modificado.
+- Suíte integral: `2892 passed`, `1 failed`, `1 skipped`, `506 subtests passed`
+  em 451,38 s. Única falha: teste de composição exigia literalmente a chamada
+  do login antigo, removida pela integração autorizada.
+- Expectativa atualizada para run_startup_login, mantendo verificações de
+  autenticação por senha, fallback convencional, setup e migração. Não houve
+  alteração funcional nesta retomada.
+- Regressão posterior composição/login/segurança/smoke: `56 passed`,
+  `3 subtests passed` em 32,45 s; git diff --check aprovado. A suíte integral
+  não foi repetida depois desta correção exclusiva de teste.
+- Próximo passo: teste visual nativo do splash/login com proprietário; validar
+  foco, DPI, demora para digitar e transição. Fonte não promovida para EXE.
+- Nenhum push, build, instalador, dado real ou SEFAZ. Alterações permanecem
+  locais, separadas do snapshot de Fichário que a outra tarefa está validando.
+
+### 2026-08-31 — Instalador Fichário corrigido e entregue no pendrive
+
+- Autorização direta do proprietário: auditar Fichário, ampliar testes de clientes
+  e pagamentos, gerar instalador se aprovado e copiar ao pendrive.
+- Snapshot limpo de build `2afdf5d`, sem mudanças locais de splash/login.
+- Rodada consolidada: `464 passed, 420 subtests passed` em 43,74 s; compileall,
+  validação oficial, lock do ambiente, pip check e diff-check aprovados.
+- Executável real abriu em APPDATA isolado, sem licença/banco; botão copiou
+  64 hex. Build oficial app + instalador exit 0; versão 2.5.2 R23.
+- Entregue em `E:\NabiCode-Fichario-2.5.2-R23-2afdf5d`, com LEIA-ME e hashes.
+  SHA-256 lido após cópia coincide: `c51ced3b490820d5806842c32df9cc6260a82f7485c1d6ad1b32c01795c2cfcd`.
+- Instalador anterior, dados e alterações da outra trilha preservados. Nenhum
+  segredo, licença de cliente, banco ou emissor levado ao pendrive; nenhum push.
+- Evidências e caminhos em `docs/AUDITORIA_FICHARIO_INSTALADOR_2026-08-31.md`.
+- Pendentes: instalação no outro PC, licença específica dele e impressão física.
+  Binário sem Authenticode; hash verifica cópia, não substitui assinatura.
+
+### Ensaio visual nativo do splash integrado
+
+- Retomada em HEAD `197d6df`, dirty anterior preservado. Criado
+  `build_tools/demo_integrated_splash_login.py`: usa o helper oficial, painel
+  integrado e sinal de primeiro desenho, com serviço sintético demo/demo.
+  Não abre banco, licença, PDV operacional nem rede; compileall aprovado.
+- Ensaio iniciado com pythonw (PID 17932). Captura nativa confirmou nome
+  NABICODE e campos discretos centralizados abaixo, sem cortes na tela atual.
+  Árvore de acessibilidade confirmou foco inicial em Usuário. Painel continuou
+  disponível após mais de 25 segundos, sem timeout do usuário.
+- Nenhuma credencial preenchida automaticamente: habilidade Computer Use
+  proíbe automação de autenticação. Proprietário deve testar demo/demo e a
+  transição manualmente. Não usar senha real nessa demonstração.
+- Validação de múltiplos DPIs/monitores e fluidez percebida continua pendente.
+  Nenhum build/instalador/push. Ensaio ficou aberto para teste do proprietário.
+
+### Correção de sobreposição reportada no ensaio nativo
+
+- Proprietário mostrou login sobre outros aplicativos e duas miniaturas na
+  barra de tarefas. Causa: WindowStaysOnTopHint no painel e HWND_TOPMOST no
+  splash, sem vínculo de proprietário entre as duas janelas.
+- Removido topo global de ambos; painel agora é Qt.Tool sem entrada própria
+  na barra de tarefas e usa setTransientParent com a janela nativa do splash.
+  Preservados foco inicial, autenticação e monitoramento do helper.
+- Regressão: `39 passed`, incluindo ausência de topmost, tipo Tool e vínculo
+  do painel ao splash; compileall e diff-check aprovados.
+- Demonstração já aberta continua com código anterior: fechar e reabrir para
+  conferir alternância entre aplicativos/barra de tarefas. Esse reteste nativo
+  está pendente; não considerar a captura anterior evidência da correção.
+- Nenhum instalador/build/push; alterações Fichário preservadas.
+
+### Correção fundamentada do minimizar/restaurar — pesquisa externa
+
+- Nova captura mostrou o painel de login órfão sobre o desktop ao minimizar o
+  splash. Proprietário exigiu pesquisa em implementações semelhantes antes de
+  novas tentativas; exigência atendida antes da correção seguinte.
+- Fontes primárias consultadas: documentação QWindow/fromWinId do Qt (observação
+  e manipulação de janela estrangeira são incidentais/dependentes da plataforma),
+  documentação Microsoft de Owned Windows/GWLP_HWNDPARENT e barra de tarefas,
+  e fonte aberta oficial qtbase/qwindowswindow.cpp. O backend Windows do Qt usa
+  transientParent como HWND owner e Qt.Tool como WS_EX_TOOLWINDOW.
+- Substituído setTransientParent sobre wrapper estrangeiro por vínculo Win32
+  explícito com SetWindowLongPtrW(GWLP_HWNDPARENT), WS_EX_TOOLWINDOW e remoção
+  de WS_EX_APPWINDOW; SetWindowPos aplica a moldura sem ativar/mover/reordenar.
+  Falha no vínculo mantém painel bloqueado até fallback seguro.
+- Regressão focal: `41 passed`; compileall e diff-check aprovados. Demonstração
+  reiniciada em PID 12204. Inspeção nativa confirmou login HWND 330058 com owner
+  395632 (splash), exstyle 0x80080 (layered + tool, sem appwindow/topmost) e
+  splash exstyle 0x10 (sem topmost).
+- Ainda requer ação humana de minimizar/restaurar e alternar aplicativos nesta
+  máquina. Não automatizar autenticação. Nenhum build/instalador/push e nenhum
+  arquivo Fichário alterado nesta correção.
+
+### Reteste humano parcial do vínculo nativo
+
+- Proprietário testou remotamente pelo celular: minimizou e restaurou a
+  demonstração e confirmou que splash/login passaram a se comportar como uma
+  única janela. Defeito do painel órfão não reapareceu nesse ensaio.
+- Login demo/demo e transição após autenticação não foram testados por limitação
+  do acesso remoto; permanecem pendentes para uso direto no computador.
+- Demonstração encerrada a pedido, sem afetar o processo Fichário.
+### 2026-08-31 — Inventário seguro de worktrees e separação de produtos
+
+- auditoria global encontrou `113` worktrees registrados no repositório;
+- `88` HEADs são ancestrais da consolidação NabiCode `197d6df`; destes, `84`
+  estão limpos e são candidatos técnicos a remover **somente o worktree** após
+  confirmar que nenhum processo os usa. Branches e histórico Git devem ser
+  preservados;
+- quatro árvores ancestrais possuem conteúdo local e ficam bloqueadas contra
+  limpeza: checkout raiz `codex/emissor-licenca-fiscal` (4 entradas),
+  `codex/dashboard-cards-detalhes` (9), `codex/auditoria-supply-chain` (4) e a
+  consolidação `codex/consolidacao-nabicode-atual` (25);
+- a trilha canônica e isolada do Fichário é
+  `codex/fichario-r21-licenca-completa@f85cecd`. Seu build possui contrato de
+  composição e recusou a consolidação NabiCode contaminada;
+- `24` worktrees não são ancestrais nem da consolidação atual nem do Fichário
+  canônico. Eles permanecem em quarentena para comparação por patch antes de
+  qualquer remoção: dois snapshots destacados (`C:/NB/NCFinal` e
+  `C:/NB/NCZip`) e as branches `administracao-qt-visual`,
+  `clientes-produtos-qt-visual`, `compras-relatorios-qt-visual`,
+  `dashboard-qt-visual-atual`, `dossie-homologacao-fiscal-ba`,
+  `dossie-homologacao-fiscal`, `correcoes-raiz-fichario`,
+  `emissor-facil-fichario`, `entrega-contabil-confiavel`,
+  `integracao-final-candidata`, `financeiro-caixa-qt-visual`,
+  `financeiro-relatorios-paginados`, `fiscal-actor-sessao`,
+  `integracao-nabi-pdv`, `emissor-comercial-completo`,
+  `pdv-botoes-metalicos-atual`, `principal-modulos-qt`,
+  `sessao-mutacoes-clientes-financeiro`, `shell-metalico-esqueleto-legacy`,
+  `splash-nabi-teste`, `sqlite-pragmas-fail-closed` e `ux-global-segura`;
+- classificação atual: **preservar** as quatro árvores sujas, o Fichário
+  canônico e as 24 divergentes; **candidatos a desregistrar** os 84 worktrees
+  limpos já integrados. Nenhuma pasta, branch, build, dado ou histórico foi
+  apagado nesta etapa;
+- próximo passo obrigatório antes da limpeza: comparar as 24 divergentes com
+  `git cherry`/`range-diff` e equivalência de patch, verificar processos abertos
+  e então remover apenas os worktrees comprovadamente redundantes, nunca as
+  branches.
+
+#### Resultado da limpeza controlada de worktrees
+
+- a comparação por `git cherry` confirmou que
+  `codex/dossie-homologacao-fiscal-ba` tinha zero patch exclusivo; as outras
+  branches divergentes possuem entre 1 e 9 patches exclusivos e foram
+  preservadas;
+- nenhum processo do NabiCode usava os worktrees candidatos no momento da
+  limpeza;
+- foram desregistrados `85` worktrees redundantes: os `84` ancestrais limpos da
+  consolidação e o dossiê BA comprovadamente equivalente. `84` diretórios foram
+  removidos normalmente pelo próprio Git;
+- `NabiCode-QT-MigracaoRestauracao-codex` foi desregistrado, mas seu diretório
+  permaneceu no disco porque continha arquivos ignorados. A recusa do Git foi
+  respeitada; não houve `--force`, exclusão recursiva nem limpeza manual;
+- restaram `28` worktrees registrados: quatro árvores com alterações locais, a
+  consolidação NabiCode, o Fichário R21 canônico e as trilhas/snapshots com
+  patches exclusivos ainda em quarentena;
+- nenhuma branch, tag, commit, backup, banco, chave, licença, instalador ou dado
+  ativo foi apagado. Branches dos worktrees removidos continuam recuperáveis no
+  histórico Git;
+- próximo passo: auditar individualmente os patches exclusivos das trilhas em
+  quarentena e decidir integrar ou arquivar. Não remover o diretório órfão de
+  migração/restauração antes de identificar os arquivos ignorados que o Git
+  protegeu.
