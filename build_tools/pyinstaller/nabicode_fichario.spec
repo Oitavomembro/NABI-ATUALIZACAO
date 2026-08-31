@@ -66,6 +66,17 @@ a = Analysis(
     runtime_hooks=[str(runtime_hook)], excludes=excludes,
     noarchive=False, optimize=0,
 )
+# Qt 6 no Windows usa a ICU fornecida pelo próprio sistema. Ambientes de build
+# podem ter Poppler/Conda no PATH; o PyInstaller então encontra ``icuuc.dll`` e
+# ``icudt*.dll`` estrangeiras e as coloca na raiz do pacote. Essas DLLs ocultam
+# as do Windows e fazem ``PySide6.QtCore`` falhar com WinError 127 antes da UI.
+foreign_icu_names = {"icuuc.dll"}
+a.binaries = type(a.binaries)(
+    item
+    for item in a.binaries
+    if Path(item[0]).name.casefold() not in foreign_icu_names
+    and not Path(item[0]).name.casefold().startswith("icudt")
+)
 pyz = PYZ(a.pure)
 options = {"icon": str(optional_icon)} if optional_icon.is_file() else {}
 exe = EXE(
