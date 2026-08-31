@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+import re
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -46,6 +47,24 @@ class DayHistory:
     @property
     def movement_total(self) -> Decimal:
         return self.sales_total + self.received_total
+
+
+@dataclass(frozen=True)
+class DailyCreditFlowEntry:
+    movement_id: int
+    timestamp: str
+    customer_name: str
+    description: str
+    received_value: Decimal
+    financed_value: Decimal
+    operator: str = ""
+
+
+@dataclass(frozen=True)
+class DailyCreditFlow:
+    entries: tuple[DailyCreditFlowEntry, ...]
+    received_total: Decimal
+    financed_total: Decimal
 
 
 class DashboardRepository:
@@ -210,3 +229,95 @@ class DashboardRepository:
             elif movement_type == "PAGAMENTO":
                 received_total += value
         return DayHistory(movements=movements, sales_total=sales_total, received_total=received_total)
+
+    def daily_credit_flow(self, *, day: datetime | None = None) -> DailyCreditFlow:
+        """Separa dinheiro recebido e crédito criado, sem contar a venda duas vezes."""
+        reference = day or datetime.now()
+        day_prefix = reference.strftime("%d/%m/%Y") + "%"
+        tables = {
+            str(row[0]).casefold()
+            for row in self.database.fetch_all(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        columns = {
+            str(row[1]).casefold()
+            for row in self.database.fetch_all("PRAGMA table_info(movimentacoes)")
+        }
+        method = "COALESCE(m.forma_pagamento,'')" if "forma_pagamento" in columns else "''"
+        amount = "COALESCE(m.valor_decimal,m.valor)" if "valor_decimal" in columns else "m.valor"
+        operator = "COALESCE(m.responsavel,'')" if "responsavel" in columns else "''"
+        financed_expression = "COALESCE(m.valor_aberto, 0)"
+        if "parcelas" in tables:
+            parcel_columns = {
+                str(row[1]).casefold()
+                for row in self.database.fetch_all("PRAGMA table_info(parcelas)")
+            }
+            parcel_value = (
+                "COALESCE(p.valor_parcela_decimal, CAST(p.valor_parcela AS TEXT), '0')"
+                if "valor_parcela_decimal" in parcel_columns
+                else "COALESCE(p.valor_parcela, 0)"
+            )
+            financed_expression = (
+                f"COALESCE((SELECT SUM(CAST({parcel_value} AS NUMERIC)) "
+                "FROM parcelas p WHERE p.movimentacao_id=m.id), m.valor_aberto, 0)"
+            )
+        rows = self.database.fetch_all(
+            f"""
+            SELECT m.id, m.data, COALESCE(c.nome, 'Cliente não encontrado'),
+                   m.tipo, COALESCE(m.descricao, ''), {amount},
+                   {financed_expression} AS valor_financiado,
+                   {method}, COALESCE(m.status_pagamento,''), {operator}
+            FROM movimentacoes m
+            LEFT JOIN clientes c ON c.id=m.cliente_id
+            WHERE (m.data LIKE ? OR m.data LIKE ?)
+              AND m.tipo IN ('COMPRA', 'PAGAMENTO')
+              AND UPPER(COALESCE(m.status_pagamento, '')) != 'CANCELADO'
+            ORDER BY m.id DESC
+            """,
+            (day_prefix, reference.strftime("%Y-%m-%d") + "%"),
+        )
+        entries: list[DailyCreditFlowEntry] = []
+        received_total = Decimal("0.00")
+        financed_total = Decimal("0.00")
+        for row in rows:
+            value = DecimalStorage.to_decimal(row[5] or 0, field="valor da movimentação")
+            movement_type = str(row[3] or "").upper()
+            if movement_type == "COMPRA":
+                payment_text = str(row[7]).upper()
+                credit_match = re.search(r"CREDI[AÁ]RIO\s+R\$\s*([0-9.,]+)", payment_text)
+                if credit_match:
+                    original_credit = DecimalStorage.to_decimal(
+                        credit_match.group(1), field="crédito original"
+                    )
+                elif payment_text and "CREDIARIO" not in payment_text and "CREDIÁRIO" not in payment_text:
+                    original_credit = Decimal("0")
+                elif str(row[8]).upper() == "PAGO" and not payment_text:
+                    raise ValueError("Venda quitada sem forma original: resumo indisponível.")
+                else:
+                    original_credit = DecimalStorage.to_decimal(row[6] or 0, field="valor financiado")
+                if not Decimal("0") <= original_credit <= value:
+                    raise ValueError("Crédito original inconsistente: resumo indisponível.")
+                financed = min(
+                    value,
+                    max(Decimal("0.00"), DecimalStorage.to_decimal(
+                        original_credit, field="valor financiado"
+                    )),
+                )
+                received = max(Decimal("0.00"), value - financed)
+            else:
+                received = value
+                financed = Decimal("0.00")
+            received_total += received
+            financed_total += financed
+            entries.append(DailyCreditFlowEntry(
+                movement_id=int(row[0]), timestamp=str(row[1] or ""),
+                customer_name=str(row[2] or "Cliente não encontrado"),
+                description=str(row[4] or ""), received_value=received,
+                financed_value=financed,
+                operator=str(row[9] or ""),
+            ))
+        return DailyCreditFlow(
+            entries=tuple(entries), received_total=received_total,
+            financed_total=financed_total,
+        )

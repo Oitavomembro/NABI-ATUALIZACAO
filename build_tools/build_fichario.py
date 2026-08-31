@@ -19,10 +19,11 @@ SPEC = ROOT / "build_tools" / "pyinstaller" / "nabicode_fichario.spec"
 INNO = ROOT / "build_tools" / "inno" / "NabiCode_Fichario_Offline.iss"
 OUTPUT = ROOT / "build_output" / "fichario"
 FICHARIO_SOURCE_CONTRACT = {
-    "main_fichario_qt.py": "d998c7b588069411b080a4da5b3f1eb6488de9a5fabaec0e4e1f8733153deba3",
-    "fichario": "6f995ac3750c31372b8b62cd9460d2b6508bae1e83aabd930559dd20d75f70ec",
-    "commercial": "958cb34e396dc6436b07a4a4c943799b2f24c16d9fdaa889fe928a484845c1da",
-    "ui_qt/commercial": "c844c2d3e6f0fcc4490a626059677c015b7749ca8c1d8b060e075d3bfdc16936",
+    "main_fichario_qt.py": "f3780a3db69eaf07189d7b957b42e31bbd3df929699d1491ae68b38071e83710",
+    "fichario": "1b9aa15f898def2d4fcc53abb89e1d4aff8f912215af7c1323b93aa2186a41bd",
+    "commercial": "a6f21f3bcd951f0856356a0a6cb09edd2799914eb968a81fad7b2c0787b0f9d7",
+    "ui_qt/commercial": "6870f1e089556958da41e5c4ef4555025bc09dbfed9ccafc68a1e0fd440e2f20",
+    "repositories/dashboard_repository.py": "4e24781a566703b99128478db86a2e789dd460f72a7fe06b24c39b896f94d93d",
     "licensing": "7c331803c5bdb1ba79c8a817f7c63c9ba1f71cbbc604a27057c8b7ea00a15d0d",
 }
 

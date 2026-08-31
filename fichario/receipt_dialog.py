@@ -13,6 +13,7 @@ from commercial.application.action_dto import ActionContext, ActionOrigin
 from commercial.application.customer_dto import CustomerReceiptCommand
 from ui_qt.commercial.customer_dialog import STYLE, _money
 from ui_qt.commercial.widgets.money_edit import MoneyEdit
+from .customer_picker import CustomerPickerDialog
 
 
 class CustomerReceiptProofDialog(QDialog):
@@ -116,6 +117,9 @@ class CustomerReceiptDialog(QDialog):
         self.customer.lineEdit().setPlaceholderText("Digite a ficha ou o nome")
         self.customer.setMinimumHeight(46)
         search_layout.addWidget(self.customer)
+        self.browse_customers = QPushButton("Escolher cliente — ver fichas e saldos")
+        self.browse_customers.clicked.connect(self._choose_customer)
+        search_layout.addWidget(self.browse_customers)
         layout.addWidget(search_card)
 
         content = QGridLayout()
@@ -228,6 +232,21 @@ class CustomerReceiptDialog(QDialog):
                 border:1px solid #55d6ff;
             }
         """)
+
+    def _choose_customer(self) -> None:
+        self._search_timer.stop()
+        dialog = CustomerPickerDialog(self.customer_service, self)
+        if dialog.exec() != QDialog.DialogCode.Accepted:
+            return
+        item = dialog.selected_customer
+        self.customer.blockSignals(True)
+        self._customers = (item,)
+        self.customer.clear()
+        self.customer.addItem(f"Ficha {item.record_number or '-'} - {item.name}", item.customer_id)
+        self.customer.blockSignals(False)
+        self._invalidate_review()
+        self._refresh_balance()
+        self.amount.setFocus()
 
     def _load_customers(self, term: str = "") -> None:
         self._customers = self.customer_service.list_customers(term, limit=100)

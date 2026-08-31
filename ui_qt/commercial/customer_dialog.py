@@ -241,7 +241,12 @@ class CustomerManagementDialog(QDialog):
         title.setStyleSheet("font-size:23px;font-weight:800;color:#00d084")
         layout.addWidget(title)
         if filter_title:
-            active_filter = QLabel(f"Filtro ativo: {filter_title}")
+            active_filter = QLabel(
+                f"{filter_title}\n"
+                "Escolha um cliente para conferir saldo, contato, compras e parcelas. "
+                "Pressione Enter ou dê dois cliques para abrir a ficha completa."
+            )
+            active_filter.setWordWrap(True)
             active_filter.setStyleSheet("font-size:16px;font-weight:800;color:#ffd33d")
             layout.addWidget(active_filter)
         search_row = QHBoxLayout()
@@ -309,7 +314,7 @@ class CustomerManagementDialog(QDialog):
         buttons = QHBoxLayout()
         self.new_button = QPushButton("Novo cliente  [F3]")
         self.edit_button = QPushButton("Editar selecionado  [F4]")
-        self.statement_button = QPushButton("Abrir ficha  [Enter]")
+        self.statement_button = QPushButton("Abrir ficha e histórico  [Enter]")
         self.delete_button = QPushButton("Excluir cadastro vazio  [Del]")
         self.delete_button.setObjectName("destructive")
         close = QPushButton("Fechar  [Esc]")
@@ -423,7 +428,11 @@ class CustomerManagementDialog(QDialog):
         if customer is None:
             self.selected_details.setText("Selecione um cliente para ver os dados.")
             return
-        parts = [f"Ficha {customer.record_number or '—'} — {customer.name}"]
+        situation = "EM DIA" if customer.debt_balance <= Decimal("0.005") else "DEVENDO"
+        parts = [
+            f"Ficha {customer.record_number or '—'} — {customer.name}",
+            f"Saldo: {_money(customer.debt_balance)} ({situation})",
+        ]
         if customer.address.strip(): parts.append(f"Endereço: {customer.address.strip()}")
         if customer.cpf.strip(): parts.append(f"CPF: {customer.cpf.strip()}")
         if customer.phone.strip(): parts.append(f"Telefone: {customer.phone.strip()}")

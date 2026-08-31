@@ -29,7 +29,7 @@ from .suspended_sale_gateway import NabiCodeSuspendedSaleGateway
 from .daily_sales_gateway import NabiCodeDailySalesGateway
 
 
-def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> CommercialContainer:
+def create_commercial_container(database: DatabaseManager, *, pdf_dir=None, transaction_factory=PDVTransactionService, finance_repository_factory=FinanceiroRepository) -> CommercialContainer:
     """Compõe o backend comercial atual sem importar qualquer interface."""
 
     products = ProdutoService(
@@ -38,13 +38,13 @@ def create_commercial_container(database: DatabaseManager, *, pdf_dir=None) -> C
         CadastroAuxiliarRepository(database),
     )
     stock = EstoqueService(EstoqueRepository(database))
-    finance_repository = FinanceiroRepository(database)
+    finance_repository = finance_repository_factory(database)
     finance = FinanceiroService(finance_repository)
     purchase = CompraService(
         CompraRepository(database), EstoqueRepository(database), finance
     )
     pdv = PDVService(database.connect)
-    transaction = PDVTransactionService(
+    transaction = transaction_factory(
         database.connect,
         estoque_service=stock,
         financeiro_service=finance,

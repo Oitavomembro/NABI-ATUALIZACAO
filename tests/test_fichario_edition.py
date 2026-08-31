@@ -50,12 +50,12 @@ def test_licenca_ausente_abre_ativacao_antes_do_banco():
     assert "self._service.activation_fingerprint()" in dialog
 
 
-def test_fichario_licenciado_abre_sessao_local_sem_tela_de_login():
+def test_fichario_licenciado_exige_sessao_individual():
     source = (Path(__file__).parents[1] / "main_fichario_qt.py").read_text(encoding="utf-8")
-    assert 'security.start_session_without_password("admin")' in source
-    assert "LoginDialog(" not in source
+    assert 'security.start_session_without_password("admin")' not in source
+    assert "LoginDialog(" in source
     assert source.index("policy.operational") < source.index(
-        'security.start_session_without_password("admin")'
+        'login = LoginDialog(security)'
     )
 
 

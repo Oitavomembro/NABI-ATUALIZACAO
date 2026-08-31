@@ -126,6 +126,8 @@ def test_filtro_do_card_usa_provedor_limitado_ao_segmento(app):
     assert calls == [("", 60)]
     assert service.calls == []
     assert dialog.table.item(0, 1).text() == "CLIENTE DO GRUPO"
+    assert dialog.statement_button.text() == "Abrir ficha e histórico  [Enter]"
+    assert "Saldo:" in dialog.selected_details.text()
     dialog.search.setText("maria")
     dialog.reload()
     assert calls[-1] == ("maria", 200)
