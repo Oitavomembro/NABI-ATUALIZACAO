@@ -5933,3 +5933,26 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   A criação de novas vendas suspensas continua fora da interface;
 - regressão Qt: `119 passed`, `2 subtests passed`. PDF com condições e
   vencimentos continua pendente; este checkpoint fecha somente o acesso legado.
+
+### PDF de orçamento — condições estimadas e textos sem cortes
+
+- base desta etapa: `7b4e814`, branch `codex/consolidacao-nabicode-atual`;
+- o PDF agora recebe as mesmas condições estimadas da prévia: forma de
+  pagamento, entrada proposta, saldo proposto e quantidade de parcelas;
+  o aviso explicita que isso não é recebimento. Vencimentos ainda não incluídos;
+- orçamento não exibe o saldo devedor existente na ficha. O parâmetro de
+  condições estimadas é recusado em documentos que não sejam ORCAMENTO;
+- a inspeção visual detectou cortes no título e no aviso. A quebra do título
+  e das linhas do PDF passou a considerar a largura real da fonte;
+- amostra sintética de 80 mm gerada por `build_tools/validate_budget_pdf.py`,
+  renderizada e inspecionada sem cortes. Arquivos de QA em `tmp/pdfs/` não
+  integram o commit e não são documentos de clientes;
+- regressão documental/orçamentos: `64 passed`, `2 subtests passed`;
+  `compileall` e `git diff --check` aprovados. Testes de limites horizontais
+  e conteúdo cobrem A4 e 80 mm, sem registro de recebimento ou documento real;
+- nenhuma abertura do aplicativo, alteração de banco ativo, comunicação SEFAZ,
+  build ou push. A instalação de uso ainda não foi atualizada nesta etapa;
+- próxima retomada: vencimentos simulados com divisão exata de centavos e
+  persistência compatível com orçamentos antigos; validar propostas extensas
+  antes de liberar a impressão de todo o cronograma. Depois, nova regressão
+  integral, build e validação acompanhada. Não considerar backlog encerrado.

@@ -3,6 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from services.pdf_document_service import PDFDocumentService
@@ -50,6 +51,51 @@ class PDFDocumentServiceTests(unittest.TestCase):
         self.assertEqual("Joao_da_Silva", self.service.safe_name("João da Silva"))
         self.assertEqual("A4", self.service.document_model("entrega"))
         self.assertEqual("A4", self.service.document_model("recibo_desconhecido"))
+
+    def test_condicoes_estimadas_recusadas_em_comprovante_de_venda(self):
+        with self.assertRaisesRegex(ValueError, "exclusivas de orçamento"):
+            self.service.generate_sale(1, [], 10, "VENDA", budget_terms="simulação")
+
+    def test_budget_terms_fit_paper_and_do_not_show_existing_debt(self):
+        from reportlab.pdfbase.pdfmetrics import stringWidth
+
+        for model in ("A4", "Térmica 80 mm"):
+            with self.subTest(model=model):
+                self.config["modelo_recibo"] = model
+                drawn = []
+                create_canvas = self.service._create_canvas
+
+                def recording_canvas(*args):
+                    canvas, page, mm = create_canvas(*args)
+                    for method, centered in (("drawString", False), ("drawCentredString", True)):
+                        original = getattr(canvas, method)
+
+                        def record(x, y, text, *extra, original=original, centered=centered, **kwargs):
+                            length = stringWidth(text, canvas._fontname, canvas._fontsize)
+                            left = x - length / 2 if centered else x
+                            self.assertGreaterEqual(left, 0)
+                            self.assertLessEqual(left + length, page[0] + 0.01)
+                            self.assertGreater(y, 0)
+                            drawn.append(text)
+                            return original(x, y, text, *extra, **kwargs)
+
+                        setattr(canvas, method, record)
+                    return canvas, page, mm
+
+                with patch.object(self.service, "_create_canvas", side_effect=recording_canvas):
+                    self.service.generate_sale(
+                        1, [{"qtd": 2, "item": "PRODUTO", "preco": 50, "subtotal": 100}],
+                        100, "ORCAMENTO", budget_terms=(
+                            "CONDIÇÃO ESTIMADA (NÃO É RECEBIMENTO)\n"
+                            "Forma: CREDIÁRIO\nEntrada: R$ 10,00\nSaldo estimado: R$ 90,00 em 3x"
+                        ),
+                    )
+                text = " ".join(drawn)
+                self.assertIn("NÃO É RECEBIMENTO", text)
+                self.assertIn("SEM VALOR FISCAL", text)
+                self.assertIn("90,00 em 3x", text)
+                self.assertNotIn("Saldo atual da ficha", text)
+                self.assertEqual([], self.registered)
 
     def test_config_bool_accepts_legacy_and_text_values(self):
         self.config["flag"] = "sim"

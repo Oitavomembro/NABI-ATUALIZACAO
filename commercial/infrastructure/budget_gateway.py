@@ -109,9 +109,13 @@ class NabiCodeBudgetGateway:
         base = self._receipts.build_sale_text(
             budget.customer_id, self._receipt_items(budget), budget.total, "ORCAMENTO"
         )
+        return f"{base.rstrip()}\n\n{self._terms_text(budget)}"
+
+    @staticmethod
+    def _terms_text(budget: BudgetDocument) -> str:
         financed = budget.total - budget.entry_amount
         return (
-            f"{base.rstrip()}\n\nCONDIÇÃO ESTIMADA (NÃO É RECEBIMENTO)\n"
+            "CONDIÇÃO ESTIMADA (NÃO É RECEBIMENTO)\n"
             f"Forma: {budget.payment_method}\n"
             f"Entrada: R$ {MoneyCodec.format_br(budget.entry_amount)}\n"
             f"Saldo estimado: R$ {MoneyCodec.format_br(financed)} em "
@@ -134,6 +138,7 @@ class NabiCodeBudgetGateway:
             budget.total,
             "ORCAMENTO",
             document_id=None,
+            budget_terms=self._terms_text(budget),
         )
 
     def open_file(self, path: str) -> str:

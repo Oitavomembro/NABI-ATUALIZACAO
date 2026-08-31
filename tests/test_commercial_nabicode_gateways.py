@@ -272,6 +272,8 @@ class NabiCodeGatewayTests(unittest.TestCase):
         self.assertEqual(receipts.calls[0][0][3], "ORCAMENTO")
         self.assertEqual(pdf.calls[0][0][3], "ORCAMENTO")
         self.assertIsNone(pdf.calls[0][1]["document_id"])
+        self.assertIn("NÃO É RECEBIMENTO", pdf.calls[0][1]["budget_terms"])
+        self.assertIn("15,00 em 3x", pdf.calls[0][1]["budget_terms"])
         self.assertEqual(gateway.list_open()[0].budget_id, "B1")
         self.assertEqual(gateway.consume("B1").budget_id, "B1")
         self.assertEqual(gateway.list_open(), ())

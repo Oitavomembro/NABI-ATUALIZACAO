@@ -17,6 +17,7 @@ from services.document_rendering import (
     config_bool,
     profile_for_pdf_model,
     wrap_lines,
+    wrap_pdf_lines,
 )
 
 
@@ -161,7 +162,10 @@ class PDFDocumentService:
         document_type: str,
         document_id: int | None = None,
         destination: str | os.PathLike[str] | None = None,
+        *, budget_terms: str = "",
     ) -> str:
+        if budget_terms and document_type != "ORCAMENTO":
+            raise ValueError("Condições estimadas são exclusivas de orçamento.")
         customer = self._customer(customer_id)
         name, code, record, phone, address, reference, balance = customer
         final_consumer = self._is_final_consumer(name=name, code=code, record=record)
@@ -189,6 +193,10 @@ class PDFDocumentService:
             footer=footer,
             payment_plan=payment_plan,
         )
+        if budget_terms and model != "A4":
+            estimated_height += sum(
+                self._wrapped_line_count(part, model) for part in budget_terms.splitlines()
+            ) * 5.5 + 8
         canvas, (width, height), mm = self._create_canvas(path, model, estimated_height)
         margin, font, size, step = self._render_config(mm, minimum_size=7)
         y = self._draw_header(canvas, width, height - margin, mm, model, title)
@@ -226,7 +234,7 @@ class PDFDocumentService:
         renderer.y = y
         line(f"TOTAL: R$ {self._money(total, field='total do documento')}", True)
         financed = bool(payment_plan and payment_plan.get("financiado"))
-        if not final_consumer or financed:
+        if document_type != "ORCAMENTO" and (not final_consumer or financed):
             line(f"Saldo atual da ficha: R$ {self._money(balance, field='saldo da ficha')}")
         if payment_plan:
             y -= 3
@@ -249,6 +257,11 @@ class PDFDocumentService:
                     f"Saldo financiado: R$ {self._money(payment_plan['valor_aberto'], field='saldo financiado')}",
                     True,
                 )
+        if budget_terms:
+            y -= step / 2
+            renderer.y = y
+            for part in budget_terms.splitlines():
+                line(part)
         if footer:
             y -= step / 2
             for part in footer.splitlines():
@@ -709,9 +722,12 @@ class PDFDocumentService:
         y -= 2
         canvas.line(margin, y, width - margin, y)
         y -= 13
-        canvas.setFont(bold_font, max(9, title_size - 2))
-        canvas.drawCentredString(center, y, title)
-        return y - 16
+        heading_size = max(9, title_size - 2)
+        canvas.setFont(bold_font, heading_size)
+        for heading_line in wrap_pdf_lines(title, bold_font, heading_size, available_width):
+            canvas.drawCentredString(center, y, heading_line)
+            y -= heading_size + 3
+        return y
 
     def _draw_qr_if_enabled(self, canvas: Any, width: float, y: float, margin: float, mm: float, content: str) -> float:
         if not self.config_bool("impressao_qrcode", True):

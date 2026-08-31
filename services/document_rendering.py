@@ -91,6 +91,26 @@ def bold_font_name(font: str) -> str:
     return known.get(normalized, normalized)
 
 
+def wrap_pdf_lines(text: Any, font: str, size: float, width: float) -> list[str]:
+    """Quebra pelo tamanho real da fonte, inclusive palavras sem espaços."""
+    from reportlab.pdfbase.pdfmetrics import stringWidth
+
+    result: list[str] = []
+    for paragraph in normalize_newlines(text).split("\n"):
+        remaining = paragraph
+        while remaining and stringWidth(remaining, font, size) > width:
+            end = 1
+            while end < len(remaining) and stringWidth(remaining[:end + 1], font, size) <= width:
+                end += 1
+            space = remaining.rfind(" ", 0, end + 1)
+            if space > 0:
+                end = space
+            result.append(remaining[:end])
+            remaining = remaining[end:].lstrip()
+        result.append(remaining)
+    return result
+
+
 class PDFLineRenderer:
     """Renderiza linhas quebradas em um canvas ReportLab mantendo o cursor Y."""
 
@@ -130,6 +150,10 @@ class PDFLineRenderer:
             break_long_words=break_long_words,
         )
         selected_font = bold_font_name(self.font) if bold else self.font
+        page_size = getattr(self.canvas, "_pagesize", None)
+        if isinstance(page_size, (tuple, list)) and isinstance(page_size[0], (int, float)):
+            available = max(1.0, page_size[0] - 2 * self.margin)
+            lines = [part for line in lines for part in wrap_pdf_lines(line, selected_font, self.size, available)]
         self.canvas.setFont(selected_font, self.size)
         for line in lines:
             if centered:
