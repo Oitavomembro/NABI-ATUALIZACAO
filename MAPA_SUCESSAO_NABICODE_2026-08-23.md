@@ -1514,3 +1514,12 @@ importação no banco de produção antes da aprovação visual e de um backup m
 - Próximo passo: gerar novo instalador a partir desta branch limpa, testar o
   binário e substituir somente a entrega reprovada no pendrive, preservando o
   instalador R21 anterior. Nenhum dado real, licença, segredo ou push.
+
+#### Ajuste visual autorizado antes do instalador
+
+- Proprietário pediu cartões principais abaixo dos resumos coloridos maiores.
+  Commit `c0bd9a3` alterou somente altura, fonte, padding, raio e estados
+  hover/foco dos quatro cartões existentes. Ordem, rótulos, callbacks,
+  permissões e todos os fluxos do Fichário R21 permanecem iguais.
+- Testes focados: `29 passed`; compileall e diff-check aprovados. Homologação
+  visual nativa continua necessária no computador do proprietário.
