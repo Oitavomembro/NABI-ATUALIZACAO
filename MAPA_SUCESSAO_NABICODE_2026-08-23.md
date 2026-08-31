@@ -5999,3 +5999,35 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   caminho curto para empacotar. Nenhum segredo/dado ativo entra nesse arquivo;
 - próxima etapa deste checkpoint: regressão integral da R23 e build isolado
   pelo pipeline oficial, com hash/manifesto/smoke antes de homologação humana.
+
+### Evidência da candidata R23 — build e regressão
+
+- commit-fonte imutável: `76f767de80202ce57ca1952a8982795af7742bc4`;
+- suíte integral dessa candidata: `2873 passed`, `1 skipped`, `506 subtests
+  passed`, com uma falha em `test_source_audit_accepts_checkpoint_tree`: o teste
+  ainda exigia R22. Expectativa atualizada para R23, sem alteração funcional;
+  regressão posterior de empacotamento/versão/entrada Qt/PDF: `55 passed`,
+  `4 subtests passed`. Não foi executada terceira suíte integral após essa
+  correção exclusiva do teste. compileall e git diff --check aprovados;
+- arquivo-fonte: `C:\NB\Build-76f767d.zip`, SHA-256
+  `6E810F183784548279ADCED4E4C63F49E52ED27C0D5DA3B43B42782B97C94680`;
+- distribuição: `C:\NB\Build-76f767d\build_output\dist\NabiCode_v2_5_2`;
+  executável SHA-256
+  `00F8212719659E863CC57EF28D1969D3E42B6B45A8D2E7873FCE41D6303F5EEB`;
+- build reutilizou apenas o ambiente isolado de dependências do build anterior,
+  com versões verificadas contra o lock atual, e fonte extraída do commit novo.
+  Nenhum arquivo de aplicação antigo foi usado como fonte. Lock fonte/build:
+  `DC6341E2DA9327D5B49980878C455C79B87B1CE0AFEF1FDBF4B74E56BC6E2234`;
+- pipeline aprovou manifesto, SHA256SUMS, arquivos proibidos e smoke empacotado.
+  Revisão interna conferida como 23. Trace confirmou main_qt_launcher, motor
+  pygame-ce e conclusão em 1137,927 ms, sem banco ou runtime operacional;
+- marcador físico do pacote permanece PRODUCAO por contrato do empacotamento:
+  isso não autoriza produção fiscal. NÃO abrir para operação antes de preparar
+  explicitamente a homologação no perfil TESTE, sem modificar dados reais;
+- aviso de coleta opcional `brazilfiscalreport.danfse` por ausência de qrcode
+  foi observado: não há uso desse módulo no fluxo NF-e/NFC-e auditado. Não
+  considerar este build prova de suporte a NFS-e;
+- nenhum instalador novo, instalação, abertura de PDV, alteração de atalho,
+  exclusão de versões ou push. Artefato é candidato a teste acompanhado, não
+  versão promovida. Próximo passo: preparar/validar perfil TESTE e testar as
+  telas comerciais/orçamento, mantendo produção fiscal bloqueada.

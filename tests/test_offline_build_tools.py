@@ -26,7 +26,7 @@ def canonical_engine_event() -> dict:
 def test_source_audit_accepts_checkpoint_tree() -> None:
     assert build_windows.validate_source(ROOT) == []
     assert build_windows.read_version(ROOT) == "2.5.2"
-    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "22"
+    assert (ROOT / "REVISAO.txt").read_text(encoding="utf-8").strip() == "23"
 
 
 def test_wheelhouse_catalog_never_hashes_its_own_output_file():
