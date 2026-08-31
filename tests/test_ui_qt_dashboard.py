@@ -51,8 +51,20 @@ def test_worker_preenche_cartoes_e_historico_legacy():
     assert dialog.cards["products"][1].minimumHeight() >= 104
     assert "qlineargradient" in dialog.cards["products"][1].styleSheet()
     assert "border-bottom:5px" in dialog.cards["products"][1].styleSheet()
+    assert "Abrir detalhes" in dialog.cards["cash"][1].text()
     assert dialog.table.item(0, 0).text() == "7"
     assert dialog.table.item(0, 4).text() == "MESA"
+    dialog.close()
+
+
+def test_card_caixa_abre_modulo_oficial_sem_criar_detalhe_paralelo():
+    opened = []
+    dialog = DashboardDialog(
+        Mock(), worker_pool=Pool(), cash_opener=lambda: opened.append("caixa")
+    )
+    assert dialog.open_detail("cash") is True
+    assert opened == ["caixa"]
+    assert "cash" not in dialog._detail_dialogs
     dialog.close()
 
 

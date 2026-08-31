@@ -5881,3 +5881,15 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   numeração ou transmissão fiscal;
 - regressão PDV/clientes/shell/Nabi: `163 passed`, `2 subtests passed`;
   `compileall` e `git diff --check` aprovados.
+
+### Card Caixa separado do histórico comercial
+
+- o dashboard recebeu um card próprio `CAIXA`, com resumo curto e abertura do
+  módulo oficial de Caixa; não foi criada consulta, tela ou totalização paralela;
+- o histórico comercial permanece baseado apenas em `movimentacoes` (compras e
+  pagamentos). Abertura, suprimento, sangria, saída documentada e fechamento
+  continuam exclusivamente nas tabelas e no serviço transacional do Caixa;
+- o card não duplica faturamento nem recebimentos e respeita a navegação e a
+  autorização já aplicadas pelo shell ao módulo `caixa`;
+- regressão repositório/aplicação/dashboard/composição/shell: `76 passed`;
+  `compileall` e `git diff --check` aprovados.

@@ -41,10 +41,11 @@ class DashboardDialog(QDialog):
 
     def __init__(
         self, application, parent=None, *, worker_pool=None, page_size: int = 50,
-        embedded: bool = False,
+        embedded: bool = False, cash_opener=None,
     ) -> None:
         super().__init__(parent); self.application = application
         self.embedded = bool(embedded)
+        self.cash_opener = cash_opener
         if self.embedded:
             self.setWindowFlags(Qt.WindowType.Widget)
         self.pool = worker_pool or QThreadPool.globalInstance()
@@ -64,6 +65,7 @@ class DashboardDialog(QDialog):
             ("receipts", "RECEBIMENTOS DE FICHAS HOJE", "#58a6ff", "rgba(88,166,255,30)"),
             ("overdue", "COBRANÇAS VENCIDAS", "#f2cc60", "rgba(242,204,96,28)"),
             ("products", "PRODUTOS ATIVOS", "#a371f7", "rgba(163,113,247,30)"),
+            ("cash", "CAIXA", "#ff9f43", "rgba(255,159,67,28)"),
         )):
             card = QPushButton(f"{label}\n—"); card.setAccessibleName(label)
             card.setCursor(Qt.CursorShape.PointingHandCursor); card.setAutoRepeat(False)
@@ -119,6 +121,12 @@ class DashboardDialog(QDialog):
 
     def open_detail(self, kind: str) -> bool:
         try:
+            if kind == "cash":
+                if not callable(self.cash_opener):
+                    raise RuntimeError("O módulo Caixa não está disponível neste contexto.")
+                self.cash_opener()
+                self.cards["cash"][1].setFocus(Qt.FocusReason.OtherFocusReason)
+                return True
             current = self._detail_dialogs.get(kind)
             if current is not None and current.isVisible():
                 current.showMaximized(); current.raise_(); current.activateWindow()
@@ -166,6 +174,7 @@ class DashboardDialog(QDialog):
         self.cards["overdue"][1].setText(f"{self.cards['overdue'][0]}\n{indicators.overdue_count} • {_money(indicators.overdue_value)}")
         products = "Indisponível" if indicators.active_products is None else str(indicators.active_products)
         self.cards["products"][1].setText(f"{self.cards['products'][0]}\n{products}")
+        self.cards["cash"][1].setText(f"{self.cards['cash'][0]}\nAbrir detalhes")
         self.total_records = history.total_records; self.table.setRowCount(0)
         for movement in history.movements:
             row = self.table.rowCount(); self.table.insertRow(row)

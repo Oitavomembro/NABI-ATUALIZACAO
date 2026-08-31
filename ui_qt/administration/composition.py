@@ -210,7 +210,19 @@ def build_administrative_modules(
     modules=[]; system=SystemRepository(database.connect)
     company_profile = CompanyProfileService(database.connect, security_service=security)
     dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)
-    modules.append(AdministrativeModule("Início","Resumo e movimentações do dia","F1","dashboard","view",lambda p:DashboardDialog(dashboard,p),"dashboard",lambda p:DashboardDialog(dashboard,p,embedded=True,worker_pool=getattr(p.window(),"worker_pool",None)),dashboard.load_client_summary))
+    modules.append(AdministrativeModule(
+        "Início", "Resumo e movimentações do dia", "F1", "dashboard", "view",
+        lambda p: DashboardDialog(
+            dashboard, p, cash_opener=lambda: p.window().show_module("caixa")
+        ),
+        "dashboard",
+        lambda p: DashboardDialog(
+            dashboard, p, embedded=True,
+            worker_pool=getattr(p.window(), "worker_pool", None),
+            cash_opener=lambda: p.window().show_module("caixa"),
+        ),
+        dashboard.load_client_summary,
+    ))
     if getattr(container,"customer_application",None):
         def filtered_customers(parent, segment, title):
             def provider(term, limit):
