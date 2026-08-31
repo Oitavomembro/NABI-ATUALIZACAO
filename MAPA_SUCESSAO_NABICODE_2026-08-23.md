@@ -5893,3 +5893,19 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   autorização já aplicadas pelo shell ao módulo `caixa`;
 - regressão repositório/aplicação/dashboard/composição/shell: `76 passed`;
   `compileall` e `git diff --check` aprovados.
+
+### Demonstração isolada — login integrado ao splash
+
+- foi criada em `build_tools/demo_splash_login.py` uma demonstração Qt
+  executável e isolada; ela ainda não substitui nem altera o startup oficial;
+- o fundo permanece animado enquanto o usuário demora. O painel fecha somente
+  quando o autenticador aceita o login **e** o carregamento informa prontidão,
+  independentemente da ordem em que esses eventos ocorrem;
+- a senha é limpa depois de cada tentativa e nunca entra no `QSettings`; a
+  opção de lembrar persiste exclusivamente o nome do usuário;
+- falhas de autenticação e carregamento aparecem no próprio painel sem expor a
+  exceção interna. `Esc` não encerra acidentalmente a demonstração;
+- regressão da demonstração e contratos da splash canônica/startup: `66
+  passed`; `compileall` e `git diff --check` aprovados;
+- próximo portão: homologar visualmente a demonstração com o proprietário.
+  Somente depois decidir se o conceito será integrado ao processo oficial.
