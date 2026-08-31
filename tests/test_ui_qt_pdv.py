@@ -1186,6 +1186,44 @@ class PDVQtTests(unittest.TestCase):
         finally:
             fiscal_window.close()
 
+    def test_cadastro_fiscal_incompleto_abre_editor_e_preserva_venda(self):
+        class FiscalRecipient:
+            def __init__(self):
+                self.calls = 0
+
+            def recipient_for_customer(self, customer_id):
+                self.calls += 1
+                self.customer_id = customer_id
+                if self.calls == 1:
+                    raise ValueError("NF-e exige endereço fiscal completo do cliente.")
+                return {"name": "CLIENTE SETE"}, {"state": "BA"}
+
+        fiscal = FiscalRecipient()
+        edited = []
+        fiscal_window = PDVWindow(
+            self.view_model,
+            fiscal_mode=True,
+            fiscal_sale_service=fiscal,
+            customer_editor=lambda customer_id, _parent: edited.append(customer_id) or True,
+        )
+        try:
+            self.view_model.select_customer(7)
+            self.view_model.session.add_item(
+                CartItem("PRODUTO", 1, Decimal("10"), product_id=9)
+            )
+            before = self.view_model.session.cart.items
+            with patch.object(
+                QMessageBox, "question", return_value=QMessageBox.StandardButton.Yes
+            ):
+                self.assertTrue(fiscal_window._ensure_fiscal_customer_ready())
+            self.assertEqual(edited, [7])
+            self.assertEqual(fiscal.calls, 2)
+            self.assertEqual(self.view_model.session.cart.items, before)
+            self.assertEqual(self.gateway.commands, [])
+            self.assertIn("venda foi preservada", fiscal_window.statusBar().currentMessage())
+        finally:
+            fiscal_window.close()
+
     def test_f6_salva_orcamento_sem_checkout_e_limpa_sessao(self):
         self.view_model.add_loose_item("ITEM", "1", Decimal("10"))
         self.window.refresh_cart()

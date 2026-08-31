@@ -5869,3 +5869,15 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   segundos, sem banco ativo, certificado, XML real ou comunicação SEFAZ;
 - esta evidência fecha o checkpoint comercial antes das etapas maiores de
   dashboard, continuidade assistida do cliente e demonstração do splash.
+
+### Continuidade assistida do cadastro fiscal do cliente
+
+- no PDV fiscal, o destinatário agora é pré-validado antes de abrir Pagamentos;
+  ausência ou incoerência cadastral oferece `Completar cadastro agora`;
+- a edição reutiliza `CustomerEditorDialog` e a aplicação cadastral oficial,
+  já posicionada no cliente selecionado, sem acesso direto da janela ao banco;
+- ao salvar, o cliente é recarregado e validado novamente. Carrinho, itens,
+  quantidades e preços permanecem intactos; cancelar volta ao PDV sem checkout,
+  numeração ou transmissão fiscal;
+- regressão PDV/clientes/shell/Nabi: `163 passed`, `2 subtests passed`;
+  `compileall` e `git diff --check` aprovados.

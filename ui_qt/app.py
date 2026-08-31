@@ -10,6 +10,7 @@ from commercial.application.pdv_application_service import PDVApplicationService
 
 from .commercial.pdv_view_model import PDVViewModel
 from .commercial.pdv_window import PDVWindow
+from .commercial.customer_dialog import CustomerEditorDialog
 from .assistant_nabi import NabiAssistantPanel, NabiFloatingAssistant, NabiFloatingCoordinator
 from .shell import NabiCodeShellWindow
 from .backup_startup import DailyBackupController
@@ -143,6 +144,7 @@ def create_shell_application(
     fiscal_mode=False,
     fiscal_sale_service=None,
     fiscal_outbox_worker=None,
+    customer_application=None,
 ):
     """Cria o shell Legacy; o PDV só nasce quando Vendas/F2 for acionado."""
 
@@ -166,6 +168,17 @@ def create_shell_application(
         security.touch()
         return True
 
+    def edit_customer_for_sale(customer_id, parent) -> bool:
+        if customer_application is None:
+            return False
+        customer = customer_application.get_customer(int(customer_id))
+        if customer is None:
+            raise LookupError("O cliente selecionado não está mais disponível.")
+        return (
+            CustomerEditorDialog(customer_application, customer, parent).exec()
+            == QDialog.DialogCode.Accepted
+        )
+
     def pdv_factory():
         return PDVWindow(
             PDVViewModel(application),
@@ -175,6 +188,7 @@ def create_shell_application(
             fiscal_sale_service=fiscal_sale_service,
             fiscal_outbox_worker=fiscal_outbox_worker,
             fiscal_cancellation_authorizer=authorize_fiscal_cancellation,
+            customer_editor=(edit_customer_for_sale if customer_application is not None else None),
             require_registered_customer=False,
         )
 

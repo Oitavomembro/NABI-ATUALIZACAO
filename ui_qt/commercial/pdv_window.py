@@ -42,6 +42,7 @@ class PDVWindow(QMainWindow):
         fiscal_sale_service=None,
         fiscal_outbox_worker=None,
         fiscal_cancellation_authorizer=None,
+        customer_editor=None,
     ) -> None:
         super().__init__()
         self.view_model = view_model
@@ -51,6 +52,7 @@ class PDVWindow(QMainWindow):
         self._fiscal_sale_service = fiscal_sale_service
         self._fiscal_outbox_worker = fiscal_outbox_worker
         self._fiscal_cancellation_authorizer = fiscal_cancellation_authorizer
+        self._customer_editor = customer_editor
         # Widgets podem emitir eventos enquanto a árvore visual ainda está sendo
         # montada. O filtro precisa existir em estado válido desde o início.
         self._enter_widgets = ()
@@ -1123,6 +1125,8 @@ class PDVWindow(QMainWindow):
             )
             self.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
             return
+        if not self._ensure_fiscal_customer_ready():
+            return
         dialog = CheckoutDialog(self.view_model, self)
         if dialog.exec() != CheckoutDialog.DialogCode.Accepted:
             self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
@@ -1163,10 +1167,6 @@ class PDVWindow(QMainWindow):
                     "Não finalize esta venda novamente.",
                 )
             finally:
-                # A venda já foi confirmada, mas a tela não deve aparentar um
-                # retorno prematuro ao PDV enquanto o acompanhamento fiscal
-                # modal está sendo exibido. Limpe a sessão visual somente ao
-                # encerrar esse acompanhamento.
                 self.customer_selected.setText("Nenhum cliente selecionado")
                 self.customer_selected.hide()
                 self.customer_search.clear()
@@ -1174,3 +1174,52 @@ class PDVWindow(QMainWindow):
         else:
             QMessageBox.warning(self, "Venda recusada", result.message)
             self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+
+    def _ensure_fiscal_customer_ready(self) -> bool:
+        """Valida o destinatário antes de Pagamentos e preserva o carrinho."""
+
+        if not self._fiscal_mode or self.view_model.selected_customer is None:
+            return True
+        validator = getattr(self._fiscal_sale_service, "recipient_for_customer", None)
+        if not callable(validator):
+            return True
+        customer_id = self.view_model.selected_customer.customer_id
+        try:
+            validator(customer_id)
+            return True
+        except (ValueError, LookupError) as error:
+            message = str(error) or "O cadastro fiscal do cliente está incompleto."
+        if self._customer_editor is None:
+            QMessageBox.warning(self, "Cadastro fiscal incompleto", message)
+            self.customer_search.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        answer = QMessageBox.question(
+            self,
+            "Completar cadastro do cliente",
+            f"{message}\n\nDeseja completar este cadastro agora?",
+            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            QMessageBox.StandardButton.Yes,
+        )
+        if answer != QMessageBox.StandardButton.Yes:
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        if not bool(self._customer_editor(customer_id, self)):
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        refreshed = self.view_model.application.get_customer(customer_id)
+        if refreshed is not None:
+            self.view_model.selected_customer = refreshed
+        try:
+            validator(customer_id)
+        except (ValueError, LookupError) as error:
+            QMessageBox.warning(
+                self,
+                "Cadastro fiscal ainda incompleto",
+                str(error) or "Revise os campos obrigatórios do cliente.",
+            )
+            self.checkout_button.setFocus(Qt.FocusReason.OtherFocusReason)
+            return False
+        self.statusBar().showMessage(
+            "Cadastro atualizado. A venda foi preservada e pode continuar.", 4000
+        )
+        return True

@@ -528,6 +528,7 @@ def main(argv=None) -> int:
             daily_backup_service=daily_backup,
             visual_preferences=UIPreferencesService.normalize(visual_values),
             auto_activate_assistant=assistant_activation is not None,
+            customer_application=getattr(container, "customer_application", None),
         )
     except Exception as error:
         splash.close()
