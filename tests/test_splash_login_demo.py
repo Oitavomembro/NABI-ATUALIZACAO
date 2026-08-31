@@ -27,6 +27,21 @@ def test_animacao_continua_enquanto_usuario_demora(tmp_path):
     demo.close()
 
 
+def test_login_surge_abaixo_do_nome_so_apos_formacao(tmp_path):
+    demo = SplashLoginDemo(lambda _u, _p: True, settings=_settings(tmp_path))
+    demo.show()
+    demo._reveal_login(7.0)
+    assert not demo.panel.isVisible()
+    demo._reveal_login(8.8)
+    assert demo.panel.isVisible()
+    assert demo.panel.y() > demo.height() / 2
+    assert len(demo.scene.stars) == 2050
+    assert not demo.remember.isVisible()
+    assert "background:transparent" in demo.panel.styleSheet()
+    demo.close()
+    assert not demo.timer.isActive()
+
+
 def test_fecha_somente_quando_login_e_sistema_estao_prontos(tmp_path):
     demo = SplashLoginDemo(lambda u, p: (u, p) == ("maria", "segredo"), settings=_settings(tmp_path))
     demo.show(); demo.username.setText("maria"); demo.password.setText("segredo")

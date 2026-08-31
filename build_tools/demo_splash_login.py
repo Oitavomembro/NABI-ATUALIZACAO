@@ -5,16 +5,17 @@ Não participa do startup oficial, não acessa banco e não armazena senha.
 
 from __future__ import annotations
 
-import random
+import time
 import sys
 from collections.abc import Callable
 
-from PySide6.QtCore import QPointF, QSettings, Qt, QTimer
-from PySide6.QtGui import QColor, QKeyEvent, QPainter, QPen
+from PySide6.QtCore import QPropertyAnimation, QRectF, QSettings, Qt, QTimer
+from PySide6.QtGui import QColor, QFont, QImage, QKeyEvent, QPainter
 from PySide6.QtWidgets import (
     QApplication, QCheckBox, QFrame, QLabel, QLineEdit, QPushButton,
-    QVBoxLayout, QWidget,
+    QGraphicsOpacityEffect, QVBoxLayout, QWidget,
 )
+from build_tools.demo_original_splash_scene import OriginalSplashScene
 
 
 class SplashLoginDemo(QWidget):
@@ -28,6 +29,7 @@ class SplashLoginDemo(QWidget):
         parent=None,
     ) -> None:
         super().__init__(parent)
+        self.setFont(QFont("Segoe UI", 10))
         if not callable(authenticator):
             raise TypeError("A demonstração exige um autenticador explícito.")
         self.authenticator = authenticator
@@ -35,52 +37,57 @@ class SplashLoginDemo(QWidget):
         self.system_ready = False
         self.authenticated = False
         self.animation_frames = 0
-        self._stars = self._create_stars(180)
+        self.scene = OriginalSplashScene()
+        self._started = time.perf_counter()
+        self._last_frame = self._started
+        self._elapsed = 0.0
+        self._frame_dt = 0.0
+        self.login_revealed = False
         self.setWindowTitle("Demonstração — login integrado ao splash")
         self.setAttribute(Qt.WidgetAttribute.WA_OpaquePaintEvent, True)
         self.setMinimumSize(900, 560)
         self.resize(1100, 680)
 
-        root = QVBoxLayout(self)
-        root.setContentsMargins(0, 0, 0, 0)
-        root.addStretch(1)
-        self.panel = QFrame()
-        self.panel.setFixedWidth(430)
+        self.panel = QFrame(self)
         self.panel.setStyleSheet(
-            "QFrame{background:rgba(13,17,23,225);border:1px solid #00d084;"
-            "border-radius:14px} QLabel{color:#f0f6fc;border:0}"
-            "QLineEdit{background:#161b22;color:#f0f6fc;border:1px solid #30363d;"
-            "border-radius:7px;padding:10px;font-size:15px}"
-            "QPushButton{background:#1f6feb;color:white;border:0;border-radius:7px;"
-            "padding:12px;font-weight:800} QCheckBox{color:#c9d1d9;border:0}"
+            "QFrame{background:transparent;border:0} QLabel{color:#f0f6fc;border:0}"
+            "QLineEdit{background:rgba(8,16,25,65);color:#f0f6fc;"
+            "border:1px solid rgba(180,220,235,90);border-radius:5px;padding:8px;font-size:14px}"
+            "QLineEdit:focus{border:1px solid #a0dace}"
+            "QPushButton{background:rgba(25,60,65,100);color:white;"
+            "border:1px solid rgba(180,220,235,80);border-radius:5px;padding:8px}"
         )
         form = QVBoxLayout(self.panel)
-        form.setContentsMargins(30, 25, 30, 25)
-        form.setSpacing(10)
-        brand = QLabel("NABICODE")
-        brand.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        brand.setStyleSheet("font-size:32px;font-weight:900;color:#00e88a;border:0")
-        subtitle = QLabel("Entrar enquanto o sistema termina de carregar")
-        subtitle.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        subtitle.setWordWrap(True)
+        form.setContentsMargins(0, 0, 0, 0)
+        form.setSpacing(8)
+        form.setAlignment(Qt.AlignmentFlag.AlignTop)
         self.username = QLineEdit(str(self.settings.value("remembered_username", "")))
         self.username.setPlaceholderText("Usuário")
         self.password = QLineEdit()
         self.password.setPlaceholderText("Senha")
         self.password.setEchoMode(QLineEdit.EchoMode.Password)
         self.remember = QCheckBox("Lembrar somente o usuário")
+        self.remember.setParent(self.panel)
+        self.remember.hide()
         self.remember.setChecked(bool(self.username.text()))
         self.enter = QPushButton("ENTRAR")
         self.status = QLabel("Carregando componentes…")
         self.status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.status.setWordWrap(True)
         for widget in (
-            brand, subtitle, self.username, self.password, self.remember,
+            self.username, self.password,
             self.enter, self.status,
         ):
             form.addWidget(widget)
-        root.addWidget(self.panel, 0, Qt.AlignmentFlag.AlignHCenter)
-        root.addStretch(1)
+        self.status.hide()
+        self.panel.hide()
+        self.opacity = QGraphicsOpacityEffect(self.panel)
+        self.panel.setGraphicsEffect(self.opacity)
+        self.opacity.setOpacity(0)
+        self.reveal = QPropertyAnimation(self.opacity, b"opacity", self)
+        self.reveal.setDuration(800)
+        self.reveal.setStartValue(0.0)
+        self.reveal.setEndValue(1.0)
 
         self.enter.clicked.connect(self.authenticate)
         self.password.returnPressed.connect(self.authenticate)
@@ -90,32 +97,52 @@ class SplashLoginDemo(QWidget):
         self.timer.start()
         (self.password if self.username.text() else self.username).setFocus()
 
-    def _create_stars(self, count: int) -> list[list[float]]:
-        rng = random.Random(20260830)
-        return [
-            [rng.random(), rng.random(), rng.uniform(0.4, 1.8), rng.uniform(0.4, 1.0)]
-            for _ in range(count)
-        ]
-
     def _animate(self) -> None:
         self.animation_frames += 1
-        for star in self._stars:
-            star[1] += star[2] / 1400
-            if star[1] > 1:
-                star[1] = 0
+        now = time.perf_counter()
+        self._frame_dt = min(0.1, now - self._last_frame)
+        self._last_frame = now
+        self._elapsed = now - self._started
+        self._reveal_login(self._elapsed)
         self.update()
+
+    def _reveal_login(self, elapsed):
+        if elapsed >= 8.8 and not self.login_revealed:
+            self.login_revealed = True
+            self._place_panel()
+            self.panel.show()
+            self.reveal.start()
+            (self.password if self.username.text() else self.username).setFocus()
+
+    def _place_panel(self):
+        scale = min(self.width() / 1280, self.height() / 720)
+        width = min(340, self.width() - 40)
+        top = (self.height() - 720 * scale) / 2 + 430 * scale
+        self.panel.setGeometry(int((self.width() - width) / 2), int(top), width, 190)
+
+    def resizeEvent(self, event):
+        self._place_panel()
+        super().resizeEvent(event)
 
     def paintEvent(self, _event) -> None:
         painter = QPainter(self)
-        painter.fillRect(self.rect(), QColor("#05070d"))
-        for x, y, speed, light in self._stars:
-            color = QColor(80, 190 + int(55 * light), 210, 100 + int(140 * light))
-            painter.setPen(QPen(color, max(1.0, speed)))
-            painter.drawPoint(QPointF(x * self.width(), y * self.height()))
+        painter.fillRect(self.rect(), QColor("#000105"))
+        raw = self.scene.render(self._elapsed, self._frame_dt)
+        frame = QImage(raw, 1280, 720, 1280 * 3, QImage.Format.Format_RGB888)
+        scale = min(self.width() / 1280, self.height() / 720)
+        painter.drawImage(QRectF((self.width() - 1280 * scale) / 2,
+                                (self.height() - 720 * scale) / 2,
+                                1280 * scale, 720 * scale), frame)
+
+    def closeEvent(self, event):
+        self.timer.stop()
+        self.reveal.stop()
+        super().closeEvent(event)
 
     def set_system_ready(self, ready: bool = True, error: str = "") -> None:
         self.system_ready = bool(ready) and not error
         if error:
+            self.status.show()
             self.status.setText(f"Falha no carregamento: {error}")
         elif self.authenticated and self.system_ready:
             self.status.setText("Pronto. Abrindo o NabiCode…")
@@ -127,6 +154,7 @@ class SplashLoginDemo(QWidget):
         username = self.username.text().strip()
         password = self.password.text()
         if not username or not password:
+            self.status.show()
             self.status.setText("Informe usuário e senha.")
             return
         try:
@@ -135,11 +163,13 @@ class SplashLoginDemo(QWidget):
             accepted = False
         self.password.clear()
         if not accepted:
+            self.status.show()
             self.authenticated = False
             self.status.setText("Usuário ou senha inválidos.")
             self.password.setFocus()
             return
         self.authenticated = True
+        self.status.show()
         if self.remember.isChecked():
             self.settings.setValue("remembered_username", username)
         else:

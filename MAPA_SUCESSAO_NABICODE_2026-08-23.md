@@ -6031,3 +6031,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   exclusão de versões ou push. Artefato é candidato a teste acompanhado, não
   versão promovida. Próximo passo: preparar/validar perfil TESTE e testar as
   telas comerciais/orçamento, mantendo produção fiscal bloqueada.
+
+### Ensaio isolado e revisão visual da demonstração de início
+
+- ensaio de primeiro uso em TEMP `nabicode-primeiro-uso-cy_saic8` aprovado:
+  perfil TESTE, banco sintético schema 21, administrador inicial e autenticação,
+  shell/PDV offscreen, dependências Qt/Tcl/Tk presentes e rede bloqueada;
+  regressão de perfil/primeiro uso/build: `35 passed`. Não é ensaio do EXE;
+- confirmado que o hook de produção do EXE R23 rejeita marcador TESTE e força
+  PRODUCAO. Não alterar marcador/variáveis para contornar essa proteção. Ainda
+  falta variante de empacotamento TESTE explícita para teste visual do EXE;
+- proprietário proibiu gerar instalador. Nenhum instalador gerado;
+- a demonstração de login foi ajustada a pedido do proprietário: agora usa
+  WarpStar/NameStar/RareStar e desenho do motor original, sem modificar
+  `splash_deep_trust_engine.py`. O adaptador Qt mantém a animação além dos 12 s;
+- campos de usuário/senha e Entrar surgem abaixo do nome após 8,8 s, com fade
+  de 800 ms, sem painel, título duplicado ou borda externa. Checkbox de lembrar
+  usuário não é exibido nesta variante minimalista. Senha nunca é persistida;
+- autenticação e carregamento continuam SIMULADOS na demonstração. Não houve
+  integração ao login/startup oficial nem abertura de banco por ela;
+- regressão demo/fidelidade/startup: `27 passed`, `3 subtests passed`.
+  Captura offscreen revisada com a fonte local Segoe UI explicitamente carregada
+  apenas no ensaio visual. Campos legíveis, posicionados abaixo do nome;
+- próximo passo: proprietário testar visualmente esta demonstração. Nenhum
+  build/instalador/push adicional realizado nesta etapa.
