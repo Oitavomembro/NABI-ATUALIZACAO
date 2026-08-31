@@ -261,7 +261,12 @@ class PDFDocumentService:
             y -= step / 2
             renderer.y = y
             for part in budget_terms.splitlines():
-                line(part)
+                for wrapped in wrap_pdf_lines(part, font, size, max(1, width - 2 * margin)):
+                    if model == "A4" and y - step < margin + 40 * mm:
+                        canvas.showPage()
+                        y = self._draw_header(canvas, width, height - margin, mm, model, title)
+                        renderer.y = y
+                    line(wrapped)
         if footer:
             y -= step / 2
             for part in footer.splitlines():

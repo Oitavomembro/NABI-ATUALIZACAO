@@ -1,8 +1,8 @@
 from __future__ import annotations
 
-from PySide6.QtCore import QEvent, Qt
+from PySide6.QtCore import QDate, QEvent, Qt
 from PySide6.QtWidgets import (
-    QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
+    QCheckBox, QDateEdit, QComboBox, QDialog, QDialogButtonBox, QFormLayout, QHBoxLayout, QHeaderView,
     QLabel, QMessageBox, QPushButton, QSpinBox, QTableWidget, QTableWidgetItem,
     QTextBrowser, QVBoxLayout,
 )
@@ -39,6 +39,14 @@ class BudgetTermsDialog(QDialog):
         form.addRow("Forma pretendida", self.method)
         form.addRow("Entrada estimada", self.entry)
         form.addRow("Quantidade de parcelas", self.installments)
+        self.schedule_enabled = QCheckBox("Definir vencimentos mensais estimados")
+        self.first_due = QDateEdit(QDate.currentDate().addMonths(1))
+        self.first_due.setDisplayFormat("dd/MM/yyyy")
+        self.first_due.setCalendarPopup(True)
+        self.first_due.setEnabled(False)
+        self.schedule_enabled.toggled.connect(self.first_due.setEnabled)
+        form.addRow(self.schedule_enabled)
+        form.addRow("Primeiro vencimento", self.first_due)
         form.addRow("Simulação", self.summary)
         root.addLayout(form)
         self.buttons = QDialogButtonBox(
@@ -69,6 +77,10 @@ class BudgetTermsDialog(QDialog):
             )
             self.entry.setFocus(Qt.FocusReason.OtherFocusReason)
             return
+        if (self.schedule_enabled.isChecked() and 0 < self.total - self.entry.value()
+                < self.installments.value() * MoneyCodec.CENT):
+            QMessageBox.warning(self, "Orçamento", "O saldo não comporta essa quantidade de parcelas.")
+            return
         self.accept()
 
     @property
@@ -77,6 +89,7 @@ class BudgetTermsDialog(QDialog):
             "payment_method": self.method.currentText(),
             "entry_amount": self.entry.value(),
             "installments": self.installments.value(),
+            "first_due_date": self.first_due.date().toPython() if self.schedule_enabled.isChecked() else None,
         }
 
 

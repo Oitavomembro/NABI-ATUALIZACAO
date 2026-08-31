@@ -254,6 +254,7 @@ class NabiCodeGatewayTests(unittest.TestCase):
             customer_id=7, customer_name="CLIENTE",
             items=(CartItem("PRODUTO", 2, "10", product_id=9, discount_percent="10"),),
             payment_method="CREDIÁRIO", entry_amount="3.00", installments=3,
+            first_due_date="2028-01-31",
         )
         self.assertEqual(budget.total, Decimal("18.00"))
         self.assertEqual(budget.items[0].product_id, 9)
@@ -275,6 +276,8 @@ class NabiCodeGatewayTests(unittest.TestCase):
         self.assertIn("NÃO É RECEBIMENTO", pdf.calls[0][1]["budget_terms"])
         self.assertIn("15,00 em 3x", pdf.calls[0][1]["budget_terms"])
         self.assertEqual(gateway.list_open()[0].budget_id, "B1")
+        self.assertEqual(gateway.list_open()[0].first_due_date.isoformat(), "2028-01-31")
+        self.assertIn("29/02/2028", preview)
         self.assertEqual(gateway.consume("B1").budget_id, "B1")
         self.assertEqual(gateway.list_open(), ())
 

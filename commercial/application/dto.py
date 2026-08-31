@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import date
+from calendar import monthrange
 from decimal import Decimal
 from typing import Iterable
 
@@ -90,6 +92,7 @@ class BudgetDocument:
     payment_method: str
     entry_amount: Decimal
     installments: int
+    first_due_date: date | None
 
     def __init__(
         self,
@@ -103,6 +106,7 @@ class BudgetDocument:
         payment_method: str = "A COMBINAR",
         entry_amount: Decimal | int | str = 0,
         installments: int = 1,
+        first_due_date: date | str | None = None,
     ) -> None:
         object.__setattr__(self, "budget_id", str(budget_id or "").strip())
         object.__setattr__(self, "created_at", str(created_at or "").strip())
@@ -113,6 +117,7 @@ class BudgetDocument:
         object.__setattr__(self, "payment_method", str(payment_method or "A COMBINAR").strip().upper())
         object.__setattr__(self, "entry_amount", entry_amount)
         object.__setattr__(self, "installments", installments)
+        object.__setattr__(self, "first_due_date", first_due_date)
         self.__post_init__()
 
     def __post_init__(self) -> None:
@@ -143,6 +148,29 @@ class BudgetDocument:
         object.__setattr__(self, "total", total)
         object.__setattr__(self, "entry_amount", entry)
         object.__setattr__(self, "installments", installments)
+        due = self.first_due_date
+        if isinstance(due, str):
+            due = date.fromisoformat(due) if due else None
+        if due is not None and type(due) is not date:
+            raise ValueError("Informe uma data válida para o primeiro vencimento estimado.")
+        object.__setattr__(self, "first_due_date", due)
+        # Valida o cronograma antes de qualquer persistência.
+        self.estimated_schedule()
+
+    def estimated_schedule(self):
+        """Proposta em memória; não cria títulos nem lançamentos financeiros."""
+        first = self.first_due_date
+        financed = self.total - self.entry_amount
+        if first is None or financed == 0:
+            return ()
+        dates = []
+        for index in range(self.installments):
+            year, month = divmod(first.year * 12 + first.month - 1 + index, 12)
+            month += 1
+            dates.append(date(year, month, min(first.day, monthrange(year, month)[1])))
+        return CreditTerms.create(
+            down_payment=self.entry_amount, financed_value=financed, due_dates=dates,
+        ).installments
 
 
 @dataclass(frozen=True, slots=True)

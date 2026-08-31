@@ -162,12 +162,14 @@ class PDVViewModel:
     def save_budget(
         self, *, payment_method: str = "A COMBINAR", entry_amount=0,
         installments: int = 1,
+        first_due_date=None,
     ) -> BudgetDocument:
         budget = self.application.save_budget(
             self.session,
             payment_method=payment_method,
             entry_amount=entry_amount,
             installments=installments,
+            first_due_date=first_due_date,
         )
         self.selected_customer = None
         self.selected_product = None

@@ -131,6 +131,7 @@ class PDVApplicationService:
     def save_budget(
         self, session: PDVSession, *, payment_method: str = "A COMBINAR",
         entry_amount=0, installments: int = 1,
+        first_due_date=None,
     ) -> BudgetDocument:
         session.ensure_open()
         if session.cart.is_empty:
@@ -149,6 +150,7 @@ class PDVApplicationService:
             payment_method=payment_method,
             entry_amount=entry_amount,
             installments=installments,
+            **({"first_due_date": first_due_date} if first_due_date is not None else {}),
         )
         session.reset()
         return budget

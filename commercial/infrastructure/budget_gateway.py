@@ -72,12 +72,21 @@ class NabiCodeBudgetGateway:
             payment_method=metadata.get("payment_method", "A COMBINAR"),
             entry_amount=metadata.get("entry_amount", 0),
             installments=metadata.get("installments", 1),
+            first_due_date=metadata.get("first_due_date"),
         )
 
     def save(
         self, *, customer_id: int, customer_name: str, items: tuple[CartItem, ...],
         payment_method: str = "A COMBINAR", entry_amount=0, installments: int = 1,
+        first_due_date=None,
     ) -> BudgetDocument:
+        proposal = BudgetDocument(
+            budget_id="validation", created_at="validation", customer_id=customer_id,
+            customer_name=customer_name, items=items,
+            total=sum((item.subtotal for item in items), MoneyCodec.ZERO),
+            payment_method=payment_method, entry_amount=entry_amount,
+            installments=installments, first_due_date=first_due_date,
+        )
         stored = self._pdv.salvar_documento(
             "ORCAMENTO",
             [self._stored_item(item) for item in items],
@@ -87,6 +96,7 @@ class NabiCodeBudgetGateway:
                 "payment_method": str(payment_method),
                 "entry_amount": str(entry_amount),
                 "installments": int(installments),
+                "first_due_date": proposal.first_due_date.isoformat() if proposal.first_due_date else None,
             },
         )
         return self._document(stored)
@@ -114,13 +124,24 @@ class NabiCodeBudgetGateway:
     @staticmethod
     def _terms_text(budget: BudgetDocument) -> str:
         financed = budget.total - budget.entry_amount
-        return (
+        text = (
             "CONDIÇÃO ESTIMADA (NÃO É RECEBIMENTO)\n"
             f"Forma: {budget.payment_method}\n"
             f"Entrada: R$ {MoneyCodec.format_br(budget.entry_amount)}\n"
             f"Saldo estimado: R$ {MoneyCodec.format_br(financed)} em "
             f"{budget.installments}x\n"
         )
+        schedule = budget.estimated_schedule()
+        if schedule:
+            text += "VENCIMENTOS ESTIMADOS - NÃO SÃO COBRANÇAS\n"
+            text += "\n".join(
+                f"{item.number:02d}/{budget.installments:02d}  "
+                f"{item.due_date:%d/%m/%Y}  R$ {MoneyCodec.format_br(item.amount)}"
+                for item in schedule
+            ) + "\n"
+        elif financed > 0:
+            text += "Vencimentos: a combinar\n"
+        return text
 
     def print_thermal(self, budget: BudgetDocument) -> str:
         printer = self._get_config("impressora_recibo") or "Padrão do Sistema"

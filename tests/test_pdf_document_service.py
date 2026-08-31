@@ -97,6 +97,39 @@ class PDFDocumentServiceTests(unittest.TestCase):
                 self.assertNotIn("Saldo atual da ficha", text)
                 self.assertEqual([], self.registered)
 
+    def test_long_budget_schedule_paginates_before_bottom_margin(self):
+        create = self.service._create_canvas
+        page_breaks = []
+        positions = []
+
+        def instrument(*args):
+            canvas, page, mm = create(*args)
+            show_page = canvas.showPage
+            draw = canvas.drawString
+
+            def show():
+                page_breaks.append(True)
+                return show_page()
+
+            def record(x, y, text, *args, **kwargs):
+                positions.append(y)
+                return draw(x, y, text, *args, **kwargs)
+
+            canvas.showPage = show
+            canvas.drawString = record
+            return canvas, page, mm
+
+        with patch.object(self.service, "_create_canvas", side_effect=instrument):
+            self.service.generate_sale(
+                1, [{"qtd": 1, "item": "TESTE", "preco": 120, "subtotal": 120}],
+                120, "ORCAMENTO", budget_terms="\n".join(
+                    f"{n:03d}/120  31/01/2028  R$ 1,00" for n in range(1, 121)
+                ),
+            )
+        self.assertGreater(len(page_breaks), 1)
+        self.assertTrue(all(y > 0 for y in positions))
+        self.assertEqual([], self.registered)
+
     def test_config_bool_accepts_legacy_and_text_values(self):
         self.config["flag"] = "sim"
         self.assertTrue(self.service.config_bool("flag", False))

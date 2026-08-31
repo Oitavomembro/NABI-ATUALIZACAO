@@ -115,6 +115,7 @@ class BudgetPort(Protocol):
     def save(
         self, *, customer_id: int, customer_name: str, items: tuple,
         payment_method: str = "A COMBINAR", entry_amount=0, installments: int = 1,
+        first_due_date=None,
     ) -> BudgetDocument: ...
 
     def list_open(self) -> tuple[BudgetDocument, ...]: ...

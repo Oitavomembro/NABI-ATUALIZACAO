@@ -5956,3 +5956,27 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
   persistência compatível com orçamentos antigos; validar propostas extensas
   antes de liberar a impressão de todo o cronograma. Depois, nova regressão
   integral, build e validação acompanhada. Não considerar backlog encerrado.
+
+### Vencimentos simulados do orçamento — retomada de 71fc04d
+
+- a janela de condições oferece data opcional do primeiro vencimento; marcar
+  a opção define um cronograma mensal, sem criar parcelas reais. Orçamentos
+  antigos sem esse metadado continuam sem datas inventadas (`a combinar`);
+- o metadado `first_due_date` é salvo em ISO e recuperado na listagem.
+  Meses curtos ajustam o dia ao último disponível, preservando o dia original
+  nos meses seguintes. A divisão reutiliza CreditTerms somente em memória;
+- valores inválidos e cronogramas impossíveis são validados antes de chamar
+  salvar_documento, evitando persistir uma proposta e só depois apresentar erro;
+- prévia, impressão térmica e PDF mostram o mesmo cronograma, explicitamente
+  estimado e sem cobrança. Entrada igual ao total não gera cronograma;
+- cronogramas extensos em A4 quebram página antes da margem inferior. Isto
+  não encerra a auditoria de paginação de documentos com muitos produtos;
+- regressão PDV/gateway/documentos/orçamentos: `172 passed`, `4 subtests passed`.
+  Inclui stress determinístico de 1 a 120 parcelas, soma exata dos centavos,
+  ano bissexto, fim de mês, persistência da data, ausência de gravação inválida,
+  opção desmarcada na UI e cronograma A4 de 120 linhas. compileall e diff-check OK;
+- amostra sintética térmica renderizada e inspecionada, sem cortes. Nenhum
+  banco ativo, título financeiro, estoque, Caixa, certificado ou SEFAZ utilizado;
+- próximo passo: regressão integral atualizada, auditoria dos casos extensos
+  e preparação do build canônico para teste acompanhado. A instalação não foi
+  atualizada nem aberta, e não houve push. PDFs de QA ficam fora do commit.
