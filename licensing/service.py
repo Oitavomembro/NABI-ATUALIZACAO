@@ -41,6 +41,17 @@ class LicenseV2Service:
         fingerprint = self._machine_fingerprint()
         return fingerprint, machine_code(fingerprint)
 
+    def activation_fingerprint(self) -> str:
+        """Identificação completa para emissão, sem ler licença ou gravar estado."""
+        fingerprint = self._machine_fingerprint()
+        if (
+            not isinstance(fingerprint, str)
+            or len(fingerprint) != 64
+            or any(char not in "0123456789abcdef" for char in fingerprint)
+        ):
+            raise ValueError("Identificação completa da máquina indisponível.")
+        return fingerprint
+
     def _invalid(self, reason: str, code: str = "NABI2-INDISPONIVEL") -> LicenseDecision:
         return LicenseDecision(LicenseState.INVALID, reason, code)
 
