@@ -109,10 +109,14 @@ class FicharioWindow(QMainWindow):
             ("RECEBER DE CLIENTE", self.open_receipt),
             ("MENU DO SISTEMA", self.open_system_center),
         )):
-            button = QPushButton(label); button.setMinimumHeight(78)
+            button = QPushButton(label); button.setMinimumHeight(112)
+            button.setObjectName("mainActionCard")
             button.setStyleSheet(
-                "text-align:left;padding:0 20px;font-size:14px;"
-                "background:#161b22;border:1px solid #30363d;border-radius:10px;"
+                "QPushButton#mainActionCard{text-align:left;padding:0 24px;font-size:16px;"
+                "font-weight:800;background:#161b22;border:1px solid #30363d;"
+                "border-radius:12px;}"
+                "QPushButton#mainActionCard:hover{background:#21262d;border:2px solid #58a6ff;}"
+                "QPushButton#mainActionCard:focus{border:2px solid #00d084;}"
             )
             button.clicked.connect(callback)
             actions.addWidget(button, index // 2, index % 2)

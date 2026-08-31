@@ -124,6 +124,8 @@ def test_menu_visivel_e_backup_diario_configuravel():
     shell = (root / "fichario/shell.py").read_text(encoding="utf-8")
     preferences = (root / "fichario/preferences_dialog.py").read_text(encoding="utf-8")
     assert '"MENU DO SISTEMA"' in shell
+    assert 'button.setMinimumHeight(112)' in shell
+    assert 'button.setObjectName("mainActionCard")' in shell
     assert 'prefix="fichario_diario"' in shell
     assert 'backup/last_success' in shell
     assert "configured_backup_directory(self.profile)" in shell
