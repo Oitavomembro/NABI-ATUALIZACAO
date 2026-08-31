@@ -112,11 +112,20 @@ class FicharioWindow(QMainWindow):
             button = QPushButton(label); button.setMinimumHeight(112)
             button.setObjectName("mainActionCard")
             button.setStyleSheet(
-                "QPushButton#mainActionCard{text-align:left;padding:0 24px;font-size:16px;"
-                "font-weight:800;background:#161b22;border:1px solid #30363d;"
-                "border-radius:12px;}"
-                "QPushButton#mainActionCard:hover{background:#21262d;border:2px solid #58a6ff;}"
-                "QPushButton#mainActionCard:focus{border:2px solid #00d084;}"
+                "QPushButton#mainActionCard{text-align:left;padding:0 26px;font-size:17px;"
+                "font-weight:900;color:#f0f6fc;"
+                "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                "stop:0 #343d48,stop:0.08 #242c35,stop:0.52 #171d24,stop:1 #0e1319);"
+                "border:1px solid #596674;border-bottom:3px solid #090c10;"
+                "border-radius:14px;}"
+                "QPushButton#mainActionCard:hover{color:#ffffff;"
+                "background:qlineargradient(x1:0,y1:0,x2:0,y2:1,"
+                "stop:0 #465361,stop:0.10 #2c3742,stop:1 #151c23);"
+                "border:2px solid #58a6ff;border-bottom:3px solid #162b40;}"
+                "QPushButton#mainActionCard:focus{border:2px solid #00d084;"
+                "border-left:6px solid #00d084;}"
+                "QPushButton#mainActionCard:pressed{padding-top:3px;"
+                "background:#10161c;border-bottom:1px solid #596674;}"
             )
             button.clicked.connect(callback)
             actions.addWidget(button, index // 2, index % 2)
