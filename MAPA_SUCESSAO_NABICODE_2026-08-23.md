@@ -1498,3 +1498,19 @@ importação no banco de produção antes da aprovação visual e de um backup m
   corretamente. A R20 recusaria outra assinatura. O R21 deve receber uma chave
   permanente de atualização por cerimônia segura para permitir R21→R22 sem
   reconstruir instalador. Nenhum bypass de assinatura foi introduzido.
+### 2026-08-31 — Hotfix isolado da ativação no Fichário R21 aprovado
+
+- Após homologação visual do proprietário, foi comprovado que o instalador
+  reconstruído sobre a consolidada posterior transportava mudanças do PDV do
+  programa principal. Esse artefato foi reprovado e não deve ser usado.
+- Fonte eleita para esta correção: Fichário final R21 `962c092`, preservado
+  integralmente. Sobre ele foi aplicado somente `65508da`, que faz o botão de
+  ativação copiar o fingerprint local completo de 64 hex em vez do NABI2 curto.
+- `git diff 962c092..65508da` contém apenas `fichario/license_dialog.py`,
+  `licensing/service.py` e dois testes da correção. Nenhum arquivo de PDV,
+  recebimento, composição comercial, banco ou aparência foi alterado.
+- Regressão direcionada da base aprovada: `370 passed, 340 subtests passed`;
+  compileall, validação oficial do Fichário e diff-check aprovados.
+- Próximo passo: gerar novo instalador a partir desta branch limpa, testar o
+  binário e substituir somente a entrega reprovada no pendrive, preservando o
+  instalador R21 anterior. Nenhum dado real, licença, segredo ou push.
