@@ -24,6 +24,7 @@ class FicharioLicenseDialog(QDialog):
         self.machine_code = QLabel()
         self.machine_code.setTextInteractionFlags(Qt.TextInteractionFlag.TextSelectableByMouse)
         self.copy_button = QPushButton("Copiar código da máquina")
+        self.copy_button.setToolTip("Copia os 64 caracteres completos exigidos pelo emissor.")
         self.activate_button = QPushButton("Selecionar licença .nabilic")
         self.close_button = QPushButton("Fechar")
         buttons = QHBoxLayout()
@@ -39,6 +40,12 @@ class FicharioLicenseDialog(QDialog):
         ))
         layout.addWidget(self.status)
         layout.addWidget(self.machine_code)
+        instructions = QLabel(
+            "Envie ao emissor o texto obtido pelo botão Copiar código da máquina. "
+            "Ele contém 64 caracteres; a identificação resumida não basta para emitir."
+        )
+        instructions.setWordWrap(True)
+        layout.addWidget(instructions)
         layout.addLayout(buttons)
         self.activate_button.clicked.connect(self._select_and_activate)
         self.copy_button.clicked.connect(self._copy_machine_code)
@@ -48,13 +55,22 @@ class FicharioLicenseDialog(QDialog):
     def _refresh(self, policy: FicharioLicensePolicy) -> None:
         self.status.setText(policy.message)
         self.machine_code.setText(
-            f"Código desta máquina: <b>{policy.decision.machine_code}</b>"
+            f"Identificação resumida desta máquina: <b>{policy.decision.machine_code}</b>"
         )
-        self._machine_code_value = policy.decision.machine_code
 
     def _copy_machine_code(self) -> None:
-        QApplication.clipboard().setText(self._machine_code_value)
-        self.copy_button.setText("Código copiado!")
+        try:
+            fingerprint = self._service.activation_fingerprint()
+        except Exception:
+            self.copy_button.setText("Copiar código da máquina")
+            QMessageBox.warning(
+                self, "Código indisponível",
+                "Não foi possível obter a identificação completa desta máquina. "
+                "Não use o código resumido para emitir a licença.",
+            )
+            return
+        QApplication.clipboard().setText(fingerprint)
+        self.copy_button.setText("Código completo copiado!")
 
     def _select_and_activate(self) -> None:
         selected, _filter = QFileDialog.getOpenFileName(

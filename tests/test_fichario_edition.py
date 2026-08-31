@@ -47,7 +47,7 @@ def test_licenca_ausente_abre_ativacao_antes_do_banco():
         encoding="utf-8"
     )
     assert "Copiar código da máquina" in dialog
-    assert "QApplication.clipboard().setText(self._machine_code_value)" in dialog
+    assert "self._service.activation_fingerprint()" in dialog
 
 
 def test_fichario_licenciado_abre_sessao_local_sem_tela_de_login():
