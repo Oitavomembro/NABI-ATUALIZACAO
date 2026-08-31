@@ -8,14 +8,31 @@ import tempfile
 from datetime import datetime
 from pathlib import Path
 
-
 ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from build_tools.product_lane_guard import validate_product_lane
+
+
 SPEC = ROOT / "build_tools" / "pyinstaller" / "nabicode_fichario.spec"
 INNO = ROOT / "build_tools" / "inno" / "NabiCode_Fichario_Offline.iss"
 OUTPUT = ROOT / "build_output" / "fichario"
+FICHARIO_SOURCE_CONTRACT = {
+    "main_fichario_qt.py": "d998c7b588069411b080a4da5b3f1eb6488de9a5fabaec0e4e1f8733153deba3",
+    "fichario": "b6f414ca82c0339aa251e7884146d56c5424cbaee67f62904b7b8707206ed132",
+    "commercial": "958cb34e396dc6436b07a4a4c943799b2f24c16d9fdaa889fe928a484845c1da",
+    "ui_qt/commercial": "8ead05d34625043c47656f338d2e48efb5c6fddc2739f1b2e3a0e5f539f32f5d",
+    "licensing": "7c331803c5bdb1ba79c8a817f7c63c9ba1f71cbbc604a27057c8b7ea00a15d0d",
+}
 
 
 def validate_sources() -> None:
+    validate_product_lane(
+        ROOT,
+        product="FICHARIO R21",
+        expected_digests=FICHARIO_SOURCE_CONTRACT,
+    )
     entry = (ROOT / "main_fichario_qt.py").read_text(encoding="utf-8").casefold()
     own = "\n".join(
         path.read_text(encoding="utf-8").casefold()
