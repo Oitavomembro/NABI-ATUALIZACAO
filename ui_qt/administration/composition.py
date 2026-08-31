@@ -207,6 +207,11 @@ def build_administrative_modules(
     nfe_purchase_import=None,
     restore_helper_command=None,
 ):
+    for service in (getattr(container, "customer_application", None),
+                    getattr(container, "financial_actions", None)):
+        bind = getattr(service, "bind_mutation_authorizer", None)
+        if callable(bind):
+            bind(security.require_actor)
     modules=[]; system=SystemRepository(database.connect)
     company_profile = CompanyProfileService(database.connect, security_service=security)
     dashboard_repository=DashboardRepository(database);dashboard=DashboardApplicationService(dashboard_repository,security)

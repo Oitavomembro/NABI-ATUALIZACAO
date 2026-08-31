@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from collections.abc import Callable
+
 from .action_dto import ActionContext, ActionSensitivity
 from .financial_dto import (
     CreateFinancialTitleCommand, FinancialActionResult, FinancialEvent,
@@ -11,16 +13,42 @@ from .ports import FinancialActionPort, FinancialEventPort
 class FinancialActionService:
     """Única fachada para mutações financeiras expostas fora do backend."""
 
-    def __init__(self, gateway: FinancialActionPort, events: FinancialEventPort | None = None) -> None:
+    def __init__(
+        self, gateway: FinancialActionPort, events: FinancialEventPort | None = None,
+        mutation_authorizer: Callable[[str, str], str] | None = None,
+    ) -> None:
         self._gateway = gateway
         self._events = events
+        self._mutation_authorizer = mutation_authorizer
 
-    def _run(self, action, context, sensitivity, confirmed, operation, event_kind):
+    def bind_mutation_authorizer(self, authorizer: Callable[[str, str], str]) -> None:
+        if not callable(authorizer):
+            raise TypeError("A porta de autorização do Financeiro deve ser chamável.")
+        self._mutation_authorizer = authorizer
+
+    def _authorize_mutation(self, action: str, context: ActionContext) -> ActionContext:
+        if self._mutation_authorizer is None:
+            return context
+        actor = str(self._mutation_authorizer("financeiro", action) or "").strip()
+        if not actor:
+            raise PermissionError("Sessão autenticada inválida para o Financeiro.")
+        return ActionContext(
+            requested_by=actor, origin=context.origin,
+            requested_at=context.requested_at, request_id=context.request_id,
+        )
+
+    def _run(self, action, permission, context, sensitivity, confirmed, operation, event_kind):
         required = True
         if not confirmed:
             return FinancialActionResult(action, context, sensitivity, required, False, False, "Confirmação humana obrigatória.")
         try:
-            persisted = operation()
+            context = self._authorize_mutation(permission, context)
+        except PermissionError as exc:
+            return FinancialActionResult(
+                action, context, sensitivity, required, False, False, str(exc)
+            )
+        try:
+            persisted = operation(context.requested_by)
         except (ValueError, LookupError) as exc:
             return FinancialActionResult(action, context, sensitivity, required, False, False, str(exc))
         secondary_failed = False
@@ -39,25 +67,25 @@ class FinancialActionService:
         )
 
     def create_receivable(self, command: CreateFinancialTitleCommand, *, context: ActionContext, confirmed: bool, operation_fingerprint: str | None = None):
-        return self._run("CREATE_RECEIVABLE", context, ActionSensitivity.SENSITIVE, confirmed,
-                         lambda: self._gateway.create_title("RECEBER", command, user=context.requested_by, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "RECEIVABLE_CREATED")
+        return self._run("CREATE_RECEIVABLE", "create", context, ActionSensitivity.SENSITIVE, confirmed,
+                         lambda actor: self._gateway.create_title("RECEBER", command, user=actor, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "RECEIVABLE_CREATED")
 
     def create_payable(self, command: CreateFinancialTitleCommand, *, context: ActionContext, confirmed: bool, operation_fingerprint: str | None = None):
-        return self._run("CREATE_PAYABLE", context, ActionSensitivity.SENSITIVE, confirmed,
-                         lambda: self._gateway.create_title("PAGAR", command, user=context.requested_by, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "PAYABLE_CREATED")
+        return self._run("CREATE_PAYABLE", "create", context, ActionSensitivity.SENSITIVE, confirmed,
+                         lambda actor: self._gateway.create_title("PAGAR", command, user=actor, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "PAYABLE_CREATED")
 
     def settle_receivable(self, command: SettleFinancialTitleCommand, *, context: ActionContext, confirmed: bool, operation_fingerprint: str | None = None):
-        return self._run("SETTLE_RECEIVABLE", context, ActionSensitivity.SENSITIVE, confirmed,
-                         lambda: self._gateway.settle("RECEBER", command, user=context.requested_by, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "RECEIVABLE_SETTLED")
+        return self._run("SETTLE_RECEIVABLE", "pay", context, ActionSensitivity.SENSITIVE, confirmed,
+                         lambda actor: self._gateway.settle("RECEBER", command, user=actor, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "RECEIVABLE_SETTLED")
 
     def settle_payable(self, command: SettleFinancialTitleCommand, *, context: ActionContext, confirmed: bool, operation_fingerprint: str | None = None):
-        return self._run("SETTLE_PAYABLE", context, ActionSensitivity.SENSITIVE, confirmed,
-                         lambda: self._gateway.settle("PAGAR", command, user=context.requested_by, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "PAYABLE_SETTLED")
+        return self._run("SETTLE_PAYABLE", "pay", context, ActionSensitivity.SENSITIVE, confirmed,
+                         lambda actor: self._gateway.settle("PAGAR", command, user=actor, idempotency_key=f"nabi:financial:{context.request_id}" if operation_fingerprint else None, operation_fingerprint=operation_fingerprint), "PAYABLE_SETTLED")
 
     def cancel_financial_title(self, title_id: int, *, context: ActionContext, confirmed: bool):
-        return self._run("CANCEL_FINANCIAL_TITLE", context, ActionSensitivity.CRITICAL, confirmed,
-                         lambda: self._gateway.cancel(title_id, user=context.requested_by), "FINANCIAL_TITLE_CANCELLED")
+        return self._run("CANCEL_FINANCIAL_TITLE", "reconcile", context, ActionSensitivity.CRITICAL, confirmed,
+                         lambda actor: self._gateway.cancel(title_id, user=actor), "FINANCIAL_TITLE_CANCELLED")
 
     def reverse_financial_payment(self, payment_id: int, *, context: ActionContext, confirmed: bool):
-        return self._run("REVERSE_FINANCIAL_PAYMENT", context, ActionSensitivity.CRITICAL, confirmed,
-                         lambda: self._gateway.reverse_payment(payment_id, user=context.requested_by), "FINANCIAL_PAYMENT_REVERSED")
+        return self._run("REVERSE_FINANCIAL_PAYMENT", "reconcile", context, ActionSensitivity.CRITICAL, confirmed,
+                         lambda actor: self._gateway.reverse_payment(payment_id, user=actor), "FINANCIAL_PAYMENT_REVERSED")

@@ -60,6 +60,32 @@ class SecurityServiceTests(unittest.TestCase):
         service.logout()
         self.assertTrue(service.is_expired())
 
+    def test_require_actor_revalida_expiracao_e_logout(self):
+        with self.assertRaises(PermissionError):
+            self.service.require_actor("clientes", "create")
+        session = self.service.authenticate("admin", "segredo")
+        self.assertEqual(self.service.require_actor("clientes", "create"), "admin")
+        session.last_activity_at = datetime.now() - timedelta(minutes=2)
+        with self.assertRaisesRegex(PermissionError, "Sessão expirada"):
+            self.service.require_actor("clientes", "create")
+        self.service.logout()
+        with self.assertRaises(PermissionError):
+            self.service.require_actor("clientes", "create")
+
+    def test_require_actor_revalida_usuario_perfil_e_permissoes(self):
+        self.service.create_user("caixa", "Operador", "senha123", "OPERADOR")
+        self.service.authenticate("caixa", "senha123")
+        self.assertEqual(self.service.require_actor("clientes", "create"), "caixa")
+        administrator = SecurityService(self.factory)
+        administrator.update_user("caixa", profile="GERENTE")
+        self.assertEqual(self.service.require_actor("financeiro", "pay"), "caixa")
+        administrator.save_profile("GERENTE", {"clientes": ["view"]})
+        with self.assertRaisesRegex(PermissionError, "sem permissão"):
+            self.service.require_actor("financeiro", "pay")
+        administrator.set_user_active("caixa", False)
+        with self.assertRaisesRegex(PermissionError, "revogada"):
+            self.service.require_actor("clientes", "create")
+
     def test_confirmacao_de_gerente(self):
         self.service.create_user("gerente", "Gerente", "senha456", "GERENTE")
         self.assertTrue(self.service.confirm_manager_password("senha456"))

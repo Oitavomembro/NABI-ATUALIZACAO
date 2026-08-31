@@ -19,6 +19,15 @@ class FinanceiroCallbackController:
     def _usuario(self) -> str:
         return self.app._usuario_financeiro()
 
+    def _ator_mutacao(self, action: str) -> str | None:
+        """Revalida sessão e permissão imediatamente antes da escrita."""
+
+        try:
+            return self.app.security.require_actor("financeiro", action)
+        except PermissionError as exc:
+            messagebox.showerror("Acesso negado", str(exc), parent=self.app)
+            return None
+
     def carregar(self) -> None:
         if not hasattr(self.app, "tabela_financeiro"):
             return
@@ -62,10 +71,12 @@ class FinanceiroCallbackController:
         if venc is None: return
         desc = simpledialog.askstring("Novo título", "Descrição:", parent=self.app) or ""
         pessoa = simpledialog.askstring("Novo título", "Pessoa/fornecedor/cliente:", parent=self.app) or ""
+        actor = self._ator_mutacao("create")
+        if actor is None: return
         try:
             self.service.criar_titulo(
                 tipo=tipo, valor=valor, data_vencimento=venc, descricao=desc,
-                pessoa_nome=pessoa, usuario=self._usuario(),
+                pessoa_nome=pessoa, usuario=actor,
             )
             self.carregar()
         except ValueError as exc:
@@ -85,6 +96,8 @@ class FinanceiroCallbackController:
         calc = self.service.calcular_juros_multa(titulo_id, juros_mensal_percentual=juros, multa_percentual=multa)
         encargos = calc["juros"] + calc["multa"]
         forma = simpledialog.askstring("Baixa", "Forma de pagamento:", parent=self.app) or ""
+        actor = self._ator_mutacao("pay")
+        if actor is None: return
         try:
             if encargos > 0:
                 confirmar = messagebox.askyesno(
@@ -94,9 +107,11 @@ class FinanceiroCallbackController:
                 )
                 if not confirmar:
                     return
+                actor = self._ator_mutacao("pay")
+                if actor is None: return
                 self.service.baixar_com_encargos(
                     titulo_id, juros_mensal_percentual=juros, multa_percentual=multa,
-                    forma_pagamento=forma, usuario=self._usuario(),
+                    forma_pagamento=forma, usuario=actor,
                 )
             else:
                 valor = simpledialog.askfloat(
@@ -105,7 +120,9 @@ class FinanceiroCallbackController:
                 )
                 if valor is None:
                     return
-                self.service.baixar(titulo_id, valor, forma_pagamento=forma, usuario=self._usuario())
+                actor = self._ator_mutacao("pay")
+                if actor is None: return
+                self.service.baixar(titulo_id, valor, forma_pagamento=forma, usuario=actor)
             self.carregar()
         except ValueError as exc:
             messagebox.showerror("Financeiro", str(exc), parent=self.app)
@@ -118,7 +135,9 @@ class FinanceiroCallbackController:
         atual = self.service.obter_centro_custo(titulo_id)
         centro = simpledialog.askstring("Centro de custo", "Centro de custo:", initialvalue=atual, parent=self.app)
         if centro is None: return
-        self.service.definir_centro_custo(titulo_id, centro, usuario=self._usuario())
+        actor = self._ator_mutacao("create")
+        if actor is None: return
+        self.service.definir_centro_custo(titulo_id, centro, usuario=actor)
         self.carregar()
 
     def abrir_recorrencias(self) -> None:
@@ -145,9 +164,11 @@ class FinanceiroCallbackController:
                 dia = simpledialog.askinteger("Recorrência", "Dia do vencimento:", minvalue=1, maxvalue=31, parent=self.app)
                 if dia is None: return
                 desc = simpledialog.askstring("Recorrência", "Descrição:", parent=self.app) or ""
+                actor = self._ator_mutacao("create")
+                if actor is None: return
                 self.service.criar_recorrencia(
                     identificador=ident, tipo=tipo, valor=valor, dia_vencimento=dia,
-                    descricao=desc, usuario=self._usuario(),
+                    descricao=desc, usuario=actor,
                 )
             elif acao == "EDITAR":
                 ident = simpledialog.askstring("Recorrências", "Identificador:", parent=self.app)
@@ -164,17 +185,21 @@ class FinanceiroCallbackController:
                 if desc is None: return
                 pessoa = simpledialog.askstring("Recorrência", "Pessoa:", initialvalue=atual.get("pessoa_nome", ""), parent=self.app)
                 if pessoa is None: return
+                actor = self._ator_mutacao("create")
+                if actor is None: return
                 self.service.editar_recorrencia(
                     ident, tipo=tipo, valor=valor, dia_vencimento=dia, descricao=desc,
-                    pessoa_nome=pessoa, usuario=self._usuario(),
+                    pessoa_nome=pessoa, usuario=actor,
                 )
             elif acao in {"ATIVAR", "DESATIVAR", "EXCLUIR"}:
                 ident = simpledialog.askstring("Recorrências", "Identificador:", parent=self.app)
                 if ident is None: return
+                actor = self._ator_mutacao("create")
+                if actor is None: return
                 if acao == "EXCLUIR":
-                    self.service.excluir_recorrencia(ident, usuario=self._usuario())
+                    self.service.excluir_recorrencia(ident, usuario=actor)
                 else:
-                    self.service.ativar_recorrencia(ident, acao == "ATIVAR", usuario=self._usuario())
+                    self.service.ativar_recorrencia(ident, acao == "ATIVAR", usuario=actor)
             elif acao == "GERAR":
                 competencia = simpledialog.askstring(
                     "Recorrências", "Competência AAAA-MM:",
@@ -182,7 +207,9 @@ class FinanceiroCallbackController:
                 )
                 if competencia is None: return
                 ano, mes = map(int, competencia.split("-"))
-                self.service.gerar_recorrencias(ano, mes, usuario=self._usuario())
+                actor = self._ator_mutacao("create")
+                if actor is None: return
+                self.service.gerar_recorrencias(ano, mes, usuario=actor)
                 self.carregar()
             else:
                 raise ValueError("Ação de recorrência inválida.")
@@ -201,8 +228,10 @@ class FinanceiroCallbackController:
         if pagamento_id is None: return
         referencia = simpledialog.askstring("Conciliação", "Referência do extrato/comprovante:", parent=self.app)
         if referencia is None: return
+        actor = self._ator_mutacao("reconcile")
+        if actor is None: return
         try:
-            self.service.conciliar_pagamento(pagamento_id, referencia, usuario=self._usuario())
+            self.service.conciliar_pagamento(pagamento_id, referencia, usuario=actor)
             messagebox.showinfo("Conciliação", "Pagamento conciliado.", parent=self.app)
         except ValueError as exc:
             messagebox.showerror("Conciliação", str(exc), parent=self.app)
@@ -212,8 +241,10 @@ class FinanceiroCallbackController:
         titulo_id = self.titulo_selecionado()
         if titulo_id is None: return
         if not messagebox.askyesno("Cancelar título", "Cancelar o título selecionado?", parent=self.app): return
+        actor = self._ator_mutacao("create")
+        if actor is None: return
         try:
-            self.service.cancelar(titulo_id, usuario=self._usuario())
+            self.service.cancelar(titulo_id, usuario=actor)
             self.carregar()
         except ValueError as exc:
             messagebox.showerror("Financeiro", str(exc), parent=self.app)
@@ -228,12 +259,16 @@ class FinanceiroCallbackController:
             acao = acao.strip().upper()
             pagamento_id = simpledialog.askinteger("Conciliações", "ID do pagamento:", parent=self.app)
             if pagamento_id is None: return
+            actor = self._ator_mutacao("reconcile")
+            if actor is None: return
             if acao == "CONCILIAR":
                 referencia = simpledialog.askstring("Conciliações", "Referência:", parent=self.app)
                 if referencia is None: return
-                self.service.conciliar_pagamento(pagamento_id, referencia, usuario=self._usuario())
+                actor = self._ator_mutacao("reconcile")
+                if actor is None: return
+                self.service.conciliar_pagamento(pagamento_id, referencia, usuario=actor)
             elif acao == "DESFAZER":
-                self.service.desfazer_conciliacao(pagamento_id, usuario=self._usuario())
+                self.service.desfazer_conciliacao(pagamento_id, usuario=actor)
             else:
                 raise ValueError("Ação de conciliação inválida.")
         except ValueError as exc:
@@ -269,8 +304,10 @@ class FinanceiroCallbackController:
         pagamento_id = simpledialog.askinteger("Estorno", f"Informe o ID do pagamento a estornar:\n\n{linhas}", parent=self.app)
         if pagamento_id is None: return
         if not messagebox.askyesno("Estorno", "Confirmar estorno desta baixa?", parent=self.app): return
+        actor = self._ator_mutacao("pay")
+        if actor is None: return
         try:
-            self.service.estornar_pagamento(pagamento_id, usuario=self._usuario())
+            self.service.estornar_pagamento(pagamento_id, usuario=actor)
             self.carregar()
         except ValueError as exc:
             messagebox.showerror("Estorno", str(exc), parent=self.app)

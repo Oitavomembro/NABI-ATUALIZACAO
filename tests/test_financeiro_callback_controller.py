@@ -55,8 +55,14 @@ class FakeApp:
         self.fin_lbl_fluxo = Label()
         self.fin_lbl_dre = Label()
         self.authorized = True
+        self.actor = "tester"
+        self.security = self
     def _autorizar(self, module, action): return self.authorized and module == "financeiro"
     def _usuario_financeiro(self): return "tester"
+    def require_actor(self, module, action):
+        if not self.authorized or module != "financeiro":
+            raise PermissionError("Sessão ou permissão revogada.")
+        return self.actor
 
 
 def test_carregar_orquestra_service_sem_regra_financeira_local():
@@ -97,3 +103,41 @@ def test_callback_financeiro_respeita_autorizacao():
         controller.novo_titulo()
     ask.assert_not_called()
     assert not service.calls
+
+
+def test_novo_titulo_revalida_sessao_depois_dos_dialogos_e_nao_grava():
+    app, service = FakeApp(), FakeService()
+    controller = FinanceiroCallbackController(app, service, FakeViewData)
+    respostas = iter(["RECEBER", "2026-08-20", "Venda", "Cliente"])
+
+    def answer(*_args, **_kwargs):
+        value = next(respostas)
+        if value == "Cliente":
+            app.authorized = False
+        return value
+
+    with patch("controllers.financeiro_callback_controller.simpledialog.askstring", side_effect=answer), \
+         patch("controllers.financeiro_callback_controller.simpledialog.askfloat", return_value=20.0), \
+         patch("controllers.financeiro_callback_controller.messagebox.showerror") as error:
+        controller.novo_titulo()
+    assert not any(call[0] == "criar" for call in service.calls)
+    error.assert_called_once()
+
+
+def test_novo_titulo_usa_usuario_corrente_apos_troca_com_janela_aberta():
+    app, service = FakeApp(), FakeService()
+    controller = FinanceiroCallbackController(app, service, FakeViewData)
+    respostas = iter(["RECEBER", "2026-08-20", "Venda", "Cliente"])
+
+    def answer(*_args, **_kwargs):
+        value = next(respostas)
+        if value == "Cliente":
+            app.actor = "novo-operador"
+        return value
+
+    with patch("controllers.financeiro_callback_controller.simpledialog.askstring", side_effect=answer), \
+         patch("controllers.financeiro_callback_controller.simpledialog.askfloat", return_value=20.0), \
+         patch.object(controller, "carregar"):
+        controller.novo_titulo()
+    criar = next(call for call in service.calls if call[0] == "criar")
+    assert criar[1]["usuario"] == "novo-operador"

@@ -6347,3 +6347,52 @@ O Fichário permanece uma finalidade/produto especial e isolado. Melhorias compa
 - regressão dirigida de conexão, manutenção, backup/restauração, Fichário e
   integração comercial: `65 passed`; nenhum banco ativo foi utilizado;
 - alterações locais preexistentes de splash, PDV e Fichário foram preservadas.
+
+#### Sessão por mutação — integração parcial, ainda sem ligação aos serviços
+
+- retomada sobre `2a07094`: adicionado `SecurityService.require_actor`, adaptado
+  da proposta `4a22dff`, sem substituir os campos fiscais atuais do cadastro nem
+  o teste de composição modificado pelo splash;
+- testes verificam ausência de login, expiração, logout, mudança persistida de
+  perfil/permissão e desativação do usuário: `25 passed` na suíte de segurança;
+- esta etapa fornece somente o método central: Clientes e Financeiro ainda não
+  o chamam por esta integração. Não declarar proteção por mutação concluída;
+- próximo passo: adaptar as fachadas comerciais e vincular o autorizador na
+  composição Qt, preservando cadastro fiscal e alterações locais do splash;
+- código e documentação desta etapa permanecem locais, sem commit/push novo,
+  sem instalador e sem acesso a banco ativo.
+
+#### Sessão por mutação — ligação Qt adaptada, validação em andamento
+
+- fachadas de Clientes e Financeiro vinculadas a `security.require_actor` na
+  composição administrativa Qt; cadastro fiscal e modificações locais do
+  splash foram preservados;
+- Clientes revalida criar/editar/excluir e cadastro assistido; Financeiro
+  revalida criar, liquidar, cancelar e estornar, usando identidade corrente no
+  gateway e nos eventos. Recusa não grava nem publica evento de sucesso;
+- compatibilidade preservada para consumidores sem autorizador vinculado:
+  esta integração protege a composição Qt, não afirma proteger todos os
+  chamadores diretos/legados. A adaptação antiga do controller legado e a
+  identificação do operador no histórico de cadastro comum continuam pendentes;
+- regressão dirigida inicial: `68 passed`; cobertura adicional de nove casos
+  de revogação/ator vazio incluída na execução completa subsequente;
+- suíte completa iniciada nesta etapa; resultado ainda não registrado.
+  Paginação financeira não foi integrada.
+
+#### Pausa segura solicitada — autorização comercial e autoria
+
+- suíte completa da ligação Qt: `2.927 passed`, `1 skipped`,
+  `506 subtests passed`. Executada antes da adaptação final dos callbacks
+  legados e autoria cadastral; não representa suíte completa desses últimos;
+- depois disso, criação/edição cadastral passaram a registrar o operador
+  validado no histórico. Callbacks legados foram adaptados, incluindo nova
+  revalidação após as últimas perguntas de baixa/conciliação;
+- regressão final dirigida: `65 passed`, `5 subtests passed` (sessão comercial,
+  callbacks financeiros, segurança, cadastro e tela de clientes);
+- pausa: nenhuma execução de teste pendente, nenhuma paginação integrada.
+  Próximo passo: testar explicitamente revogação durante a última confirmação,
+  repetir suíte completa após alterações finais e então auditar paginação;
+- commit desta pausa inclui somente autorização/autoria, testes associados e
+  mapa. Alterações preexistentes de splash/login e experimentos do Fichário
+  continuam locais e fora do commit. Nenhum instalador ou programa aberto;
+- proprietário autorizou commit e push da branch de consolidação nesta pausa.

@@ -405,6 +405,21 @@ class SecurityService:
         actions = profile.get(str(module), [])
         return "*" in actions or str(action) in actions
 
+    def require_actor(self, module: str, action: str) -> str:
+        """Revalida a sessão persistida e retorna o ator, sem fallback externo."""
+        if self.session is None or self.is_expired():
+            raise PermissionError("Sessão expirada. Entre novamente para continuar.")
+        if not self.require(module, action):
+            if self.session is None:
+                raise PermissionError("Sessão revogada. Entre novamente para continuar.")
+            raise PermissionError("Usuário sem permissão para esta operação.")
+        actor = str(self.session.user.username or "").strip()
+        if not actor:
+            self.session = None
+            raise PermissionError("Sessão autenticada inválida.")
+        self.touch()
+        return actor
+
     def confirm_manager_password(self, password: str) -> bool:
         throttle_id = self.MANAGER_CONFIRMATION_THROTTLE_ID
         if self._login_is_blocked(throttle_id):

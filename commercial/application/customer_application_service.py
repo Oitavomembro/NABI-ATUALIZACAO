@@ -16,8 +16,25 @@ class CustomerApplicationService:
         self._customers = customers
         self._accounts = accounts
 
+        self._mutation_authorizer = None
+
+    def bind_mutation_authorizer(self, authorizer):
+        if not callable(authorizer):
+            raise TypeError("Autorizador de Clientes deve ser chamável.")
+        self._mutation_authorizer = authorizer
+
+    def _authorize_mutation(self, action):
+        if self._mutation_authorizer is None:
+            return None
+        actor = str(self._mutation_authorizer("clientes", action) or "").strip()
+        if not actor:
+            raise PermissionError("Sessão autenticada inválida para Clientes.")
+        return actor
+
     def create_customer(self, command: CustomerCreateCommand) -> CustomerDetails:
+        actor = self._authorize_mutation("create")
         customer_id = self._registration.criar(
+            **({"usuario": actor} if actor else {}),
             nome=command.name, codigo=command.code, numero_ficha=command.record_number,
             cpf=command.cpf, rg=command.rg, telefone=command.phone,
             endereco=command.address, observacoes=command.notes, limite=command.credit_limit,
@@ -35,6 +52,7 @@ class CustomerApplicationService:
         self, command: CustomerCreateCommand, *, username: str,
         idempotency_key: str, operation_fingerprint: str,
     ) -> CustomerDetails:
+        actor = self._authorize_mutation("create")
         create = getattr(self._registration, "criar_assistido", None)
         if not callable(create):
             raise RuntimeError("Cadastro assistido idempotente não está disponível.")
@@ -43,7 +61,7 @@ class CustomerApplicationService:
             numero_ficha=command.record_number, cpf=command.cpf, rg=command.rg,
             telefone=command.phone, endereco=command.address,
             observacoes=command.notes, limite=command.credit_limit,
-            usuario=username, idempotency_key=idempotency_key,
+            usuario=actor or username, idempotency_key=idempotency_key,
             operation_fingerprint=operation_fingerprint,
         )
         return self.get_customer(customer_id)
@@ -56,8 +74,10 @@ class CustomerApplicationService:
         return dict(provider() if callable(provider) else {})
 
     def update_customer(self, command: CustomerUpdateCommand) -> CustomerDetails:
+        actor = self._authorize_mutation("edit")
         self._registration.editar(
             command.customer_id, nome=command.name, codigo=command.code,
+            **({"usuario": actor} if actor else {}),
             numero_ficha=command.record_number, cpf=command.cpf, rg=command.rg,
             telefone=command.phone, endereco=command.address,
             observacoes=command.notes, limite=command.credit_limit,
@@ -72,6 +92,7 @@ class CustomerApplicationService:
         return self.get_customer(command.customer_id)
 
     def delete_unused_customer(self, customer_id: int) -> None:
+        self._authorize_mutation("edit")
         delete = getattr(self._registration, "excluir_cadastro_sem_movimento", None)
         if not callable(delete):
             raise RuntimeError("Exclusão segura de cadastro não está disponível.")
